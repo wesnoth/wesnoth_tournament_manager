@@ -22,7 +22,6 @@ import MyTournaments from './pages/MyTournaments';
 import Rankings from './pages/Rankings';
 import Statistics from './pages/Statistics';
 import Players from './pages/Players';
-import PlayerStatsPage from './pages/PlayerStatsPage';
 import AdminAnnouncements from './pages/AdminAnnouncements';
 import AdminFAQ from './pages/AdminFAQ';
 import AdminTournaments from './pages/AdminTournaments';
@@ -108,7 +107,6 @@ const App: React.FC = () => {
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/player/:id" element={<PlayerProfile />} />
-            <Route path="/player/:playerId/stats" element={<PlayerStatsPage />} />
             <Route path="/matches" element={<Matches />} />
             <Route path="/my-matches" element={<MyMatches />} />
             <Route path="/players" element={<Players />} />
