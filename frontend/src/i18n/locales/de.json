@@ -321,6 +321,8 @@
   "level_novice": "Anfänger",
   "level_veterano": "Veteran",
   "loading": "Wird geladen...",
+  "login_account_blocked": "Konto blockiert",
+  "login_account_blocked_reason": "Ihr Konto wurde von einem Administrator blockiert",
   "login_account_locked": "Konto vorübergehend gesperrt",
   "login_account_locked_reason": "Zu viele fehlgeschlagene Anmeldeversuche. Bitte versuchen Sie es in {{minutes}} Minute(n) erneut",
   "login_ban_duration": "Dauer",

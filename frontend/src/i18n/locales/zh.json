@@ -321,6 +321,8 @@
   "level_novice": "新手",
   "level_veterano": "老手",
   "loading": "加载中...",
+  "login_account_blocked": "账户已被封禁",
+  "login_account_blocked_reason": "您的账户已被管理员封禁",
   "login_account_locked": "账户暂时被锁定",
   "login_account_locked_reason": "登录尝试失败次数过多。请在 {{minutes}} 分钟后重试",
   "login_ban_duration": "持续时间",

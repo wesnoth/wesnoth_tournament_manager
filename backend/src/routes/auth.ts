@@ -30,9 +30,9 @@ router.post('/login', async (req, res) => {
 
     console.log(`🔐 [LOGIN] Attempting login for user: ${normalizedUsername}`);
 
-    // Check if user exists in users_extension and is account locked
+     // Check if user exists in users_extension and validate account status
     const existingUsers = await queryTournament(
-      'SELECT id FROM users_extension WHERE LOWER(nickname) = LOWER(?)',
+      'SELECT id, is_blocked FROM users_extension WHERE LOWER(nickname) = LOWER(?)',
       [normalizedUsername]
     ) as any[];
 
@@ -40,6 +40,24 @@ router.post('/login', async (req, res) => {
 
     if (existingUsers && existingUsers.length > 0) {
       tournamentUserId = existingUsers[0].id;
+      const isBlocked = existingUsers[0].is_blocked;
+      
+      // Check if account is administratively blocked
+      if (isBlocked) {
+        console.warn(`❌ [LOGIN] Account administratively blocked for ${normalizedUsername}`);
+        await logAuditEvent({
+          event_type: 'LOGIN_FAILED',
+          username: normalizedUsername,
+          user_id: tournamentUserId,
+          ip_address: getUserIP(req),
+          user_agent: getUserAgent(req),
+          details: { reason: 'account_blocked_by_admin' }
+        });
+        return res.status(401).json({ 
+          error: 'account_blocked',
+          message: 'Your account has been blocked by an administrator'
+        });
+      }
       
       // Check if account is locked due to failed login attempts
       const locked = await isAccountLocked(tournamentUserId);

@@ -321,6 +321,8 @@
   "level_novice": "Новичок",
   "level_veterano": "Ветеран",
   "loading": "Загрузка...",
+  "login_account_blocked": "Аккаунт заблокирован",
+  "login_account_blocked_reason": "Ваш аккаунт был заблокирован администратором",
   "login_account_locked": "Аккаунт временно заблокирован",
   "login_account_locked_reason": "Слишком много неудачных попыток входа. Пожалуйста, попробуйте еще раз через {{minutes}} минут(ы)",
   "login_ban_duration": "Длительность",

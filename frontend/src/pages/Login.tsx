@@ -13,6 +13,7 @@ const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [banInfo, setBanInfo] = useState<{ reason?: string; until?: string | null } | null>(null);
   const [lockoutInfo, setLockoutInfo] = useState<{ remainingSeconds?: number } | null>(null);
+  const [blockedInfo, setBlockedInfo] = useState<{ message?: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -21,6 +22,7 @@ const Login: React.FC = () => {
     setError('');
     setBanInfo(null);
     setLockoutInfo(null);
+    setBlockedInfo(null);
     
     try {
       const response = await authService.login(username, password);
@@ -54,6 +56,8 @@ const Login: React.FC = () => {
       const data = err.response?.data;
       if (data?.error === 'forum_banned') {
         setBanInfo({ reason: data.banReason, until: data.banUntil });
+      } else if (data?.error === 'account_blocked') {
+        setBlockedInfo({ message: data.message });
       } else if (data?.error === 'account_locked') {
         setLockoutInfo({ remainingSeconds: data.remainingSeconds });
       } else {
@@ -96,6 +100,13 @@ const Login: React.FC = () => {
               minutes: Math.ceil((lockoutInfo.remainingSeconds || 0) / 60)
             })}
           </p>
+        </div>
+      )}
+
+      {blockedInfo && (
+        <div className="bg-red-50 text-red-900 px-4 py-3 rounded-md mb-4 border-l-4 border-red-700">
+          <p className="font-semibold">{t('login_account_blocked', 'Account blocked')}</p>
+          <p className="text-sm mt-1">{blockedInfo.message || t('login_account_blocked_reason', 'Your account has been blocked by an administrator')}</p>
         </div>
       )}
       

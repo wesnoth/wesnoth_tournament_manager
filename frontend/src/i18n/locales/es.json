@@ -321,6 +321,8 @@
   "level_novice": "Novato",
   "level_veterano": "Veterano",
   "loading": "Cargando...",
+  "login_account_blocked": "Cuenta bloqueada",
+  "login_account_blocked_reason": "Tu cuenta ha sido bloqueada por un administrador",
   "login_account_locked": "Cuenta temporalmente bloqueada",
   "login_account_locked_reason": "Demasiados intentos de inicio de sesión fallidos. Por favor, intenta de nuevo en {{minutes}} minuto(s)",
   "login_ban_duration": "Duración",

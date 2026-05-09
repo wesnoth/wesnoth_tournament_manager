@@ -326,6 +326,8 @@
   "level_novice": "Novice",
   "level_veterano": "Veteran",
   "loading": "Loading...",
+  "login_account_blocked": "Account blocked",
+  "login_account_blocked_reason": "Your account has been blocked by an administrator",
   "login_account_locked": "Account temporarily locked",
   "login_account_locked_reason": "Too many failed login attempts. Please try again in {{minutes}} minute(s)",
   "login_ban_duration": "Duration",
