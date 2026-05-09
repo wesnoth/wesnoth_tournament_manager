@@ -95,7 +95,7 @@ export async function recordSuccessfulLogin(userId: string): Promise<void> {
 export async function unlockAccount(userId: string): Promise<void> {
   try {
     await query(
-      `UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = ?`,
+      `UPDATE users_extension SET failed_login_attempts = 0, locked_until = NULL WHERE id = ?`,
       [userId]
     );
   } catch (error) {
@@ -109,7 +109,7 @@ export async function unlockAccount(userId: string): Promise<void> {
 export async function getRemainingLockoutTime(userId: string): Promise<number> {
   try {
     const result = await query(
-      `SELECT locked_until FROM users WHERE id = ?`,
+      `SELECT locked_until FROM users_extension WHERE id = ?`,
       [userId]
     );
 

@@ -5,6 +5,7 @@ import { generateUUID } from '../utils/uuid.js';
 import { queryTournament } from '../config/tournamentDatabase.js';
 import { query } from '../config/database.js';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
+import { isAccountLocked, recordFailedLoginAttempt, recordSuccessfulLogin, getRemainingLockoutTime } from '../services/accountLockout.js';
 
 const router = Router();
 
@@ -28,6 +29,37 @@ router.post('/login', async (req, res) => {
     const normalizedUsername = username.toLowerCase();
 
     console.log(`🔐 [LOGIN] Attempting login for user: ${normalizedUsername}`);
+
+    // Check if user exists in users_extension and is account locked
+    const existingUsers = await queryTournament(
+      'SELECT id FROM users_extension WHERE LOWER(nickname) = LOWER(?)',
+      [normalizedUsername]
+    ) as any[];
+
+    let tournamentUserId: string = '';
+
+    if (existingUsers && existingUsers.length > 0) {
+      tournamentUserId = existingUsers[0].id;
+      
+      // Check if account is locked due to failed login attempts
+      const locked = await isAccountLocked(tournamentUserId);
+      if (locked) {
+        const remainingTime = await getRemainingLockoutTime(tournamentUserId);
+        console.warn(`❌ [LOGIN] Account locked for ${normalizedUsername}. Remaining lockout time: ${remainingTime}s`);
+        await logAuditEvent({
+          event_type: 'LOGIN_FAILED',
+          username: normalizedUsername,
+          user_id: tournamentUserId,
+          ip_address: getUserIP(req),
+          user_agent: getUserAgent(req),
+          details: { reason: 'account_locked', remainingSeconds: remainingTime }
+        });
+        return res.status(401).json({ 
+          error: 'account_locked',
+          remainingSeconds: remainingTime
+        });
+      }
+    }
 
     // In TEST_MODE, determine if this user is privileged (admin/moderator) — always validate their password
     let skipPasswordCheck = false;
@@ -53,9 +85,17 @@ router.post('/login', async (req, res) => {
     
     if (!authResult.valid) {
       console.log(`❌ [LOGIN] Failed login for ${normalizedUsername}: ${authResult.error}`);
+      
+      // Record failed login attempt if user exists in tournament database
+      if (tournamentUserId) {
+        await recordFailedLoginAttempt(tournamentUserId, normalizedUsername);
+        console.warn(`🚨 [LOGIN] Failed attempt recorded for ${normalizedUsername}`);
+      }
+      
       // Log failed login attempt
       await logAuditEvent({
         event_type: 'LOGIN_FAILED',
+        user_id: tournamentUserId || undefined,
         username: normalizedUsername,
         ip_address: getUserIP(req),
         user_agent: getUserAgent(req),
@@ -72,6 +112,7 @@ router.post('/login', async (req, res) => {
       console.warn(`❌ [LOGIN] User ${normalizedUsername} has an active forum ban`);
       await logAuditEvent({
         event_type: 'LOGIN_FAILED',
+        user_id: tournamentUserId || undefined,
         username: normalizedUsername,
         ip_address: getUserIP(req),
         user_agent: getUserAgent(req),
@@ -84,30 +125,26 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    // Check if user exists in users_extension (tournament database)
-    const existingUsers = await queryTournament(
-      'SELECT id FROM users_extension WHERE LOWER(nickname) = LOWER(?)',
-      [normalizedUsername]
-    ) as any[];
-
-    let tournamentUserId: string;
-
-    if (!existingUsers || existingUsers.length === 0) {
+    // Get or create user in users_extension (tournament database)
+    if (!tournamentUserId) {
       // Create new user in users_extension table
       console.log(`🔐 [LOGIN] Creating new user in users_extension: ${normalizedUsername}`);
       tournamentUserId = generateUUID();
       
       await queryTournament(
-        `INSERT INTO users_extension (id, nickname, is_active, is_blocked, locked_until)
-         VALUES (?, ?, 1, 0, NULL)`,
+        `INSERT INTO users_extension (id, nickname, is_active, is_blocked, locked_until, failed_login_attempts)
+         VALUES (?, ?, 1, 0, NULL, 0)`,
         [tournamentUserId, authResult.username]
       );
       
       console.log(`✅ [LOGIN] User created in users_extension: ${tournamentUserId}`);
     } else {
-      tournamentUserId = existingUsers[0].id;
       console.log(`✅ [LOGIN] User already exists in users_extension: ${tournamentUserId}`);
     }
+
+    // Record successful login (resets failed attempts and lockout)
+    await recordSuccessfulLogin(tournamentUserId);
+    console.log(`✅ [LOGIN] Successful login recorded for ${normalizedUsername}`);
 
     // Generate JWT token with tournament database user ID
     const token = generateTokenWithUsername(normalizedUsername, tournamentUserId);
