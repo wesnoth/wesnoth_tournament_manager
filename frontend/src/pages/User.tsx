@@ -12,9 +12,10 @@ import MatchDetailsModal from '../components/MatchDetailsModal';
 import MatchConfirmationModal from '../components/MatchConfirmationModal';
 import PlayerStatsByMap from '../components/PlayerStatsByMap';
 import PlayerStatsByFaction from '../components/PlayerStatsByFaction';
+import PlayerStatsByMatchup from '../components/PlayerStatsByMatchup';
 import PlayerLink from '../components/PlayerLink';
 
-type ProfileTab = 'overall' | 'matches' | 'opponents' | 'by-map' | 'by-faction';
+type ProfileTab = 'overall' | 'matches' | 'opponents' | 'by-map' | 'by-faction' | 'by-matchup';
 
 interface FilterState {
   player: string;
@@ -298,6 +299,7 @@ const User: React.FC = () => {
     { id: 'opponents', label: t('my_opponents') || 'Opponents' },
     { id: 'by-map', label: t('performance_by_map') || 'By Map' },
     { id: 'by-faction', label: t('performance_by_faction') || 'By Faction' },
+    { id: 'by-matchup', label: t('matchup_analysis') || 'Matchup Analysis' },
   ];
 
   return (
@@ -629,6 +631,13 @@ const User: React.FC = () => {
               {activeTab === 'by-faction' && (
                 <div className="bg-white rounded-lg shadow-md p-8">
                   <PlayerStatsByFaction playerId={userId || ''} />
+                </div>
+              )}
+
+              {/* Matchup Analysis Tab */}
+              {activeTab === 'by-matchup' && (
+                <div className="bg-white rounded-lg shadow-md p-8">
+                  <PlayerStatsByMatchup playerId={userId || ''} />
                 </div>
               )}
             </div>
