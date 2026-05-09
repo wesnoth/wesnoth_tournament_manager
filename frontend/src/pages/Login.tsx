@@ -12,6 +12,7 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [banInfo, setBanInfo] = useState<{ reason?: string; until?: string | null } | null>(null);
+  const [lockoutInfo, setLockoutInfo] = useState<{ remainingSeconds?: number } | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -19,6 +20,7 @@ const Login: React.FC = () => {
     setLoading(true);
     setError('');
     setBanInfo(null);
+    setLockoutInfo(null);
     
     try {
       const response = await authService.login(username, password);
@@ -52,6 +54,8 @@ const Login: React.FC = () => {
       const data = err.response?.data;
       if (data?.error === 'forum_banned') {
         setBanInfo({ reason: data.banReason, until: data.banUntil });
+      } else if (data?.error === 'account_locked') {
+        setLockoutInfo({ remainingSeconds: data.remainingSeconds });
       } else {
         setError(data?.error || 'Login failed. Please check your credentials.');
       }
@@ -81,6 +85,17 @@ const Login: React.FC = () => {
           <p className="font-semibold">{t('login_ban_title', 'Your account is banned from the Wesnoth forum')}</p>
           {banInfo.reason && <p className="text-sm mt-1">{t('login_ban_reason', 'Reason')}: {banInfo.reason}</p>}
           <p className="text-sm mt-1">{t('login_ban_duration', 'Duration')}: {formatBanUntil(banInfo.until)}</p>
+        </div>
+      )}
+
+      {lockoutInfo && (
+        <div className="bg-yellow-50 text-yellow-900 px-4 py-3 rounded-md mb-4 border-l-4 border-yellow-700">
+          <p className="font-semibold">{t('login_account_locked', 'Account temporarily locked')}</p>
+          <p className="text-sm mt-1">
+            {t('login_account_locked_reason', 'Too many failed login attempts. Please try again in {{minutes}} minute(s)', {
+              minutes: Math.ceil((lockoutInfo.remainingSeconds || 0) / 60)
+            })}
+          </p>
         </div>
       )}
       
