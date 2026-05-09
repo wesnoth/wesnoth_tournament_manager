@@ -5,10 +5,11 @@ import { publicService } from '../services/api';
 import PlayerStatsOverview from '../components/PlayerStatsOverview';
 import PlayerStatsByMap from '../components/PlayerStatsByMap';
 import PlayerStatsByFaction from '../components/PlayerStatsByFaction';
+import PlayerStatsByMatchup from '../components/PlayerStatsByMatchup';
 import PlayerHeadToHead from '../components/PlayerHeadToHead';
 import PlayerRecentOpponents from '../components/PlayerRecentOpponents';
 
-type StatsTab = 'overview' | 'by-map' | 'by-faction' | 'recent-opponents';
+type StatsTab = 'overview' | 'by-map' | 'by-faction' | 'by-matchup' | 'recent-opponents';
 
 interface Player {
   id: string;
@@ -74,6 +75,7 @@ const PlayerStatsPage: React.FC = () => {
     { id: 'overview', label: t('overall_statistics') || 'Overall Statistics' },
     { id: 'by-map', label: t('performance_by_map') || 'By Map' },
     { id: 'by-faction', label: t('performance_by_faction') || 'By Faction' },
+    { id: 'by-matchup', label: t('matchup_analysis') || 'Matchup Analysis' },
     { id: 'recent-opponents', label: t('recent_opponents') || 'Recent Opponents' },
   ];
 
@@ -123,6 +125,12 @@ const PlayerStatsPage: React.FC = () => {
         {activeTab === 'by-faction' && (
           <div className="bg-white rounded-lg shadow-md p-8">
             <PlayerStatsByFaction playerId={playerId} />
+          </div>
+        )}
+
+        {activeTab === 'by-matchup' && (
+          <div className="bg-white rounded-lg shadow-md p-8">
+            <PlayerStatsByMatchup playerId={playerId} />
           </div>
         )}
 

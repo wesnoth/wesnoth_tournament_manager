@@ -25,6 +25,14 @@ export const playerStatisticsService = {
     return response.data;
   },
 
+  // Get player statistics by faction matchup
+  getStatsByMatchup: async (playerId: string, minGames = 2, side = 0) => {
+    const response = await api.get(`/player-statistics/player/${playerId}/by-matchup`, {
+      params: { minGames, side },
+    });
+    return response.data;
+  },
+
   // Get head-to-head vs specific opponent
   getHeadToHead: async (playerId: string, opponentId: string, side = 0) => {
     const response = await api.get(`/player-statistics/player/${playerId}/vs-player/${opponentId}`, {

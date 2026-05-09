@@ -85,7 +85,7 @@ router.get('/player/:playerId/by-map', async (req, res) => {
 
 /**
  * Get player statistics by faction
- * Shows how a player performs with each faction
+ * Shows how a player performs with each faction (aggregated across all opponents)
  */
 router.get('/player/:playerId/by-faction', async (req, res) => {
   try {
@@ -97,12 +97,11 @@ router.get('/player/:playerId/by-faction', async (req, res) => {
       `SELECT 
         f.id as faction_id,
         f.name as faction_name,
-        pms.player_side,
-        pms.total_games,
-        pms.wins,
-        pms.losses,
-        pms.winrate,
-        pms.avg_elo_change
+        SUM(pms.total_games) as total_games,
+        SUM(pms.wins) as wins,
+        SUM(pms.losses) as losses,
+        ROUND(SUM(pms.wins) * 100.0 / SUM(pms.total_games), 2) as winrate,
+        ROUND(AVG(pms.avg_elo_change), 2) as avg_elo_change
       FROM player_match_statistics pms
       JOIN factions f ON pms.faction_id = f.id
       WHERE pms.player_id = ?
@@ -110,14 +109,56 @@ router.get('/player/:playerId/by-faction', async (req, res) => {
       AND pms.map_id IS NULL
       AND pms.faction_id IS NOT NULL
       AND pms.player_side = ?
-      AND pms.total_games >= ?
-      ORDER BY pms.winrate DESC`,
+      GROUP BY f.id, f.name
+      HAVING SUM(pms.total_games) >= ?
+      ORDER BY winrate DESC`,
       [playerId, side, minGames]
     );
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching player faction statistics:', error);
     res.status(500).json({ error: 'Failed to fetch player faction statistics' });
+  }
+});
+
+/**
+ * Get player statistics by faction matchup
+ * Shows matchups with both player faction and opponent faction
+ */
+router.get('/player/:playerId/by-matchup', async (req, res) => {
+  try {
+    const { playerId } = req.params;
+    const minGames = parseInt(req.query.minGames as string) || 2;
+    const side = parseSide(req.query.side);
+
+    const result = await query(
+      `SELECT 
+        f.id as faction_id,
+        f.name as faction_name,
+        opp_f.id as opponent_faction_id,
+        opp_f.name as opponent_faction_name,
+        pms.total_games,
+        pms.wins,
+        pms.losses,
+        pms.winrate,
+        pms.avg_elo_change
+      FROM player_match_statistics pms
+      JOIN factions f ON pms.faction_id = f.id
+      LEFT JOIN factions opp_f ON pms.opponent_faction_id = opp_f.id
+      WHERE pms.player_id = ?
+      AND pms.opponent_id IS NULL
+      AND pms.map_id IS NULL
+      AND pms.faction_id IS NOT NULL
+      AND pms.opponent_faction_id IS NOT NULL
+      AND pms.player_side = ?
+      AND pms.total_games >= ?
+      ORDER BY pms.winrate DESC, pms.total_games DESC`,
+      [playerId, side, minGames]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching player matchup statistics:', error);
+    res.status(500).json({ error: 'Failed to fetch player matchup statistics' });
   }
 });
 
