@@ -6,7 +6,6 @@ import { useAuthStore } from './store/authStore';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import MaintenanceBanner from './components/MaintenanceBanner';
-import { ToastContainer } from './components/ToastNotification';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -97,7 +96,6 @@ const App: React.FC = () => {
       <BrowserRouter>
         <MaintenanceBanner isVisible={maintenanceMode} />
         <Navbar />
-        <ToastContainer />
         <main className={`main-content ${maintenanceMode ? 'pt-40' : ''}`}>
           <Routes>
             <Route path="/" element={<Home />} />
