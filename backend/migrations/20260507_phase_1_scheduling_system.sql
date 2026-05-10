@@ -11,8 +11,8 @@ ADD COLUMN IF NOT EXISTS availability_updated_at DATETIME NULL COMMENT 'Timestam
 -- Stores proposals for scheduling matches at tournament_round_matches or tournament_matches level
 CREATE TABLE IF NOT EXISTS match_schedule_proposals (
   id CHAR(36) PRIMARY KEY COMMENT 'UUID v4',
-  tournament_round_match_id CHAR(36) NULL COMMENT 'FK→tournament_round_matches.id (series-level)',
-  tournament_match_id CHAR(36) NULL COMMENT 'FK→tournament_matches.id (game-level)',
+  tournament_round_match_id CHAR(36) NULL COMMENT 'Reference to tournament_round_matches.id (series-level)',
+  tournament_match_id CHAR(36) NULL COMMENT 'Reference to tournament_matches.id (game-level)',
   proposed_by_user_id CHAR(36) NOT NULL COMMENT 'FK→users_extension.id',
   proposed_at DATETIME NOT NULL,
   status VARCHAR(20) NOT NULL DEFAULT 'active' COMMENT 'active | superseded | resolved',
@@ -20,9 +20,7 @@ CREATE TABLE IF NOT EXISTS match_schedule_proposals (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   
-  FOREIGN KEY (tournament_round_match_id) REFERENCES tournament_round_matches(id) ON DELETE CASCADE,
-  FOREIGN KEY (tournament_match_id) REFERENCES tournament_matches(id) ON DELETE CASCADE,
-  FOREIGN KEY (proposed_by_user_id) REFERENCES users_extension(id) ON DELETE CASCADE,
+  CONSTRAINT fk_proposed_by_user FOREIGN KEY (proposed_by_user_id) REFERENCES users_extension(id) ON DELETE CASCADE,
   
   CONSTRAINT check_proposal_target CHECK (
     (tournament_round_match_id IS NOT NULL AND tournament_match_id IS NULL) OR
