@@ -490,21 +490,87 @@ export const getParticipantsAvailability = async (
     let participantsResult;
     
     if (roundMatchId) {
-      participantsResult = await query(
-        `SELECT DISTINCT u.id, u.nickname, u.timezone, u.availability_schedule
-         FROM users_extension u
-         JOIN tournament_round_matches trm ON (u.id = trm.player1_id OR u.id = trm.player2_id)
+      // First, check if this is a team tournament
+      const matchTypeResult = await query(
+        `SELECT trm.player1_id, trm.player2_id, t.tournament_mode
+         FROM tournament_round_matches trm
+         JOIN tournaments t ON trm.tournament_id = t.id
          WHERE trm.id = ?`,
         [roundMatchId]
       );
+
+      if (!matchTypeResult.rows || matchTypeResult.rows.length === 0) {
+        throw new Error(`tournament_round_match ${roundMatchId} not found`);
+      }
+
+      const matchData = matchTypeResult.rows[0];
+      const isTeamTournament = matchData.tournament_mode === 'team';
+
+      if (isTeamTournament) {
+        // Team tournament: get all players from both teams
+        participantsResult = await query(
+          `SELECT DISTINCT u.id, u.nickname, u.timezone, u.availability_schedule
+           FROM users_extension u
+           JOIN tournament_participants tp ON u.id = tp.user_id
+           WHERE tp.team_id IN (
+             SELECT player1_id FROM tournament_round_matches WHERE id = ?
+             UNION
+             SELECT player2_id FROM tournament_round_matches WHERE id = ?
+           )
+           ORDER BY u.nickname`,
+          [roundMatchId, roundMatchId]
+        );
+      } else {
+        // 1v1 tournament: get both players
+        participantsResult = await query(
+          `SELECT DISTINCT u.id, u.nickname, u.timezone, u.availability_schedule
+           FROM users_extension u
+           JOIN tournament_round_matches trm ON (u.id = trm.player1_id OR u.id = trm.player2_id)
+           WHERE trm.id = ?`,
+          [roundMatchId]
+        );
+      }
     } else if (matchId) {
-      participantsResult = await query(
-        `SELECT DISTINCT u.id, u.nickname, u.timezone, u.availability_schedule
-         FROM users_extension u
-         JOIN tournament_matches tm ON (u.id = tm.player1_id OR u.id = tm.player2_id)
+      // For tournament_matches (individual games)
+      const matchTypeResult = await query(
+        `SELECT tm.player1_id, tm.player2_id, t.tournament_mode
+         FROM tournament_matches tm
+         JOIN tournaments t ON tm.tournament_id = t.id
          WHERE tm.id = ?`,
         [matchId]
       );
+
+      if (!matchTypeResult.rows || matchTypeResult.rows.length === 0) {
+        throw new Error(`tournament_match ${matchId} not found`);
+      }
+
+      const matchData = matchTypeResult.rows[0];
+      const isTeamTournament = matchData.tournament_mode === 'team';
+
+      if (isTeamTournament) {
+        // Team tournament: get all players from both teams
+        participantsResult = await query(
+          `SELECT DISTINCT u.id, u.nickname, u.timezone, u.availability_schedule
+           FROM users_extension u
+           JOIN tournament_participants tp ON u.id = tp.user_id
+           WHERE tp.team_id IN (
+             SELECT player1_id FROM tournament_matches WHERE id = ?
+             UNION
+             SELECT player2_id FROM tournament_matches WHERE id = ?
+           )
+           ORDER BY u.nickname`,
+          [matchId, matchId]
+        );
+      } else {
+        // 1v1 tournament: get both players
+        participantsResult = await query(
+          `SELECT DISTINCT u.id, u.nickname, u.timezone, u.availability_schedule
+           FROM users_extension u
+           JOIN tournament_matches tm ON (u.id = tm.player1_id OR u.id = tm.player2_id)
+           WHERE tm.id = ?`,
+          [matchId]
+        );
+      }
     } else {
       throw new Error('Either roundMatchId or matchId must be provided');
     }
