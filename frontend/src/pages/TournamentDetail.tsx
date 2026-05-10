@@ -262,14 +262,16 @@ const TournamentDetail: React.FC = () => {
   const [replacementTeamMembers, setReplacementTeamMembers] = useState<any[]>([]);
   const [replacementData, setReplacementData] = useState<{ teamId: string; memberId: string; memberNickname: string } | null>(null);
   const [scheduleProposalModal, setScheduleProposalModal] = useState<{ 
-    isOpen: boolean; 
-    matchId: string | null; 
-    player1_nickname: string; 
-    player2_nickname: string;
+    isOpen: boolean;
+    tournamentId?: string;
+    roundMatchId?: string;
+    matchId?: string;
+    player1_nickname?: string; 
+    player2_nickname?: string;
     scheduled_datetime?: string;
     scheduled_status?: string;
     scheduled_by_player_id?: string;
-  }>({ isOpen: false, matchId: null, player1_nickname: '', player2_nickname: '' });
+  }>({ isOpen: false });
 
     const [showReplayConfirmModal, setShowReplayConfirmModal] = useState(false);
   const [selectedTournamentReplay, setSelectedTournamentReplay] = useState<any>(null);
@@ -2361,7 +2363,9 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                               <button
                                                 className="px-3 py-1 bg-green-500 text-white rounded text-xs font-semibold hover:bg-green-600 transition-colors whitespace-nowrap"
                                                 onClick={() => setScheduleProposalModal({ 
-                                                  isOpen: true, 
+                                                  isOpen: true,
+                                                   tournamentId: id,
+                                                   roundMatchId: match.tournament_round_match_id,
                                                   matchId: match.id,
                                                   player1_nickname: match.player1_nickname,
                                                   player2_nickname: match.player2_nickname,
@@ -2394,7 +2398,9 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                               <button
                                                 className="px-3 py-1 bg-purple-500 text-white rounded text-xs font-semibold hover:bg-purple-600 transition-colors whitespace-nowrap"
                                                 onClick={() => setScheduleProposalModal({ 
-                                                  isOpen: true, 
+                                                  isOpen: true,
+                                                   tournamentId: id,
+                                                   roundMatchId: match.tournament_round_match_id,
                                                   matchId: match.id,
                                                   player1_nickname: match.player1_nickname,
                                                   player2_nickname: match.player2_nickname,
@@ -2426,7 +2432,9 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                           <button
                                             className="px-3 py-1 bg-purple-500 text-white rounded text-xs font-semibold hover:bg-purple-600 transition-colors whitespace-nowrap"
                                             onClick={() => setScheduleProposalModal({ 
-                                              isOpen: true, 
+                                              isOpen: true,
+                                                   tournamentId: id,
+                                                   roundMatchId: match.tournament_round_match_id,
                                               matchId: match.id,
                                               player1_nickname: match.player1_nickname,
                                               player2_nickname: match.player2_nickname,
@@ -2860,17 +2868,12 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
       {/* Schedule Proposal Modal */}
       <ScheduleProposalModal
         isOpen={scheduleProposalModal.isOpen}
-        onClose={() => setScheduleProposalModal({ isOpen: false, matchId: null, player1_nickname: '', player2_nickname: '' })}
+        tournamentId={scheduleProposalModal.tournamentId || id}
+        roundMatchId={scheduleProposalModal.roundMatchId}
         matchId={scheduleProposalModal.matchId}
-        player1_nickname={scheduleProposalModal.player1_nickname}
-        player2_nickname={scheduleProposalModal.player2_nickname}
-        scheduled_datetime={scheduleProposalModal.scheduled_datetime}
-        scheduled_status={scheduleProposalModal.scheduled_status}
-        scheduled_by_player_id={scheduleProposalModal.scheduled_by_player_id}
+        onClose={() => setScheduleProposalModal({ isOpen: false })}
         onSuccess={() => {
-          // Close modal first
-          setScheduleProposalModal({ isOpen: false, matchId: null, player1_nickname: '', player2_nickname: '' });
-          // Then refresh data
+          setScheduleProposalModal({ isOpen: false });
           fetchTournamentData();
         }}
       />
