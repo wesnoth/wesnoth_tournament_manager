@@ -24,34 +24,42 @@ interface ConversionResult {
  */
 const getTimezoneOffset = (fromTz: string, toTz: string, referenceDate: Date = new Date()): number => {
   try {
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: toTz,
+    // Use the full DateTimeFormat with date info to detect day boundaries
+    const formatterWithDate = (tz: string) => new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
       hour12: false
     });
     
-    const parts = formatter.formatToParts(referenceDate);
-    const toHour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
-    
-    // UTC hour at this reference date
+    const utcDateStr = referenceDate.toISOString().split('T')[0]; // YYYY-MM-DD
     const utcHour = referenceDate.getUTCHours();
-    const toOffset = toHour - utcHour;
     
-    // Now get fromTz offset
-    const formatter2 = new Intl.DateTimeFormat('en-US', {
-      timeZone: fromTz,
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
+    // Get toTz local time with date
+    const toTzFormatter = formatterWithDate(toTz);
+    const toParts = toTzFormatter.formatToParts(referenceDate);
+    const toDay = parseInt(toParts.find(p => p.type === 'day')?.value || '1');
+    const toHour = parseInt(toParts.find(p => p.type === 'hour')?.value || '0');
     
-    const parts2 = formatter2.formatToParts(referenceDate);
-    const fromHour = parseInt(parts2.find(p => p.type === 'hour')?.value || '0');
-    const fromOffset = fromHour - utcHour;
+    // Get fromTz local time with date
+    const fromTzFormatter = formatterWithDate(fromTz);
+    const fromParts = fromTzFormatter.formatToParts(referenceDate);
+    const fromDay = parseInt(fromParts.find(p => p.type === 'day')?.value || '1');
+    const fromHour = parseInt(fromParts.find(p => p.type === 'hour')?.value || '0');
     
-    // Difference: toOffset - fromOffset
-    // Example: São Paulo (-3) vs Madrid (+2 in summer) = 2 - (-3) = +5 hours
+    // Calculate day offsets from UTC day
+    const utcDay = referenceDate.getUTCDate();
+    const toTzDayOffset = toDay - utcDay;
+    const fromTzDayOffset = fromDay - utcDay;
+    
+    // Calculate offsets accounting for day boundaries
+    const toOffset = toTzDayOffset * 24 + (toHour - utcHour);
+    const fromOffset = fromTzDayOffset * 24 + (fromHour - utcHour);
+    
+    // Difference
     return toOffset - fromOffset;
   } catch (error) {
     console.warn(`Error calculating timezone offset between ${fromTz} and ${toTz}:`, error);
@@ -71,137 +79,83 @@ const convertTimeRangeToTimezone = (
   referenceDate: Date = new Date()
 ): ConversionResult => {
   try {
-    const ranges: TimeRange[] = [];
-    
     // Parse start and end times
     const [startHour, startMin] = timeRange.start.split(':').map(Number);
     const [endHour, endMin] = timeRange.end.split(':').map(Number);
+    
+    if (fromTz === toTz) {
+      // No conversion needed
+      return { day: dayOfWeek, ranges: [timeRange] };
+    }
+    
+    // Get timezone offsets
+    const fromTzOffsetHours = getTimezoneOffset('UTC', fromTz, referenceDate);
+    const toTzOffsetHours = getTimezoneOffset('UTC', toTz, referenceDate);
+    
+    // Convert: if we have HH:MM in fromTz, what time is it in toTz?
+    // The shift is: toTzOffset - fromTzOffset
+    const shiftHours = toTzOffsetHours - fromTzOffsetHours;
+    
+    // Apply the shift to start and end times
+    let resultStartHour = startHour + shiftHours;
+    let resultStartMin = startMin;
+    let resultStartDayShift = 0;
+    
+    // Handle hour wraparound
+    if (resultStartHour < 0) {
+      resultStartDayShift = Math.floor(resultStartHour / 24) - 1;
+      resultStartHour = ((resultStartHour % 24) + 24) % 24;
+    } else if (resultStartHour >= 24) {
+      resultStartDayShift = Math.floor(resultStartHour / 24);
+      resultStartHour = resultStartHour % 24;
+    }
+    
+    let resultEndHour = endHour + shiftHours;
+    let resultEndMin = endMin;
+    let resultEndDayShift = 0;
+    
+    // Handle hour wraparound
+    if (resultEndHour < 0) {
+      resultEndDayShift = Math.floor(resultEndHour / 24) - 1;
+      resultEndHour = ((resultEndHour % 24) + 24) % 24;
+    } else if (resultEndHour >= 24) {
+      resultEndDayShift = Math.floor(resultEndHour / 24);
+      resultEndHour = resultEndHour % 24;
+    }
     
     const daysMap: Record<string, number> = {
       sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
       thursday: 4, friday: 5, saturday: 6
     };
-    
-    // Create a test date for this day of week, using referenceDate as base
-    const testDate = new Date(referenceDate);
-    testDate.setUTCHours(0, 0, 0, 0);
-    
-    // Find the next occurrence of this day of week
-    const targetDayNum = daysMap[dayOfWeek.toLowerCase()];
-    const currentDayNum = testDate.getUTCDay();
-    let dayOffset = targetDayNum - currentDayNum;
-    if (dayOffset < 0) dayOffset += 7;
-    
-    const dayDate = new Date(testDate);
-    dayDate.setUTCDate(dayDate.getUTCDate() + dayOffset);
-    
-    // Create start and end times in the fromTz
-    // We need to find what UTC time corresponds to "startHour:startMin in fromTz on this dayDate"
-    
-    // Try different UTC times to find which one gives us the correct local time
-    let startUTC: Date | null = null;
-    let endUTC: Date | null = null;
-    
-    for (let offsetHours = -14; offsetHours <= 14; offsetHours++) {
-      const testUtc = new Date(dayDate.getTime() + startHour * 60 * 60 * 1000 + startMin * 60 * 1000);
-      testUtc.setTime(testUtc.getTime() - offsetHours * 60 * 60 * 1000);
-      
-      // Check what local time this UTC time is in fromTz
-      const formatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: fromTz,
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      });
-      
-      const parts = formatter.formatToParts(testUtc);
-      const testHour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
-      const testMin = parseInt(parts.find(p => p.type === 'minute')?.value || '0');
-      
-      if (testHour === startHour && testMin === startMin) {
-        startUTC = testUtc;
-        break;
-      }
-    }
-    
-    for (let offsetHours = -14; offsetHours <= 14; offsetHours++) {
-      const testUtc = new Date(dayDate.getTime() + endHour * 60 * 60 * 1000 + endMin * 60 * 1000);
-      testUtc.setTime(testUtc.getTime() - offsetHours * 60 * 60 * 1000);
-      
-      const formatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: fromTz,
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      });
-      
-      const parts = formatter.formatToParts(testUtc);
-      const testHour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
-      const testMin = parseInt(parts.find(p => p.type === 'minute')?.value || '0');
-      
-      if (testHour === endHour && testMin === endMin) {
-        endUTC = testUtc;
-        break;
-      }
-    }
-    
-    if (!startUTC || !endUTC) {
-      console.warn(`Could not convert time range for ${dayOfWeek} ${timeRange.start}-${timeRange.end} from ${fromTz} to ${toTz}`);
-      return { day: dayOfWeek, ranges: [timeRange] };
-    }
-    
-    // Now convert these UTC times to toTz and get the local times and days
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: toTz,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
-    
-    const startParts = formatter.formatToParts(startUTC);
-    const startToTzHour = parseInt(startParts.find(p => p.type === 'hour')?.value || '0');
-    const startToTzMin = parseInt(startParts.find(p => p.type === 'minute')?.value || '0');
-    const startToTzDayNum = parseInt(startParts.find(p => p.type === 'day')?.value || '1');
-    
-    const endParts = formatter.formatToParts(endUTC);
-    const endToTzHour = parseInt(endParts.find(p => p.type === 'hour')?.value || '0');
-    const endToTzMin = parseInt(endParts.find(p => p.type === 'minute')?.value || '0');
-    const endToTzDayNum = parseInt(endParts.find(p => p.type === 'day')?.value || '1');
-    
-    // Calculate day offset from the original day
-    const dayDate_day = dayDate.getUTCDate();
-    const startDayOffset = startToTzDayNum - dayDate_day;
-    const endDayOffset = endToTzDayNum - dayDate_day;
-    
-    // Map to day names
     const daysReverseMap = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    const startResultDayNum = (targetDayNum + startDayOffset + 7) % 7;
-    const endResultDayNum = (targetDayNum + endDayOffset + 7) % 7;
     
-    const startDayName = daysReverseMap[startResultDayNum];
-    const endDayName = daysReverseMap[endResultDayNum];
+    const startDayNum = daysMap[dayOfWeek.toLowerCase()];
+    const startResultDayNum = (startDayNum + resultStartDayShift + 7) % 7;
+    const startResultDayName = daysReverseMap[startResultDayNum];
     
-    const startTimeStr = `${String(startToTzHour).padStart(2, '0')}:${String(startToTzMin).padStart(2, '0')}`;
-    const endTimeStr = `${String(endToTzHour).padStart(2, '0')}:${String(endToTzMin).padStart(2, '0')}`;
+    const endDayNum = daysMap[dayOfWeek.toLowerCase()];
+    const endResultDayNum = (endDayNum + resultEndDayShift + 7) % 7;
+    const endResultDayName = daysReverseMap[endResultDayNum];
     
-    if (startDayName === endDayName) {
+    const startTimeStr = `${String(resultStartHour).padStart(2, '0')}:${String(resultStartMin).padStart(2, '0')}`;
+    const endTimeStr = `${String(resultEndHour).padStart(2, '0')}:${String(resultEndMin).padStart(2, '0')}`;
+    
+    if (startResultDayName === endResultDayName) {
       // Same day
-      ranges.push({ start: startTimeStr, end: endTimeStr });
-      return { day: startDayName, ranges };
+      return { day: startResultDayName, ranges: [{ start: startTimeStr, end: endTimeStr }] };
     } else {
       // Spans two days
-      ranges.push({ start: startTimeStr, end: '23:59' });
-      ranges.push({ start: '00:00', end: endTimeStr });
-      return { day: startDayName, ranges: [
-        { start: startTimeStr, end: '23:59' },
-        { start: '00:00', end: endTimeStr }
-      ], nextDay: endDayName };
+      return {
+        day: startResultDayName,
+        ranges: [
+          { start: startTimeStr, end: '23:59' },
+          { start: '00:00', end: endTimeStr }
+        ],
+        nextDay: endResultDayName
+      };
     }
   } catch (error) {
-    console.warn(`Error converting time range:`, error);
+    console.warn(`Error converting time range for ${dayOfWeek} ${timeRange.start}-${timeRange.end}:`, error);
     return { day: dayOfWeek, ranges: [timeRange] };
   }
 };
