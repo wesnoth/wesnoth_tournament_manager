@@ -1,11 +1,11 @@
 -- Phase 1: Enhanced Scheduling System - Database Schema
 -- Adds timezone awareness, availability scheduling, and match schedule proposals
 
--- 1. Update users_extension table to include timezone and availability
+-- 1. Update users_extension table to include timezone and availability (if not already present)
 ALTER TABLE users_extension
-ADD COLUMN timezone VARCHAR(100) DEFAULT 'UTC' COMMENT 'IANA timezone name (e.g., Europe/Madrid, America/New_York)' AFTER is_admin,
-ADD COLUMN availability_schedule JSON NULL COMMENT 'Object with day keys (monday-sunday) containing array of {start, end} time ranges' AFTER timezone,
-ADD COLUMN availability_updated_at DATETIME NULL COMMENT 'Timestamp when availability was last modified' AFTER availability_schedule;
+ADD COLUMN IF NOT EXISTS timezone VARCHAR(100) DEFAULT 'UTC' COMMENT 'IANA timezone name (e.g., Europe/Madrid, America/New_York)' AFTER is_admin,
+ADD COLUMN IF NOT EXISTS availability_schedule JSON NULL COMMENT 'Object with day keys (monday-sunday) containing array of {start, end} time ranges' AFTER timezone,
+ADD COLUMN IF NOT EXISTS availability_updated_at DATETIME NULL COMMENT 'Timestamp when availability was last modified' AFTER availability_schedule;
 
 -- 2. Create match_schedule_proposals table
 -- Stores proposals for scheduling matches at tournament_round_matches or tournament_matches level
