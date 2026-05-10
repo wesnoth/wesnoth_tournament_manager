@@ -30,14 +30,12 @@ COMMENT='Scheduling proposals at round or individual match level';
 -- 3. Create match_schedule_slots table
 -- Individual time slots within a proposal - slots are in UTC, rounded to nearest 30-minute mark
 CREATE TABLE IF NOT EXISTS match_schedule_slots (
-  id CHAR(36) PRIMARY KEY COMMENT 'UUID v4',
-  proposal_id CHAR(36) NOT NULL COMMENT 'FK→match_schedule_proposals.id',
+  id CHAR(36) NOT NULL PRIMARY KEY COMMENT 'UUID v4',
+  proposal_id CHAR(36) NOT NULL COMMENT 'Reference to match_schedule_proposals.id',
   slot_datetime DATETIME NOT NULL COMMENT 'UTC timestamp, rounded to nearest 30-minute mark (HH:00 or HH:30)',
   slot_duration_minutes INT DEFAULT 30 COMMENT 'Always 30 minutes',
   status VARCHAR(20) NOT NULL DEFAULT 'pending' COMMENT 'pending | confirmed',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  
-  FOREIGN KEY (proposal_id) REFERENCES match_schedule_proposals(id) ON DELETE CASCADE,
   
   UNIQUE KEY uq_proposal_slot_time (proposal_id, slot_datetime),
   INDEX idx_proposal_id (proposal_id),
@@ -49,16 +47,12 @@ COMMENT='Individual 30-minute time slots within proposals';
 -- 4. Create match_schedule_confirmations table
 -- Tracks user/team confirmations for proposed time slots
 CREATE TABLE IF NOT EXISTS match_schedule_confirmations (
-  id CHAR(36) PRIMARY KEY COMMENT 'UUID v4',
-  slot_id CHAR(36) NOT NULL COMMENT 'FK→match_schedule_slots.id',
-  user_id CHAR(36) NOT NULL COMMENT 'FK→users_extension.id',
-  team_id CHAR(36) NULL COMMENT 'FK→tournament_teams.id (only for team matches)',
+  id CHAR(36) NOT NULL PRIMARY KEY COMMENT 'UUID v4',
+  slot_id CHAR(36) NOT NULL COMMENT 'Reference to match_schedule_slots.id',
+  user_id CHAR(36) NOT NULL COMMENT 'Reference to users_extension.id',
+  team_id CHAR(36) NULL COMMENT 'Reference to tournament_teams.id (only for team matches)',
   confirmed_at DATETIME NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  
-  FOREIGN KEY (slot_id) REFERENCES match_schedule_slots(id) ON DELETE CASCADE,
-  FOREIGN KEY (user_id) REFERENCES users_extension(id) ON DELETE CASCADE,
-  FOREIGN KEY (team_id) REFERENCES tournament_teams(id) ON DELETE SET NULL,
   
   UNIQUE KEY uq_slot_user (slot_id, user_id),
   INDEX idx_slot_id (slot_id),
