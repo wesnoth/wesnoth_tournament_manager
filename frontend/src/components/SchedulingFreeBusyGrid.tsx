@@ -10,12 +10,9 @@ interface Participant {
 }
 
 interface GridSlot {
-  startTime: Date;      // Stored as UTC for API
-  endTime: Date;        // Stored as UTC for API
+  dateStr: string;      // YYYY-MM-DD
+  timeStr: string;      // HH:MM
   dayOfWeek: string;
-  slotIndex: number;
-  displayTime: string;  // HH:MM in viewing timezone
-  localDate: string;    // YYYY-MM-DD in viewing timezone
 }
 
 interface SchedulingFreeBusyGridProps {
@@ -33,131 +30,102 @@ interface SchedulingFreeBusyGridProps {
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 /**
- * Generate 30-minute slots for display grid
- * Each day runs from 00:00 to 23:59 in viewing timezone
- * Slots are converted to UTC for storage/API, but displayTime shows viewing timezone time
+ * Generate 30-minute slots for display grid in viewing timezone
+ * Slots represent times in viewing timezone only
  */
-const generateSlots = (dateStart: Date, dateEnd: Date, viewingTimezone: string): GridSlot[] => {
+const generateSlots = (dateStart: Date, dateEnd: Date): GridSlot[] => {
   const slots: GridSlot[] = [];
-  
-  // We need to iterate over dates in viewing timezone
-  // Start: convert dateStart to viewing timezone date
-  // End: convert dateEnd to viewing timezone date
-  
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: viewingTimezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  });
-  
-  // Get start date in viewing timezone
-  let currentLocalDate = formatter.format(dateStart);
-  const endLocalDate = formatter.format(dateEnd);
-  
-  while (currentLocalDate <= endLocalDate) {
-    // Create dates for this day in viewing timezone
-    // We create them as if they are UTC, then convert back
+  const current = new Date(dateStart);
+  current.setUTCHours(0, 0, 0, 0);
+
+  while (current < dateEnd) {
+    const dateStr = current.toISOString().split('T')[0]; // YYYY-MM-DD
+    const dayOfWeek = DAYS_OF_WEEK[current.getUTCDay()];
+
     for (let hour = 0; hour < 24; hour++) {
       for (let minute = 0; minute < 60; minute += 30) {
-        const displayTime = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-        
-        // Create a UTC date that represents "currentLocalDate at displayTime in viewingTimezone"
-        // We need to find what UTC time corresponds to this
-        const localDateObj = new Date(currentLocalDate + 'T' + displayTime + ':00');
-        
-        // Use Intl to figure out the UTC equivalent
-        // We'll try a range of UTC times to find which one gives us the desired local time
-        let utcTime = new Date(localDateObj);
-        
-        // First approximation: assume UTC offset of ±12 hours max
-        for (let offsetHours = -12; offsetHours <= 12; offsetHours++) {
-          const testUtc = new Date(localDateObj.getTime() - offsetHours * 60 * 60 * 1000);
-          const testFormatter = new Intl.DateTimeFormat('en-US', {
-            timeZone: viewingTimezone,
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false
-          });
-          
-          const parts = testFormatter.formatToParts(testUtc);
-          const testHour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
-          const testMin = parseInt(parts.find(p => p.type === 'minute')?.value || '0');
-          
-          if (testHour === hour && testMin === minute) {
-            utcTime = testUtc;
-            break;
-          }
-        }
-        
-        const slotEnd = new Date(utcTime.getTime() + 30 * 60 * 1000);
-        
-        // Get day of week in UTC (for display purposes)
-        const dayOfWeek = DAYS_OF_WEEK[utcTime.getUTCDay()];
-        
+        const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
         slots.push({
-          startTime: utcTime,
-          endTime: slotEnd,
-          dayOfWeek,
-          slotIndex: hour * 2 + Math.floor(minute / 30),
-          displayTime,
-          localDate: currentLocalDate
+          dateStr,
+          timeStr,
+          dayOfWeek
         });
       }
     }
-    
-    // Move to next day in viewing timezone
-    const [year, month, day] = currentLocalDate.split('-').map(Number);
-    const nextDayLocal = new Date(year, month - 1, day + 1);
-    currentLocalDate = formatter.format(nextDayLocal);
+
+    current.setUTCDate(current.getUTCDate() + 1);
   }
-  
+
   return slots;
 };
 
 /**
- * Convert UTC date to specified timezone and get day name
- */
-const getDayInTimezone = (utcDate: Date, timezone: string): string => {
-  try {
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      weekday: 'long'
-    });
-    return formatter.format(utcDate).toLowerCase();
-  } catch {
-    return DAYS_OF_WEEK[utcDate.getUTCDay()].toLowerCase();
-  }
-};
-
-/**
- * Check if participant is available at this slot
- * Compare using displayTime (viewing timezone) with availability ranges
+ * Check if participant is available at this slot time
+ * Both slot and availability are in viewing timezone
  */
 const isParticipantAvailable = (
   participant: Participant,
-  slot: GridSlot,
-  viewingTimezone: string
+  slot: GridSlot
 ): boolean => {
   if (!participant.availability_schedule) {
     return true;
   }
 
   try {
-    // Get day name in viewing timezone
-    const dayKey = getDayInTimezone(slot.startTime, viewingTimezone);
+    const dayKey = slot.dayOfWeek.toLowerCase();
     const dayRanges = participant.availability_schedule[dayKey] || [];
-
-    // Use the display time which is already in viewing timezone
-    const slotTimeStr = slot.displayTime;
+    const slotTime = slot.timeStr;
 
     return dayRanges.some(
-      range => slotTimeStr >= range.start && slotTimeStr < range.end
+      range => slotTime >= range.start && slotTime < range.end
     );
   } catch (error) {
     console.warn(`Error checking availability for ${participant.nickname}:`, error);
     return true;
   }
+};
+
+/**
+ * Convert slot to UTC datetime for API submission
+ */
+const slotToUTCDatetime = (slot: GridSlot, viewingTimezone: string): string => {
+  // Create a date string for this date/time in viewing timezone
+  const localDateTimeStr = `${slot.dateStr}T${slot.timeStr}:00`;
+  const localDate = new Date(localDateTimeStr);
+
+  // Find what UTC time corresponds to this local time
+  // Try different UTC offsets to find the match
+  for (let offsetHours = -12; offsetHours <= 14; offsetHours++) {
+    const testUtc = new Date(localDate.getTime() - offsetHours * 60 * 60 * 1000);
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: viewingTimezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+
+    const parts = formatter.formatToParts(testUtc);
+    const testYear = parseInt(parts.find(p => p.type === 'year')?.value || '0');
+    const testMonth = parseInt(parts.find(p => p.type === 'month')?.value || '0');
+    const testDay = parseInt(parts.find(p => p.type === 'day')?.value || '0');
+    const testHour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
+    const testMin = parseInt(parts.find(p => p.type === 'minute')?.value || '0');
+
+    const [year, month, day] = slot.dateStr.split('-').map(Number);
+    const [hour, min] = slot.timeStr.split(':').map(Number);
+
+    if (testYear === year && testMonth === month && testDay === day && testHour === hour && testMin === min) {
+      return testUtc.toISOString();
+    }
+  }
+
+  // Fallback
+  console.warn('Could not convert slot to UTC:', slot);
+  return new Date(localDateTimeStr).toISOString();
 };
 
 export default function SchedulingFreeBusyGrid({
@@ -173,21 +141,22 @@ export default function SchedulingFreeBusyGrid({
 }: SchedulingFreeBusyGridProps) {
   const { t } = useTranslation();
 
-  const slots = useMemo(() => generateSlots(dateStart, dateEnd, viewingTimezone), [dateStart, dateEnd, viewingTimezone]);
+  const slots = useMemo(() => generateSlots(dateStart, dateEnd), [dateStart, dateEnd]);
 
   const slotsByDate = useMemo(() => {
     const grouped: Record<string, GridSlot[]> = {};
     slots.forEach(slot => {
-      const dateKey = slot.localDate;
-      if (!grouped[dateKey]) {
-        grouped[dateKey] = [];
+      if (!grouped[slot.dateStr]) {
+        grouped[slot.dateStr] = [];
       }
-      grouped[dateKey].push(slot);
+      grouped[slot.dateStr].push(slot);
     });
     return grouped;
   }, [slots]);
 
-  const getSlotKey = (slot: GridSlot): string => slot.startTime.toISOString();
+  const getSlotKey = (slot: GridSlot): string => {
+    return slotToUTCDatetime(slot, viewingTimezone);
+  };
 
   const handleSlotClick = (slot: GridSlot) => {
     if (readOnly || !onSlotToggle) return;
@@ -265,10 +234,10 @@ export default function SchedulingFreeBusyGrid({
 
                 return daySlots.map(slot => (
                   <th
-                    key={getSlotKey(slot)}
+                    key={`${dateKey}-${slot.timeStr}`}
                     className={`border border-gray-300 p-1 ${dayColor} text-center h-8`}
                   >
-                    <span title={slot.displayTime}>{slot.displayTime}</span>
+                    <span>{slot.timeStr}</span>
                   </th>
                 ));
               })}
@@ -291,7 +260,7 @@ export default function SchedulingFreeBusyGrid({
 
                   return daySlots.map(slot => {
                     const slotKey = getSlotKey(slot);
-                    const isAvailable = isParticipantAvailable(participant, slot, viewingTimezone);
+                    const isAvailable = isParticipantAvailable(participant, slot);
                     const isProposed = proposedSlots.includes(slotKey);
                     const confirmations = confirmedSlots[slotKey] || [];
                     const isConfirmed = confirmations.length > 0;
@@ -319,12 +288,12 @@ export default function SchedulingFreeBusyGrid({
 
                     return (
                       <td
-                        key={slotKey}
+                        key={`${dateKey}-${slot.timeStr}`}
                         className={`border ${borderColor} p-0.5 h-8 cursor-${readOnly ? 'default' : 'pointer'} ${bgColor} ${
                           !readOnly && !isProposed ? 'hover:opacity-75' : ''
                         }`}
                         onClick={() => handleSlotClick(slot)}
-                        title={`${participant.nickname} - ${slot.displayTime}`}
+                        title={`${participant.nickname} - ${slot.dateStr} ${slot.timeStr}`}
                       >
                         {isConfirmed && (
                           <div className="w-full h-full flex items-center justify-center text-green-700 font-bold">
