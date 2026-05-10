@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense, lazy } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { userService, publicService } from '../services/api';
@@ -6,14 +6,17 @@ import { playerStatisticsService } from '../services/playerStatisticsService';
 import { useAuthStore } from '../store/authStore';
 import MainLayout from '../components/MainLayout';
 import ProfileStats from '../components/ProfileStats';
-import EloChart from '../components/EloChart';
 import MatchesTable from '../components/MatchesTable';
 import MatchDetailsModal from '../components/MatchDetailsModal';
 import MatchConfirmationModal from '../components/MatchConfirmationModal';
-import PlayerStatsByMap from '../components/PlayerStatsByMap';
-import PlayerStatsByFaction from '../components/PlayerStatsByFaction';
-import PlayerStatsByMatchup from '../components/PlayerStatsByMatchup';
 import PlayerLink from '../components/PlayerLink';
+import RouteLoader from '../components/RouteLoader';
+
+// Lazy-load heavy chart and statistics components
+const EloChart = lazy(() => import('../components/EloChart'));
+const PlayerStatsByMap = lazy(() => import('../components/PlayerStatsByMap'));
+const PlayerStatsByFaction = lazy(() => import('../components/PlayerStatsByFaction'));
+const PlayerStatsByMatchup = lazy(() => import('../components/PlayerStatsByMatchup'));
 
 type ProfileTab = 'overall' | 'matches' | 'opponents' | 'by-map' | 'by-faction' | 'by-matchup';
 
@@ -348,10 +351,12 @@ const User: React.FC = () => {
               {/* Overall Tab */}
               {activeTab === 'overall' && (
                 <div className="bg-white rounded-lg shadow-md p-8">
-                  <EloChart 
-                    matches={matches}
-                    currentPlayerId={userId || ''}
-                  />
+                  <Suspense fallback={<RouteLoader />}>
+                    <EloChart 
+                      matches={matches}
+                      currentPlayerId={userId || ''}
+                    />
+                  </Suspense>
 
                   <div className="recent-games-container">
                     <h2>{t('recent_games')}</h2>
@@ -623,21 +628,27 @@ const User: React.FC = () => {
               {/* Performance by Map Tab */}
               {activeTab === 'by-map' && (
                 <div className="bg-white rounded-lg shadow-md p-8">
-                  <PlayerStatsByMap playerId={userId || ''} />
+                  <Suspense fallback={<RouteLoader />}>
+                    <PlayerStatsByMap playerId={userId || ''} />
+                  </Suspense>
                 </div>
               )}
 
               {/* Performance by Faction Tab */}
               {activeTab === 'by-faction' && (
                 <div className="bg-white rounded-lg shadow-md p-8">
-                  <PlayerStatsByFaction playerId={userId || ''} />
+                  <Suspense fallback={<RouteLoader />}>
+                    <PlayerStatsByFaction playerId={userId || ''} />
+                  </Suspense>
                 </div>
               )}
 
               {/* Matchup Analysis Tab */}
               {activeTab === 'by-matchup' && (
                 <div className="bg-white rounded-lg shadow-md p-8">
-                  <PlayerStatsByMatchup playerId={userId || ''} />
+                  <Suspense fallback={<RouteLoader />}>
+                    <PlayerStatsByMatchup playerId={userId || ''} />
+                  </Suspense>
                 </div>
               )}
             </div>
