@@ -10,22 +10,15 @@ ADD COLUMN IF NOT EXISTS availability_updated_at DATETIME NULL COMMENT 'Timestam
 -- 2. Create match_schedule_proposals table
 -- Stores proposals for scheduling matches at tournament_round_matches or tournament_matches level
 CREATE TABLE IF NOT EXISTS match_schedule_proposals (
-  id CHAR(36) PRIMARY KEY COMMENT 'UUID v4',
+  id CHAR(36) NOT NULL PRIMARY KEY COMMENT 'UUID v4',
   tournament_round_match_id CHAR(36) NULL COMMENT 'Reference to tournament_round_matches.id (series-level)',
   tournament_match_id CHAR(36) NULL COMMENT 'Reference to tournament_matches.id (game-level)',
-  proposed_by_user_id CHAR(36) NOT NULL COMMENT 'FK→users_extension.id',
+  proposed_by_user_id CHAR(36) NOT NULL COMMENT 'User who made the proposal',
   proposed_at DATETIME NOT NULL,
   status VARCHAR(20) NOT NULL DEFAULT 'active' COMMENT 'active | superseded | resolved',
   notes TEXT NULL COMMENT 'Player notes (max 500 chars)',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  
-  CONSTRAINT fk_proposed_by_user FOREIGN KEY (proposed_by_user_id) REFERENCES users_extension(id) ON DELETE CASCADE,
-  
-  CONSTRAINT check_proposal_target CHECK (
-    (tournament_round_match_id IS NOT NULL AND tournament_match_id IS NULL) OR
-    (tournament_round_match_id IS NULL AND tournament_match_id IS NOT NULL)
-  ),
   
   INDEX idx_round_match_id (tournament_round_match_id),
   INDEX idx_match_id (tournament_match_id),
