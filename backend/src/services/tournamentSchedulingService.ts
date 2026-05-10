@@ -588,6 +588,8 @@ export const getParticipantsAvailability = async (
       }
     }
 
+    console.log(`[getParticipantsAvailability] LoggedInUserId: ${loggedInUserId}, ViewingTimezone: ${viewingTimezone}`);
+
     const participants = participantsResult.rows || [];
     
     // Parse JSON availability_schedule for each participant

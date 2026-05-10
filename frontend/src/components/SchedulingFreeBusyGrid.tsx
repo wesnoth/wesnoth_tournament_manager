@@ -79,27 +79,27 @@ const getDayInTimezone = (utcDate: Date, timezone: string): string => {
 };
 
 /**
- * Convert UTC time to viewing timezone for availability checking
- * Participant availability is stored in their own timezone, but we check against viewing timezone
+ * Convert UTC time to participant's timezone and check availability
+ * The key insight: participant's availability_schedule is in their timezone
+ * So we need to convert the UTC slot to the participant's timezone to verify availability
  */
 const isParticipantAvailable = (
   participant: Participant,
   slotStartUTC: Date,
-  slotEndUTC: Date,
-  viewingTimezone: string
+  slotEndUTC: Date
 ): boolean => {
   if (!participant.availability_schedule) {
     return true; // Unknown availability = assume available
   }
 
   try {
-    // Get day name in viewing timezone
-    const dayKey = getDayInTimezone(slotStartUTC, viewingTimezone);
+    // Get day name in PARTICIPANT's timezone (not viewing timezone!)
+    const dayKey = getDayInTimezone(slotStartUTC, participant.timezone);
     const dayRanges = participant.availability_schedule[dayKey] || [];
 
-    // Convert UTC time to viewing timezone
+    // Convert UTC time to PARTICIPANT's timezone
     const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: viewingTimezone,
+      timeZone: participant.timezone,
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
@@ -271,7 +271,7 @@ export default function SchedulingFreeBusyGrid({
 
                   return daySlots.map(slot => {
                     const slotKey = getSlotKey(slot);
-                    const isAvailable = isParticipantAvailable(participant, slot.startTime, slot.endTime, viewingTimezone);
+                    const isAvailable = isParticipantAvailable(participant, slot.startTime, slot.endTime);
                     const isProposed = proposedSlots.includes(slotKey);
                     const confirmations = confirmedSlots[slotKey] || [];
                     const isConfirmed = confirmations.length > 0;
