@@ -117,7 +117,9 @@
     "filter_completed": "Completadas",
     "refresh": "Actualizar",
     "clear_all": "Limpiar Todo",
-    "remove": "Eliminar"
+    "remove": "Eliminar",
+    "timezone": "Zona horaria",
+    "save": "Guardar"
   },
   "confirm_delete_tournament": "¿Estás seguro de que quieres eliminar este torneo? Los matches asociados se desvincularcán pero no se eliminarán.",
   "confirm_dispute": "Confirmar/Disputar",

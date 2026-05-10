@@ -115,7 +115,9 @@
     "filter_completed": "Abgeschlossen",
     "refresh": "Aktualisieren",
     "clear_all": "Alles löschen",
-    "remove": "Entfernen"
+    "remove": "Entfernen",
+    "timezone": "Zeitzone",
+    "save": "Speichern"
   },
   "confirm_dispute": "Bestätigen/Bestreiten",
   "create_balance_event": "Balance-Event erstellen",

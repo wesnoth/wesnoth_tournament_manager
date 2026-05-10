@@ -116,7 +116,9 @@
     "filter_completed": "Completed",
     "refresh": "Refresh",
     "clear_all": "Clear All",
-    "remove": "Remove"
+    "remove": "Remove",
+    "timezone": "Timezone",
+    "save": "Save"
   },
   "confirm_delete_tournament": "Are you sure you want to delete this tournament? Associated matches will be desvinculated but not deleted.",
   "confirm_dispute": "Confirm/Dispute",

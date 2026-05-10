@@ -115,7 +115,9 @@
     "filter_completed": "Завершённые",
     "refresh": "Обновить",
     "clear_all": "Очистить все",
-    "remove": "Удалить"
+    "remove": "Удалить",
+    "timezone": "Часовой пояс",
+    "save": "Сохранить"
   },
   "confirm_dispute": "Подтвердить/оспорить",
   "create_balance_event": "Создать событие баланса",

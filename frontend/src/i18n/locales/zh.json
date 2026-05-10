@@ -115,7 +115,9 @@
     "filter_completed": "已完成",
     "refresh": "刷新",
     "clear_all": "全部清除",
-    "remove": "删除"
+    "remove": "删除",
+    "timezone": "时区",
+    "save": "保存"
   },
   "confirm_dispute": "确认/争议",
   "create_balance_event": "创建平衡事件",
