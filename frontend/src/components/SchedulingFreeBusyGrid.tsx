@@ -14,6 +14,7 @@ interface GridSlot {
   endTime: Date;
   dayOfWeek: string;
   slotIndex: number;
+  displayTime: string; // HH:MM in viewing timezone
 }
 
 interface SchedulingFreeBusyGridProps {
@@ -31,9 +32,10 @@ interface SchedulingFreeBusyGridProps {
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 /**
- * Generate 30-minute slots between dateStart and dateEnd (in UTC)
+ * Generate 30-minute slots for display grid in viewing timezone
+ * Slots are displayed in viewing timezone times, but stored as UTC for API
  */
-const generateSlots = (dateStart: Date, dateEnd: Date): GridSlot[] => {
+const generateSlots = (dateStart: Date, dateEnd: Date, viewingTimezone: string): GridSlot[] => {
   const slots: GridSlot[] = [];
   const current = new Date(dateStart);
   current.setUTCHours(0, 0, 0, 0);
@@ -49,11 +51,25 @@ const generateSlots = (dateStart: Date, dateEnd: Date): GridSlot[] => {
 
         if (slotStart >= dateEnd) break;
 
+        // Format display time in viewing timezone
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: viewingTimezone,
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        });
+        
+        const parts = formatter.formatToParts(slotStart);
+        const displayHour = parts.find(p => p.type === 'hour')?.value || '00';
+        const displayMin = parts.find(p => p.type === 'minute')?.value || '00';
+        const displayTime = `${displayHour}:${displayMin}`;
+
         slots.push({
           startTime: slotStart,
           endTime: slotEnd,
           dayOfWeek: DAYS_OF_WEEK[slotStart.getUTCDay()],
-          slotIndex: hour * 2 + Math.floor(minute / 30)
+          slotIndex: hour * 2 + Math.floor(minute / 30),
+          displayTime
         });
       }
     }
@@ -89,14 +105,14 @@ const formatTime = (date: Date): string => {
 };
 
 /**
- * Check if participant is available at this UTC slot
- * Availability schedule has already been converted to viewing timezone by backend,
- * so we just need to check the day and time directly
+ * Check if participant is available at this slot
+ * Availability schedule has already been converted to viewing timezone by backend.
+ * Slots are stored as UTC but have displayTime showing viewing timezone.
+ * We compare using the day and display time.
  */
 const isParticipantAvailable = (
   participant: Participant,
-  slotStartUTC: Date,
-  slotEndUTC: Date,
+  slot: GridSlot,
   viewingTimezone: string
 ): boolean => {
   if (!participant.availability_schedule) {
@@ -105,22 +121,11 @@ const isParticipantAvailable = (
 
   try {
     // Get day name in viewing timezone
-    const dayKey = getDayInTimezone(slotStartUTC, viewingTimezone);
+    const dayKey = getDayInTimezone(slot.startTime, viewingTimezone);
     const dayRanges = participant.availability_schedule[dayKey] || [];
 
-    // Convert UTC time to viewing timezone
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: viewingTimezone,
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    });
-
-    const parts = formatter.formatToParts(slotStartUTC);
-    const hour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
-    const minute = parseInt(parts.find(p => p.type === 'minute')?.value || '0');
-    const slotTimeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    // Use the display time which is already in viewing timezone
+    const slotTimeStr = slot.displayTime;
 
     return dayRanges.some(
       range => slotTimeStr >= range.start && slotTimeStr < range.end
@@ -144,7 +149,7 @@ export default function SchedulingFreeBusyGrid({
 }: SchedulingFreeBusyGridProps) {
   const { t } = useTranslation();
 
-  const slots = useMemo(() => generateSlots(dateStart, dateEnd), [dateStart, dateEnd]);
+  const slots = useMemo(() => generateSlots(dateStart, dateEnd, viewingTimezone), [dateStart, dateEnd, viewingTimezone]);
 
   const slotsWithDates = useMemo(() => {
     return slots.map(slot => ({
@@ -249,7 +254,7 @@ export default function SchedulingFreeBusyGrid({
                     key={getSlotKey(slot)}
                     className={`border border-gray-300 p-1 ${dayColor} text-center h-8`}
                   >
-                    <span title={formatTime(slot.startTime)}>{formatTime(slot.startTime)}</span>
+                    <span title={slot.displayTime}>{slot.displayTime}</span>
                   </th>
                 ));
               })}
@@ -272,7 +277,7 @@ export default function SchedulingFreeBusyGrid({
 
                   return daySlots.map(slot => {
                     const slotKey = getSlotKey(slot);
-                    const isAvailable = isParticipantAvailable(participant, slot.startTime, slot.endTime, viewingTimezone);
+                    const isAvailable = isParticipantAvailable(participant, slot, viewingTimezone);
                     const isProposed = proposedSlots.includes(slotKey);
                     const confirmations = confirmedSlots[slotKey] || [];
                     const isConfirmed = confirmations.length > 0;
@@ -305,7 +310,7 @@ export default function SchedulingFreeBusyGrid({
                           !readOnly && !isProposed ? 'hover:opacity-75' : ''
                         }`}
                         onClick={() => handleSlotClick(slot)}
-                        title={`${participant.nickname} - ${formatTime(slot.startTime)}`}
+                        title={`${participant.nickname} - ${slot.displayTime}`}
                       >
                         {isConfirmed && (
                           <div className="w-full h-full flex items-center justify-center text-green-700 font-bold">
