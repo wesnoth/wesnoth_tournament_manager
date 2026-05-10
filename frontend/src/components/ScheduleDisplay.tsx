@@ -19,62 +19,69 @@ const ScheduleDisplay: React.FC<ScheduleDisplayProps> = ({
 
   const getDayLabel = (day: string): string => {
     const label = t(`days.${day}`);
-    return label || day;
+    // Return first 3 letters for compact mode
+    return compact ? label?.substring(0, 3) || day.substring(0, 3) : label || day;
   };
 
-  const hasSchedule = availabilitySchedule && Object.values(availabilitySchedule).some(ranges => ranges.length > 0);
-
-  if (!timezone && !hasSchedule) {
+  if (!timezone) {
     return null;
   }
+
+  const hasSchedule = availabilitySchedule && Object.values(availabilitySchedule).some(ranges => ranges.length > 0);
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4">
       <div className="space-y-3">
         {/* Timezone Row */}
         {timezone && (
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-2">
             <span className="text-sm text-gray-600">{t('timezone') || 'Timezone'}:</span>
             <span className="text-sm font-semibold text-gray-800">{timezone}</span>
           </div>
         )}
 
-        {/* Schedule Grid with Time Ranges */}
-        {hasSchedule && (
-          <div>
-            <div className="text-sm text-gray-600 mb-3">{t('availability.title') || 'Available'}:</div>
-            <div className="space-y-2">
-              {DAYS.map((day) => {
-                const ranges = availabilitySchedule?.[day] || [];
-                const hasRanges = ranges.length > 0;
-                
-                return (
-                  <div key={day} className="flex gap-2 items-start">
-                    <div className="w-20 text-sm font-semibold text-gray-700 pt-1">
-                      {getDayLabel(day)}
-                    </div>
-                    <div className={`flex-1 flex flex-wrap gap-1 ${hasRanges ? '' : 'pt-1'}`}>
-                      {hasRanges ? (
-                        ranges.map((range, idx) => (
-                          <div 
-                            key={`${day}-${idx}`}
-                            className="px-2 py-1 bg-green-50 text-green-700 border border-green-200 rounded text-xs font-medium"
-                          >
-                            {range.start}–{range.end}
-                          </div>
-                        ))
-                      ) : (
-                        <span className="text-xs text-gray-500 italic pt-0.5">
-                          {t('availability.not_available') || 'Not available'}
-                        </span>
-                      )}
-                    </div>
+        {/* Schedule Grid - 7 columns horizontal */}
+        <div>
+          {hasSchedule && (
+            <div className="text-sm text-gray-600 mb-2">{t('availability.title') || 'Available'}:</div>
+          )}
+          <div className="grid grid-cols-7 gap-1">
+            {DAYS.map((day) => {
+              const ranges = availabilitySchedule?.[day] || [];
+              const hasRanges = ranges.length > 0;
+              
+              return (
+                <div 
+                  key={day}
+                  className={`p-2 rounded text-xs border ${
+                    hasRanges 
+                      ? 'bg-green-50 border-green-200' 
+                      : 'bg-gray-50 border-gray-200'
+                  }`}
+                >
+                  <div className="font-semibold text-gray-700 mb-1 text-center">
+                    {getDayLabel(day)}
                   </div>
-                );
-              })}
-            </div>
+                  {hasRanges ? (
+                    <div className="space-y-0.5">
+                      {ranges.map((range, idx) => (
+                        <div 
+                          key={`${day}-${idx}`}
+                          className="px-1 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium text-center whitespace-nowrap overflow-hidden text-ellipsis"
+                          title={`${range.start}–${range.end}`}
+                        >
+                          {range.start}–{range.end}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-gray-500 text-center block">—</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
