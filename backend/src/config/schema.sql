@@ -1,9 +1,10 @@
--- Users table
-CREATE TABLE IF NOT EXISTS users (
+-- Users extension table (actual user profiles with app-specific data)
+-- Extends forum phpbb3_users with tournament application fields
+CREATE TABLE IF NOT EXISTS users_extension (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id INTEGER NOT NULL UNIQUE COMMENT 'Foreign key to forum phpbb3_users.user_id',
   nickname VARCHAR(255) NOT NULL UNIQUE,
   email VARCHAR(255) NOT NULL UNIQUE,
-  password_hash VARCHAR(255) NOT NULL,
   language VARCHAR(2) DEFAULT 'en',
   discord_id VARCHAR(255),
   elo_rating INTEGER DEFAULT 1200,
@@ -11,6 +12,18 @@ CREATE TABLE IF NOT EXISTS users (
   is_active BOOLEAN DEFAULT false,
   is_blocked BOOLEAN DEFAULT false,
   is_admin BOOLEAN DEFAULT false,
+  is_moderator BOOLEAN DEFAULT false,
+  country VARCHAR(2),
+  avatar VARCHAR(255),
+  enable_ranked BOOLEAN DEFAULT false,
+  is_rated BOOLEAN DEFAULT false,
+  matches_played INTEGER DEFAULT 0,
+  total_wins INTEGER DEFAULT 0,
+  total_losses INTEGER DEFAULT 0,
+  trend VARCHAR(50),
+  timezone VARCHAR(100) DEFAULT 'UTC' COMMENT 'IANA timezone name (e.g., Europe/Madrid, America/New_York)',
+  availability_schedule JSON NULL COMMENT 'Object with day keys (monday-sunday) containing array of {start, end} time ranges',
+  availability_updated_at DATETIME NULL COMMENT 'Timestamp when availability was last modified',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -30,7 +43,7 @@ CREATE TABLE IF NOT EXISTS password_policy (
 -- Password history table
 CREATE TABLE IF NOT EXISTS password_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users_extension(id) ON DELETE CASCADE,
   password_hash VARCHAR(255) NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -45,14 +58,14 @@ CREATE TABLE IF NOT EXISTS registration_requests (
   status VARCHAR(20) DEFAULT 'pending',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   reviewed_at TIMESTAMP,
-  reviewed_by UUID REFERENCES users(id)
+  reviewed_by UUID REFERENCES users_extension(id)
 );
 
 -- Matches table
 CREATE TABLE IF NOT EXISTS matches (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  winner_id UUID NOT NULL REFERENCES users(id),
-  loser_id UUID NOT NULL REFERENCES users(id),
+  winner_id UUID NOT NULL REFERENCES users_extension(id),
+  loser_id UUID NOT NULL REFERENCES users_extension(id),
   map VARCHAR(255) NOT NULL,
   winner_faction VARCHAR(255) NOT NULL,
   loser_faction VARCHAR(255) NOT NULL,
@@ -79,7 +92,7 @@ CREATE TABLE IF NOT EXISTS matches (
   loser_ranking_change INTEGER,
   admin_reviewed BOOLEAN DEFAULT false,
   admin_reviewed_at TIMESTAMP,
-  admin_reviewed_by UUID REFERENCES users(id),
+  admin_reviewed_by UUID REFERENCES users_extension(id),
   round_id UUID REFERENCES tournament_rounds(id) ON DELETE SET NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -90,7 +103,7 @@ CREATE TABLE IF NOT EXISTS tournaments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR(255) NOT NULL,
   description TEXT NOT NULL,
-  creator_id UUID NOT NULL REFERENCES users(id),
+  creator_id UUID NOT NULL REFERENCES users_extension(id),
   status VARCHAR(30) DEFAULT 'registration_open',
   tournament_type VARCHAR(50) NOT NULL,
   max_participants INTEGER NOT NULL,
@@ -108,7 +121,7 @@ CREATE TABLE IF NOT EXISTS tournaments (
   prepared_at TIMESTAMP,
   started_at TIMESTAMP,
   finished_at TIMESTAMP,
-  winner_id UUID REFERENCES users(id),
+  winner_id UUID REFERENCES users_extension(id),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -117,7 +130,7 @@ CREATE TABLE IF NOT EXISTS tournaments (
 CREATE TABLE IF NOT EXISTS tournament_participants (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tournament_id UUID NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES users(id),
+  user_id UUID NOT NULL REFERENCES users_extension(id),
   participation_status VARCHAR(20) DEFAULT 'pending',
   tournament_ranking INTEGER,
   tournament_wins INTEGER DEFAULT 0,
@@ -154,7 +167,7 @@ CREATE TABLE IF NOT EXISTS news (
   title VARCHAR(255) NOT NULL,
   content TEXT NOT NULL,
   translations JSONB DEFAULT '{"en":{},"es":{},"zh":{},"de":{}}',
-  author_id UUID NOT NULL REFERENCES users(id),
+  author_id UUID NOT NULL REFERENCES users_extension(id),
   language_code VARCHAR(10) DEFAULT 'en',
   published_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -192,15 +205,15 @@ CREATE TABLE IF NOT EXISTS game_maps (
 -- Online users table
 CREATE TABLE IF NOT EXISTS online_users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL UNIQUE REFERENCES users(id),
+  user_id UUID NOT NULL UNIQUE REFERENCES users_extension(id),
   last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Chat messages table
 CREATE TABLE IF NOT EXISTS chat_messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  sender_id UUID NOT NULL REFERENCES users(id),
-  receiver_id UUID NOT NULL REFERENCES users(id),
+  sender_id UUID NOT NULL REFERENCES users_extension(id),
+  receiver_id UUID NOT NULL REFERENCES users_extension(id),
   message TEXT NOT NULL,
   is_read BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -211,9 +224,9 @@ CREATE TABLE IF NOT EXISTS tournament_matches (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tournament_id UUID NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
   round_id UUID NOT NULL REFERENCES tournament_rounds(id) ON DELETE CASCADE,
-  player1_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  player2_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  winner_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  player1_id UUID NOT NULL REFERENCES users_extension(id) ON DELETE CASCADE,
+  player2_id UUID NOT NULL REFERENCES users_extension(id) ON DELETE CASCADE,
+  winner_id UUID REFERENCES users_extension(id) ON DELETE SET NULL,
   match_id UUID REFERENCES matches(id) ON DELETE SET NULL,
   tournament_round_match_id UUID,
   match_status VARCHAR(20) DEFAULT 'pending' CHECK (match_status IN ('pending', 'in_progress', 'completed', 'cancelled')),
@@ -227,15 +240,15 @@ CREATE TABLE IF NOT EXISTS tournament_round_matches (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tournament_id UUID NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
   round_id UUID NOT NULL REFERENCES tournament_rounds(id) ON DELETE CASCADE,
-  player1_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  player2_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  player1_id UUID NOT NULL REFERENCES users_extension(id) ON DELETE CASCADE,
+  player2_id UUID NOT NULL REFERENCES users_extension(id) ON DELETE CASCADE,
   best_of INT NOT NULL CHECK (best_of IN (1, 3, 5)),
   wins_required INT NOT NULL,
   player1_wins INT NOT NULL DEFAULT 0,
   player2_wins INT NOT NULL DEFAULT 0,
   matches_scheduled INT NOT NULL DEFAULT 0,
   series_status VARCHAR(50) NOT NULL DEFAULT 'in_progress' CHECK (series_status IN ('in_progress', 'completed')),
-  winner_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  winner_id UUID REFERENCES users_extension(id) ON DELETE SET NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(tournament_id, round_id, player1_id, player2_id)
@@ -257,8 +270,8 @@ BEGIN
 END $$;
 
 -- Create indexes
-CREATE INDEX IF NOT EXISTS idx_users_nickname ON users(nickname);
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_extension_nickname ON users_extension(nickname);
+CREATE INDEX IF NOT EXISTS idx_users_extension_email ON users_extension(email);
 CREATE INDEX IF NOT EXISTS idx_matches_winner ON matches(winner_id);
 CREATE INDEX IF NOT EXISTS idx_matches_loser ON matches(loser_id);
 CREATE INDEX IF NOT EXISTS idx_matches_tournament ON matches(tournament_id);
@@ -274,3 +287,50 @@ CREATE INDEX IF NOT EXISTS idx_news_author ON news(author_id);
 CREATE INDEX IF NOT EXISTS idx_news_language_code ON news(language_code);
 CREATE INDEX IF NOT EXISTS idx_chat_sender ON chat_messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_chat_receiver ON chat_messages(receiver_id);
+
+-- Match scheduling tables (Phase 1)
+-- Stores proposals for scheduling matches at tournament_round_matches or tournament_matches level
+CREATE TABLE IF NOT EXISTS match_schedule_proposals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tournament_round_match_id UUID REFERENCES tournament_round_matches(id) ON DELETE CASCADE,
+  tournament_match_id UUID REFERENCES tournament_matches(id) ON DELETE CASCADE,
+  proposed_by_user_id UUID NOT NULL REFERENCES users_extension(id) ON DELETE CASCADE,
+  proposed_at TIMESTAMP NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'superseded', 'resolved')),
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_match_schedule_proposals_round_match ON match_schedule_proposals(tournament_round_match_id);
+CREATE INDEX IF NOT EXISTS idx_match_schedule_proposals_match ON match_schedule_proposals(tournament_match_id);
+CREATE INDEX IF NOT EXISTS idx_match_schedule_proposals_status ON match_schedule_proposals(status);
+CREATE INDEX IF NOT EXISTS idx_match_schedule_proposals_proposed_by ON match_schedule_proposals(proposed_by_user_id);
+
+-- Individual time slots within a proposal (slots are in UTC, rounded to nearest 30-minute mark)
+CREATE TABLE IF NOT EXISTS match_schedule_slots (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  proposal_id UUID NOT NULL REFERENCES match_schedule_proposals(id) ON DELETE CASCADE,
+  slot_datetime TIMESTAMP NOT NULL,
+  slot_duration_minutes INTEGER DEFAULT 30,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed')),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(proposal_id, slot_datetime)
+);
+
+CREATE INDEX IF NOT EXISTS idx_match_schedule_slots_proposal ON match_schedule_slots(proposal_id);
+CREATE INDEX IF NOT EXISTS idx_match_schedule_slots_datetime ON match_schedule_slots(slot_datetime);
+CREATE INDEX IF NOT EXISTS idx_match_schedule_slots_status ON match_schedule_slots(status);
+
+-- User/team confirmations for proposed time slots
+CREATE TABLE IF NOT EXISTS match_schedule_confirmations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  slot_id UUID NOT NULL REFERENCES match_schedule_slots(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users_extension(id) ON DELETE CASCADE,
+  confirmed_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(slot_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_match_schedule_confirmations_slot ON match_schedule_confirmations(slot_id);
+CREATE INDEX IF NOT EXISTS idx_match_schedule_confirmations_user ON match_schedule_confirmations(user_id);
