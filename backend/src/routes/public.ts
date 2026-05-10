@@ -867,6 +867,8 @@ router.get('/players/:id', async (req, res) => {
         u.trend,
         u.is_active,
         u.enable_ranked,
+        u.timezone,
+        u.availability_schedule,
         pms.avg_elo_change
       FROM users_extension u
       LEFT JOIN player_match_statistics pms ON u.id = pms.player_id 
