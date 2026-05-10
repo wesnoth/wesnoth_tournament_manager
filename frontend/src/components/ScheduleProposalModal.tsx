@@ -101,6 +101,48 @@ export default function ScheduleProposalModal({
     setSelectedSlots(newSelected);
   };
 
+  /**
+   * Group contiguous slots into ranges
+   */
+  const groupSlotsIntoRanges = (slotDatetimes: string[]): Array<{ start: Date; end: Date; hours: string }> => {
+    if (slotDatetimes.length === 0) return [];
+
+    const sorted = slotDatetimes
+      .map(dt => new Date(dt))
+      .sort((a, b) => a.getTime() - b.getTime());
+
+    const ranges: Array<{ start: Date; end: Date; hours: string }> = [];
+    let currentStart = sorted[0];
+    let currentEnd = sorted[0];
+
+    for (let i = 1; i < sorted.length; i++) {
+      const current = sorted[i];
+      const prevEnd = new Date(currentEnd);
+      prevEnd.setMinutes(prevEnd.getMinutes() + 30); // Add 30 min to get end time
+
+      if (current.getTime() === prevEnd.getTime()) {
+        // Contiguous, extend range
+        currentEnd = current;
+      } else {
+        // Gap found, save range and start new one
+        const endTime = new Date(currentEnd);
+        endTime.setMinutes(endTime.getMinutes() + 30);
+        const hours = `${String(currentStart.getHours()).padStart(2, '0')}:${String(currentStart.getMinutes()).padStart(2, '0')}-${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}`;
+        ranges.push({ start: currentStart, end: endTime, hours });
+        currentStart = current;
+        currentEnd = current;
+      }
+    }
+
+    // Add final range
+    const endTime = new Date(currentEnd);
+    endTime.setMinutes(endTime.getMinutes() + 30);
+    const hours = `${String(currentStart.getHours()).padStart(2, '0')}:${String(currentStart.getMinutes()).padStart(2, '0')}-${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}`;
+    ranges.push({ start: currentStart, end: endTime, hours });
+
+    return ranges;
+  };
+
   const handleProposeSlots = async () => {
     if (selectedSlots.size === 0) {
       setError('Please select at least one slot');
@@ -172,8 +214,8 @@ export default function ScheduleProposalModal({
 
   if (!isOpen) return null;
 
-  const dateStart = new Date();
-  const dateEnd = new Date(dateStart);
+  const [displayDateStart, setDisplayDateStart] = React.useState<Date>(new Date());
+  const dateEnd = new Date(displayDateStart);
   dateEnd.setDate(dateEnd.getDate() + 14); // 14-day window
 
   const proposedSlotDatetimes = proposal?.slots.map(s => s.slot_datetime) || [];
@@ -184,6 +226,9 @@ export default function ScheduleProposalModal({
       confirmedSlotsMap[slotId] = confirmations.map((c: any) => c.user_id);
     });
   }
+
+  const selectedSlotsArray = Array.from(selectedSlots);
+  const groupedRanges = groupSlotsIntoRanges(selectedSlotsArray);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -216,12 +261,28 @@ export default function ScheduleProposalModal({
             </div>
           ) : (
             <>
+              {/* Date picker */}
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-gray-800">Select Date Range Start</label>
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    value={displayDateStart.toISOString().split('T')[0]}
+                    onChange={(e) => setDisplayDateStart(new Date(e.target.value))}
+                    className="px-3 py-2 border border-gray-300 rounded text-sm"
+                  />
+                  <span className="text-sm text-gray-500 self-center">
+                    Next 14 days ({dateEnd.toLocaleDateString()})
+                  </span>
+                </div>
+              </div>
+
               {/* Grid */}
               <div className="space-y-2">
                 <h3 className="font-semibold text-gray-800">Availability Grid</h3>
                 <SchedulingFreeBusyGrid
                   participants={participants}
-                  dateStart={dateStart}
+                  dateStart={displayDateStart}
                   dateEnd={dateEnd}
                   selectedSlots={selectedSlots}
                   onSlotToggle={handleSlotToggle}
@@ -235,12 +296,17 @@ export default function ScheduleProposalModal({
               {selectedSlots.size > 0 && (
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded">
                   <p className="text-sm font-semibold text-blue-900">
-                    {selectedSlots.size} slot{selectedSlots.size !== 1 ? 's' : ''} selected
+                    {selectedSlots.size} slot{selectedSlots.size !== 1 ? 's' : ''} selected ({groupedRanges.length} range{groupedRanges.length !== 1 ? 's' : ''})
                   </p>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    {Array.from(selectedSlots).map(slot => (
-                      <div key={slot} className="text-xs text-blue-800">
-                        {new Date(slot).toLocaleString()}
+                  <div className="mt-3 space-y-2">
+                    {groupedRanges.map((range, idx) => (
+                      <div key={idx} className="text-sm text-blue-800 p-2 bg-white rounded border border-blue-100">
+                        <div className="font-semibold">
+                          {range.start.toLocaleDateString()} - {range.hours}
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          UTC: {range.start.toISOString()} to {range.end.toISOString()}
+                        </div>
                       </div>
                     ))}
                   </div>

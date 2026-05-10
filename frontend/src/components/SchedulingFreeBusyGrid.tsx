@@ -65,6 +65,7 @@ const generateSlots = (dateStart: Date, dateEnd: Date): GridSlot[] => {
 
 /**
  * Check if participant is available in a specific slot (UTC)
+ * Converts slot times from UTC to participant's timezone for comparison
  */
 const isParticipantAvailable = (
   participant: Participant,
@@ -75,18 +76,42 @@ const isParticipantAvailable = (
     return true; // Unknown availability = assume available
   }
 
-  const dayKey = DAYS_OF_WEEK[slotStartUTC.getUTCDay()].toLowerCase();
-  const dayRanges = participant.availability_schedule[dayKey] || [];
+  try {
+    // Convert UTC time to participant's timezone
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: participant.timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
 
-  // TODO: Convert UTC slot times to participant's timezone, then check ranges
-  // For now, simplified version
-  const slotHour = slotStartUTC.getUTCHours();
-  const slotMinute = slotStartUTC.getUTCMinutes();
-  const slotTimeStr = `${String(slotHour).padStart(2, '0')}:${String(slotMinute).padStart(2, '0')}`;
+    const parts = formatter.formatToParts(slotStartUTC);
+    const dateObj = {
+      year: parseInt(parts.find(p => p.type === 'year')?.value || '0'),
+      month: parseInt(parts.find(p => p.type === 'month')?.value || '0'),
+      day: parseInt(parts.find(p => p.type === 'day')?.value || '0'),
+      hour: parseInt(parts.find(p => p.type === 'hour')?.value || '0'),
+      minute: parseInt(parts.find(p => p.type === 'minute')?.value || '0')
+    };
 
-  return dayRanges.some(
-    range => slotTimeStr >= range.start && slotTimeStr < range.end
-  );
+    // Get day name in participant's timezone
+    const tzDate = new Date(slotStartUTC.toLocaleString('en-US', { timeZone: participant.timezone }));
+    const dayKey = DAYS_OF_WEEK[tzDate.getUTCDay()].toLowerCase();
+    const dayRanges = participant.availability_schedule[dayKey] || [];
+
+    const slotTimeStr = `${String(dateObj.hour).padStart(2, '0')}:${String(dateObj.minute).padStart(2, '0')}`;
+
+    return dayRanges.some(
+      range => slotTimeStr >= range.start && slotTimeStr < range.end
+    );
+  } catch (error) {
+    console.warn(`Error checking availability for ${participant.nickname} in timezone ${participant.timezone}:`, error);
+    return true; // On error, assume available
+  }
 };
 
 /**
