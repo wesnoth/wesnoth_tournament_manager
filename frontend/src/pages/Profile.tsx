@@ -9,7 +9,6 @@ import { CountrySelector } from '../components/CountrySelector';
 import { AvatarSelector } from '../components/AvatarSelector';
 import TimezoneSelector from '../components/TimezoneSelector';
 import AvailabilityRangeEditor, { AvailabilitySchedule } from '../components/AvailabilityRangeEditor';
-import ScheduleDisplay from '../components/ScheduleDisplay';
 
 const Profile: React.FC = () => {
   const { t, i18n } = useTranslation();
@@ -226,14 +225,6 @@ const Profile: React.FC = () => {
           {profile && (
             <>
               <ProfileStats player={profile} />
-
-              <div className="mb-8">
-                <ScheduleDisplay 
-                  timezone={timezone}
-                  availabilitySchedule={availabilitySchedule}
-                  compact={true}
-                />
-              </div>
 
               <section className="bg-white rounded-lg shadow-md p-8 mb-8">
                 <h2 className="text-2xl font-semibold text-gray-800 mb-6 pb-4 border-b-2 border-gray-200">{t('profile.discord_title')}</h2>
