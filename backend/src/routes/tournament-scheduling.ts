@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../config/database.js';
-import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { authMiddleware, AuthRequest, optionalAuthMiddleware } from '../middleware/auth.js';
 import { sendDiscordNotification, storeNotificationForUsers } from '../services/discordNotificationService.js';
 import {
   createRoundMatchProposal,
@@ -1309,6 +1309,7 @@ router.get(
  */
 router.get(
   '/tournament/:tournamentId/round-match/:roundMatchId/participants-availability',
+  optionalAuthMiddleware,
   async (req: AuthRequest, res: Response) => {
     try {
       const { roundMatchId, tournamentId } = req.params;
@@ -1344,6 +1345,7 @@ router.get(
  */
 router.get(
   '/tournament/:tournamentId/match/:matchId/participants-availability',
+  optionalAuthMiddleware,
   async (req: AuthRequest, res: Response) => {
     try {
       const { matchId, tournamentId } = req.params;
