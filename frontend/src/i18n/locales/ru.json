@@ -113,7 +113,9 @@
     "filter_status": "Статус",
     "filter_scheduled": "Запланированные",
     "filter_completed": "Завершённые",
-    "refresh": "Обновить"
+    "refresh": "Обновить",
+    "clear_all": "Очистить все",
+    "remove": "Удалить"
   },
   "confirm_dispute": "Подтвердить/оспорить",
   "create_balance_event": "Создать событие баланса",
@@ -722,5 +724,24 @@
   "winrate_range": "Диапазон WR",
   "wins": "Победы",
   "yes": "Да",
-  "your_faction": "Ваша Фракция"
+  "your_faction": "Ваша Фракция",
+  "days": {
+    "monday": "Понедельник",
+    "tuesday": "Вторник",
+    "wednesday": "Среда",
+    "thursday": "Четверг",
+    "friday": "Пятница",
+    "saturday": "Суббота",
+    "sunday": "Воскресенье"
+  },
+  "availability": {
+    "title": "График Доступности",
+    "day": "День",
+    "time_ranges": "Доступное Время",
+    "help_text": "Определите свои доступные временные окна для матчей (в вашем местном часовом поясе). Детализация 30 минут.",
+    "not_available": "Недоступно",
+    "add_range": "Добавить",
+    "add_time_range_help": "Добавить еще одно временное окно",
+    "clear_all_help": "Очистить все временные окна"
+  }
 }

@@ -16,15 +16,6 @@ interface AvailabilityRangeEditorProps {
 }
 
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-const DAY_LABELS = {
-  monday: 'Monday',
-  tuesday: 'Tuesday',
-  wednesday: 'Wednesday',
-  thursday: 'Thursday',
-  friday: 'Friday',
-  saturday: 'Saturday',
-  sunday: 'Sunday',
-};
 
 const AvailabilityRangeEditor: React.FC<AvailabilityRangeEditorProps> = ({ value, onChange }) => {
   const { t } = useTranslation();
@@ -67,65 +58,92 @@ const AvailabilityRangeEditor: React.FC<AvailabilityRangeEditorProps> = ({ value
     updateSchedule(emptySchedule);
   };
 
+  const getDayLabel = (day: string) => {
+    return t(`days.${day}`) || t(day as any) || day.charAt(0).toUpperCase() + day.slice(1);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center mb-4">
         <label className="block text-sm font-semibold text-gray-700">
-          {t('availability_schedule') || 'Availability Schedule'}
+          {t('availability.title') || 'Availability Schedule'}
         </label>
         <button
           onClick={clearAllSchedule}
-          className="px-3 py-1 text-sm bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+          className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition"
+          title={t('availability.clear_all_help') || 'Clear all time ranges'}
         >
-          {t('clear_all') || 'Clear All'}
+          {t('common.clear_all') || 'Clear All'}
         </button>
       </div>
 
-      <p className="text-sm text-gray-600 mb-6">
-        {t('availability_schedule_help') || 'Define your available time slots for matches (in your local timezone)'}
+      <p className="text-xs text-gray-600">
+        {t('availability.help_text') || 'Define your available time slots for matches (in your local timezone). 30-minute granularity.'}
       </p>
 
-      <div className="space-y-4">
-        {DAYS.map((day) => (
-          <div key={day} className="bg-white rounded-lg border border-gray-200 p-4">
-            <h4 className="font-semibold text-gray-800 mb-3">
-              {t(day as any) || DAY_LABELS[day as keyof typeof DAY_LABELS]}
-            </h4>
-
-            <div className="space-y-2">
-              {(schedule[day] || []).map((range, index) => (
-                <div key={`${day}-${index}`} className="flex gap-2 items-center">
-                  <input
-                    type="time"
-                    value={range.start}
-                    onChange={(e) => updateRange(day, index, 'start', e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-200"
-                  />
-                  <span className="text-gray-600">–</span>
-                  <input
-                    type="time"
-                    value={range.end}
-                    onChange={(e) => updateRange(day, index, 'end', e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-200"
-                  />
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-gray-200 bg-gray-50">
+              <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 w-24">
+                {t('availability.day') || 'Day'}
+              </th>
+              <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">
+                {t('availability.time_ranges') || 'Available Times'}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {DAYS.map((day, dayIndex) => (
+              <tr key={day} className={dayIndex !== DAYS.length - 1 ? 'border-b border-gray-200' : ''}>
+                <td className="px-4 py-3 text-sm font-medium text-gray-700 w-24">
+                  {getDayLabel(day)}
+                </td>
+                <td className="px-4 py-3">
+                  {(schedule[day] || []).length === 0 ? (
+                    <p className="text-xs text-gray-500 italic">{t('availability.not_available') || 'Not available'}</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {(schedule[day] || []).map((range, index) => (
+                        <div key={`${day}-${index}`} className="flex gap-2 items-center flex-wrap">
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="time"
+                              value={range.start}
+                              onChange={(e) => updateRange(day, index, 'start', e.target.value)}
+                              className="px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-200 w-20"
+                            />
+                            <span className="text-gray-400 text-sm">–</span>
+                            <input
+                              type="time"
+                              value={range.end}
+                              onChange={(e) => updateRange(day, index, 'end', e.target.value)}
+                              className="px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-200 w-20"
+                            />
+                          </div>
+                          <button
+                            onClick={() => removeRange(day, index)}
+                            className="px-2 py-0.5 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition"
+                            title={t('common.remove') || 'Remove'}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <button
-                    onClick={() => removeRange(day, index)}
-                    className="px-2 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
+                    onClick={() => addRange(day)}
+                    className="mt-2 px-2 py-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100 transition"
+                    title={t('availability.add_time_range_help') || 'Add another time range'}
                   >
-                    {t('remove') || 'Remove'}
+                    + {t('availability.add_range') || 'Add'}
                   </button>
-                </div>
-              ))}
-            </div>
-
-            <button
-              onClick={() => addRange(day)}
-              className="mt-3 px-3 py-2 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-            >
-              + {t('add_time_range') || 'Add Time Range'}
-            </button>
-          </div>
-        ))}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

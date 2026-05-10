@@ -114,7 +114,9 @@
     "filter_status": "Status",
     "filter_scheduled": "Scheduled",
     "filter_completed": "Completed",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "clear_all": "Clear All",
+    "remove": "Remove"
   },
   "confirm_delete_tournament": "Are you sure you want to delete this tournament? Associated matches will be desvinculated but not deleted.",
   "confirm_dispute": "Confirm/Dispute",
@@ -733,5 +735,24 @@
   "winrate_range": "WR Range",
   "wins": "Wins",
   "yes": "Yes",
-  "your_faction": "Your Faction"
+  "your_faction": "Your Faction",
+  "days": {
+    "monday": "Monday",
+    "tuesday": "Tuesday",
+    "wednesday": "Wednesday",
+    "thursday": "Thursday",
+    "friday": "Friday",
+    "saturday": "Saturday",
+    "sunday": "Sunday"
+  },
+  "availability": {
+    "title": "Availability Schedule",
+    "day": "Day",
+    "time_ranges": "Available Times",
+    "help_text": "Define your available time slots for matches (in your local timezone). 30-minute granularity.",
+    "not_available": "Not available",
+    "add_range": "Add",
+    "add_time_range_help": "Add another time range",
+    "clear_all_help": "Clear all time ranges"
+  }
 }

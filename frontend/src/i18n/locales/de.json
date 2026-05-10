@@ -113,7 +113,9 @@
     "filter_status": "Status",
     "filter_scheduled": "Geplant",
     "filter_completed": "Abgeschlossen",
-    "refresh": "Aktualisieren"
+    "refresh": "Aktualisieren",
+    "clear_all": "Alles löschen",
+    "remove": "Entfernen"
   },
   "confirm_dispute": "Bestätigen/Bestreiten",
   "create_balance_event": "Balance-Event erstellen",
@@ -722,5 +724,24 @@
   "winrate_range": "WR-Bereich",
   "wins": "Siege",
   "yes": "Ja",
-  "your_faction": "Deine Fraktion"
+  "your_faction": "Deine Fraktion",
+  "days": {
+    "monday": "Montag",
+    "tuesday": "Dienstag",
+    "wednesday": "Mittwoch",
+    "thursday": "Donnerstag",
+    "friday": "Freitag",
+    "saturday": "Samstag",
+    "sunday": "Sonntag"
+  },
+  "availability": {
+    "title": "Verfügbarkeitszeitplan",
+    "day": "Tag",
+    "time_ranges": "Verfügbare Zeiten",
+    "help_text": "Definiere deine verfügbaren Zeitfenster für Spiele (in deiner lokalen Zeitzone). 30-Minuten-Granularität.",
+    "not_available": "Nicht verfügbar",
+    "add_range": "Hinzufügen",
+    "add_time_range_help": "Weiteres Zeitfenster hinzufügen",
+    "clear_all_help": "Alle Zeitfenster löschen"
+  }
 }

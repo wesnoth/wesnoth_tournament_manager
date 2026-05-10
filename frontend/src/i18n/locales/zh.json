@@ -113,7 +113,9 @@
     "filter_status": "状态",
     "filter_scheduled": "已排程",
     "filter_completed": "已完成",
-    "refresh": "刷新"
+    "refresh": "刷新",
+    "clear_all": "全部清除",
+    "remove": "删除"
   },
   "confirm_dispute": "确认/争议",
   "create_balance_event": "创建平衡事件",
@@ -722,5 +724,24 @@
   "winrate_range": "胜率范围",
   "wins": "胜利",
   "yes": "是",
-  "your_faction": "您的派系"
+  "your_faction": "您的派系",
+  "days": {
+    "monday": "星期一",
+    "tuesday": "星期二",
+    "wednesday": "星期三",
+    "thursday": "星期四",
+    "friday": "星期五",
+    "saturday": "星期六",
+    "sunday": "星期日"
+  },
+  "availability": {
+    "title": "可用时间表",
+    "day": "日期",
+    "time_ranges": "可用时间",
+    "help_text": "定义您对局的可用时间段（使用您的本地时区）。30分钟粒度。",
+    "not_available": "不可用",
+    "add_range": "添加",
+    "add_time_range_help": "添加另一个时间段",
+    "clear_all_help": "清除所有时间段"
+  }
 }

@@ -115,7 +115,9 @@
     "filter_status": "Estado",
     "filter_scheduled": "Programadas",
     "filter_completed": "Completadas",
-    "refresh": "Actualizar"
+    "refresh": "Actualizar",
+    "clear_all": "Limpiar Todo",
+    "remove": "Eliminar"
   },
   "confirm_delete_tournament": "¿Estás seguro de que quieres eliminar este torneo? Los matches asociados se desvincularcán pero no se eliminarán.",
   "confirm_dispute": "Confirmar/Disputar",
@@ -720,5 +722,24 @@
   "winrate_range": "Rango WR",
   "wins": "Victorias",
   "yes": "Sí",
-  "your_faction": "Tu Facción"
+  "your_faction": "Tu Facción",
+  "days": {
+    "monday": "Lunes",
+    "tuesday": "Martes",
+    "wednesday": "Miércoles",
+    "thursday": "Jueves",
+    "friday": "Viernes",
+    "saturday": "Sábado",
+    "sunday": "Domingo"
+  },
+  "availability": {
+    "title": "Horario de Disponibilidad",
+    "day": "Día",
+    "time_ranges": "Horarios Disponibles",
+    "help_text": "Define tu horario disponible para partidas (en tu zona horaria local). Granularidad de 30 minutos.",
+    "not_available": "No disponible",
+    "add_range": "Agregar",
+    "add_time_range_help": "Agregar otro horario",
+    "clear_all_help": "Limpiar todos los horarios"
+  }
 }
