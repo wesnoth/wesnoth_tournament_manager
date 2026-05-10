@@ -484,8 +484,9 @@ export const getMatchProposal = async (matchId: string) => {
  */
 export const getParticipantsAvailability = async (
   roundMatchId?: string,
-  matchId?: string
-): Promise<any[]> => {
+  matchId?: string,
+  loggedInUserId?: string
+): Promise<any> => {
   try {
     let participantsResult;
     
@@ -575,10 +576,22 @@ export const getParticipantsAvailability = async (
       throw new Error('Either roundMatchId or matchId must be provided');
     }
 
+    // Get viewing timezone from logged-in user if available
+    let viewingTimezone = 'UTC';
+    if (loggedInUserId) {
+      const userResult = await query(
+        `SELECT timezone FROM users_extension WHERE id = ?`,
+        [loggedInUserId]
+      );
+      if (userResult.rows && userResult.rows.length > 0) {
+        viewingTimezone = userResult.rows[0].timezone || 'UTC';
+      }
+    }
+
     const participants = participantsResult.rows || [];
     
     // Parse JSON availability_schedule for each participant
-    return participants.map(p => ({
+    const formattedParticipants = participants.map(p => ({
       ...p,
       availability_schedule: p.availability_schedule 
         ? (typeof p.availability_schedule === 'string' 
@@ -586,6 +599,11 @@ export const getParticipantsAvailability = async (
           : p.availability_schedule)
         : null
     }));
+
+    return {
+      participants: formattedParticipants,
+      viewing_timezone: viewingTimezone
+    };
   } catch (error) {
     console.error('[getParticipantsAvailability] Error:', error);
     throw error;

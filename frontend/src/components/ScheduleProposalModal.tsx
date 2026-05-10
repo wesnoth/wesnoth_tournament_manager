@@ -45,6 +45,7 @@ export default function ScheduleProposalModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [viewingTimezone, setViewingTimezone] = useState('UTC');
   const [proposal, setProposal] = useState<ProposalData | null>(null);
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState('');
@@ -69,6 +70,7 @@ export default function ScheduleProposalModal({
           : await tournamentSchedulingService.getMatchParticipantsAvailability(tournamentId, targetId);
 
         setParticipants(availRes.participants || []);
+        setViewingTimezone(availRes.viewing_timezone || 'UTC');
 
         // Load active proposal if exists
         const proposalRes = isRoundMatch
@@ -274,6 +276,9 @@ export default function ScheduleProposalModal({
                   <span className="text-sm text-gray-500 self-center">
                     Next 14 days ({dateEnd.toLocaleDateString()})
                   </span>
+                  <span className="text-sm text-gray-600 self-center font-semibold">
+                    | Viewing: {viewingTimezone}
+                  </span>
                 </div>
               </div>
 
@@ -289,6 +294,7 @@ export default function ScheduleProposalModal({
                   readOnly={mode === 'confirm' && !proposal}
                   proposedSlots={proposedSlotDatetimes}
                   confirmedSlots={confirmedSlotsMap}
+                  viewingTimezone={viewingTimezone}
                 />
               </div>
 

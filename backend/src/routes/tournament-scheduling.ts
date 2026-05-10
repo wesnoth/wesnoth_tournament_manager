@@ -1323,9 +1323,9 @@ router.get(
         return res.status(404).json({ error: 'Match not found' });
       }
 
-      const participants = await getParticipantsAvailability(roundMatchId);
+      const result = await getParticipantsAvailability(roundMatchId, undefined, req.userId);
 
-      res.json({ participants });
+      res.json(result);
     } catch (error) {
       console.error('❌ [SCHEDULING] Error getting participants availability:', error);
       res.status(500).json({
@@ -1356,8 +1356,8 @@ router.get(
 
       if (matchResult.rows && matchResult.rows.length > 0) {
         // Found as tournament_matches
-        const participants = await getParticipantsAvailability(undefined, matchId);
-        return res.json({ participants });
+        const result = await getParticipantsAvailability(undefined, matchId, req.userId);
+        return res.json(result);
       }
 
       // If not found, try to find by tournament_round_match_id (in case ID was passed incorrectly)
@@ -1371,8 +1371,8 @@ router.get(
       }
 
       // This is actually a round match, not a tournament match - use round match logic
-      const participants = await getParticipantsAvailability(matchId);
-      res.json({ participants });
+      const result = await getParticipantsAvailability(matchId, undefined, req.userId);
+      res.json(result);
     } catch (error) {
       console.error('❌ [SCHEDULING] Error getting participants availability:', error);
       res.status(500).json({
