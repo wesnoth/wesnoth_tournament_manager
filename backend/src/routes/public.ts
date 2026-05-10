@@ -888,6 +888,16 @@ router.get('/players/:id', async (req, res) => {
 
     const player = playerResult.rows[0];
 
+    // Parse availability_schedule if it's a JSON string
+    if (player.availability_schedule && typeof player.availability_schedule === 'string') {
+      try {
+        player.availability_schedule = JSON.parse(player.availability_schedule);
+      } catch (e) {
+        console.warn(`[Player ${id}] Failed to parse availability_schedule:`, e);
+        player.availability_schedule = null;
+      }
+    }
+
     // Get last activity from most recent match (any status except cancelled)
     const lastActivityResult = await query(
       `SELECT created_at FROM matches WHERE (winner_id = ? OR loser_id = ?) AND status != 'cancelled' ORDER BY created_at DESC LIMIT 1`,
