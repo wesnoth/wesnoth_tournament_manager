@@ -70,7 +70,9 @@ export default function ScheduleProposalModal({
           : await tournamentSchedulingService.getMatchParticipantsAvailability(tournamentId, targetId);
 
         setParticipants(availRes.participants || []);
-        setViewingTimezone(availRes.viewing_timezone || 'UTC');
+        const receivedTimezone = availRes.viewing_timezone || 'UTC';
+        console.log('[ScheduleProposalModal] Received viewing_timezone:', receivedTimezone);
+        setViewingTimezone(receivedTimezone);
 
         // Load active proposal if exists
         const proposalRes = isRoundMatch
