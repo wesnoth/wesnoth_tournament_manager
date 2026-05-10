@@ -1254,6 +1254,7 @@ router.get(
 /**
  * GET /api/tournament/:tournamentId/match/:matchId/proposal
  * Get active proposal for a match
+ * Handles both tournament_matches.id and tournament_round_match_id
  */
 router.get(
   '/tournament/:tournamentId/match/:matchId/proposal',
@@ -1261,22 +1262,36 @@ router.get(
     try {
       const { matchId, tournamentId } = req.params;
 
-      // Verify match exists
-      const matchResult = await query(
+      // Verify match exists (try tournament_matches first)
+      let matchResult = await query(
         `SELECT id FROM tournament_matches WHERE id = ? AND tournament_id = ?`,
         [matchId, tournamentId]
       );
 
-      if (!matchResult.rows || matchResult.rows.length === 0) {
+      if (matchResult.rows && matchResult.rows.length > 0) {
+        // Found as tournament_matches
+        const proposal = await getMatchProposal(matchId);
+        if (!proposal) {
+          return res.json({ proposal: null });
+        }
+        return res.json({ proposal });
+      }
+
+      // If not found, try tournament_round_match_id
+      const roundMatchResult = await query(
+        `SELECT id FROM tournament_round_matches WHERE id = ? AND tournament_id = ?`,
+        [matchId, tournamentId]
+      );
+
+      if (!roundMatchResult.rows || roundMatchResult.rows.length === 0) {
         return res.status(404).json({ error: 'Match not found' });
       }
 
-      const proposal = await getMatchProposal(matchId);
-
+      // This is a round match, use round match logic
+      const proposal = await getRoundMatchProposal(matchId);
       if (!proposal) {
         return res.json({ proposal: null });
       }
-
       res.json({ proposal });
     } catch (error) {
       console.error('❌ [SCHEDULING] Error getting proposal:', error);
@@ -1324,6 +1339,8 @@ router.get(
 /**
  * GET /api/tournament/:tournamentId/match/:matchId/participants-availability
  * Get participants for a match
+ * Handles both tournament_matches.id and tournament_round_match_id
+ * (Since frontend may send either ID type via this endpoint)
  */
 router.get(
   '/tournament/:tournamentId/match/:matchId/participants-availability',
@@ -1331,18 +1348,30 @@ router.get(
     try {
       const { matchId, tournamentId } = req.params;
 
-      // Verify match exists
-      const matchResult = await query(
+      // First try to find by tournament_matches.id
+      let matchResult = await query(
         `SELECT id FROM tournament_matches WHERE id = ? AND tournament_id = ?`,
         [matchId, tournamentId]
       );
 
-      if (!matchResult.rows || matchResult.rows.length === 0) {
+      if (matchResult.rows && matchResult.rows.length > 0) {
+        // Found as tournament_matches
+        const participants = await getParticipantsAvailability(undefined, matchId);
+        return res.json({ participants });
+      }
+
+      // If not found, try to find by tournament_round_match_id (in case ID was passed incorrectly)
+      const roundMatchResult = await query(
+        `SELECT id FROM tournament_round_matches WHERE id = ? AND tournament_id = ?`,
+        [matchId, tournamentId]
+      );
+
+      if (!roundMatchResult.rows || roundMatchResult.rows.length === 0) {
         return res.status(404).json({ error: 'Match not found' });
       }
 
-      const participants = await getParticipantsAvailability(undefined, matchId);
-
+      // This is actually a round match, not a tournament match - use round match logic
+      const participants = await getParticipantsAvailability(matchId);
       res.json({ participants });
     } catch (error) {
       console.error('❌ [SCHEDULING] Error getting participants availability:', error);
