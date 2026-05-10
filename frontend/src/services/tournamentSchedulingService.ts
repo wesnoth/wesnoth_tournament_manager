@@ -22,7 +22,7 @@ export const tournamentSchedulingService = {
   },
 
   /**
-   * Propose a match schedule
+   * Propose a match schedule (old single-slot format)
    */
   proposeSchedule: async (tournamentRoundMatchId: string, scheduledDatetime: string, scheduleMessage?: string) => {
     const response = await api.post(
@@ -36,7 +36,7 @@ export const tournamentSchedulingService = {
   },
 
   /**
-   * Confirm a proposed schedule (can also counter-propose with a different time)
+   * Confirm a proposed schedule (old format)
    */
   confirmSchedule: async (tournamentRoundMatchId: string, scheduledDatetime?: string, scheduleMessage?: string) => {
     const response = await api.post(
@@ -59,4 +59,124 @@ export const tournamentSchedulingService = {
     );
     return response.data;
   },
+
+  // ============================================================
+  // NEW Phase 3 Methods - Multi-slot scheduling
+  // ============================================================
+
+  /**
+   * Propose multiple slots for a round match (entire series)
+   */
+  proposeRoundMatchSlots: async (
+    tournamentId: string,
+    roundMatchId: string,
+    slotDatetimes: string[],
+    notes?: string
+  ) => {
+    const response = await api.post(
+      `/tournament-scheduling/tournament/${tournamentId}/round-match/${roundMatchId}/propose-slots`,
+      {
+        slot_datetimes: slotDatetimes,
+        ...(notes && { notes })
+      }
+    );
+    return response.data;
+  },
+
+  /**
+   * Propose multiple slots for a single match (individual game)
+   */
+  proposeMatchSlots: async (
+    tournamentId: string,
+    matchId: string,
+    slotDatetimes: string[],
+    notes?: string
+  ) => {
+    const response = await api.post(
+      `/tournament-scheduling/tournament/${tournamentId}/match/${matchId}/propose-slots`,
+      {
+        slot_datetimes: slotDatetimes,
+        ...(notes && { notes })
+      }
+    );
+    return response.data;
+  },
+
+  /**
+   * Confirm specific slots for a round match proposal
+   */
+  confirmRoundMatchSlots: async (
+    tournamentId: string,
+    roundMatchId: string,
+    slotIds: string[],
+    teamId?: string
+  ) => {
+    const response = await api.post(
+      `/tournament-scheduling/tournament/${tournamentId}/round-match/${roundMatchId}/confirm-slots`,
+      {
+        slot_ids: slotIds,
+        ...(teamId && { team_id: teamId })
+      }
+    );
+    return response.data;
+  },
+
+  /**
+   * Confirm specific slots for a match proposal
+   */
+  confirmMatchSlots: async (
+    tournamentId: string,
+    matchId: string,
+    slotIds: string[],
+    teamId?: string
+  ) => {
+    const response = await api.post(
+      `/tournament-scheduling/tournament/${tournamentId}/match/${matchId}/confirm-slots`,
+      {
+        slot_ids: slotIds,
+        ...(teamId && { team_id: teamId })
+      }
+    );
+    return response.data;
+  },
+
+  /**
+   * Get active proposal with slots and confirmations for a round match
+   */
+  getRoundMatchProposal: async (tournamentId: string, roundMatchId: string) => {
+    const response = await api.get(
+      `/tournament-scheduling/tournament/${tournamentId}/round-match/${roundMatchId}/proposal`
+    );
+    return response.data;
+  },
+
+  /**
+   * Get active proposal for a match
+   */
+  getMatchProposal: async (tournamentId: string, matchId: string) => {
+    const response = await api.get(
+      `/tournament-scheduling/tournament/${tournamentId}/match/${matchId}/proposal`
+    );
+    return response.data;
+  },
+
+  /**
+   * Get all participants' timezone and availability for a round match
+   */
+  getRoundMatchParticipantsAvailability: async (tournamentId: string, roundMatchId: string) => {
+    const response = await api.get(
+      `/tournament-scheduling/tournament/${tournamentId}/round-match/${roundMatchId}/participants-availability`
+    );
+    return response.data;
+  },
+
+  /**
+   * Get all participants' timezone and availability for a match
+   */
+  getMatchParticipantsAvailability: async (tournamentId: string, matchId: string) => {
+    const response = await api.get(
+      `/tournament-scheduling/tournament/${tournamentId}/match/${matchId}/participants-availability`
+    );
+    return response.data;
+  }
 };

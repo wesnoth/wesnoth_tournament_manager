@@ -3,6 +3,14 @@ import { v4 as uuidv4 } from 'uuid';
 import { query } from '../config/database.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { sendDiscordNotification, storeNotificationForUsers } from '../services/discordNotificationService.js';
+import {
+  createRoundMatchProposal,
+  createMatchProposal,
+  confirmSlots,
+  getRoundMatchProposal,
+  getMatchProposal,
+  getParticipantsAvailability
+} from '../services/tournamentSchedulingService.js';
 
 const router = Router();
 
@@ -950,5 +958,400 @@ router.post('/:tournamentRoundMatchId/cancel-schedule', authMiddleware, async (r
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// ============================================================
+// NEW PHASE 3 ENDPOINTS - Multi-slot scheduling with confirmations
+// ============================================================
+
+/**
+ * POST /api/tournament/:tournamentId/round-match/:roundMatchId/propose-slots
+ * Propose multiple 30-minute slots for a tournament_round_match (entire series)
+ */
+router.post(
+  '/tournament/:tournamentId/round-match/:roundMatchId/propose-slots',
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { roundMatchId, tournamentId } = req.params;
+      const { slot_datetimes, notes } = req.body;
+      const userId = req.userId;
+
+      if (!userId || !roundMatchId || !Array.isArray(slot_datetimes)) {
+        return res.status(400).json({
+          error: 'Missing required fields: userId, roundMatchId, slot_datetimes (array)'
+        });
+      }
+
+      // Verify user is a participant in this match
+      const matchResult = await query(
+        `SELECT player1_id, player2_id FROM tournament_round_matches WHERE id = ? AND tournament_id = ?`,
+        [roundMatchId, tournamentId]
+      );
+
+      if (!matchResult.rows || matchResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Match not found' });
+      }
+
+      const match = matchResult.rows[0];
+      const isParticipant = userId === match.player1_id || userId === match.player2_id;
+
+      if (!isParticipant) {
+        return res.status(403).json({ error: 'You are not a participant in this match' });
+      }
+
+      // Create proposal with slots
+      const { proposalId, slotsCreated } = await createRoundMatchProposal(
+        roundMatchId,
+        userId,
+        slot_datetimes,
+        notes
+      );
+
+      console.log(`✅ [SCHEDULING] Round match proposal created: ${proposalId} with ${slotsCreated} slots`);
+
+      // TODO: Send notification to opponent
+      const opponentId = userId === match.player1_id ? match.player2_id : match.player1_id;
+      // await storeNotificationForUsers([opponentId], {...});
+
+      res.json({
+        success: true,
+        proposalId,
+        slotsCreated
+      });
+    } catch (error) {
+      console.error('❌ [SCHEDULING] Error proposing round match slots:', error);
+      res.status(500).json({
+        error: 'Failed to propose schedule',
+        details: (error as any).message
+      });
+    }
+  }
+);
+
+/**
+ * POST /api/tournament/:tournamentId/match/:matchId/propose-slots
+ * Propose multiple 30-minute slots for a tournament_match (single game)
+ */
+router.post(
+  '/tournament/:tournamentId/match/:matchId/propose-slots',
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { matchId, tournamentId } = req.params;
+      const { slot_datetimes, notes } = req.body;
+      const userId = req.userId;
+
+      if (!userId || !matchId || !Array.isArray(slot_datetimes)) {
+        return res.status(400).json({
+          error: 'Missing required fields: userId, matchId, slot_datetimes (array)'
+        });
+      }
+
+      // Verify user is a participant
+      const matchResult = await query(
+        `SELECT player1_id, player2_id, tournament_round_match_id 
+         FROM tournament_matches 
+         WHERE id = ? AND tournament_id = ?`,
+        [matchId, tournamentId]
+      );
+
+      if (!matchResult.rows || matchResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Match not found' });
+      }
+
+      const match = matchResult.rows[0];
+      const isParticipant = userId === match.player1_id || userId === match.player2_id;
+
+      if (!isParticipant) {
+        return res.status(403).json({ error: 'You are not a participant in this match' });
+      }
+
+      // Create proposal
+      const { proposalId, slotsCreated } = await createMatchProposal(
+        matchId,
+        userId,
+        slot_datetimes,
+        notes
+      );
+
+      console.log(`✅ [SCHEDULING] Match proposal created: ${proposalId} with ${slotsCreated} slots`);
+
+      const opponentId = userId === match.player1_id ? match.player2_id : match.player1_id;
+      // TODO: Send notification
+
+      res.json({
+        success: true,
+        proposalId,
+        slotsCreated
+      });
+    } catch (error) {
+      console.error('❌ [SCHEDULING] Error proposing match slots:', error);
+      res.status(500).json({
+        error: 'Failed to propose schedule',
+        details: (error as any).message
+      });
+    }
+  }
+);
+
+/**
+ * POST /api/tournament/:tournamentId/round-match/:roundMatchId/confirm-slots
+ * Confirm specific slots for a proposal
+ */
+router.post(
+  '/tournament/:tournamentId/round-match/:roundMatchId/confirm-slots',
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { roundMatchId, tournamentId } = req.params;
+      const { slot_ids, team_id } = req.body;
+      const userId = req.userId;
+
+      if (!userId || !roundMatchId || !Array.isArray(slot_ids) || slot_ids.length === 0) {
+        return res.status(400).json({
+          error: 'Missing required fields: userId, roundMatchId, slot_ids (non-empty array)'
+        });
+      }
+
+      // Verify user is a participant
+      const matchResult = await query(
+        `SELECT player1_id, player2_id FROM tournament_round_matches WHERE id = ? AND tournament_id = ?`,
+        [roundMatchId, tournamentId]
+      );
+
+      if (!matchResult.rows || matchResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Match not found' });
+      }
+
+      const match = matchResult.rows[0];
+      const isParticipant = userId === match.player1_id || userId === match.player2_id;
+
+      if (!isParticipant) {
+        return res.status(403).json({ error: 'You are not a participant in this match' });
+      }
+
+      // Confirm slots
+      const { slotsConfirmed, fullyConfirmedSlots } = await confirmSlots(
+        slot_ids,
+        userId,
+        team_id
+      );
+
+      console.log(`✅ [SCHEDULING] Confirmed ${slotsConfirmed} slots, ${fullyConfirmedSlots.length} fully confirmed`);
+
+      res.json({
+        success: true,
+        slotsConfirmed,
+        fullyConfirmedSlots
+      });
+    } catch (error) {
+      console.error('❌ [SCHEDULING] Error confirming slots:', error);
+      res.status(500).json({
+        error: 'Failed to confirm slots',
+        details: (error as any).message
+      });
+    }
+  }
+);
+
+/**
+ * POST /api/tournament/:tournamentId/match/:matchId/confirm-slots
+ * Confirm specific slots for a match proposal
+ */
+router.post(
+  '/tournament/:tournamentId/match/:matchId/confirm-slots',
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { matchId, tournamentId } = req.params;
+      const { slot_ids, team_id } = req.body;
+      const userId = req.userId;
+
+      if (!userId || !matchId || !Array.isArray(slot_ids) || slot_ids.length === 0) {
+        return res.status(400).json({
+          error: 'Missing required fields: userId, matchId, slot_ids (non-empty array)'
+        });
+      }
+
+      // Verify user is a participant
+      const matchResult = await query(
+        `SELECT player1_id, player2_id FROM tournament_matches WHERE id = ? AND tournament_id = ?`,
+        [matchId, tournamentId]
+      );
+
+      if (!matchResult.rows || matchResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Match not found' });
+      }
+
+      const match = matchResult.rows[0];
+      const isParticipant = userId === match.player1_id || userId === match.player2_id;
+
+      if (!isParticipant) {
+        return res.status(403).json({ error: 'You are not a participant in this match' });
+      }
+
+      // Confirm slots
+      const { slotsConfirmed, fullyConfirmedSlots } = await confirmSlots(
+        slot_ids,
+        userId,
+        team_id
+      );
+
+      console.log(`✅ [SCHEDULING] Match confirmed ${slotsConfirmed} slots, ${fullyConfirmedSlots.length} fully confirmed`);
+
+      res.json({
+        success: true,
+        slotsConfirmed,
+        fullyConfirmedSlots
+      });
+    } catch (error) {
+      console.error('❌ [SCHEDULING] Error confirming match slots:', error);
+      res.status(500).json({
+        error: 'Failed to confirm slots',
+        details: (error as any).message
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/tournament/:tournamentId/round-match/:roundMatchId/proposal
+ * Get active proposal with slots and confirmations
+ */
+router.get(
+  '/tournament/:tournamentId/round-match/:roundMatchId/proposal',
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { roundMatchId, tournamentId } = req.params;
+
+      // Verify match exists
+      const matchResult = await query(
+        `SELECT id FROM tournament_round_matches WHERE id = ? AND tournament_id = ?`,
+        [roundMatchId, tournamentId]
+      );
+
+      if (!matchResult.rows || matchResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Match not found' });
+      }
+
+      const proposal = await getRoundMatchProposal(roundMatchId);
+
+      if (!proposal) {
+        return res.json({ proposal: null });
+      }
+
+      res.json({ proposal });
+    } catch (error) {
+      console.error('❌ [SCHEDULING] Error getting proposal:', error);
+      res.status(500).json({
+        error: 'Failed to fetch proposal',
+        details: (error as any).message
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/tournament/:tournamentId/match/:matchId/proposal
+ * Get active proposal for a match
+ */
+router.get(
+  '/tournament/:tournamentId/match/:matchId/proposal',
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { matchId, tournamentId } = req.params;
+
+      // Verify match exists
+      const matchResult = await query(
+        `SELECT id FROM tournament_matches WHERE id = ? AND tournament_id = ?`,
+        [matchId, tournamentId]
+      );
+
+      if (!matchResult.rows || matchResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Match not found' });
+      }
+
+      const proposal = await getMatchProposal(matchId);
+
+      if (!proposal) {
+        return res.json({ proposal: null });
+      }
+
+      res.json({ proposal });
+    } catch (error) {
+      console.error('❌ [SCHEDULING] Error getting proposal:', error);
+      res.status(500).json({
+        error: 'Failed to fetch proposal',
+        details: (error as any).message
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/tournament/:tournamentId/round-match/:roundMatchId/participants-availability
+ * Get all participants' timezone and availability schedule
+ */
+router.get(
+  '/tournament/:tournamentId/round-match/:roundMatchId/participants-availability',
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { roundMatchId, tournamentId } = req.params;
+
+      // Verify match exists
+      const matchResult = await query(
+        `SELECT id FROM tournament_round_matches WHERE id = ? AND tournament_id = ?`,
+        [roundMatchId, tournamentId]
+      );
+
+      if (!matchResult.rows || matchResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Match not found' });
+      }
+
+      const participants = await getParticipantsAvailability(roundMatchId);
+
+      res.json({ participants });
+    } catch (error) {
+      console.error('❌ [SCHEDULING] Error getting participants availability:', error);
+      res.status(500).json({
+        error: 'Failed to fetch participants availability',
+        details: (error as any).message
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/tournament/:tournamentId/match/:matchId/participants-availability
+ * Get participants for a match
+ */
+router.get(
+  '/tournament/:tournamentId/match/:matchId/participants-availability',
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { matchId, tournamentId } = req.params;
+
+      // Verify match exists
+      const matchResult = await query(
+        `SELECT id FROM tournament_matches WHERE id = ? AND tournament_id = ?`,
+        [matchId, tournamentId]
+      );
+
+      if (!matchResult.rows || matchResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Match not found' });
+      }
+
+      const participants = await getParticipantsAvailability(undefined, matchId);
+
+      res.json({ participants });
+    } catch (error) {
+      console.error('❌ [SCHEDULING] Error getting participants availability:', error);
+      res.status(500).json({
+        error: 'Failed to fetch participants availability',
+        details: (error as any).message
+      });
+    }
+  }
+);
 
 export default router;

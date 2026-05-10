@@ -1,368 +1,329 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAuthStore } from '../store/authStore';
+import SchedulingFreeBusyGrid from './SchedulingFreeBusyGrid';
 import { tournamentSchedulingService } from '../services/tournamentSchedulingService';
 
 interface ScheduleProposalModalProps {
   isOpen: boolean;
+  tournamentId: string;
+  roundMatchId?: string;
+  matchId?: string;
   onClose: () => void;
-  matchId: string | null;
-  player1_nickname: string;
-  player2_nickname: string;
-  scheduled_datetime?: string;
-  scheduled_status?: string;
-  scheduled_by_player_id?: string;
   onSuccess?: () => void;
 }
 
-interface Schedule {
+interface Participant {
   id: string;
-  scheduled_datetime: string | null;
-  scheduled_status: string;
-  scheduled_by_player_id: string | null;
-  scheduled_confirmed_at: string | null;
+  nickname: string;
+  timezone: string;
+  availability_schedule?: Record<string, Array<{ start: string; end: string }>>;
 }
 
-const ScheduleProposalModal: React.FC<ScheduleProposalModalProps> = ({
-  isOpen,
-  onClose,
-  matchId,
-  player1_nickname,
-  player2_nickname,
-  scheduled_datetime,
-  scheduled_status,
-  scheduled_by_player_id,
-  onSuccess,
-}) => {
-  const { t } = useTranslation();
-  const { user } = useAuthStore();
-  const [selectedDate, setSelectedDate] = useState<string>('');
-  const [selectedTime, setSelectedTime] = useState<string>('12:00');
-  const [scheduleMessage, setScheduleMessage] = useState<string>('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-  const [schedule, setSchedule] = useState<Schedule | null>(null);
-  const [loadingSchedule, setLoadingSchedule] = useState(false);
-  const MAX_MESSAGE_LENGTH = 500;
+interface ProposalData {
+  id: string;
+  proposed_by_user_id: string;
+  proposed_at: string;
+  status: string;
+  notes?: string;
+  slots: Array<{
+    id: string;
+    slot_datetime: string;
+    status: string;
+  }>;
+  confirmations: Record<string, Array<{ user_id: string; team_id?: string; confirmed_at: string }>>;
+}
 
-  // Get user's timezone
-  const getUserTimeZone = () => {
-    try {
-      return Intl.DateTimeFormat().resolvedOptions().timeZone;
-    } catch (e) {
-      return 'UTC';
+export default function ScheduleProposalModal({
+  isOpen,
+  tournamentId,
+  roundMatchId,
+  matchId,
+  onClose,
+  onSuccess
+}: ScheduleProposalModalProps) {
+  const { t } = useTranslation();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [proposal, setProposal] = useState<ProposalData | null>(null);
+  const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
+  const [notes, setNotes] = useState('');
+  const [mode, setMode] = useState<'propose' | 'confirm' | 'counter'>('propose');
+
+  const targetId = roundMatchId || matchId;
+  const isRoundMatch = !!roundMatchId;
+
+  // Load data when modal opens
+  useEffect(() => {
+    if (!isOpen || !targetId) return;
+
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        setError('');
+
+        // Load participants availability
+        const availRes = isRoundMatch
+          ? await tournamentSchedulingService.getRoundMatchParticipantsAvailability(tournamentId, targetId)
+          : await tournamentSchedulingService.getMatchParticipantsAvailability(tournamentId, targetId);
+
+        setParticipants(availRes.participants || []);
+
+        // Load active proposal if exists
+        const proposalRes = isRoundMatch
+          ? await tournamentSchedulingService.getRoundMatchProposal(tournamentId, targetId)
+          : await tournamentSchedulingService.getMatchProposal(tournamentId, targetId);
+
+        if (proposalRes.proposal) {
+          setProposal(proposalRes.proposal);
+          setMode('confirm');
+        } else {
+          setMode('propose');
+        }
+      } catch (err) {
+        console.error('Error loading scheduling data:', err);
+        setError('Failed to load scheduling data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, [isOpen, targetId, tournamentId, isRoundMatch]);
+
+  const handleSlotToggle = (slotDatetime: string, selected: boolean) => {
+    const newSelected = new Set(selectedSlots);
+    if (selected) {
+      newSelected.add(slotDatetime);
+    } else {
+      newSelected.delete(slotDatetime);
     }
+    setSelectedSlots(newSelected);
   };
 
-  const timezone = getUserTimeZone();
-
-  // Load existing schedule when modal opens
-  useEffect(() => {
-    if (isOpen && matchId && scheduled_datetime) {
-      // Use schedule data passed from parent component
-      setSchedule({
-        id: matchId,
-        scheduled_datetime,
-        scheduled_status: scheduled_status || 'pending',
-        scheduled_by_player_id: scheduled_by_player_id || null,
-        scheduled_confirmed_at: null,
-      });
-      
-      // Parse datetime to populate form in user's local timezone
-      const date = new Date(scheduled_datetime);
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const hours = String(date.getHours()).padStart(2, '0');
-      const minutes = String(date.getMinutes()).padStart(2, '0');
-      
-      setSelectedDate(`${year}-${month}-${day}`);
-      setSelectedTime(`${hours}:${minutes}`);
-    } else if (isOpen && matchId && !scheduled_datetime) {
-      // No existing schedule
-      setSchedule(null);
-      setSelectedDate('');
-      setSelectedTime('12:00');
+  const handleProposeSlots = async () => {
+    if (selectedSlots.size === 0) {
+      setError('Please select at least one slot');
+      return;
     }
-  }, [isOpen, matchId, scheduled_datetime, scheduled_status, scheduled_by_player_id]);
 
-  const loadSchedule = async () => {
     try {
-      setLoadingSchedule(true);
-      const response = await tournamentSchedulingService.getSchedule(matchId!);
-      if (response.schedule) {
-        setSchedule(response.schedule);
-        // If there's a scheduled datetime, parse it to populate the form in user's local timezone
-        if (response.schedule.scheduled_datetime) {
-          const date = new Date(response.schedule.scheduled_datetime);
-          const year = date.getFullYear();
-          const month = String(date.getMonth() + 1).padStart(2, '0');
-          const day = String(date.getDate()).padStart(2, '0');
-          const hours = String(date.getHours()).padStart(2, '0');
-          const minutes = String(date.getMinutes()).padStart(2, '0');
-          
-          setSelectedDate(`${year}-${month}-${day}`);
-          setSelectedTime(`${hours}:${minutes}`);
-        }
+      setLoading(true);
+      setError('');
+
+      const slotArray = Array.from(selectedSlots);
+      const response = isRoundMatch
+        ? await tournamentSchedulingService.proposeRoundMatchSlots(
+            tournamentId,
+            targetId!,
+            slotArray,
+            notes || undefined
+          )
+        : await tournamentSchedulingService.proposeMatchSlots(
+            tournamentId,
+            targetId!,
+            slotArray,
+            notes || undefined
+          );
+
+      if (response.success) {
+        onSuccess?.();
+        onClose();
       }
     } catch (err) {
-      console.error('Failed to load schedule:', err);
+      console.error('Error proposing slots:', err);
+      setError('Failed to propose slots');
     } finally {
-      setLoadingSchedule(false);
+      setLoading(false);
     }
   };
 
-  if (!isOpen || !matchId) {
-    return null;
+  const handleConfirmSlots = async () => {
+    if (selectedSlots.size === 0) {
+      setError('Please select at least one slot');
+      return;
+    }
+
+    if (!proposal) {
+      setError('No proposal to confirm');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError('');
+
+      const slotArray = Array.from(selectedSlots);
+      const response = isRoundMatch
+        ? await tournamentSchedulingService.confirmRoundMatchSlots(tournamentId, targetId!, slotArray)
+        : await tournamentSchedulingService.confirmMatchSlots(tournamentId, targetId!, slotArray);
+
+      if (response.success) {
+        onSuccess?.();
+        onClose();
+      }
+    } catch (err) {
+      console.error('Error confirming slots:', err);
+      setError('Failed to confirm slots');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  const dateStart = new Date();
+  const dateEnd = new Date(dateStart);
+  dateEnd.setDate(dateEnd.getDate() + 14); // 14-day window
+
+  const proposedSlotDatetimes = proposal?.slots.map(s => s.slot_datetime) || [];
+  const confirmedSlotsMap: Record<string, string[]> = {};
+
+  if (proposal?.confirmations) {
+    Object.entries(proposal.confirmations).forEach(([slotId, confirmations]) => {
+      confirmedSlotsMap[slotId] = confirmations.map((c: any) => c.user_id);
+    });
   }
 
-  // Convert local datetime input to UTC ISO string
-  const localToUTC = (dateStr: string, timeStr: string): string => {
-    const localDateTime = `${dateStr}T${timeStr}:00`;
-    const date = new Date(localDateTime);
-    return date.toISOString();
-  };
-
-  // Format datetime for display in user's timezone
-  const formatDateTimeDisplay = (dateTimeStr: string | null): string => {
-    if (!dateTimeStr) return 'Not scheduled';
-    const date = new Date(dateTimeStr);
-    return date.toLocaleString('es-ES', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const handlePropose = async () => {
-    try {
-      setError(null);
-      setLoading(true);
-
-      if (!selectedDate || !selectedTime) {
-        setError('Please select both date and time');
-        return;
-      }
-
-      const utcDatetime = localToUTC(selectedDate, selectedTime);
-      await tournamentSchedulingService.proposeSchedule(matchId, utcDatetime, scheduleMessage);
-      setSuccess(true);
-
-      setTimeout(async () => {
-        setSuccess(false);
-        setScheduleMessage(''); // Clear message after successful proposal
-        // Reload schedule after proposing
-        await loadSchedule();
-        if (onSuccess) onSuccess();
-      }, 1500);
-    } catch (err: any) {
-      setError(err?.response?.data?.error || 'Failed to propose schedule');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleConfirm = async () => {
-    try {
-      setError(null);
-      setLoading(true);
-
-      if (!selectedDate || !selectedTime) {
-        setError('Please select both date and time');
-        return;
-      }
-
-      const utcDatetime = localToUTC(selectedDate, selectedTime);
-      await tournamentSchedulingService.confirmSchedule(matchId, utcDatetime, scheduleMessage);
-      setSuccess(true);
-
-      setTimeout(async () => {
-        setSuccess(false);
-        setScheduleMessage(''); // Clear message after successful confirmation
-        // Reload schedule after confirming
-        await loadSchedule();
-        if (onSuccess) onSuccess();
-      }, 1500);
-    } catch (err: any) {
-      setError(err?.response?.data?.error || 'Failed to confirm schedule');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const isConfirmed = schedule?.scheduled_status === 'confirmed';
-  const hasProposal = schedule?.scheduled_datetime && schedule?.scheduled_status !== 'pending';
-  const isPending = schedule?.scheduled_status === 'pending';
-  
-  // Determine if current user is the one who proposed
-  const isUserTheProposer = schedule?.scheduled_by_player_id === user?.id;
-  // If user is NOT the proposer but there's a proposal, they need to confirm
-  const userNeedsToConfirm = hasProposal && !isUserTheProposer && !isConfirmed;
-  // If user IS the proposer and proposal is awaiting confirmation, they can reschedule/modify
-  const userCanReschedule = hasProposal && isUserTheProposer && !isConfirmed;
-
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-      <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full mx-4 max-h-screen overflow-y-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-gray-800">Schedule Match</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 font-bold text-2xl"
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* Match info */}
-        <div className="mb-6 p-4 bg-gray-100 rounded">
-          <p className="text-sm text-gray-600 mb-2">
-            <strong>{player1_nickname}</strong> vs{' '}
-            <strong>{player2_nickname}</strong>
-          </p>
-          <p className="text-xs text-gray-500">Your timezone: {timezone}</p>
-        </div>
-
-        {/* Loading schedule */}
-        {loadingSchedule && (
-          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-blue-700 text-sm">
-            Loading schedule...
-          </div>
-        )}
-
-        {/* Current schedule display */}
-        {!loadingSchedule && hasProposal && (
-          <div className="mb-6 p-4 bg-blue-50 rounded">
-            <p className="text-sm font-semibold text-gray-700 mb-2">Proposed time:</p>
-            <p className="text-sm text-gray-600 mb-3">
-              {formatDateTimeDisplay(schedule?.scheduled_datetime)}
-            </p>
-            {isConfirmed ? (
-              <p className="text-sm text-green-600 font-semibold">✅ Confirmed by both</p>
-            ) : (
-              <p className="text-sm text-orange-600 font-semibold">
-                ⏳ Awaiting confirmation
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Error message */}
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
-            {error}
-          </div>
-        )}
-
-        {/* Success message */}
-        {success && (
-          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded text-green-700 text-sm">
-            ✅ Success!
-          </div>
-        )}
-
-        {/* Proposal form - show if no confirmed schedule, or if confirmed but user wants to reschedule */}
-        {(!isConfirmed || isConfirmed) && (userNeedsToConfirm || !hasProposal || isConfirmed || userCanReschedule) && (
-          <div className="mb-6 space-y-4">
-            {userNeedsToConfirm && !isConfirmed && (
-              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-sm">
-                ⏳ Your opponent proposed a time. You can confirm it or propose a different time.
-              </div>
-            )}
-            {userCanReschedule && !isConfirmed && (
-              <div className="p-3 bg-orange-50 border border-orange-200 rounded text-orange-800 text-sm">
-                ⏳ Awaiting opponent confirmation. You can modify or reschedule the proposal.
-              </div>
-            )}
-            {isConfirmed && (
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded text-blue-800 text-sm">
-                💬 Propose a new time to reschedule the match.
-              </div>
-            )}
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={loading}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Time ({timezone})
-              </label>
-              <input
-                type="time"
-                value={selectedTime}
-                onChange={(e) => setSelectedTime(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={loading}
-              />
-            </div>
-
-            <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
-              Time will be converted to UTC for storage. Opponent will see this in their timezone.
-            </p>
-
-            {/* Message/Comment field */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Optional message for opponent
-              </label>
-              <textarea
-                value={scheduleMessage}
-                onChange={(e) => {
-                  if (e.target.value.length <= MAX_MESSAGE_LENGTH) {
-                    setScheduleMessage(e.target.value);
-                  }
-                }}
-                placeholder="e.g., Alternative times available, timezone concerns, etc."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
-                rows={3}
-                disabled={loading}
-                maxLength={MAX_MESSAGE_LENGTH}
-              />
-              <div className="flex justify-between items-center mt-1">
-                <p className="text-xs text-gray-500">
-                  {scheduleMessage.length}/{MAX_MESSAGE_LENGTH} characters
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Buttons */}
-        <div className="flex gap-3">
-          {(userNeedsToConfirm || !hasProposal || isConfirmed || userCanReschedule) && (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b border-gray-200 p-6">
+          <div className="flex justify-between items-start">
+            <h2 className="text-2xl font-bold text-gray-800">
+              {mode === 'propose' ? 'Propose Match Schedule' : 'Confirm Schedule'}
+            </h2>
             <button
-              onClick={userNeedsToConfirm && !isConfirmed ? handleConfirm : handlePropose}
-              disabled={loading || !selectedDate || !selectedTime}
-              className="flex-1 px-4 py-2 bg-blue-500 text-white rounded font-semibold hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              onClick={onClose}
+              className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
             >
-              {loading ? '...' : isConfirmed ? '📅 Reschedule' : userNeedsToConfirm ? '✅ Confirm' : userCanReschedule ? '📅 Reschedule' : '📅 Propose'}
+              ✕
             </button>
+          </div>
+          {error && (
+            <div className="mt-4 p-3 bg-red-100 border border-red-300 rounded text-red-700 text-sm">
+              {error}
+            </div>
           )}
-          <button
-            onClick={onClose}
-            disabled={loading}
-            className="flex-1 px-4 py-2 bg-gray-300 text-gray-800 rounded font-semibold hover:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-          >
-            Close
-          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 space-y-6">
+          {loading && participants.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-gray-500">Loading scheduling data...</p>
+            </div>
+          ) : (
+            <>
+              {/* Grid */}
+              <div className="space-y-2">
+                <h3 className="font-semibold text-gray-800">Availability Grid</h3>
+                <SchedulingFreeBusyGrid
+                  participants={participants}
+                  dateStart={dateStart}
+                  dateEnd={dateEnd}
+                  selectedSlots={selectedSlots}
+                  onSlotToggle={handleSlotToggle}
+                  readOnly={mode === 'confirm' && !proposal}
+                  proposedSlots={proposedSlotDatetimes}
+                  confirmedSlots={confirmedSlotsMap}
+                />
+              </div>
+
+              {/* Selected slots summary */}
+              {selectedSlots.size > 0 && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded">
+                  <p className="text-sm font-semibold text-blue-900">
+                    {selectedSlots.size} slot{selectedSlots.size !== 1 ? 's' : ''} selected
+                  </p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {Array.from(selectedSlots).map(slot => (
+                      <div key={slot} className="text-xs text-blue-800">
+                        {new Date(slot).toLocaleString()}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Proposal info (if responding) */}
+              {proposal && (
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded">
+                  <p className="text-sm font-semibold text-yellow-900">Active Proposal</p>
+                  <p className="text-xs text-yellow-800 mt-1">
+                    Proposed {new Date(proposal.proposed_at).toLocaleString()}
+                  </p>
+                  {proposal.notes && (
+                    <p className="text-xs text-yellow-800 mt-2 italic">
+                      Notes: {proposal.notes}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Notes textarea */}
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-gray-800">
+                  Notes (optional, max 500 characters)
+                </label>
+                <textarea
+                  value={notes}
+                  onChange={e => setNotes(e.target.value.slice(0, 500))}
+                  placeholder="Add any notes about your availability or preferences..."
+                  className="w-full p-3 border border-gray-300 rounded text-sm font-mono"
+                  rows={3}
+                  disabled={loading}
+                />
+                <p className="text-xs text-gray-500">{notes.length}/500</p>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6 space-y-3">
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 text-gray-700 font-medium"
+              disabled={loading}
+            >
+              Cancel
+            </button>
+
+            {mode === 'propose' ? (
+              <button
+                onClick={handleProposeSlots}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium disabled:opacity-50"
+                disabled={loading || selectedSlots.size === 0}
+              >
+                {loading ? 'Proposing...' : 'Propose Selected Slots'}
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => {
+                    setMode('counter');
+                    setSelectedSlots(new Set());
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 text-gray-700 font-medium"
+                  disabled={loading}
+                >
+                  Counter-propose
+                </button>
+                <button
+                  onClick={handleConfirmSlots}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium disabled:opacity-50"
+                  disabled={loading || selectedSlots.size === 0}
+                >
+                  {loading ? 'Confirming...' : 'Confirm Selected Slots'}
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
-};
-
-export default ScheduleProposalModal;
+}
