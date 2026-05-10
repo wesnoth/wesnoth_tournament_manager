@@ -746,6 +746,7 @@
     "add_time_range_help": "Agregar otro horario",
     "clear_all_help": "Limpiar todos los horarios",
     "slot": "slot",
-    "slots": "slots"
+    "slots": "slots",
+    "viewing_as": "Viendo como"
   }
 }

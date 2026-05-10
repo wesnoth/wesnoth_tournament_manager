@@ -748,6 +748,7 @@
     "add_time_range_help": "Weiteres Zeitfenster hinzufügen",
     "clear_all_help": "Alle Zeitfenster löschen",
     "slot": "Slot",
-    "slots": "Slots"
+    "slots": "Slots",
+    "viewing_as": "Angezeigt als"
   }
 }

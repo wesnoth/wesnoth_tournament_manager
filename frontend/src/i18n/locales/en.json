@@ -759,6 +759,7 @@
     "add_time_range_help": "Add another time range",
     "clear_all_help": "Clear all time ranges",
     "slot": "slot",
-    "slots": "slots"
+    "slots": "slots",
+    "viewing_as": "Viewing as"
   }
 }
