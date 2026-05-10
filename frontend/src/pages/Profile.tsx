@@ -393,13 +393,10 @@ const Profile: React.FC = () => {
                       </p>
                     )}
                     <div className="space-y-6">
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-3">{t('common.timezone') || 'Timezone'}</label>
-                        <TimezoneSelector 
-                          value={timezone} 
-                          onChange={setTimezone}
-                        />
-                      </div>
+                      <TimezoneSelector 
+                        value={timezone} 
+                        onChange={setTimezone}
+                      />
                       
                       <AvailabilityRangeEditor 
                         value={availabilitySchedule} 
