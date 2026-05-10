@@ -12,7 +12,201 @@ export interface AvailabilitySchedule {
 }
 
 /**
- * Round datetime to nearest 30-minute mark in UTC
+ * Calculate timezone offset in hours between two timezones
+ * Returns positive if toTz is ahead of fromTz, negative if behind
+ */
+const getTimezoneOffset = (fromTz: string, toTz: string): number => {
+  try {
+    // Create a test date (using a fixed date to avoid DST issues)
+    const testDate = new Date('2025-01-15T12:00:00Z');
+    
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: toTz,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+    
+    const parts = formatter.formatToParts(testDate);
+    const toHour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
+    
+    // UTC time is 12:00, so toTz hour tells us the offset
+    // If toHour is 13, then toTz is UTC+1
+    // If toHour is 11, then toTz is UTC-1
+    const toOffset = toHour - 12;
+    
+    // Now get fromTz offset
+    const formatter2 = new Intl.DateTimeFormat('en-US', {
+      timeZone: fromTz,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+    
+    const parts2 = formatter2.formatToParts(testDate);
+    const fromHour = parseInt(parts2.find(p => p.type === 'hour')?.value || '0');
+    const fromOffset = fromHour - 12;
+    
+    // Difference: toOffset - fromOffset
+    // Example: São Paulo (-3) vs Madrid (+1) = 1 - (-3) = +4 hours (Madrid is 4 hours ahead)
+    return toOffset - fromOffset;
+  } catch (error) {
+    console.warn(`Error calculating timezone offset between ${fromTz} and ${toTz}:`, error);
+    return 0;
+  }
+};
+
+/**
+ * Convert time range from one timezone to another
+ * Input: time range in "fromTz", output: time range in "toTz"
+ */
+const convertTimeRangeToTimezone = (
+  dayOfWeek: string,
+  timeRange: TimeRange,
+  fromTz: string,
+  toTz: string
+): { day: string; ranges: TimeRange[] } => {
+  try {
+    const ranges: TimeRange[] = [];
+    
+    // Parse start and end times
+    const [startHour, startMin] = timeRange.start.split(':').map(Number);
+    const [endHour, endMin] = timeRange.end.split(':').map(Number);
+    
+    // Create a reference date in the participant's timezone
+    // Use a date that won't hit DST transitions
+    const referenceDate = new Date('2025-01-15T00:00:00Z');
+    
+    // We need to find what UTC time corresponds to "dayOfWeek HH:MM in fromTz"
+    // Then convert that UTC time to toTz
+    const daysMap: Record<string, number> = {
+      monday: 0, tuesday: 1, wednesday: 2, thursday: 3,
+      friday: 4, saturday: 5, sunday: 6
+    };
+    
+    const targetDayOfWeek = daysMap[dayOfWeek.toLowerCase()];
+    const utcDayOfWeek = referenceDate.getUTCDay();
+    const dayDiff = (targetDayOfWeek - utcDayOfWeek + 7) % 7;
+    
+    // Create start date in fromTz
+    const startDateStr = new Date(referenceDate.getTime() + dayDiff * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split('T')[0];
+    
+    const startUTCStr = `${startDateStr}T${String(startHour).padStart(2, '0')}:${String(startMin).padStart(2, '0')}:00Z`;
+    let startUTC = new Date(startUTCStr);
+    
+    const endUTCStr = `${startDateStr}T${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}:00Z`;
+    let endUTC = new Date(endUTCStr);
+    
+    // Adjust for timezone differences
+    // If we want "19:00 in São Paulo", we need to subtract São Paulo's UTC offset
+    const offset = getTimezoneOffset('UTC', fromTz);
+    startUTC = new Date(startUTC.getTime() - offset * 60 * 60 * 1000);
+    endUTC = new Date(endUTC.getTime() - offset * 60 * 60 * 1000);
+    
+    // Now convert these UTC times to toTz
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: toTz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    
+    const startParts = formatter.formatToParts(startUTC);
+    const startToTzHour = parseInt(startParts.find(p => p.type === 'hour')?.value || '0');
+    const startToTzMin = parseInt(startParts.find(p => p.type === 'minute')?.value || '0');
+    const startToTzDay = startParts.find(p => p.type === 'day')?.value || '15';
+    
+    const endParts = formatter.formatToParts(endUTC);
+    const endToTzHour = parseInt(endParts.find(p => p.type === 'hour')?.value || '0');
+    const endToTzMin = parseInt(endParts.find(p => p.type === 'minute')?.value || '0');
+    const endToTzDay = endParts.find(p => p.type === 'day')?.value || '15';
+    
+    const startDayOffset = parseInt(startToTzDay) - parseInt(startDateStr.split('-')[2]);
+    const endDayOffset = parseInt(endToTzDay) - parseInt(startDateStr.split('-')[2]);
+    
+    // Handle day wraparound
+    const startDay = (targetDayOfWeek + startDayOffset + 7) % 7;
+    const endDay = (targetDayOfWeek + endDayOffset + 7) % 7;
+    
+    const daysReverseMap = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    
+    const startDayName = daysReverseMap[startDay];
+    const endDayName = daysReverseMap[endDay];
+    
+    const startTimeStr = `${String(startToTzHour).padStart(2, '0')}:${String(startToTzMin).padStart(2, '0')}`;
+    const endTimeStr = `${String(endToTzHour).padStart(2, '0')}:${String(endToTzMin).padStart(2, '0')}`;
+    
+    if (startDayName === endDayName) {
+      // Same day
+      ranges.push({ start: startTimeStr, end: endTimeStr });
+      return { day: startDayName, ranges };
+    } else {
+      // Spans two days
+      ranges.push({ start: startTimeStr, end: '23:59' });
+      ranges.push({ start: '00:00', end: endTimeStr });
+      return { day: startDayName, ranges };
+    }
+  } catch (error) {
+    console.warn(`Error converting time range:`, error);
+    return { day: dayOfWeek, ranges: [timeRange] };
+  }
+};
+
+/**
+ * Convert entire availability schedule from one timezone to another
+ */
+const convertAvailabilitySchedule = (
+  schedule: AvailabilitySchedule,
+  fromTz: string,
+  toTz: string
+): AvailabilitySchedule => {
+  if (fromTz === toTz) {
+    return schedule;
+  }
+  
+  const result: AvailabilitySchedule = {
+    monday: [], tuesday: [], wednesday: [], thursday: [],
+    friday: [], saturday: [], sunday: []
+  };
+  
+  for (const [day, ranges] of Object.entries(schedule)) {
+    for (const range of ranges) {
+      const { day: resultDay, ranges: resultRanges } = convertTimeRangeToTimezone(
+        day,
+        range,
+        fromTz,
+        toTz
+      );
+      
+      for (const resultRange of resultRanges) {
+        // Avoid duplicates
+        const exists = result[resultDay].some(
+          r => r.start === resultRange.start && r.end === resultRange.end
+        );
+        if (!exists) {
+          result[resultDay].push(resultRange);
+        }
+      }
+    }
+  }
+  
+  // Sort each day's ranges
+  for (const day of Object.keys(result)) {
+    result[day].sort((a, b) => a.start.localeCompare(b.start));
+  }
+  
+  return result;
+};
+
+/**
+ * Round datetime to nearest 30-minute mark
  */
 export const roundToNearest30Min = (dt: Date): Date => {
   const copy = new Date(dt);
@@ -592,15 +786,33 @@ export const getParticipantsAvailability = async (
 
     const participants = participantsResult.rows || [];
     
-    // Parse JSON availability_schedule for each participant
-    const formattedParticipants = participants.map(p => ({
-      ...p,
-      availability_schedule: p.availability_schedule 
+    // Parse JSON availability_schedule and convert to viewing timezone
+    const formattedParticipants = participants.map(p => {
+      let availabilitySchedule = p.availability_schedule 
         ? (typeof p.availability_schedule === 'string' 
           ? JSON.parse(p.availability_schedule) 
           : p.availability_schedule)
-        : null
-    }));
+        : null;
+      
+      // Convert availability to viewing timezone
+      if (availabilitySchedule && p.timezone !== viewingTimezone) {
+        availabilitySchedule = convertAvailabilitySchedule(
+          availabilitySchedule,
+          p.timezone,
+          viewingTimezone
+        );
+      }
+      
+      // Calculate offset in hours
+      const offset = getTimezoneOffset(p.timezone, viewingTimezone);
+      const offsetStr = offset >= 0 ? `+${offset}h` : `${offset}h`;
+      
+      return {
+        ...p,
+        availability_schedule: availabilitySchedule,
+        timezone_offset: offsetStr
+      };
+    });
 
     return {
       participants: formattedParticipants,

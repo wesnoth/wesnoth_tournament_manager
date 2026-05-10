@@ -16,6 +16,7 @@ interface Participant {
   id: string;
   nickname: string;
   timezone: string;
+  timezone_offset?: string;
   availability_schedule?: Record<string, Array<{ start: string; end: string }>>;
 }
 

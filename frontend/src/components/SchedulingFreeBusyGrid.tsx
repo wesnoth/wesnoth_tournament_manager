@@ -5,6 +5,7 @@ interface Participant {
   id: string;
   nickname: string;
   timezone: string;
+  timezone_offset?: string;
   availability_schedule?: Record<string, Array<{ start: string; end: string }>>;
 }
 
@@ -23,7 +24,7 @@ interface SchedulingFreeBusyGridProps {
   onSlotToggle?: (slotDatetime: string, selected: boolean) => void;
   readOnly?: boolean;
   proposedSlots?: string[];
-  confirmedSlots?: Record<string, string[]>; // slot_id -> array of user_ids who confirmed
+  confirmedSlots?: Record<string, string[]>;
   viewingTimezone?: string;
 }
 
@@ -79,27 +80,37 @@ const getDayInTimezone = (utcDate: Date, timezone: string): string => {
 };
 
 /**
- * Convert UTC time to participant's timezone and check availability
- * The key insight: participant's availability_schedule is in their timezone
- * So we need to convert the UTC slot to the participant's timezone to verify availability
+ * Format time as HH:MM (in UTC)
+ */
+const formatTime = (date: Date): string => {
+  const hours = String(date.getUTCHours()).padStart(2, '0');
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+};
+
+/**
+ * Check if participant is available at this UTC slot
+ * Availability schedule has already been converted to viewing timezone by backend,
+ * so we just need to check the day and time directly
  */
 const isParticipantAvailable = (
   participant: Participant,
   slotStartUTC: Date,
-  slotEndUTC: Date
+  slotEndUTC: Date,
+  viewingTimezone: string
 ): boolean => {
   if (!participant.availability_schedule) {
     return true; // Unknown availability = assume available
   }
 
   try {
-    // Get day name in PARTICIPANT's timezone (not viewing timezone!)
-    const dayKey = getDayInTimezone(slotStartUTC, participant.timezone);
+    // Get day name in viewing timezone
+    const dayKey = getDayInTimezone(slotStartUTC, viewingTimezone);
     const dayRanges = participant.availability_schedule[dayKey] || [];
 
-    // Convert UTC time to PARTICIPANT's timezone
+    // Convert UTC time to viewing timezone
     const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: participant.timezone,
+      timeZone: viewingTimezone,
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
@@ -116,17 +127,8 @@ const isParticipantAvailable = (
     );
   } catch (error) {
     console.warn(`Error checking availability for ${participant.nickname}:`, error);
-    return true; // On error, assume available
+    return true;
   }
-};
-
-/**
- * Format time as HH:MM (in UTC)
- */
-const formatTime = (date: Date): string => {
-  const hours = String(date.getUTCHours()).padStart(2, '0');
-  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-  return `${hours}:${minutes}`;
 };
 
 export default function SchedulingFreeBusyGrid({
@@ -144,7 +146,6 @@ export default function SchedulingFreeBusyGrid({
 
   const slots = useMemo(() => generateSlots(dateStart, dateEnd), [dateStart, dateEnd]);
 
-  // Create detailed slot info with date
   const slotsWithDates = useMemo(() => {
     return slots.map(slot => ({
       ...slot,
@@ -156,7 +157,6 @@ export default function SchedulingFreeBusyGrid({
     }));
   }, [slots]);
 
-  // Group slots by date (YYYY-MM-DD)
   const slotsByDate = useMemo(() => {
     const grouped: Record<string, GridSlot[]> = {};
     slotsWithDates.forEach(slot => {
@@ -177,7 +177,6 @@ export default function SchedulingFreeBusyGrid({
     onSlotToggle(key, !selectedSlots.has(key));
   };
 
-  // Determine alternating colors for day columns
   const getDayBackgroundColor = (index: number): string => {
     return index % 2 === 0 ? 'bg-blue-50' : 'bg-green-50';
   };
@@ -186,7 +185,7 @@ export default function SchedulingFreeBusyGrid({
 
   return (
     <div className="w-full space-y-4">
-      {/* Legend - Fixed, not affected by day background colors */}
+      {/* Legend */}
       <div className="sticky top-0 z-20 bg-white flex items-center gap-6 text-xs p-4 border border-gray-200 rounded-lg">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 bg-green-100 border border-green-300 rounded"></div>
@@ -210,9 +209,9 @@ export default function SchedulingFreeBusyGrid({
       <div className="overflow-x-auto border border-gray-200 rounded-lg">
         <table className="border-collapse text-xs whitespace-nowrap">
           <thead>
-            {/* Day header - shows dates with alternating colors */}
+            {/* Day header */}
             <tr>
-              <th className="border border-gray-300 p-2 bg-gray-50 sticky left-0 z-10 text-left min-w-[160px]">
+              <th className="border border-gray-300 p-2 bg-gray-50 sticky left-0 z-10 text-left min-w-[180px]">
                 Participant
               </th>
               {dateKeys.map((dateKey, dateIdx) => {
@@ -239,7 +238,7 @@ export default function SchedulingFreeBusyGrid({
 
             {/* Time header */}
             <tr>
-              <th className="border border-gray-300 p-1 bg-gray-100 sticky left-0 z-10 min-w-[160px]"></th>
+              <th className="border border-gray-300 p-1 bg-gray-100 sticky left-0 z-10 min-w-[180px]"></th>
               {dateKeys.map(dateKey => {
                 const daySlots = slotsByDate[dateKey];
                 const dateIdx = dateKeys.indexOf(dateKey);
@@ -260,9 +259,11 @@ export default function SchedulingFreeBusyGrid({
           <tbody>
             {participants.map(participant => (
               <tr key={participant.id}>
-                <td className="border border-gray-300 p-2 bg-gray-50 sticky left-0 z-10 font-semibold whitespace-nowrap min-w-[160px]">
+                <td className="border border-gray-300 p-2 bg-gray-50 sticky left-0 z-10 font-semibold whitespace-nowrap min-w-[180px]">
                   <div className="text-xs font-semibold">{participant.nickname}</div>
-                  <div className="text-xs text-gray-500">{participant.timezone}</div>
+                  <div className="text-xs text-gray-500">
+                    {participant.timezone} {participant.timezone_offset && `(${participant.timezone_offset})`}
+                  </div>
                 </td>
                 {dateKeys.map(dateKey => {
                   const daySlots = slotsByDate[dateKey];
@@ -271,17 +272,12 @@ export default function SchedulingFreeBusyGrid({
 
                   return daySlots.map(slot => {
                     const slotKey = getSlotKey(slot);
-                    const isAvailable = isParticipantAvailable(participant, slot.startTime, slot.endTime);
+                    const isAvailable = isParticipantAvailable(participant, slot.startTime, slot.endTime, viewingTimezone);
                     const isProposed = proposedSlots.includes(slotKey);
                     const confirmations = confirmedSlots[slotKey] || [];
                     const isConfirmed = confirmations.length > 0;
                     const isSelected = selectedSlots.has(slotKey);
 
-                    // Determine cell color based on state priority:
-                    // 1. Confirmed (highest priority)
-                    // 2. Proposed
-                    // 3. Selected
-                    // 4. Availability status (with day background as base)
                     let bgColor = dayColor;
                     let borderColor = 'border-gray-200';
 
