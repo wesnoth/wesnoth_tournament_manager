@@ -33,29 +33,62 @@ const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'S
  * Generate 30-minute slots for display grid in viewing timezone
  * Slots represent times in viewing timezone only
  */
-const generateSlots = (dateStart: Date, dateEnd: Date): GridSlot[] => {
+const generateSlots = (dateStart: Date, dateEnd: Date, viewingTimezone: string = 'UTC'): GridSlot[] => {
   const slots: GridSlot[] = [];
+  
+  // Helper to get date/time in a specific timezone
+  const getLocalDateTime = (utcDate: Date, tz: string) => {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      weekday: 'long',
+      hour12: false
+    });
+    
+    const parts = formatter.formatToParts(utcDate);
+    const year = parts.find(p => p.type === 'year')?.value || '2025';
+    const month = parts.find(p => p.type === 'month')?.value || '01';
+    const day = parts.find(p => p.type === 'day')?.value || '01';
+    const weekday = parts.find(p => p.type === 'weekday')?.value || 'Monday';
+    
+    return {
+      dateStr: `${year}-${month}-${day}`,
+      weekday,
+      parts
+    };
+  };
+  
+  // Start from dateStart (already in correct local representation)
   const current = new Date(dateStart);
   current.setUTCHours(0, 0, 0, 0);
-
+  
+  let prevDateStr = '';
+  
   while (current < dateEnd) {
-    const dateStr = current.toISOString().split('T')[0]; // YYYY-MM-DD
-    const dayOfWeek = DAYS_OF_WEEK[current.getUTCDay()];
-
-    for (let hour = 0; hour < 24; hour++) {
-      for (let minute = 0; minute < 60; minute += 30) {
-        const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-        slots.push({
-          dateStr,
-          timeStr,
-          dayOfWeek
-        });
+    const { dateStr, weekday: dayOfWeek } = getLocalDateTime(current, viewingTimezone);
+    
+    // Only generate slots once per day (check if date changed)
+    if (dateStr !== prevDateStr) {
+      prevDateStr = dateStr;
+      
+      for (let hour = 0; hour < 24; hour++) {
+        for (let minute = 0; minute < 60; minute += 30) {
+          const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+          slots.push({
+            dateStr,
+            timeStr,
+            dayOfWeek
+          });
+        }
       }
     }
-
+    
+    // Increment by 1 UTC day (will map to different viewing dates due to timezone)
     current.setUTCDate(current.getUTCDate() + 1);
   }
-
+  
   return slots;
 };
 
@@ -141,7 +174,7 @@ export default function SchedulingFreeBusyGrid({
 }: SchedulingFreeBusyGridProps) {
   const { t } = useTranslation();
 
-  const slots = useMemo(() => generateSlots(dateStart, dateEnd), [dateStart, dateEnd]);
+  const slots = useMemo(() => generateSlots(dateStart, dateEnd, viewingTimezone), [dateStart, dateEnd, viewingTimezone]);
 
   const slotsByDate = useMemo(() => {
     const grouped: Record<string, GridSlot[]> = {};
