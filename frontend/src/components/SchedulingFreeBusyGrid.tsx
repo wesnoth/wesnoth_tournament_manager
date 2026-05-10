@@ -27,7 +27,6 @@ interface SchedulingFreeBusyGridProps {
 }
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const DAYS_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 /**
  * Generate 30-minute slots between dateStart and dateEnd
@@ -77,6 +76,11 @@ const isParticipantAvailable = (
   }
 
   try {
+    // Get day name in participant's timezone
+    const tzDate = new Date(slotStartUTC.toLocaleString('en-US', { timeZone: participant.timezone }));
+    const dayKey = DAYS_OF_WEEK[tzDate.getUTCDay()].toLowerCase();
+    const dayRanges = participant.availability_schedule[dayKey] || [];
+
     // Convert UTC time to participant's timezone
     const formatter = new Intl.DateTimeFormat('en-US', {
       timeZone: participant.timezone,
@@ -97,11 +101,6 @@ const isParticipantAvailable = (
       hour: parseInt(parts.find(p => p.type === 'hour')?.value || '0'),
       minute: parseInt(parts.find(p => p.type === 'minute')?.value || '0')
     };
-
-    // Get day name in participant's timezone
-    const tzDate = new Date(slotStartUTC.toLocaleString('en-US', { timeZone: participant.timezone }));
-    const dayKey = DAYS_OF_WEEK[tzDate.getUTCDay()].toLowerCase();
-    const dayRanges = participant.availability_schedule[dayKey] || [];
 
     const slotTimeStr = `${String(dateObj.hour).padStart(2, '0')}:${String(dateObj.minute).padStart(2, '0')}`;
 
@@ -137,17 +136,30 @@ export default function SchedulingFreeBusyGrid({
 
   const slots = useMemo(() => generateSlots(dateStart, dateEnd), [dateStart, dateEnd]);
 
-  // Group slots by day
-  const slotsByDay = useMemo(() => {
+  // Create detailed slot info with date
+  const slotsWithDates = useMemo(() => {
+    return slots.map(slot => ({
+      ...slot,
+      dateStr: slot.startTime.toLocaleDateString('es-ES', {
+        weekday: 'short',
+        month: '2-digit',
+        day: '2-digit'
+      })
+    }));
+  }, [slots]);
+
+  // Group slots by date (YYYY-MM-DD)
+  const slotsByDate = useMemo(() => {
     const grouped: Record<string, GridSlot[]> = {};
-    slots.forEach(slot => {
-      if (!grouped[slot.dayOfWeek]) {
-        grouped[slot.dayOfWeek] = [];
+    slotsWithDates.forEach(slot => {
+      const dateKey = slot.startTime.toISOString().split('T')[0];
+      if (!grouped[dateKey]) {
+        grouped[dateKey] = [];
       }
-      grouped[slot.dayOfWeek].push(slot);
+      grouped[dateKey].push(slot);
     });
     return grouped;
-  }, [slots]);
+  }, [slotsWithDates]);
 
   const getSlotKey = (slot: GridSlot): string => slot.startTime.toISOString();
 
@@ -157,111 +169,143 @@ export default function SchedulingFreeBusyGrid({
     onSlotToggle(key, !selectedSlots.has(key));
   };
 
-  return (
-    <div className="w-full overflow-x-auto">
-      <div className="space-y-4">
-        {/* Legend */}
-        <div className="flex items-center gap-6 text-xs">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-green-100 border border-green-300 rounded"></div>
-            <span>Available</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-gray-100 border border-gray-300 rounded"></div>
-            <span>Busy</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-blue-200 border border-blue-400 rounded"></div>
-            <span>Proposed</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-green-400 border border-green-600 rounded"></div>
-            <span>Confirmed</span>
-          </div>
-        </div>
+  // Determine alternating colors
+  const getDayColor = (index: number): string => {
+    return index % 2 === 0 ? 'bg-blue-50' : 'bg-green-50';
+  };
 
-        {/* Grid */}
-        <table className="w-full border-collapse text-xs">
+  const dateKeys = Object.keys(slotsByDate).sort();
+
+  return (
+    <div className="w-full space-y-4">
+      {/* Legend - Fixed */}
+      <div className="sticky top-0 z-20 bg-white flex items-center gap-6 text-xs p-4 border border-gray-200 rounded-lg">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-green-100 border border-green-300 rounded"></div>
+          <span>Available</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-gray-100 border border-gray-300 rounded"></div>
+          <span>Busy</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-blue-200 border border-blue-400 rounded"></div>
+          <span>Proposed</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-green-400 border border-green-600 rounded"></div>
+          <span>Confirmed</span>
+        </div>
+      </div>
+
+      {/* Grid Container */}
+      <div className="overflow-x-auto border border-gray-200 rounded-lg">
+        <table className="border-collapse text-xs whitespace-nowrap">
           <thead>
+            {/* Day header - shows dates with alternating colors */}
             <tr>
-              <th className="border border-gray-300 p-2 bg-gray-50 sticky left-0 z-10 text-left">
+              <th className="border border-gray-300 p-2 bg-gray-50 sticky left-0 z-10 text-left min-w-[160px]">
                 Participant
               </th>
-              {Object.entries(slotsByDay).map(([day, daySlots]) => (
-                <th
-                  key={day}
-                  colSpan={daySlots.length}
-                  className="border border-gray-300 p-2 bg-gray-50 text-center font-semibold"
-                >
-                  {DAYS_SHORT[DAYS_OF_WEEK.indexOf(day)]}
-                </th>
-              ))}
+              {dateKeys.map((dateKey, dateIdx) => {
+                const daySlots = slotsByDate[dateKey];
+                const dayColor = getDayColor(dateIdx);
+                const date = new Date(dateKey + 'T00:00:00Z');
+                const dateLabel = date.toLocaleDateString('es-ES', {
+                  weekday: 'short',
+                  month: '2-digit',
+                  day: '2-digit'
+                });
+
+                return (
+                  <th
+                    key={`date-${dateKey}`}
+                    colSpan={daySlots.length}
+                    className={`border border-gray-300 p-2 ${dayColor} font-semibold text-center text-xs`}
+                  >
+                    {dateLabel}
+                  </th>
+                );
+              })}
             </tr>
+
+            {/* Time header */}
             <tr>
-              <th className="border border-gray-300 p-1 bg-gray-50 sticky left-0 z-10"></th>
-              {slots.map(slot => (
-                <th
-                  key={getSlotKey(slot)}
-                  className="border border-gray-300 p-1 bg-gray-100 text-center text-xs h-6"
-                >
-                  <span className="inline-block" title={formatTime(slot.startTime)}>
-                    {formatTime(slot.startTime)}
-                  </span>
-                </th>
-              ))}
+              <th className="border border-gray-300 p-1 bg-gray-100 sticky left-0 z-10 min-w-[160px]"></th>
+              {dateKeys.map(dateKey => {
+                const daySlots = slotsByDate[dateKey];
+                const dateIdx = dateKeys.indexOf(dateKey);
+                const dayColor = getDayColor(dateIdx);
+
+                return daySlots.map(slot => (
+                  <th
+                    key={getSlotKey(slot)}
+                    className={`border border-gray-300 p-1 ${dayColor} text-center h-8`}
+                  >
+                    <span title={formatTime(slot.startTime)}>{formatTime(slot.startTime)}</span>
+                  </th>
+                ));
+              })}
             </tr>
           </thead>
+
           <tbody>
             {participants.map(participant => (
               <tr key={participant.id}>
-                <td className="border border-gray-300 p-2 bg-gray-50 sticky left-0 z-10 font-semibold whitespace-nowrap">
+                <td className="border border-gray-300 p-2 bg-gray-50 sticky left-0 z-10 font-semibold whitespace-nowrap min-w-[160px]">
                   <div className="text-xs font-semibold">{participant.nickname}</div>
                   <div className="text-xs text-gray-500">{participant.timezone}</div>
                 </td>
-                {slots.map(slot => {
-                  const slotKey = getSlotKey(slot);
-                  const isAvailable = isParticipantAvailable(participant, slot.startTime, slot.endTime);
-                  const isProposed = proposedSlots.includes(slotKey);
-                  const confirmations = confirmedSlots[slotKey] || [];
-                  const isConfirmed = confirmations.length > 0;
-                  const isSelected = selectedSlots.has(slotKey);
+                {dateKeys.map(dateKey => {
+                  const daySlots = slotsByDate[dateKey];
+                  const dateIdx = dateKeys.indexOf(dateKey);
+                  const dayColor = getDayColor(dateIdx);
 
-                  let bgColor = 'bg-white';
-                  let borderColor = 'border-gray-200';
+                  return daySlots.map(slot => {
+                    const slotKey = getSlotKey(slot);
+                    const isAvailable = isParticipantAvailable(participant, slot.startTime, slot.endTime);
+                    const isProposed = proposedSlots.includes(slotKey);
+                    const confirmations = confirmedSlots[slotKey] || [];
+                    const isConfirmed = confirmations.length > 0;
+                    const isSelected = selectedSlots.has(slotKey);
 
-                  if (isConfirmed) {
-                    bgColor = 'bg-green-400';
-                    borderColor = 'border-green-600';
-                  } else if (isProposed) {
-                    bgColor = 'bg-blue-200';
-                    borderColor = 'border-blue-400';
-                  } else if (isSelected) {
-                    bgColor = 'bg-yellow-100';
-                    borderColor = 'border-yellow-400';
-                  } else if (isAvailable) {
-                    bgColor = 'bg-green-50';
-                    borderColor = 'border-green-200';
-                  } else {
-                    bgColor = 'bg-gray-100';
-                    borderColor = 'border-gray-300';
-                  }
+                    let bgColor = dayColor;
+                    let borderColor = 'border-gray-200';
 
-                  return (
-                    <td
-                      key={slotKey}
-                      className={`border ${borderColor} p-0.5 h-8 cursor-${readOnly ? 'default' : 'pointer'} ${bgColor} ${
-                        !readOnly && !isProposed ? 'hover:opacity-75' : ''
-                      }`}
-                      onClick={() => handleSlotClick(slot)}
-                      title={`${participant.nickname} - ${formatTime(slot.startTime)}`}
-                    >
-                      {isConfirmed && (
-                        <div className="w-full h-full flex items-center justify-center text-green-700 font-bold">
-                          ✓
-                        </div>
-                      )}
-                    </td>
-                  );
+                    if (isConfirmed) {
+                      bgColor = 'bg-green-400';
+                      borderColor = 'border-green-600';
+                    } else if (isProposed) {
+                      bgColor = 'bg-blue-200';
+                      borderColor = 'border-blue-400';
+                    } else if (isSelected) {
+                      bgColor = 'bg-yellow-100';
+                      borderColor = 'border-yellow-400';
+                    } else if (isAvailable) {
+                      bgColor = dayColor;
+                      borderColor = 'border-green-200';
+                    } else {
+                      bgColor = 'bg-gray-100';
+                      borderColor = 'border-gray-300';
+                    }
+
+                    return (
+                      <td
+                        key={slotKey}
+                        className={`border ${borderColor} p-0.5 h-8 cursor-${readOnly ? 'default' : 'pointer'} ${bgColor} ${
+                          !readOnly && !isProposed ? 'hover:opacity-75' : ''
+                        }`}
+                        onClick={() => handleSlotClick(slot)}
+                        title={`${participant.nickname} - ${formatTime(slot.startTime)}`}
+                      >
+                        {isConfirmed && (
+                          <div className="w-full h-full flex items-center justify-center text-green-700 font-bold">
+                            ✓
+                          </div>
+                        )}
+                      </td>
+                    );
+                  });
                 })}
               </tr>
             ))}
