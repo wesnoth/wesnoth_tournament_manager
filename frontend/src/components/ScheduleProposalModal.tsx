@@ -49,6 +49,7 @@ export default function ScheduleProposalModal({
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState('');
   const [mode, setMode] = useState<'propose' | 'confirm' | 'counter'>('propose');
+  const [displayDateStart, setDisplayDateStart] = useState<Date>(new Date());
 
   const targetId = roundMatchId || matchId;
   const isRoundMatch = !!roundMatchId;
@@ -214,7 +215,6 @@ export default function ScheduleProposalModal({
 
   if (!isOpen) return null;
 
-  const [displayDateStart, setDisplayDateStart] = React.useState<Date>(new Date());
   const dateEnd = new Date(displayDateStart);
   dateEnd.setDate(dateEnd.getDate() + 14); // 14-day window
 
