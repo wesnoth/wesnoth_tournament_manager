@@ -11,46 +11,47 @@ export interface AvailabilitySchedule {
   [day: string]: TimeRange[];
 }
 
+interface ConversionResult {
+  day: string;
+  ranges: TimeRange[];
+  nextDay?: string;
+}
+
 /**
  * Calculate timezone offset in hours between two timezones
+ * Uses the provided referenceDate to account for DST transitions
  * Returns positive if toTz is ahead of fromTz, negative if behind
  */
-const getTimezoneOffset = (fromTz: string, toTz: string): number => {
+const getTimezoneOffset = (fromTz: string, toTz: string, referenceDate: Date = new Date()): number => {
   try {
-    // Create a test date (using a fixed date to avoid DST issues)
-    const testDate = new Date('2025-01-15T12:00:00Z');
-    
     const formatter = new Intl.DateTimeFormat('en-US', {
       timeZone: toTz,
       hour: '2-digit',
       minute: '2-digit',
-      second: '2-digit',
       hour12: false
     });
     
-    const parts = formatter.formatToParts(testDate);
+    const parts = formatter.formatToParts(referenceDate);
     const toHour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
     
-    // UTC time is 12:00, so toTz hour tells us the offset
-    // If toHour is 13, then toTz is UTC+1
-    // If toHour is 11, then toTz is UTC-1
-    const toOffset = toHour - 12;
+    // UTC hour at this reference date
+    const utcHour = referenceDate.getUTCHours();
+    const toOffset = toHour - utcHour;
     
     // Now get fromTz offset
     const formatter2 = new Intl.DateTimeFormat('en-US', {
       timeZone: fromTz,
       hour: '2-digit',
       minute: '2-digit',
-      second: '2-digit',
       hour12: false
     });
     
-    const parts2 = formatter2.formatToParts(testDate);
+    const parts2 = formatter2.formatToParts(referenceDate);
     const fromHour = parseInt(parts2.find(p => p.type === 'hour')?.value || '0');
-    const fromOffset = fromHour - 12;
+    const fromOffset = fromHour - utcHour;
     
     // Difference: toOffset - fromOffset
-    // Example: São Paulo (-3) vs Madrid (+1) = 1 - (-3) = +4 hours (Madrid is 4 hours ahead)
+    // Example: São Paulo (-3) vs Madrid (+2 in summer) = 2 - (-3) = +5 hours
     return toOffset - fromOffset;
   } catch (error) {
     console.warn(`Error calculating timezone offset between ${fromTz} and ${toTz}:`, error);
@@ -66,8 +67,9 @@ const convertTimeRangeToTimezone = (
   dayOfWeek: string,
   timeRange: TimeRange,
   fromTz: string,
-  toTz: string
-): { day: string; ranges: TimeRange[] } => {
+  toTz: string,
+  referenceDate: Date = new Date()
+): ConversionResult => {
   try {
     const ranges: TimeRange[] = [];
     
@@ -75,39 +77,32 @@ const convertTimeRangeToTimezone = (
     const [startHour, startMin] = timeRange.start.split(':').map(Number);
     const [endHour, endMin] = timeRange.end.split(':').map(Number);
     
-    // Create a reference date in the participant's timezone
-    // Use a date that won't hit DST transitions
-    const referenceDate = new Date('2025-01-15T00:00:00Z');
-    
-    // We need to find what UTC time corresponds to "dayOfWeek HH:MM in fromTz"
-    // Then convert that UTC time to toTz
     const daysMap: Record<string, number> = {
-      monday: 0, tuesday: 1, wednesday: 2, thursday: 3,
-      friday: 4, saturday: 5, sunday: 6
+      sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
+      thursday: 4, friday: 5, saturday: 6
     };
     
-    const targetDayOfWeek = daysMap[dayOfWeek.toLowerCase()];
-    const utcDayOfWeek = referenceDate.getUTCDay();
-    const dayDiff = (targetDayOfWeek - utcDayOfWeek + 7) % 7;
+    const targetDayNum = daysMap[dayOfWeek.toLowerCase()];
+    const refDayNum = referenceDate.getUTCDay();
+    const dayOffset = targetDayNum - refDayNum;
     
-    // Create start date in fromTz
-    const startDateStr = new Date(referenceDate.getTime() + dayDiff * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .split('T')[0];
+    // Create dates with the target day
+    const startDate = new Date(referenceDate.getTime() + dayOffset * 24 * 60 * 60 * 1000);
+    startDate.setUTCHours(startHour, startMin, 0, 0);
     
-    const startUTCStr = `${startDateStr}T${String(startHour).padStart(2, '0')}:${String(startMin).padStart(2, '0')}:00Z`;
-    let startUTC = new Date(startUTCStr);
+    const endDate = new Date(referenceDate.getTime() + dayOffset * 24 * 60 * 60 * 1000);
+    endDate.setUTCHours(endHour, endMin, 0, 0);
     
-    const endUTCStr = `${startDateStr}T${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}:00Z`;
-    let endUTC = new Date(endUTCStr);
+    // Get offset from UTC to fromTz (pass referenceDate for DST awareness)
+    const fromTzOffsetHours = getTimezoneOffset('UTC', fromTz, referenceDate);
+    const fromTzOffsetMs = fromTzOffsetHours * 60 * 60 * 1000;
     
-    // Adjust for timezone differences
-    // If we want "19:00 in São Paulo", we need to subtract São Paulo's UTC offset
-    const offset = getTimezoneOffset('UTC', fromTz);
-    startUTC = new Date(startUTC.getTime() - offset * 60 * 60 * 1000);
-    endUTC = new Date(endUTC.getTime() - offset * 60 * 60 * 1000);
+    // If we have HH:MM in fromTz, the UTC time is HH:MM - offset
+    // Example: 17:00 in São Paulo (UTC-3) means 17:00 - (-3) = 17:00 + 3 = 20:00 UTC
+    const startUTC = new Date(startDate.getTime() - fromTzOffsetMs);
+    const endUTC = new Date(endDate.getTime() - fromTzOffsetMs);
     
-    // Now convert these UTC times to toTz
+    // Convert these UTC times to toTz
     const formatter = new Intl.DateTimeFormat('en-US', {
       timeZone: toTz,
       year: 'numeric',
@@ -115,30 +110,36 @@ const convertTimeRangeToTimezone = (
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
+      second: '2-digit',
       hour12: false
     });
     
     const startParts = formatter.formatToParts(startUTC);
     const startToTzHour = parseInt(startParts.find(p => p.type === 'hour')?.value || '0');
     const startToTzMin = parseInt(startParts.find(p => p.type === 'minute')?.value || '0');
-    const startToTzDay = startParts.find(p => p.type === 'day')?.value || '15';
+    const startToTzDayStr = startParts.find(p => p.type === 'day')?.value || '17';
     
     const endParts = formatter.formatToParts(endUTC);
     const endToTzHour = parseInt(endParts.find(p => p.type === 'hour')?.value || '0');
     const endToTzMin = parseInt(endParts.find(p => p.type === 'minute')?.value || '0');
-    const endToTzDay = endParts.find(p => p.type === 'day')?.value || '15';
+    const endToTzDayStr = endParts.find(p => p.type === 'day')?.value || '17';
     
-    const startDayOffset = parseInt(startToTzDay) - parseInt(startDateStr.split('-')[2]);
-    const endDayOffset = parseInt(endToTzDay) - parseInt(startDateStr.split('-')[2]);
+    // Calculate day offset relative to original Friday (17)
+    const refDay = 17;
+    const startToTzDayNum = parseInt(startToTzDayStr);
+    const endToTzDayNum = parseInt(endToTzDayStr);
     
-    // Handle day wraparound
-    const startDay = (targetDayOfWeek + startDayOffset + 7) % 7;
-    const endDay = (targetDayOfWeek + endDayOffset + 7) % 7;
+    const startDayOffsetFromRef = startToTzDayNum - refDay;
+    const endDayOffsetFromRef = endToTzDayNum - refDay;
     
+    // Map back to day of week
     const daysReverseMap = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     
-    const startDayName = daysReverseMap[startDay];
-    const endDayName = daysReverseMap[endDay];
+    const startResultDayNum = (targetDayNum + startDayOffsetFromRef + 7) % 7;
+    const endResultDayNum = (targetDayNum + endDayOffsetFromRef + 7) % 7;
+    
+    const startDayName = daysReverseMap[startResultDayNum];
+    const endDayName = daysReverseMap[endResultDayNum];
     
     const startTimeStr = `${String(startToTzHour).padStart(2, '0')}:${String(startToTzMin).padStart(2, '0')}`;
     const endTimeStr = `${String(endToTzHour).padStart(2, '0')}:${String(endToTzMin).padStart(2, '0')}`;
@@ -148,10 +149,14 @@ const convertTimeRangeToTimezone = (
       ranges.push({ start: startTimeStr, end: endTimeStr });
       return { day: startDayName, ranges };
     } else {
-      // Spans two days
+      // Spans two days - return both ranges for both days
       ranges.push({ start: startTimeStr, end: '23:59' });
       ranges.push({ start: '00:00', end: endTimeStr });
-      return { day: startDayName, ranges };
+      // Return info for both days - caller will need to handle this
+      return { day: startDayName, ranges: [
+        { start: startTimeStr, end: '23:59' },
+        { start: '00:00', end: endTimeStr }
+      ], nextDay: endDayName };
     }
   } catch (error) {
     console.warn(`Error converting time range:`, error);
@@ -165,7 +170,8 @@ const convertTimeRangeToTimezone = (
 const convertAvailabilitySchedule = (
   schedule: AvailabilitySchedule,
   fromTz: string,
-  toTz: string
+  toTz: string,
+  referenceDate: Date = new Date()
 ): AvailabilitySchedule => {
   if (fromTz === toTz) {
     return schedule;
@@ -178,20 +184,32 @@ const convertAvailabilitySchedule = (
   
   for (const [day, ranges] of Object.entries(schedule)) {
     for (const range of ranges) {
-      const { day: resultDay, ranges: resultRanges } = convertTimeRangeToTimezone(
+      const { day: resultDay, ranges: resultRanges, nextDay } = convertTimeRangeToTimezone(
         day,
         range,
         fromTz,
-        toTz
-      );
+        toTz,
+        referenceDate
+      ) as any;
       
-      for (const resultRange of resultRanges) {
-        // Avoid duplicates
+      // Add ranges for first day
+      for (const resultRange of resultRanges.slice(0, 1)) {
         const exists = result[resultDay].some(
           r => r.start === resultRange.start && r.end === resultRange.end
         );
         if (!exists) {
           result[resultDay].push(resultRange);
+        }
+      }
+      
+      // If spans two days, add the second day's range
+      if (nextDay && resultRanges.length > 1) {
+        const secondRange = resultRanges[1];
+        const exists = result[nextDay].some(
+          r => r.start === secondRange.start && r.end === secondRange.end
+        );
+        if (!exists) {
+          result[nextDay].push(secondRange);
         }
       }
     }
@@ -799,12 +817,13 @@ export const getParticipantsAvailability = async (
         availabilitySchedule = convertAvailabilitySchedule(
           availabilitySchedule,
           p.timezone,
-          viewingTimezone
+          viewingTimezone,
+          new Date()  // Use current date for DST awareness
         );
       }
       
-      // Calculate offset in hours
-      const offset = getTimezoneOffset(p.timezone, viewingTimezone);
+      // Calculate offset in hours using current date for DST awareness
+      const offset = getTimezoneOffset(p.timezone, viewingTimezone, new Date());
       const offsetStr = offset >= 0 ? `+${offset}h` : `${offset}h`;
       
       return {
