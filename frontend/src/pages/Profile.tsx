@@ -7,6 +7,8 @@ import MainLayout from '../components/MainLayout';
 import ProfileStats from '../components/ProfileStats';
 import { CountrySelector } from '../components/CountrySelector';
 import { AvatarSelector } from '../components/AvatarSelector';
+import TimezoneSelector from '../components/TimezoneSelector';
+import AvailabilityRangeEditor, { AvailabilitySchedule } from '../components/AvailabilityRangeEditor';
 
 const Profile: React.FC = () => {
   const { t, i18n } = useTranslation();
@@ -28,6 +30,11 @@ const Profile: React.FC = () => {
   const [enableRanked, setEnableRanked] = useState(false);
   const [rankedMessage, setRankedMessage] = useState('');
   const [updatingRanked, setUpdatingRanked] = useState(false);
+  const [timezone, setTimezone] = useState('UTC');
+  const [availabilitySchedule, setAvailabilitySchedule] = useState<AvailabilitySchedule | null>(null);
+  const [schedulingCollapsed, setSchedulingCollapsed] = useState(true);
+  const [savingScheduling, setSavingScheduling] = useState(false);
+  const [schedulingMessage, setSchedulingMessage] = useState('');
 
   const languages = useMemo(() => [
     { code: 'en', name: 'English', countryCode: 'gb' },
@@ -73,6 +80,11 @@ const Profile: React.FC = () => {
         setSelectedLanguage(langFromDB);
         setDiscordId(profileRes.data.discord_id || '');
         setEnableRanked(!!profileRes.data.enable_ranked);
+        
+        // Set timezone and availability from profile
+        setTimezone(profileRes.data.timezone || 'UTC');
+        setAvailabilitySchedule(profileRes.data.availability_schedule || null);
+        
         console.log('Discord ID from API:', profileRes.data.discord_id);
         
         // Change i18n if different
@@ -178,6 +190,23 @@ const Profile: React.FC = () => {
       setUpdatingRanked(false);
     }
   }, [enableRanked, t]);
+
+  const handleSaveScheduling = useCallback(async () => {
+    setSavingScheduling(true);
+    setSchedulingMessage('');
+    try {
+      await userService.updateProfile({
+        timezone,
+        availability_schedule: availabilitySchedule
+      });
+      setSchedulingMessage(t('profile.scheduling_saved', 'Scheduling preferences saved successfully'));
+      setTimeout(() => setSchedulingMessage(''), 3000);
+    } catch (err: any) {
+      setSchedulingMessage(err?.response?.data?.error || err?.response?.data?.details?.[0] || t('profile.error_scheduling_update', 'Error updating scheduling preferences'));
+    } finally {
+      setSavingScheduling(false);
+    }
+  }, [timezone, availabilitySchedule, t]);
 
   if (loading) {
     return <div className="auth-container"><p>{t('loading')}</p></div>;
@@ -334,6 +363,62 @@ const Profile: React.FC = () => {
                 </label>
                 {rankedMessage && (
                   <p className={`mt-3 text-sm ${rankedMessage.includes('cannot') ? 'text-yellow-700 bg-yellow-50' : 'text-green-700 bg-green-50'} px-3 py-2 rounded`}>{rankedMessage}</p>
+                )}
+              </section>
+
+              <section className="bg-white rounded-lg shadow-md mb-8">
+                <div 
+                  className="p-8 cursor-pointer flex justify-between items-center hover:bg-gray-50 transition-colors"
+                  onClick={() => setSchedulingCollapsed(!schedulingCollapsed)}
+                >
+                  <h2 className="text-2xl font-semibold text-gray-800 pb-0">{t('profile.scheduling_title') || 'Scheduling Preferences'}</h2>
+                  <svg 
+                    className={`w-6 h-6 text-gray-600 transition-transform ${schedulingCollapsed ? 'rotate-180' : ''}`}
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                  </svg>
+                </div>
+                {!schedulingCollapsed && (
+                  <div className="p-8 pt-0 border-t border-gray-200">
+                    {schedulingMessage && (
+                      <p className={`mb-4 px-4 py-3 rounded-lg border-l-4 ${
+                        schedulingMessage.includes('Error') || schedulingMessage.includes('error')
+                          ? 'bg-red-100 text-red-800 border-red-600'
+                          : 'bg-green-100 text-green-800 border-green-600'
+                      }`}>
+                        {schedulingMessage}
+                      </p>
+                    )}
+                    <div className="space-y-6">
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-3">{t('profile.timezone_label') || 'Timezone'}</label>
+                        <TimezoneSelector 
+                          value={timezone} 
+                          onChange={setTimezone}
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-3">{t('profile.availability_label') || 'Availability Schedule'}</label>
+                        <p className="text-sm text-gray-600 mb-4">{t('profile.availability_help') || 'Define your available time slots for matches in your local timezone. Use 30-minute increments.'}</p>
+                        <AvailabilityRangeEditor 
+                          value={availabilitySchedule} 
+                          onChange={setAvailabilitySchedule}
+                        />
+                      </div>
+
+                      <button
+                        onClick={handleSaveScheduling}
+                        disabled={savingScheduling}
+                        className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-green-700 text-white rounded-lg font-semibold hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {savingScheduling ? t('profile.saving') : t('profile.save_scheduling') || 'Save Scheduling Preferences'}
+                      </button>
+                    </div>
+                  </div>
                 )}
               </section>
 

@@ -4,6 +4,7 @@ import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { searchLimiter } from '../middleware/rateLimiter.js';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
 import { avatarManifestService } from '../services/avatarManifestService.js';
+import { validateTimezone, validateAvailabilitySchedule } from '../utils/timezoneUtils.js';
 
 const router = Router();
 
@@ -31,6 +32,8 @@ router.get('/profile', authMiddleware, async (req: AuthRequest, res) => {
         u.country,
         u.avatar,
         u.enable_ranked,
+        u.timezone,
+        u.availability_schedule,
         pms.avg_elo_change
       FROM users_extension u
       LEFT JOIN player_match_statistics pms ON u.id = pms.player_id 
@@ -57,6 +60,11 @@ router.get('/profile', authMiddleware, async (req: AuthRequest, res) => {
     );
 
     console.log(`[User ${req.userId}] Last activity query result:`, lastActivityResult.rows);
+
+    // Parse JSON fields
+    if (user.availability_schedule && typeof user.availability_schedule === 'string') {
+      user.availability_schedule = JSON.parse(user.availability_schedule);
+    }
 
     const result = {
       ...user,
@@ -400,10 +408,10 @@ router.put('/profile/discord', authMiddleware, async (req: AuthRequest, res) => 
 // Update user profile (country and avatar)
 router.put('/profile/update', authMiddleware, async (req: AuthRequest, res) => {
   try {
-    const { country, avatar } = req.body;
+    const { country, avatar, timezone, availability_schedule } = req.body;
 
-    if (!country && !avatar) {
-      return res.status(400).json({ error: 'At least one field (country or avatar) is required' });
+    if (!country && !avatar && !timezone && !availability_schedule) {
+      return res.status(400).json({ error: 'At least one field is required' });
     }
 
     let updateFields: string[] = [];
@@ -419,6 +427,34 @@ router.put('/profile/update', authMiddleware, async (req: AuthRequest, res) => {
       params.push(avatar);
     }
 
+    // Validate and update timezone
+    if (timezone) {
+      if (!validateTimezone(timezone)) {
+        return res.status(400).json({ error: 'Invalid timezone' });
+      }
+      updateFields.push(`timezone = ?`);
+      params.push(timezone);
+    }
+
+    // Validate and update availability_schedule
+    if (availability_schedule !== undefined) {
+      if (availability_schedule === null) {
+        updateFields.push(`availability_schedule = NULL`);
+        updateFields.push(`availability_updated_at = NULL`);
+      } else {
+        const validation = validateAvailabilitySchedule(availability_schedule);
+        if (!validation.valid) {
+          return res.status(400).json({ 
+            error: 'Invalid availability schedule',
+            details: validation.errors 
+          });
+        }
+        updateFields.push(`availability_schedule = ?`);
+        params.push(JSON.stringify(availability_schedule));
+        updateFields.push(`availability_updated_at = CURRENT_TIMESTAMP`);
+      }
+    }
+
     params.push(req.userId);
 
     await query(
@@ -427,7 +463,7 @@ router.put('/profile/update', authMiddleware, async (req: AuthRequest, res) => {
     );
 
     const result = await query(
-      `SELECT id, nickname, language, discord_id, country, avatar, elo_rating, level, created_at FROM users_extension WHERE id = ?`,
+      `SELECT id, nickname, language, discord_id, country, avatar, timezone, availability_schedule, elo_rating, level, created_at FROM users_extension WHERE id = ?`,
       [req.userId]
     );
 
@@ -435,7 +471,13 @@ router.put('/profile/update', authMiddleware, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json(result.rows[0]);
+    const user = result.rows[0];
+    // Parse JSON fields
+    if (user.availability_schedule && typeof user.availability_schedule === 'string') {
+      user.availability_schedule = JSON.parse(user.availability_schedule);
+    }
+
+    res.json(user);
   } catch (error) {
     console.error('Error updating profile:', error);
     res.status(500).json({ error: 'Failed to update profile', details: (error as any).message });

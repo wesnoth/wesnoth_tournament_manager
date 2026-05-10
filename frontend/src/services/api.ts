@@ -102,7 +102,7 @@ export const userService = {
   getProfile: () => api.get('/users/profile'),
   updateDiscordId: (discordId: string) => api.put('/users/profile/discord', { discord_id: discordId }),
   updateRankedStatus: (enable_ranked: boolean) => api.put('/users/profile/ranked', { enable_ranked }),
-  updateProfile: (data: { country?: string; avatar?: string }) => 
+  updateProfile: (data: { country?: string; avatar?: string; timezone?: string; availability_schedule?: any }) => 
     api.put('/users/profile/update', data),
   getUserStats: (id: string) => api.get(`/users/${id}/stats`),
   getUserMonthlyStats: (id: string) => api.get(`/users/${id}/stats/month`),
