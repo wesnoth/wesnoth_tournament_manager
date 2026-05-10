@@ -82,27 +82,75 @@ const convertTimeRangeToTimezone = (
       thursday: 4, friday: 5, saturday: 6
     };
     
+    // Create a test date for this day of week, using referenceDate as base
+    const testDate = new Date(referenceDate);
+    testDate.setUTCHours(0, 0, 0, 0);
+    
+    // Find the next occurrence of this day of week
     const targetDayNum = daysMap[dayOfWeek.toLowerCase()];
-    const refDayNum = referenceDate.getUTCDay();
-    const dayOffset = targetDayNum - refDayNum;
+    const currentDayNum = testDate.getUTCDay();
+    let dayOffset = targetDayNum - currentDayNum;
+    if (dayOffset < 0) dayOffset += 7;
     
-    // Create dates with the target day
-    const startDate = new Date(referenceDate.getTime() + dayOffset * 24 * 60 * 60 * 1000);
-    startDate.setUTCHours(startHour, startMin, 0, 0);
+    const dayDate = new Date(testDate);
+    dayDate.setUTCDate(dayDate.getUTCDate() + dayOffset);
     
-    const endDate = new Date(referenceDate.getTime() + dayOffset * 24 * 60 * 60 * 1000);
-    endDate.setUTCHours(endHour, endMin, 0, 0);
+    // Create start and end times in the fromTz
+    // We need to find what UTC time corresponds to "startHour:startMin in fromTz on this dayDate"
     
-    // Get offset from UTC to fromTz (pass referenceDate for DST awareness)
-    const fromTzOffsetHours = getTimezoneOffset('UTC', fromTz, referenceDate);
-    const fromTzOffsetMs = fromTzOffsetHours * 60 * 60 * 1000;
+    // Try different UTC times to find which one gives us the correct local time
+    let startUTC: Date | null = null;
+    let endUTC: Date | null = null;
     
-    // If we have HH:MM in fromTz, the UTC time is HH:MM - offset
-    // Example: 17:00 in São Paulo (UTC-3) means 17:00 - (-3) = 17:00 + 3 = 20:00 UTC
-    const startUTC = new Date(startDate.getTime() - fromTzOffsetMs);
-    const endUTC = new Date(endDate.getTime() - fromTzOffsetMs);
+    for (let offsetHours = -14; offsetHours <= 14; offsetHours++) {
+      const testUtc = new Date(dayDate.getTime() + startHour * 60 * 60 * 1000 + startMin * 60 * 1000);
+      testUtc.setTime(testUtc.getTime() - offsetHours * 60 * 60 * 1000);
+      
+      // Check what local time this UTC time is in fromTz
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: fromTz,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      
+      const parts = formatter.formatToParts(testUtc);
+      const testHour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
+      const testMin = parseInt(parts.find(p => p.type === 'minute')?.value || '0');
+      
+      if (testHour === startHour && testMin === startMin) {
+        startUTC = testUtc;
+        break;
+      }
+    }
     
-    // Convert these UTC times to toTz
+    for (let offsetHours = -14; offsetHours <= 14; offsetHours++) {
+      const testUtc = new Date(dayDate.getTime() + endHour * 60 * 60 * 1000 + endMin * 60 * 1000);
+      testUtc.setTime(testUtc.getTime() - offsetHours * 60 * 60 * 1000);
+      
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: fromTz,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      
+      const parts = formatter.formatToParts(testUtc);
+      const testHour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
+      const testMin = parseInt(parts.find(p => p.type === 'minute')?.value || '0');
+      
+      if (testHour === endHour && testMin === endMin) {
+        endUTC = testUtc;
+        break;
+      }
+    }
+    
+    if (!startUTC || !endUTC) {
+      console.warn(`Could not convert time range for ${dayOfWeek} ${timeRange.start}-${timeRange.end} from ${fromTz} to ${toTz}`);
+      return { day: dayOfWeek, ranges: [timeRange] };
+    }
+    
+    // Now convert these UTC times to toTz and get the local times and days
     const formatter = new Intl.DateTimeFormat('en-US', {
       timeZone: toTz,
       year: 'numeric',
@@ -110,33 +158,28 @@ const convertTimeRangeToTimezone = (
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
-      second: '2-digit',
       hour12: false
     });
     
     const startParts = formatter.formatToParts(startUTC);
     const startToTzHour = parseInt(startParts.find(p => p.type === 'hour')?.value || '0');
     const startToTzMin = parseInt(startParts.find(p => p.type === 'minute')?.value || '0');
-    const startToTzDayStr = startParts.find(p => p.type === 'day')?.value || '17';
+    const startToTzDayNum = parseInt(startParts.find(p => p.type === 'day')?.value || '1');
     
     const endParts = formatter.formatToParts(endUTC);
     const endToTzHour = parseInt(endParts.find(p => p.type === 'hour')?.value || '0');
     const endToTzMin = parseInt(endParts.find(p => p.type === 'minute')?.value || '0');
-    const endToTzDayStr = endParts.find(p => p.type === 'day')?.value || '17';
+    const endToTzDayNum = parseInt(endParts.find(p => p.type === 'day')?.value || '1');
     
-    // Calculate day offset relative to original Friday (17)
-    const refDay = 17;
-    const startToTzDayNum = parseInt(startToTzDayStr);
-    const endToTzDayNum = parseInt(endToTzDayStr);
+    // Calculate day offset from the original day
+    const dayDate_day = dayDate.getUTCDate();
+    const startDayOffset = startToTzDayNum - dayDate_day;
+    const endDayOffset = endToTzDayNum - dayDate_day;
     
-    const startDayOffsetFromRef = startToTzDayNum - refDay;
-    const endDayOffsetFromRef = endToTzDayNum - refDay;
-    
-    // Map back to day of week
+    // Map to day names
     const daysReverseMap = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    
-    const startResultDayNum = (targetDayNum + startDayOffsetFromRef + 7) % 7;
-    const endResultDayNum = (targetDayNum + endDayOffsetFromRef + 7) % 7;
+    const startResultDayNum = (targetDayNum + startDayOffset + 7) % 7;
+    const endResultDayNum = (targetDayNum + endDayOffset + 7) % 7;
     
     const startDayName = daysReverseMap[startResultDayNum];
     const endDayName = daysReverseMap[endResultDayNum];
@@ -149,10 +192,9 @@ const convertTimeRangeToTimezone = (
       ranges.push({ start: startTimeStr, end: endTimeStr });
       return { day: startDayName, ranges };
     } else {
-      // Spans two days - return both ranges for both days
+      // Spans two days
       ranges.push({ start: startTimeStr, end: '23:59' });
       ranges.push({ start: '00:00', end: endTimeStr });
-      // Return info for both days - caller will need to handle this
       return { day: startDayName, ranges: [
         { start: startTimeStr, end: '23:59' },
         { start: '00:00', end: endTimeStr }
