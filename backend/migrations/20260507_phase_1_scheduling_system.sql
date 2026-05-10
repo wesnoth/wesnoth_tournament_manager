@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS match_schedule_proposals (
   CONSTRAINT check_proposal_target CHECK (
     (tournament_round_match_id IS NOT NULL AND tournament_match_id IS NULL) OR
     (tournament_round_match_id IS NULL AND tournament_match_id IS NOT NULL)
-  ) COMMENT 'Must have exactly one of round_match_id or match_id',
+  ),
   
   INDEX idx_round_match_id (tournament_round_match_id),
   INDEX idx_match_id (tournament_match_id),
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS match_schedule_confirmations (
   FOREIGN KEY (user_id) REFERENCES users_extension(id) ON DELETE CASCADE,
   FOREIGN KEY (team_id) REFERENCES tournament_teams(id) ON DELETE SET NULL,
   
-  UNIQUE KEY uq_slot_user (slot_id, user_id) COMMENT 'One confirmation per user per slot',
+  UNIQUE KEY uq_slot_user (slot_id, user_id),
   INDEX idx_slot_id (slot_id),
   INDEX idx_user_id (user_id),
   INDEX idx_team_id (team_id)
