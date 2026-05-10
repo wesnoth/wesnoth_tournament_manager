@@ -1,19 +1,19 @@
 -- Phase 1: Enhanced Scheduling System - Database Schema
 -- Adds timezone awareness, availability scheduling, and match schedule proposals
 
--- 1. Update users table to include timezone and availability
-ALTER TABLE tournament.users
+-- 1. Update users_extension table to include timezone and availability
+ALTER TABLE users_extension
 ADD COLUMN timezone VARCHAR(100) DEFAULT 'UTC' COMMENT 'IANA timezone name (e.g., Europe/Madrid, America/New_York)' AFTER is_admin,
 ADD COLUMN availability_schedule JSON NULL COMMENT 'Object with day keys (monday-sunday) containing array of {start, end} time ranges' AFTER timezone,
 ADD COLUMN availability_updated_at DATETIME NULL COMMENT 'Timestamp when availability was last modified' AFTER availability_schedule;
 
 -- 2. Create match_schedule_proposals table
 -- Stores proposals for scheduling matches at tournament_round_matches or tournament_matches level
-CREATE TABLE IF NOT EXISTS tournament.match_schedule_proposals (
+CREATE TABLE IF NOT EXISTS match_schedule_proposals (
   id CHAR(36) PRIMARY KEY COMMENT 'UUID v4',
   tournament_round_match_id CHAR(36) NULL COMMENT 'FK→tournament_round_matches.id (series-level)',
   tournament_match_id CHAR(36) NULL COMMENT 'FK→tournament_matches.id (game-level)',
-  proposed_by_user_id CHAR(36) NOT NULL COMMENT 'FK→users.id',
+  proposed_by_user_id CHAR(36) NOT NULL COMMENT 'FK→users_extension.id',
   proposed_at DATETIME NOT NULL,
   status VARCHAR(20) NOT NULL DEFAULT 'active' COMMENT 'active | superseded | resolved',
   notes TEXT NULL COMMENT 'Player notes (max 500 chars)',
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS tournament.match_schedule_proposals (
   
   FOREIGN KEY (tournament_round_match_id) REFERENCES tournament_round_matches(id) ON DELETE CASCADE,
   FOREIGN KEY (tournament_match_id) REFERENCES tournament_matches(id) ON DELETE CASCADE,
-  FOREIGN KEY (proposed_by_user_id) REFERENCES tournament.users(id) ON DELETE CASCADE,
+  FOREIGN KEY (proposed_by_user_id) REFERENCES users_extension(id) ON DELETE CASCADE,
   
   CONSTRAINT check_proposal_target CHECK (
     (tournament_round_match_id IS NOT NULL AND tournament_match_id IS NULL) OR
@@ -38,7 +38,7 @@ COMMENT='Scheduling proposals at round or individual match level';
 
 -- 3. Create match_schedule_slots table
 -- Individual time slots within a proposal - slots are in UTC, rounded to nearest 30-minute mark
-CREATE TABLE IF NOT EXISTS tournament.match_schedule_slots (
+CREATE TABLE IF NOT EXISTS match_schedule_slots (
   id CHAR(36) PRIMARY KEY COMMENT 'UUID v4',
   proposal_id CHAR(36) NOT NULL COMMENT 'FK→match_schedule_proposals.id',
   slot_datetime DATETIME NOT NULL COMMENT 'UTC timestamp, rounded to nearest 30-minute mark (HH:00 or HH:30)',
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS tournament.match_schedule_slots (
   status VARCHAR(20) NOT NULL DEFAULT 'pending' COMMENT 'pending | confirmed',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   
-  FOREIGN KEY (proposal_id) REFERENCES tournament.match_schedule_proposals(id) ON DELETE CASCADE,
+  FOREIGN KEY (proposal_id) REFERENCES match_schedule_proposals(id) ON DELETE CASCADE,
   
   UNIQUE KEY uq_proposal_slot_time (proposal_id, slot_datetime),
   INDEX idx_proposal_id (proposal_id),
@@ -57,17 +57,17 @@ COMMENT='Individual 30-minute time slots within proposals';
 
 -- 4. Create match_schedule_confirmations table
 -- Tracks user/team confirmations for proposed time slots
-CREATE TABLE IF NOT EXISTS tournament.match_schedule_confirmations (
+CREATE TABLE IF NOT EXISTS match_schedule_confirmations (
   id CHAR(36) PRIMARY KEY COMMENT 'UUID v4',
   slot_id CHAR(36) NOT NULL COMMENT 'FK→match_schedule_slots.id',
-  user_id CHAR(36) NOT NULL COMMENT 'FK→users.id',
+  user_id CHAR(36) NOT NULL COMMENT 'FK→users_extension.id',
   team_id CHAR(36) NULL COMMENT 'FK→tournament_teams.id (only for team matches)',
   confirmed_at DATETIME NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   
-  FOREIGN KEY (slot_id) REFERENCES tournament.match_schedule_slots(id) ON DELETE CASCADE,
-  FOREIGN KEY (user_id) REFERENCES tournament.users(id) ON DELETE CASCADE,
-  FOREIGN KEY (team_id) REFERENCES tournament.tournament_teams(id) ON DELETE SET NULL,
+  FOREIGN KEY (slot_id) REFERENCES match_schedule_slots(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users_extension(id) ON DELETE CASCADE,
+  FOREIGN KEY (team_id) REFERENCES tournament_teams(id) ON DELETE SET NULL,
   
   UNIQUE KEY uq_slot_user (slot_id, user_id) COMMENT 'One confirmation per user per slot',
   INDEX idx_slot_id (slot_id),
