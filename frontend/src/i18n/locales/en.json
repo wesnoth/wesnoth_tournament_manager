@@ -757,6 +757,8 @@
     "not_available": "Not available",
     "add_range": "Add",
     "add_time_range_help": "Add another time range",
-    "clear_all_help": "Clear all time ranges"
+    "clear_all_help": "Clear all time ranges",
+    "slot": "slot",
+    "slots": "slots"
   }
 }

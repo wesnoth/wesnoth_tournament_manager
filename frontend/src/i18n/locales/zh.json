@@ -746,6 +746,8 @@
     "not_available": "不可用",
     "add_range": "添加",
     "add_time_range_help": "添加另一个时间段",
-    "clear_all_help": "清除所有时间段"
+    "clear_all_help": "清除所有时间段",
+    "slot": "时段",
+    "slots": "时段"
   }
 }

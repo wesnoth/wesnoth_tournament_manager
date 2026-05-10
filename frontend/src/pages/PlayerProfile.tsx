@@ -8,6 +8,7 @@ import MatchesTable from '../components/MatchesTable';
 import MatchDetailsModal from '../components/MatchDetailsModal';
 import PlayerLink from '../components/PlayerLink';
 import RouteLoader from '../components/RouteLoader';
+import ScheduleDisplay from '../components/ScheduleDisplay';
 
 // Lazy-load heavy chart and statistics components
 const EloChart = lazy(() => import('../components/EloChart'));
@@ -262,6 +263,14 @@ const PlayerProfile: React.FC = () => {
         {profile && (
           <>
             <ProfileStats player={profile} />
+            
+            <div className="mb-8">
+              <ScheduleDisplay 
+                timezone={profile.timezone}
+                availabilitySchedule={profile.availability_schedule}
+                compact={true}
+              />
+            </div>
 
             {/* Tab Navigation */}
             <div className="flex flex-wrap gap-2 mb-8 border-b border-gray-300">

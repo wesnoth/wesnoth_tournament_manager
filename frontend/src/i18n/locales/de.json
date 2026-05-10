@@ -746,6 +746,8 @@
     "not_available": "Nicht verfügbar",
     "add_range": "Hinzufügen",
     "add_time_range_help": "Weiteres Zeitfenster hinzufügen",
-    "clear_all_help": "Alle Zeitfenster löschen"
+    "clear_all_help": "Alle Zeitfenster löschen",
+    "slot": "Slot",
+    "slots": "Slots"
   }
 }
