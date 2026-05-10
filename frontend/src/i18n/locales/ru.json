@@ -514,6 +514,8 @@
   "profile.ranked_permanent": "Постоянно",
   "profile.ranked_title": "Рейтинговые матчи",
   "profile.ranked_updated": "Предпочтение рейтинговых матчей обновлено",
+  "profile.scheduling_saved": "Предпочтения расписания успешно сохранены",
+  "profile.error_scheduling_update": "Ошибка при обновлении предпочтений расписания",
   "profile.title": "Профиль",
   "profile.update_discord_button": "Обновить ID Discord",
   "profile_language_settings": "Настройки языка",

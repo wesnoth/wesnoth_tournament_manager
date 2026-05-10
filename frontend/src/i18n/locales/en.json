@@ -520,6 +520,8 @@
   "profile.ranked_permanent": "Permanent",
   "profile.ranked_title": "Ranked Matches",
   "profile.ranked_updated": "Ranked preference updated",
+  "profile.scheduling_saved": "Scheduling preferences saved successfully",
+  "profile.error_scheduling_update": "Error updating scheduling preferences",
   "profile.title": "Profile",
   "profile.update_discord_button": "Update Discord ID",
   "profile_language_settings": "Language Settings",

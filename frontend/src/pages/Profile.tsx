@@ -371,7 +371,7 @@ const Profile: React.FC = () => {
                   className="p-8 cursor-pointer flex justify-between items-center hover:bg-gray-50 transition-colors"
                   onClick={() => setSchedulingCollapsed(!schedulingCollapsed)}
                 >
-                  <h2 className="text-2xl font-semibold text-gray-800 pb-0">{t('profile.scheduling_title') || 'Scheduling Preferences'}</h2>
+                  <h2 className="text-2xl font-semibold text-gray-800 pb-0">{t('availability.title') || 'Scheduling Preferences'}</h2>
                   <svg 
                     className={`w-6 h-6 text-gray-600 transition-transform ${schedulingCollapsed ? 'rotate-180' : ''}`}
                     fill="none" 
@@ -394,28 +394,24 @@ const Profile: React.FC = () => {
                     )}
                     <div className="space-y-6">
                       <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-3">{t('profile.timezone_label') || 'Timezone'}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-3">{t('common.timezone') || 'Timezone'}</label>
                         <TimezoneSelector 
                           value={timezone} 
                           onChange={setTimezone}
                         />
                       </div>
                       
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-3">{t('profile.availability_label') || 'Availability Schedule'}</label>
-                        <p className="text-sm text-gray-600 mb-4">{t('profile.availability_help') || 'Define your available time slots for matches in your local timezone. Use 30-minute increments.'}</p>
-                        <AvailabilityRangeEditor 
-                          value={availabilitySchedule} 
-                          onChange={setAvailabilitySchedule}
-                        />
-                      </div>
+                      <AvailabilityRangeEditor 
+                        value={availabilitySchedule} 
+                        onChange={setAvailabilitySchedule}
+                      />
 
                       <button
                         onClick={handleSaveScheduling}
                         disabled={savingScheduling}
                         className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-green-700 text-white rounded-lg font-semibold hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                       >
-                        {savingScheduling ? t('profile.saving') : t('profile.save_scheduling') || 'Save Scheduling Preferences'}
+                        {savingScheduling ? t('profile.saving') : t('common.save') || 'Save'}
                       </button>
                     </div>
                   </div>

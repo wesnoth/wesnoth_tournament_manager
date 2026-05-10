@@ -514,6 +514,8 @@
   "profile.ranked_permanent": "Dauerhaft",
   "profile.ranked_title": "Ranked-Spiele",
   "profile.ranked_updated": "Ranked-Einstellung aktualisiert",
+  "profile.scheduling_saved": "Zeitplaneinstellungen erfolgreich gespeichert",
+  "profile.error_scheduling_update": "Fehler beim Aktualisieren der Zeitplaneinstellungen",
   "profile.title": "Profil",
   "profile.update_discord_button": "Discord-ID aktualisieren",
   "profile_language_settings": "Spracheinstellungen",

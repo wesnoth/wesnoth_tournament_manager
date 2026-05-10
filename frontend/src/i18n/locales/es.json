@@ -510,6 +510,8 @@
   "profile.ranked_permanent": "Permanente",
   "profile.ranked_title": "Partidas Clasificadas",
   "profile.ranked_updated": "Preferencia de clasificadas actualizada",
+  "profile.scheduling_saved": "Preferencias de scheduling guardadas correctamente",
+  "profile.error_scheduling_update": "Error al actualizar preferencias de scheduling",
   "profile.title": "Perfil",
   "profile.update_discord_button": "Actualizar ID de Discord",
   "profile_language_settings": "Configuración de Idioma",

@@ -514,6 +514,8 @@
   "profile.ranked_permanent": "永久性",
   "profile.ranked_title": "排名比赛",
   "profile.ranked_updated": "排名偏好已更新",
+  "profile.scheduling_saved": "日程偏好已成功保存",
+  "profile.error_scheduling_update": "更新日程偏好时出错",
   "profile.title": "个人资料",
   "profile.update_discord_button": "更新 Discord ID",
   "profile_language_settings": "语言设置",
