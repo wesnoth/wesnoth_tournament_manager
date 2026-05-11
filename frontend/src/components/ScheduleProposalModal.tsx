@@ -44,7 +44,7 @@ export default function ScheduleProposalModal({
   onSuccess
 }: ScheduleProposalModalProps) {
   const { t } = useTranslation();
-  const { user } = useAuthStore();
+  const { userId } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -85,8 +85,8 @@ export default function ScheduleProposalModal({
         if (proposalRes.proposal) {
           setProposal(proposalRes.proposal);
           // Check if current user is the proposer
-          console.log('[ScheduleProposalModal] User:', user?.user_id, 'Proposer:', proposalRes.proposal.proposed_by_user_id);
-          if (user && proposalRes.proposal.proposed_by_user_id === user.user_id) {
+          console.log('[ScheduleProposalModal] UserId:', userId, 'Proposer:', proposalRes.proposal.proposed_by_user_id);
+          if (userId && proposalRes.proposal.proposed_by_user_id === userId) {
             console.log('[ScheduleProposalModal] Setting mode to edit_proposal');
             setMode('edit_proposal');
           } else {
@@ -105,7 +105,7 @@ export default function ScheduleProposalModal({
     };
 
     loadData();
-  }, [isOpen, targetId, tournamentId, isRoundMatch, user]);
+  }, [isOpen, targetId, tournamentId, isRoundMatch, userId]);
 
   const handleSlotToggle = (slotDatetime: string, selected: boolean) => {
     const newSelected = new Set(selectedSlots);
