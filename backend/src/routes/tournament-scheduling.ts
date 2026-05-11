@@ -984,7 +984,10 @@ router.post(
 
       // Verify user is a participant in this match
       const matchResult = await query(
-        `SELECT player1_id, player2_id FROM tournament_round_matches WHERE id = ? AND tournament_id = ?`,
+        `SELECT trm.player1_id, trm.player2_id, t.tournament_mode 
+         FROM tournament_round_matches trm
+         JOIN tournaments t ON t.id = trm.tournament_id
+         WHERE trm.id = ? AND trm.tournament_id = ?`,
         [roundMatchId, tournamentId]
       );
 
@@ -993,7 +996,25 @@ router.post(
       }
 
       const match = matchResult.rows[0];
-      const isParticipant = userId === match.player1_id || userId === match.player2_id;
+      let isParticipant = false;
+
+      if (match.tournament_mode === 'team') {
+        // Team tournament - check if user is on one of the teams
+        const userTeamResult = await query(
+          `SELECT team_id FROM tournament_participants 
+           WHERE tournament_id = ? AND user_id = ? 
+           LIMIT 1`,
+          [tournamentId, userId]
+        );
+
+        if (userTeamResult.rows && userTeamResult.rows.length > 0) {
+          const userTeamId = userTeamResult.rows[0].team_id;
+          isParticipant = userTeamId === match.player1_id || userTeamId === match.player2_id;
+        }
+      } else {
+        // 1v1 tournament - check if user is one of the players
+        isParticipant = userId === match.player1_id || userId === match.player2_id;
+      }
 
       if (!isParticipant) {
         return res.status(403).json({ error: 'You are not a participant in this match' });
@@ -1049,9 +1070,10 @@ router.post(
 
       // Verify user is a participant
       const matchResult = await query(
-        `SELECT player1_id, player2_id, tournament_round_match_id 
-         FROM tournament_matches 
-         WHERE id = ? AND tournament_id = ?`,
+        `SELECT tm.player1_id, tm.player2_id, t.tournament_mode 
+         FROM tournament_matches tm
+         JOIN tournaments t ON t.id = tm.tournament_id
+         WHERE tm.id = ? AND tm.tournament_id = ?`,
         [matchId, tournamentId]
       );
 
@@ -1060,7 +1082,25 @@ router.post(
       }
 
       const match = matchResult.rows[0];
-      const isParticipant = userId === match.player1_id || userId === match.player2_id;
+      let isParticipant = false;
+
+      if (match.tournament_mode === 'team') {
+        // Team tournament - check if user is on one of the teams
+        const userTeamResult = await query(
+          `SELECT team_id FROM tournament_participants 
+           WHERE tournament_id = ? AND user_id = ? 
+           LIMIT 1`,
+          [tournamentId, userId]
+        );
+
+        if (userTeamResult.rows && userTeamResult.rows.length > 0) {
+          const userTeamId = userTeamResult.rows[0].team_id;
+          isParticipant = userTeamId === match.player1_id || userTeamId === match.player2_id;
+        }
+      } else {
+        // 1v1 tournament - check if user is one of the players
+        isParticipant = userId === match.player1_id || userId === match.player2_id;
+      }
 
       if (!isParticipant) {
         return res.status(403).json({ error: 'You are not a participant in this match' });
@@ -1115,7 +1155,10 @@ router.post(
 
       // Verify user is a participant
       const matchResult = await query(
-        `SELECT player1_id, player2_id FROM tournament_round_matches WHERE id = ? AND tournament_id = ?`,
+        `SELECT trm.player1_id, trm.player2_id, t.tournament_mode 
+         FROM tournament_round_matches trm
+         JOIN tournaments t ON t.id = trm.tournament_id
+         WHERE trm.id = ? AND trm.tournament_id = ?`,
         [roundMatchId, tournamentId]
       );
 
@@ -1124,7 +1167,25 @@ router.post(
       }
 
       const match = matchResult.rows[0];
-      const isParticipant = userId === match.player1_id || userId === match.player2_id;
+      let isParticipant = false;
+
+      if (match.tournament_mode === 'team') {
+        // Team tournament - check if user is on one of the teams
+        const userTeamResult = await query(
+          `SELECT team_id FROM tournament_participants 
+           WHERE tournament_id = ? AND user_id = ? 
+           LIMIT 1`,
+          [tournamentId, userId]
+        );
+
+        if (userTeamResult.rows && userTeamResult.rows.length > 0) {
+          const userTeamId = userTeamResult.rows[0].team_id;
+          isParticipant = userTeamId === match.player1_id || userTeamId === match.player2_id;
+        }
+      } else {
+        // 1v1 tournament - check if user is one of the players
+        isParticipant = userId === match.player1_id || userId === match.player2_id;
+      }
 
       if (!isParticipant) {
         return res.status(403).json({ error: 'You are not a participant in this match' });
@@ -1175,7 +1236,10 @@ router.post(
 
       // Verify user is a participant
       const matchResult = await query(
-        `SELECT player1_id, player2_id FROM tournament_matches WHERE id = ? AND tournament_id = ?`,
+        `SELECT tm.player1_id, tm.player2_id, t.tournament_mode 
+         FROM tournament_matches tm
+         JOIN tournaments t ON t.id = tm.tournament_id
+         WHERE tm.id = ? AND tm.tournament_id = ?`,
         [matchId, tournamentId]
       );
 
@@ -1184,7 +1248,25 @@ router.post(
       }
 
       const match = matchResult.rows[0];
-      const isParticipant = userId === match.player1_id || userId === match.player2_id;
+      let isParticipant = false;
+
+      if (match.tournament_mode === 'team') {
+        // Team tournament - check if user is on one of the teams
+        const userTeamResult = await query(
+          `SELECT team_id FROM tournament_participants 
+           WHERE tournament_id = ? AND user_id = ? 
+           LIMIT 1`,
+          [tournamentId, userId]
+        );
+
+        if (userTeamResult.rows && userTeamResult.rows.length > 0) {
+          const userTeamId = userTeamResult.rows[0].team_id;
+          isParticipant = userTeamId === match.player1_id || userTeamId === match.player2_id;
+        }
+      } else {
+        // 1v1 tournament - check if user is one of the players
+        isParticipant = userId === match.player1_id || userId === match.player2_id;
+      }
 
       if (!isParticipant) {
         return res.status(403).json({ error: 'You are not a participant in this match' });
