@@ -55,8 +55,12 @@ export default function ScheduleProposalModal({
   const [mode, setMode] = useState<'propose' | 'confirm' | 'counter' | 'edit_proposal'>('propose');
   const [displayDateStart, setDisplayDateStart] = useState<Date>(new Date());
 
+  // For scheduling, always use tournament_round_match_id (roundMatchId) since proposals are tied to tournament_round_matches
+  // If roundMatchId is not provided, fallback to matchId (though this shouldn't happen)
   const targetId = roundMatchId || matchId;
   const isRoundMatch = !!roundMatchId;
+  
+  console.log('[ScheduleProposalModal] targetId:', targetId, 'isRoundMatch:', isRoundMatch, 'roundMatchId:', roundMatchId, 'matchId:', matchId);
 
   // Load data when modal opens
   useEffect(() => {

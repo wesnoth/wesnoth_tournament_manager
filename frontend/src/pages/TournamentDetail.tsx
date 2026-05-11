@@ -2365,8 +2365,8 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                                 onClick={() => setScheduleProposalModal({ 
                                                   isOpen: true,
                                                    tournamentId: id,
-                                                   roundMatchId: match.tournament_round_match_id,
-                                                  matchId: match.id,
+                                                   roundMatchId: match.tournament_round_match_id || match.id,
+                                                  matchId: undefined,
                                                   player1_nickname: match.player1_nickname,
                                                   player2_nickname: match.player2_nickname,
                                                   scheduled_datetime: match.scheduled_datetime,
@@ -2400,8 +2400,8 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                                 onClick={() => setScheduleProposalModal({ 
                                                   isOpen: true,
                                                    tournamentId: id,
-                                                   roundMatchId: match.tournament_round_match_id,
-                                                  matchId: match.id,
+                                                   roundMatchId: match.tournament_round_match_id || match.id,
+                                                  matchId: undefined,
                                                   player1_nickname: match.player1_nickname,
                                                   player2_nickname: match.player2_nickname,
                                                   scheduled_datetime: match.scheduled_datetime,
