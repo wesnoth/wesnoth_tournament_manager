@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import SchedulingFreeBusyGrid from './SchedulingFreeBusyGrid';
 import { tournamentSchedulingService } from '../services/tournamentSchedulingService';
+import { useAuthStore } from '../store/authStore';
 
 interface ScheduleProposalModalProps {
   isOpen: boolean;
@@ -43,6 +44,7 @@ export default function ScheduleProposalModal({
   onSuccess
 }: ScheduleProposalModalProps) {
   const { t } = useTranslation();
+  const { user } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -50,7 +52,7 @@ export default function ScheduleProposalModal({
   const [proposal, setProposal] = useState<ProposalData | null>(null);
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState('');
-  const [mode, setMode] = useState<'propose' | 'confirm' | 'counter'>('propose');
+  const [mode, setMode] = useState<'propose' | 'confirm' | 'counter' | 'edit_proposal'>('propose');
   const [displayDateStart, setDisplayDateStart] = useState<Date>(new Date());
 
   const targetId = roundMatchId || matchId;
@@ -82,7 +84,12 @@ export default function ScheduleProposalModal({
 
         if (proposalRes.proposal) {
           setProposal(proposalRes.proposal);
-          setMode('confirm');
+          // Check if current user is the proposer
+          if (user && proposalRes.proposal.proposed_by_user_id === user.user_id) {
+            setMode('edit_proposal');
+          } else {
+            setMode('confirm');
+          }
         } else {
           setMode('propose');
         }
@@ -95,7 +102,7 @@ export default function ScheduleProposalModal({
     };
 
     loadData();
-  }, [isOpen, targetId, tournamentId, isRoundMatch]);
+  }, [isOpen, targetId, tournamentId, isRoundMatch, user]);
 
   const handleSlotToggle = (slotDatetime: string, selected: boolean) => {
     const newSelected = new Set(selectedSlots);
@@ -218,6 +225,32 @@ export default function ScheduleProposalModal({
     }
   };
 
+  const handleCancelProposal = async () => {
+    if (!proposal) {
+      setError('No proposal to cancel');
+      return;
+    }
+
+    if (!confirm('Are you sure you want to cancel this proposal?')) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError('');
+
+      // TODO: Call backend to delete/cancel the proposal
+      // For now, just close and refresh
+      onSuccess?.();
+      onClose();
+    } catch (err) {
+      console.error('Error canceling proposal:', err);
+      setError('Failed to cancel proposal');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   const dateEnd = new Date(displayDateStart);
@@ -242,7 +275,7 @@ export default function ScheduleProposalModal({
         <div className="sticky top-0 bg-white border-b border-gray-200 p-6">
           <div className="flex justify-between items-start">
             <h2 className="text-2xl font-bold text-gray-800">
-              {mode === 'propose' ? 'Propose Match Schedule' : 'Confirm Schedule'}
+              {mode === 'propose' ? 'Propose Match Schedule' : mode === 'edit_proposal' ? 'Edit Schedule Proposal' : 'Confirm Schedule'}
             </h2>
             <button
               onClick={onClose}
@@ -375,6 +408,23 @@ export default function ScheduleProposalModal({
               >
                 {loading ? 'Proposing...' : 'Propose Selected Slots'}
               </button>
+            ) : mode === 'edit_proposal' ? (
+              <>
+                <button
+                  onClick={handleCancelProposal}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-medium"
+                  disabled={loading}
+                >
+                  Cancel Proposal
+                </button>
+                <button
+                  onClick={handleProposeSlots}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium disabled:opacity-50"
+                  disabled={loading || selectedSlots.size === 0}
+                >
+                  {loading ? 'Updating...' : 'Change Proposal'}
+                </button>
+              </>
             ) : (
               <>
                 <button
