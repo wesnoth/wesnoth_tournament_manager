@@ -338,6 +338,21 @@ export const createRoundMatchProposal = async (
     }
   }
 
+  // 4. Update tournament_round_matches to reflect pending scheduling
+  if (slotsCreated > 0) {
+    const firstSlot = new Date(slotDatetimes[0]);
+    const roundedFirstSlot = roundToNearest30Min(firstSlot);
+    
+    await query(
+      `UPDATE tournament_round_matches 
+       SET scheduled_status = 'pending_confirmation', 
+           scheduled_datetime = ?,
+           scheduled_by_player_id = ?
+       WHERE id = ?`,
+      [roundedFirstSlot, proposedByUserId, tournamentRoundMatchId]
+    );
+  }
+
   return { proposalId, slotsCreated };
 };
 
@@ -398,6 +413,27 @@ export const createMatchProposal = async (
     if (slotResult.rowCount) {
       slotsCreated++;
     }
+  }
+
+  // 4. Get the tournament_round_match_id and update tournament_round_matches
+  const matchResult = await query(
+    `SELECT tournament_round_match_id FROM tournament_matches WHERE id = ?`,
+    [tournamentMatchId]
+  );
+
+  if (matchResult.rows && matchResult.rows.length > 0 && matchResult.rows[0].tournament_round_match_id && slotsCreated > 0) {
+    const roundMatchId = matchResult.rows[0].tournament_round_match_id;
+    const firstSlot = new Date(slotDatetimes[0]);
+    const roundedFirstSlot = roundToNearest30Min(firstSlot);
+    
+    await query(
+      `UPDATE tournament_round_matches 
+       SET scheduled_status = 'pending_confirmation', 
+           scheduled_datetime = ?,
+           scheduled_by_player_id = ?
+       WHERE id = ?`,
+      [roundedFirstSlot, proposedByUserId, roundMatchId]
+    );
   }
 
   return { proposalId, slotsCreated };
@@ -480,6 +516,37 @@ export const confirmSlots = async (
               `UPDATE match_schedule_proposals SET status = 'resolved' WHERE id = ?`,
               [proposalId]
             );
+
+            // Update tournament_round_matches to reflect confirmed scheduling
+            const proposalData = await query(
+              `SELECT tournament_round_match_id, tournament_match_id FROM match_schedule_proposals WHERE id = ?`,
+              [proposalId]
+            );
+
+            if (proposalData.rows && proposalData.rows.length > 0) {
+              const { tournament_round_match_id, tournament_match_id } = proposalData.rows[0];
+              
+              if (tournament_round_match_id) {
+                // Get the confirmed slot datetime
+                const slotData = await query(
+                  `SELECT slot_datetime FROM match_schedule_slots 
+                   WHERE proposal_id = ? AND status = 'confirmed' 
+                   ORDER BY slot_datetime ASC LIMIT 1`,
+                  [proposalId]
+                );
+
+                if (slotData.rows && slotData.rows.length > 0) {
+                  await query(
+                    `UPDATE tournament_round_matches 
+                     SET scheduled_status = 'confirmed', 
+                         scheduled_datetime = ?,
+                         scheduled_confirmed_at = ?
+                     WHERE id = ?`,
+                    [slotData.rows[0].slot_datetime, new Date(), tournament_round_match_id]
+                  );
+                }
+              }
+            }
           }
         }
       }
