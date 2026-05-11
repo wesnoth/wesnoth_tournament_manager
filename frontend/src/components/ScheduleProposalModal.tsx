@@ -85,9 +85,12 @@ export default function ScheduleProposalModal({
         if (proposalRes.proposal) {
           setProposal(proposalRes.proposal);
           // Check if current user is the proposer
+          console.log('[ScheduleProposalModal] User:', user?.user_id, 'Proposer:', proposalRes.proposal.proposed_by_user_id);
           if (user && proposalRes.proposal.proposed_by_user_id === user.user_id) {
+            console.log('[ScheduleProposalModal] Setting mode to edit_proposal');
             setMode('edit_proposal');
           } else {
+            console.log('[ScheduleProposalModal] Setting mode to confirm');
             setMode('confirm');
           }
         } else {
@@ -366,6 +369,18 @@ export default function ScheduleProposalModal({
                     <p className="text-xs text-yellow-800 mt-2 italic">
                       Notes: {proposal.notes}
                     </p>
+                  )}
+                  {proposal.slots && proposal.slots.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-xs font-semibold text-yellow-900 mb-2">Proposed Slots:</p>
+                      <div className="space-y-1">
+                        {proposal.slots.map((slot) => (
+                          <div key={slot.id} className="text-xs text-yellow-800 bg-white rounded px-2 py-1 border border-yellow-100">
+                            {new Date(slot.slot_datetime).toLocaleString()} - {slot.status}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
