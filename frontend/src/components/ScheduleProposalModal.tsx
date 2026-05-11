@@ -374,9 +374,17 @@ export default function ScheduleProposalModal({
                     <div className="mt-3">
                       <p className="text-xs font-semibold text-yellow-900 mb-2">Proposed Slots:</p>
                       <div className="space-y-1">
-                        {proposal.slots.map((slot) => (
-                          <div key={slot.id} className="text-xs text-yellow-800 bg-white rounded px-2 py-1 border border-yellow-100">
-                            {new Date(slot.slot_datetime).toLocaleString()} - {slot.status}
+                        {groupSlotsIntoRanges(proposal.slots.map(s => s.slot_datetime)).map((range, idx) => (
+                          <div key={idx} className="text-xs text-yellow-800 bg-white rounded px-2 py-1 border border-yellow-100">
+                            <div className="font-semibold">
+                              {range.start.toLocaleDateString()} - {range.hours}
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              ({proposal.slots.filter(s => {
+                                const slotDate = new Date(s.slot_datetime);
+                                return slotDate >= range.start && slotDate < range.end;
+                              }).map(s => s.status).join(', ')})
+                            </div>
                           </div>
                         ))}
                       </div>
