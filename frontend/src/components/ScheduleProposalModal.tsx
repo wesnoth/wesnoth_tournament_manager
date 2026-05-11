@@ -50,7 +50,7 @@ export default function ScheduleProposalModal({
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [viewingTimezone, setViewingTimezone] = useState('UTC');
   const [proposal, setProposal] = useState<ProposalData | null>(null);
-  const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
+  const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set()); // Always contains datetimes (string ISO)
   const [notes, setNotes] = useState('');
   const [mode, setMode] = useState<'propose' | 'confirm' | 'counter' | 'edit_proposal'>('propose');
   const [displayDateStart, setDisplayDateStart] = useState<Date>(new Date());
@@ -223,10 +223,20 @@ export default function ScheduleProposalModal({
       setLoading(true);
       setError('');
 
-      const slotArray = Array.from(selectedSlots);
+      // Map datetimes back to slot IDs
+      const selectedDatetimes = Array.from(selectedSlots);
+      const slotIds = selectedDatetimes
+        .map(dt => proposal.slots.find(s => s.slot_datetime === dt)?.id)
+        .filter((id) => id !== undefined) as string[];
+
+      if (slotIds.length === 0) {
+        setError('No valid slots selected');
+        return;
+      }
+
       const response = isRoundMatch
-        ? await tournamentSchedulingService.confirmRoundMatchSlots(tournamentId, targetId!, slotArray)
-        : await tournamentSchedulingService.confirmMatchSlots(tournamentId, targetId!, slotArray);
+        ? await tournamentSchedulingService.confirmRoundMatchSlots(tournamentId, targetId!, slotIds)
+        : await tournamentSchedulingService.confirmMatchSlots(tournamentId, targetId!, slotIds);
 
       if (response.success) {
         onSuccess?.();
