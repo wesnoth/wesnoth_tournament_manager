@@ -209,11 +209,6 @@ export default function ScheduleProposalModal({
   };
 
   const handleConfirmSlots = async () => {
-    if (selectedSlots.size === 0) {
-      setError('Please select at least one slot');
-      return;
-    }
-
     if (!proposal) {
       setError('No proposal to confirm');
       return;
@@ -223,20 +218,11 @@ export default function ScheduleProposalModal({
       setLoading(true);
       setError('');
 
-      // Map datetimes back to slot IDs
-      const selectedDatetimes = Array.from(selectedSlots);
-      const slotIds = selectedDatetimes
-        .map(dt => proposal.slots.find(s => s.slot_datetime === dt)?.id)
-        .filter((id) => id !== undefined) as string[];
-
-      if (slotIds.length === 0) {
-        setError('No valid slots selected');
-        return;
-      }
-
+      // Simply confirm the proposal by sending proposal_id
+      // Backend will mark ALL slots of this proposal as confirmed
       const response = isRoundMatch
-        ? await tournamentSchedulingService.confirmRoundMatchSlots(tournamentId, targetId!, slotIds)
-        : await tournamentSchedulingService.confirmMatchSlots(tournamentId, targetId!, slotIds);
+        ? await tournamentSchedulingService.confirmRoundMatchSlots(tournamentId, targetId!, proposal.id)
+        : await tournamentSchedulingService.confirmMatchSlots(tournamentId, targetId!, proposal.id);
 
       if (response.success) {
         onSuccess?.();
