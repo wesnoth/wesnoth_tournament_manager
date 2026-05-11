@@ -300,6 +300,35 @@ export const createRoundMatchProposal = async (
   const proposalId = uuidv4();
   const now = new Date();
 
+  // Get tournament info and proposer's team (if team tournament)
+  const matchResult = await query(
+    `SELECT trm.tournament_id, t.tournament_mode 
+     FROM tournament_round_matches trm
+     JOIN tournaments t ON t.id = trm.tournament_id
+     WHERE trm.id = ?`,
+    [tournamentRoundMatchId]
+  );
+
+  if (!matchResult.rows || matchResult.rows.length === 0) {
+    throw new Error('Tournament round match not found');
+  }
+
+  const { tournament_id, tournament_mode } = matchResult.rows[0];
+
+  let proposerTeamId: string | null = null;
+  if (tournament_mode === 'team') {
+    // Get proposer's team
+    const teamResult = await query(
+      `SELECT team_id FROM tournament_participants 
+       WHERE tournament_id = ? AND user_id = ? LIMIT 1`,
+      [tournament_id, proposedByUserId]
+    );
+
+    if (teamResult.rows && teamResult.rows.length > 0) {
+      proposerTeamId = teamResult.rows[0].team_id;
+    }
+  }
+
   // 1. Mark any previous active proposals as superseded
   await query(
     `UPDATE match_schedule_proposals 
@@ -322,6 +351,7 @@ export const createRoundMatchProposal = async (
 
   // 3. Create slots
   let slotsCreated = 0;
+  const slotIds: string[] = [];
   for (const dtString of slotDatetimes) {
     const slotId = uuidv4();
     const roundedDt = roundToNearest30Min(new Date(dtString));
@@ -335,10 +365,28 @@ export const createRoundMatchProposal = async (
 
     if (slotResult.rowCount) {
       slotsCreated++;
+      slotIds.push(slotId);
     }
   }
 
-  // 4. Update tournament_round_matches to reflect pending scheduling
+  // 4. Insert confirmation for proposer (implicit confirmation when proposing)
+  if (slotIds.length > 0) {
+    for (const slotId of slotIds) {
+      const confirmationId = uuidv4();
+      try {
+        await query(
+          `INSERT INTO match_schedule_confirmations 
+            (id, slot_id, user_id, team_id, confirmed_at)
+           VALUES (?, ?, ?, ?, ?)`,
+          [confirmationId, slotId, proposedByUserId, proposerTeamId || null, new Date()]
+        );
+      } catch (error) {
+        console.warn(`[createRoundMatchProposal] Failed to insert initial confirmation for slot ${slotId}:`, error);
+      }
+    }
+  }
+
+  // 5. Update tournament_round_matches to reflect pending scheduling
   if (slotsCreated > 0) {
     const firstSlot = new Date(slotDatetimes[0]);
     const roundedFirstSlot = roundToNearest30Min(firstSlot);
@@ -377,6 +425,35 @@ export const createMatchProposal = async (
   const proposalId = uuidv4();
   const now = new Date();
 
+  // Get tournament info and proposer's team (if team tournament)
+  const matchInfo = await query(
+    `SELECT tm.tournament_id, t.tournament_mode 
+     FROM tournament_matches tm
+     JOIN tournaments t ON t.id = tm.tournament_id
+     WHERE tm.id = ?`,
+    [tournamentMatchId]
+  );
+
+  if (!matchInfo.rows || matchInfo.rows.length === 0) {
+    throw new Error('Tournament match not found');
+  }
+
+  const { tournament_id, tournament_mode } = matchInfo.rows[0];
+
+  let proposerTeamId: string | null = null;
+  if (tournament_mode === 'team') {
+    // Get proposer's team
+    const teamResult = await query(
+      `SELECT team_id FROM tournament_participants 
+       WHERE tournament_id = ? AND user_id = ? LIMIT 1`,
+      [tournament_id, proposedByUserId]
+    );
+
+    if (teamResult.rows && teamResult.rows.length > 0) {
+      proposerTeamId = teamResult.rows[0].team_id;
+    }
+  }
+
   // 1. Mark previous active proposals as superseded
   await query(
     `UPDATE match_schedule_proposals 
@@ -399,6 +476,7 @@ export const createMatchProposal = async (
 
   // 3. Create slots
   let slotsCreated = 0;
+  const slotIds: string[] = [];
   for (const dtString of slotDatetimes) {
     const slotId = uuidv4();
     const roundedDt = roundToNearest30Min(new Date(dtString));
@@ -412,10 +490,28 @@ export const createMatchProposal = async (
 
     if (slotResult.rowCount) {
       slotsCreated++;
+      slotIds.push(slotId);
     }
   }
 
-  // 4. Get the tournament_round_match_id and update tournament_round_matches
+  // 4. Insert confirmation for proposer (implicit confirmation when proposing)
+  if (slotIds.length > 0) {
+    for (const slotId of slotIds) {
+      const confirmationId = uuidv4();
+      try {
+        await query(
+          `INSERT INTO match_schedule_confirmations 
+            (id, slot_id, user_id, team_id, confirmed_at)
+           VALUES (?, ?, ?, ?, ?)`,
+          [confirmationId, slotId, proposedByUserId, proposerTeamId || null, new Date()]
+        );
+      } catch (error) {
+        console.warn(`[createMatchProposal] Failed to insert initial confirmation for slot ${slotId}:`, error);
+      }
+    }
+  }
+
+  // 5. Get the tournament_round_match_id and update tournament_round_matches
   const matchResult = await query(
     `SELECT tournament_round_match_id FROM tournament_matches WHERE id = ?`,
     [tournamentMatchId]
