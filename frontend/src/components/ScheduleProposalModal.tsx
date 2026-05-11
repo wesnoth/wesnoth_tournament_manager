@@ -89,12 +89,20 @@ export default function ScheduleProposalModal({
           if (userId && proposalRes.proposal.proposed_by_user_id === userId) {
             console.log('[ScheduleProposalModal] Setting mode to edit_proposal');
             setMode('edit_proposal');
+            setSelectedSlots(new Set());
           } else {
             console.log('[ScheduleProposalModal] Setting mode to confirm');
             setMode('confirm');
+            // Pre-select proposed slots for opponent to confirm or modify
+            if (proposalRes.proposal.slots) {
+              const proposedSlotDatetimes = proposalRes.proposal.slots.map(s => s.slot_datetime);
+              setSelectedSlots(new Set(proposedSlotDatetimes));
+              console.log('[ScheduleProposalModal] Pre-selected proposed slots:', proposedSlotDatetimes.length);
+            }
           }
         } else {
           setMode('propose');
+          setSelectedSlots(new Set());
         }
       } catch (err) {
         console.error('Error loading scheduling data:', err);
