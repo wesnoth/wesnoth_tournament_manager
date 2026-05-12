@@ -1243,11 +1243,11 @@ export const checkProposalFullyConfirmed = async (
   roundMatchId: string
 ): Promise<boolean> => {
   try {
-    // 1. Get match details
+    // 1. Get match details (player1_id and player2_id can be user UUIDs or team UUIDs)
     const match = await query(
-      `SELECT trm.player1_id, trm.player2_id, trm.team1_id, trm.team2_id, t.tournament_mode
+      `SELECT trm.player1_id, trm.player2_id, t.tournament_mode
        FROM tournament_round_matches trm
-       LEFT JOIN tournament.tournaments t ON trm.tournament_id = t.id
+       LEFT JOIN tournaments t ON trm.tournament_id = t.id
        WHERE trm.id = ?`,
       [roundMatchId]
     );
@@ -1272,7 +1272,7 @@ export const checkProposalFullyConfirmed = async (
     const proposedByUser = proposal.rows[0].proposed_by_user_id;
     
     if (!is2v2) {
-      // 1v1: need OTHER player to confirm
+      // 1v1: proposedByUser is player1 or player2, need OTHER player to confirm
       const otherPlayer = proposedByUser === m.player1_id ? m.player2_id : m.player1_id;
       
       const confirmations = await query(
@@ -1283,29 +1283,18 @@ export const checkProposalFullyConfirmed = async (
       
       return confirmations.rows && confirmations.rows[0].count > 0;
     } else {
-      // 2v2: need at least 1 from the OTHER team
-      const proposerTeam = await query(
-        `SELECT team_id FROM tournament_participants 
-         WHERE user_id = ? AND tournament_id = (
-           SELECT tournament_id FROM tournament_round_matches WHERE id = ?
-         )`,
-        [proposedByUser, roundMatchId]
-      );
+      // 2v2: player1_id and player2_id are team UUIDs
+      // Need at least 1 confirmation from the OTHER team
+      const proposerTeam = proposedByUser === m.player1_id ? m.player1_id : m.player2_id;
+      const otherTeam = proposerTeam === m.player1_id ? m.player2_id : m.player1_id;
       
-      if (!proposerTeam.rows || !proposerTeam.rows.length) {
-        return false;
-      }
-      
-      const proposerTeamId = proposerTeam.rows[0].team_id;
-      const otherTeamId = proposerTeamId === m.team1_id ? m.team2_id : m.team1_id;
-      
-      // Count confirmations from other team
+      // Count confirmations from users in the other team
       const confirmations = await query(
         `SELECT COUNT(DISTINCT msc.user_id) as count
          FROM match_schedule_confirmations msc
-         JOIN tournament.tournament_participants tp ON msc.user_id = tp.user_id
+         JOIN tournament_participants tp ON msc.user_id = tp.user_id
          WHERE msc.proposal_id = ? AND tp.team_id = ?`,
-        [proposalId, otherTeamId]
+        [proposalId, otherTeam]
       );
       
       return confirmations.rows && confirmations.rows[0].count > 0;
