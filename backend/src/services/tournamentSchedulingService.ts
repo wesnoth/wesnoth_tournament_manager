@@ -765,17 +765,15 @@ export const getRoundMatchProposal = async (roundMatchId: string) => {
 
     const slots = slotsResult.rows || [];
 
-    // Get confirmations for each slot
-    const confirmations: any = {};
-    for (const slot of slots) {
-      const confirmResult = await query(
-        `SELECT user_id, team_id, confirmed_at
-         FROM match_schedule_confirmations
-         WHERE slot_id = ?`,
-        [slot.id]
-      );
-      confirmations[slot.id] = confirmResult.rows || [];
-    }
+    // Get confirmations for the proposal (proposal-level, not per-slot)
+    const confirmResult = await query(
+      `SELECT user_id, confirmed_at
+       FROM match_schedule_confirmations
+       WHERE proposal_id = ?
+       ORDER BY confirmed_at ASC`,
+      [proposal.id]
+    );
+    const confirmations = confirmResult.rows || [];
 
     return {
       ...proposal,
@@ -817,16 +815,15 @@ export const getMatchProposal = async (matchId: string) => {
 
     const slots = slotsResult.rows || [];
 
-    const confirmations: any = {};
-    for (const slot of slots) {
-      const confirmResult = await query(
-        `SELECT user_id, team_id, confirmed_at
-         FROM match_schedule_confirmations
-         WHERE slot_id = ?`,
-        [slot.id]
-      );
-      confirmations[slot.id] = confirmResult.rows || [];
-    }
+    // Get confirmations for the proposal (proposal-level, not per-slot)
+    const confirmResult = await query(
+      `SELECT user_id, confirmed_at
+       FROM match_schedule_confirmations
+       WHERE proposal_id = ?
+       ORDER BY confirmed_at ASC`,
+      [proposal.id]
+    );
+    const confirmations = confirmResult.rows || [];
 
     return {
       ...proposal,
