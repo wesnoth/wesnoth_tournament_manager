@@ -15,6 +15,9 @@
 | `tournament_matches` | Matches within tournaments | `id` | `player1_id`, `player2_id`, `winner_id`, `match_id`, `status`, `match_status` |
 | `tournament_teams` | Team records (2v2) | `id` | `name`, `tournament_id`, `status` |
 | `tournament_round_matches` | Round-level match aggregates | `id` | `player1_id`, `player2_id`, `winner_id` |
+| `match_schedule_proposals` | Schedule proposals (Phase 2) | `id` | `tournament_round_match_id`, `tournament_match_id`, `proposed_by_user_id`, `status` |
+| `match_schedule_slots` | Time slots within a proposal | `id` | `proposal_id`, `slot_datetime`, `status` |
+| `match_schedule_confirmations` | User confirmations of proposals | `id` | `proposal_id`, `user_id`, `confirmed_at` |
 | `replays` | Discovered replays | `id` | `replay_file_path`, `parse_status`, `parsed_data` |
 | `game_maps` | Valid maps | `id` | `name`, `is_ranked` |
 | `factions` | Valid factions | `id` | `name`, `is_ranked` |
@@ -830,6 +833,65 @@ Tracks which SQL migrations have been executed.
 | `id` | int AUTO_INCREMENT PK | |
 | `name` | varchar(255) UNIQUE | Migration filename |
 | `executed_at` | datetime | When the migration ran |
+
+---
+
+### `match_schedule_proposals`
+
+Schedule proposals for tournament round matches. Phase 2 of tournament scheduling system.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | char(36) PK | UUID |
+| `tournament_round_match_id` | char(36) FK→tournament_round_matches | Target round match (NULL if for direct match) |
+| `tournament_match_id` | char(36) FK→tournament_matches | Target direct match (NULL if for round match) |
+| `proposed_by_user_id` | char(36) FK→users_extension | User who proposed this schedule |
+| `proposed_at` | datetime | When proposal was created |
+| `status` | varchar(20) | `pending` = awaiting confirmation, `confirmed` = all players agreed, `cancelled` = withdrawn |
+| `expires_at` | datetime | Optional: automatic expiration timestamp |
+| `cancelled_at` | datetime | When cancelled (NULL if active/confirmed) |
+| `user_id` | char(36) FK→users_extension | Legacy field (deprecated) |
+| `notes` | text | Optional notes from proposer |
+| `created_at` | datetime | |
+| `updated_at` | datetime | |
+
+**Status flow**: `pending` → (`confirmed` OR `cancelled`)
+
+---
+
+### `match_schedule_slots`
+
+Individual time slots within a proposal. Players select from these slots to confirm.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | char(36) PK | UUID |
+| `proposal_id` | char(36) FK→match_schedule_proposals | Parent proposal |
+| `slot_datetime` | datetime | UTC time of the slot (30-min duration implied) |
+| `slot_duration_minutes` | int | Duration (default 30) |
+| `status` | varchar(20) | `pending` = available, `confirmed` = chosen by players, `cancelled` = withdrawn |
+| `created_at` | datetime | |
+
+**Query pattern**: Get all slots for a proposal ordered by `slot_datetime ASC` to find earliest availability.
+
+---
+
+### `match_schedule_confirmations`
+
+User confirmations of proposed schedules. Records agreement to the schedule proposal (proposal-level, not per-slot).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | char(36) PK | UUID |
+| `proposal_id` | char(36) FK→match_schedule_proposals | Which proposal was confirmed |
+| `user_id` | char(36) FK→users_extension | Player who confirmed (NULL for team tournaments) |
+| `confirmed_at` | datetime | When confirmed |
+| `created_at` | datetime | |
+
+**Unique constraint**: `(proposal_id, user_id)` — each player confirms exactly once per proposal.
+
+**For 1v1 matches**: Both `player1_id` and `player2_id` must have confirmation rows.  
+**For 2v2 matches**: All 4 players (2 teams × 2 players) must have confirmation rows.
 
 ---
 
