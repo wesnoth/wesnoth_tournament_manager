@@ -1,45 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { IANA_TIMEZONES } from '../constants/timezones';
 
 interface TimezoneSelecterProps {
   value: string;
   onChange: (timezone: string) => void;
 }
-
-/**
- * Curated list of commonly used timezones
- */
-const COMMON_TIMEZONES = [
-  'UTC',
-  'Europe/Madrid',
-  'Europe/London',
-  'Europe/Paris',
-  'Europe/Berlin',
-  'Europe/Amsterdam',
-  'Europe/Rome',
-  'Europe/Stockholm',
-  'Europe/Moscow',
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Toronto',
-  'America/Mexico_City',
-  'America/Buenos_Aires',
-  'America/Sao_Paulo',
-  'Asia/Tokyo',
-  'Asia/Shanghai',
-  'Asia/Hong_Kong',
-  'Asia/Singapore',
-  'Asia/Bangkok',
-  'Asia/Dubai',
-  'Asia/Kolkata',
-  'Australia/Sydney',
-  'Australia/Melbourne',
-  'Pacific/Auckland',
-  'Africa/Cairo',
-  'Africa/Johannesburg',
-];
 
 const TimezoneSelector: React.FC<TimezoneSelecterProps> = ({ value, onChange }) => {
   const { t } = useTranslation();
@@ -48,7 +14,7 @@ const TimezoneSelector: React.FC<TimezoneSelecterProps> = ({ value, onChange }) 
 
   const filteredTimezones = useMemo(() => {
     const search = searchInput.toLowerCase();
-    return COMMON_TIMEZONES.filter(tz => tz.toLowerCase().includes(search))
+    return IANA_TIMEZONES.filter(tz => tz.toLowerCase().includes(search))
       .sort((a, b) => a.localeCompare(b));
   }, [searchInput]);
 
