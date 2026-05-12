@@ -114,6 +114,11 @@ export default function ScheduleProposalModal({
     if (initialProposal) {
       setProposal(initialProposal);
       console.log('[ScheduleProposalModal] Updated proposal:', initialProposal.id);
+    } else {
+      // Clear proposal data when opening modal for new schedule (no existing proposal)
+      setProposal(null);
+      setSelectedSlots(new Set());
+      console.log('[ScheduleProposalModal] Cleared proposal data - new schedule');
     }
   }, [isOpen, initialParticipants, initialProposal, initialViewingTimezone, initialDisplayDateStart, initialScrollToHour]);
 
