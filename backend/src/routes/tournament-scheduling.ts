@@ -6,7 +6,6 @@ import { sendDiscordNotification, storeNotificationForUsers } from '../services/
 import {
   createRoundMatchProposal,
   createMatchProposal,
-  confirmSlots,
   getRoundMatchProposal,
   getMatchProposal,
   getParticipantsAvailability,
@@ -1199,31 +1198,14 @@ router.post(
         return res.status(403).json({ error: 'You are not a participant in this match' });
       }
 
-      // Get all slots for this proposal
-      const slotsResult = await query(
-        `SELECT id FROM match_schedule_slots WHERE proposal_id = ?`,
-        [proposal_id]
-      );
+      // Confirm the proposal (proposal-level confirmation)
+      const isFullyConfirmed = await confirmProposal(proposal_id, userId);
 
-      if (!slotsResult.rows || slotsResult.rows.length === 0) {
-        return res.status(404).json({ error: 'No slots found for this proposal' });
-      }
-
-      const slotIds = slotsResult.rows.map(r => r.id);
-
-      // Confirm slots
-      const { slotsConfirmed, fullyConfirmedSlots } = await confirmSlots(
-        slotIds,
-        userId,
-        userTeamId || undefined
-      );
-
-      console.log(`✅ [SCHEDULING] Confirmed ${slotsConfirmed} slots via proposal, ${fullyConfirmedSlots.length} fully confirmed`);
+      console.log(`✅ [SCHEDULING] User ${userId} confirmed proposal ${proposal_id}, fully confirmed: ${isFullyConfirmed}`);
 
       res.json({
         success: true,
-        slotsConfirmed,
-        fullyConfirmedSlots
+        isFullyConfirmed
       });
     } catch (error) {
       console.error('❌ [SCHEDULING] Error confirming slots:', error);
@@ -1294,31 +1276,14 @@ router.post(
         return res.status(403).json({ error: 'You are not a participant in this match' });
       }
 
-      // Get all slots for this proposal
-      const slotsResult = await query(
-        `SELECT id FROM match_schedule_slots WHERE proposal_id = ?`,
-        [proposal_id]
-      );
+      // Confirm the proposal (proposal-level confirmation)
+      const isFullyConfirmed = await confirmProposal(proposal_id, userId);
 
-      if (!slotsResult.rows || slotsResult.rows.length === 0) {
-        return res.status(404).json({ error: 'No slots found for this proposal' });
-      }
-
-      const slotIds = slotsResult.rows.map(r => r.id);
-
-      // Confirm slots
-      const { slotsConfirmed, fullyConfirmedSlots } = await confirmSlots(
-        slotIds,
-        userId,
-        userTeamId || undefined
-      );
-
-      console.log(`✅ [SCHEDULING] Confirmed ${slotsConfirmed} slots via proposal, ${fullyConfirmedSlots.length} fully confirmed`);
+      console.log(`✅ [SCHEDULING] User ${userId} confirmed proposal ${proposal_id}, fully confirmed: ${isFullyConfirmed}`);
 
       res.json({
         success: true,
-        slotsConfirmed,
-        fullyConfirmedSlots
+        isFullyConfirmed
       });
     } catch (error) {
       console.error('❌ [SCHEDULING] Error confirming slots:', error);
