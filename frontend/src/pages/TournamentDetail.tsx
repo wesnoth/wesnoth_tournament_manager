@@ -455,7 +455,7 @@ const TournamentDetail: React.FC = () => {
         const day = parseInt(parts.find(p => p.type === 'day')?.value || '1');
         const hour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
 
-        displayDateStart = new Date(year, month, day);
+        displayDateStart = new Date(Date.UTC(year, month, day));
         scrollToHour = hour;
 
         console.log('[TournamentDetail] Scheduling data precalculated:', {
@@ -465,8 +465,10 @@ const TournamentDetail: React.FC = () => {
           viewingTimezone
         });
       } else {
-        // No proposal, use current time
-        scrollToHour = new Date().getHours();
+        // No proposal, use current date
+        const now = new Date();
+        displayDateStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+        scrollToHour = now.getHours();
       }
 
       // Open modal with preloaded data

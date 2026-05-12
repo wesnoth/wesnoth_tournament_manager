@@ -292,12 +292,14 @@ export default function ScheduleProposalModal({
   const dateEnd = new Date(displayDateStart);
   dateEnd.setDate(dateEnd.getDate() + 14); // 14-day window
 
-  const proposedSlotDatetimes = proposal?.slots.map(s => s.slot_datetime) || [];
+  const proposedSlotDatetimes = proposal?.slots?.map(s => s.slot_datetime) || [];
   const confirmedSlotsMap: Record<string, string[]> = {};
 
-  if (proposal?.confirmations) {
+  if (proposal?.confirmations && typeof proposal.confirmations === 'object' && !Array.isArray(proposal.confirmations)) {
     Object.entries(proposal.confirmations).forEach(([slotId, confirmations]) => {
-      confirmedSlotsMap[slotId] = confirmations.map((c: any) => c.user_id);
+      if (Array.isArray(confirmations)) {
+        confirmedSlotsMap[slotId] = confirmations.map((c: any) => c.user_id);
+      }
     });
   }
 
