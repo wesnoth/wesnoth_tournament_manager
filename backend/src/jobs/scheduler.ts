@@ -69,6 +69,97 @@ export async function autoDiscardUnconfirmedReplays(): Promise<void> {
 }
 
 /**
+ * Expire and purge scheduling proposals
+ * Phase 1: Mark proposals as 'cancelled' if their expires_at has passed
+ * Phase 2: Delete proposals that have been in 'cancelled' state for 7+ days
+ */
+export async function expireAndPurgeProposals(): Promise<void> {
+  try {
+    console.log('⏰ [SCHEDULING] Starting expiration and purge job...');
+    
+    // PHASE 1: Mark expired proposals as cancelled
+    const expiredResult = await query(
+      `SELECT id FROM tournament.match_schedule_proposals
+       WHERE status IN ('pending', 'confirmed') 
+         AND expires_at IS NOT NULL 
+         AND expires_at < NOW()
+         AND cancelled_at IS NULL`,
+      []
+    );
+    
+    const expiredProposals = (expiredResult as any).rows || [];
+    let expiredCount = 0;
+    
+    for (const proposal of expiredProposals) {
+      try {
+        // Mark proposal as cancelled
+        await query(
+          `UPDATE tournament.match_schedule_proposals 
+           SET status = 'cancelled', cancelled_at = NOW()
+           WHERE id = ?`,
+          [proposal.id]
+        );
+        
+        // Mark slots as cancelled
+        await query(
+          `UPDATE tournament.match_schedule_slots SET status = 'cancelled'
+           WHERE proposal_id = ?`,
+          [proposal.id]
+        );
+        
+        // Reset tournament_round_matches
+        await query(
+          `UPDATE tournament.tournament_round_matches 
+           SET scheduled_datetime = NULL, scheduled_status = 'pending', scheduled_confirmed_at = NULL
+           WHERE id = (SELECT tournament_round_match_id FROM tournament.match_schedule_proposals WHERE id = ?)`,
+          [proposal.id]
+        );
+        
+        expiredCount++;
+      } catch (error) {
+        console.error(`❌ [SCHEDULING] Failed to expire proposal ${proposal.id}:`, error);
+      }
+    }
+    
+    if (expiredCount > 0) {
+      console.log(`✅ [SCHEDULING] Marked ${expiredCount} proposals as expired`);
+    }
+    
+    // PHASE 2: Delete proposals that have been cancelled for 7+ days
+    const purgeResult = await query(
+      `SELECT id FROM tournament.match_schedule_proposals
+       WHERE status = 'cancelled'
+         AND cancelled_at < DATE_SUB(NOW(), INTERVAL 7 DAY)`,
+      []
+    );
+    
+    const purgeProposals = (purgeResult as any).rows || [];
+    let purgedCount = 0;
+    
+    for (const proposal of purgeProposals) {
+      try {
+        // Delete is cascading, so slots and confirmations will be deleted automatically
+        await query(
+          `DELETE FROM tournament.match_schedule_proposals WHERE id = ?`,
+          [proposal.id]
+        );
+        purgedCount++;
+      } catch (error) {
+        console.error(`❌ [SCHEDULING] Failed to purge proposal ${proposal.id}:`, error);
+      }
+    }
+    
+    if (purgedCount > 0) {
+      console.log(`✅ [SCHEDULING] Purged ${purgedCount} old cancelled proposals`);
+    }
+    
+    console.log(`✅ [SCHEDULING] Expiration and purge job completed (expired: ${expiredCount}, purged: ${purgedCount})`);
+  } catch (error) {
+    console.error('❌ [CRON] Scheduling expiration/purge job failed:', error);
+  }
+}
+
+/**
  * Initialize all scheduled jobs
  * Runs at specific times in UTC:
  * - 00:30 UTC: Daily balance snapshot
@@ -76,6 +167,7 @@ export async function autoDiscardUnconfirmedReplays(): Promise<void> {
  * - 01:00 UTC: Check and mark inactive players
  * - 01:30 UTC on 1st: Calculate player of the month
  * - 02:00 UTC: Auto-discard old unconfirmed replays
+ * - 02:30 UTC: Expire and purge scheduling proposals
  * - Every 30 minutes: Calculate global site statistics
  * - Every 60s: Sync new games from forum database
  * - Every 30s: Parse unparsed replays and create matches
@@ -182,6 +274,16 @@ export const initializeScheduledJobs = (): void => {
         console.error('❌ [CRON] Auto-discard failed:', error);
       }
     });
+    
+    // Schedule proposal expiration and purge at 02:30 UTC daily
+    cron.schedule('30 2 * * *', async () => {
+      try {
+        console.log('⏰ [CRON] Running scheduling proposal expiration and purge...');
+        await expireAndPurgeProposals();
+      } catch (error) {
+        console.error('❌ [CRON] Proposal expiration/purge failed:', error);
+      }
+    });
 
     // Schedule global statistics calculation every 30 minutes
     cron.schedule('*/30 * * * *', async () => {
@@ -198,6 +300,7 @@ export const initializeScheduledJobs = (): void => {
     console.log('   - Inactive players check: Daily at 01:00 UTC');
     console.log('   - Player of month: 1st of month at 01:30 UTC');
     console.log('   - Auto-discard unconfirmed replays: Daily at 02:00 UTC');
+    console.log('   - Proposal expiration & purge: Daily at 02:30 UTC');
     console.log('   - Global statistics calculation: Every 30 minutes');
     console.log('   - Forum database sync: Every 60 seconds');
     console.log('   - Replay parsing & match creation: Every 30 seconds');

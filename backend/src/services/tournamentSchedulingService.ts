@@ -331,25 +331,29 @@ export const createRoundMatchProposal = async (
 
   // 1. Mark any previous active proposals as superseded
   await query(
-    `UPDATE match_schedule_proposals 
+    `UPDATE tournament.match_schedule_proposals 
      SET status = 'superseded' 
      WHERE tournament_round_match_id = ? AND status = 'active' AND proposed_by_user_id = ?`,
     [tournamentRoundMatchId, proposedByUserId]
   );
 
-  // 2. Create new proposal
+  // 2. Calculate expires_at: MAX(slot_datetime) + 7 days
+  const maxSlotDatetime = new Date(Math.max(...slotDatetimes.map(dt => new Date(dt).getTime())));
+  const expiresAt = new Date(maxSlotDatetime.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  // 3. Create new proposal
   const result = await query(
-    `INSERT INTO match_schedule_proposals 
-      (id, tournament_round_match_id, proposed_by_user_id, proposed_at, status, notes)
-     VALUES (?, ?, ?, ?, 'active', ?)`,
-    [proposalId, tournamentRoundMatchId, proposedByUserId, now, notes || null]
+    `INSERT INTO tournament.match_schedule_proposals 
+      (id, tournament_round_match_id, proposed_by_user_id, proposed_at, status, notes, expires_at, user_id)
+     VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)`,
+    [proposalId, tournamentRoundMatchId, proposedByUserId, now, notes || null, expiresAt, proposedByUserId]
   );
 
   if (!result.rowCount) {
     throw new Error('Failed to create proposal');
   }
 
-  // 3. Create slots
+  // 4. Create slots
   let slotsCreated = 0;
   const slotIds: string[] = [];
   for (const dtString of slotDatetimes) {
@@ -357,7 +361,7 @@ export const createRoundMatchProposal = async (
     const roundedDt = roundToNearest30Min(new Date(dtString));
     
     const slotResult = await query(
-      `INSERT INTO match_schedule_slots 
+      `INSERT INTO tournament.match_schedule_slots 
         (id, proposal_id, slot_datetime, slot_duration_minutes, status)
        VALUES (?, ?, ?, 30, 'pending')`,
       [slotId, proposalId, roundedDt]
@@ -369,20 +373,18 @@ export const createRoundMatchProposal = async (
     }
   }
 
-  // 4. Insert confirmation for proposer (implicit confirmation when proposing)
-  if (slotIds.length > 0) {
-    for (const slotId of slotIds) {
-      const confirmationId = uuidv4();
-      try {
-        await query(
-          `INSERT INTO match_schedule_confirmations 
-            (id, slot_id, user_id, team_id, confirmed_at)
-           VALUES (?, ?, ?, ?, ?)`,
-          [confirmationId, slotId, proposedByUserId, proposerTeamId || null, new Date()]
-        );
-      } catch (error) {
-        console.warn(`[createRoundMatchProposal] Failed to insert initial confirmation for slot ${slotId}:`, error);
-      }
+  // 5. Insert one confirmation at proposal level (proposer auto-confirms their own proposal)
+  if (slotsCreated > 0) {
+    const confirmationId = uuidv4();
+    try {
+      await query(
+        `INSERT INTO tournament.match_schedule_confirmations 
+          (id, proposal_id, user_id, confirmed_at)
+         VALUES (?, ?, ?, NOW())`,
+        [confirmationId, proposalId, proposedByUserId]
+      );
+    } catch (error) {
+      console.warn(`[createRoundMatchProposal] Failed to insert proposer confirmation:`, error);
     }
   }
 
@@ -456,25 +458,29 @@ export const createMatchProposal = async (
 
   // 1. Mark previous active proposals as superseded
   await query(
-    `UPDATE match_schedule_proposals 
+    `UPDATE tournament.match_schedule_proposals 
      SET status = 'superseded' 
      WHERE tournament_match_id = ? AND status = 'active' AND proposed_by_user_id = ?`,
     [tournamentMatchId, proposedByUserId]
   );
 
-  // 2. Create proposal
+  // 2. Calculate expires_at: MAX(slot_datetime) + 7 days
+  const maxSlotDatetime = new Date(Math.max(...slotDatetimes.map(dt => new Date(dt).getTime())));
+  const expiresAt = new Date(maxSlotDatetime.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  // 3. Create proposal (proponent doesn't auto-confirm, just creates it)
   const result = await query(
-    `INSERT INTO match_schedule_proposals 
-      (id, tournament_match_id, proposed_by_user_id, proposed_at, status, notes)
-     VALUES (?, ?, ?, ?, 'active', ?)`,
-    [proposalId, tournamentMatchId, proposedByUserId, now, notes || null]
+    `INSERT INTO tournament.match_schedule_proposals 
+      (id, tournament_match_id, proposed_by_user_id, proposed_at, status, notes, expires_at, user_id)
+     VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)`,
+    [proposalId, tournamentMatchId, proposedByUserId, now, notes || null, expiresAt, proposedByUserId]
   );
 
   if (!result.rowCount) {
     throw new Error('Failed to create proposal');
   }
 
-  // 3. Create slots
+  // 4. Create slots
   let slotsCreated = 0;
   const slotIds: string[] = [];
   for (const dtString of slotDatetimes) {
@@ -482,7 +488,7 @@ export const createMatchProposal = async (
     const roundedDt = roundToNearest30Min(new Date(dtString));
     
     const slotResult = await query(
-      `INSERT INTO match_schedule_slots 
+      `INSERT INTO tournament.match_schedule_slots 
         (id, proposal_id, slot_datetime, slot_duration_minutes, status)
        VALUES (?, ?, ?, 30, 'pending')`,
       [slotId, proposalId, roundedDt]
@@ -491,23 +497,6 @@ export const createMatchProposal = async (
     if (slotResult.rowCount) {
       slotsCreated++;
       slotIds.push(slotId);
-    }
-  }
-
-  // 4. Insert confirmation for proposer (implicit confirmation when proposing)
-  if (slotIds.length > 0) {
-    for (const slotId of slotIds) {
-      const confirmationId = uuidv4();
-      try {
-        await query(
-          `INSERT INTO match_schedule_confirmations 
-            (id, slot_id, user_id, team_id, confirmed_at)
-           VALUES (?, ?, ?, ?, ?)`,
-          [confirmationId, slotId, proposedByUserId, proposerTeamId || null, new Date()]
-        );
-      } catch (error) {
-        console.warn(`[createMatchProposal] Failed to insert initial confirmation for slot ${slotId}:`, error);
-      }
     }
   }
 
@@ -999,5 +988,450 @@ export const getParticipantsAvailability = async (
   } catch (error) {
     console.error('[getParticipantsAvailability] Error:', error);
     throw error;
+  }
+};
+
+// ============================================================================
+// NEW PROPOSAL CONFIRMATION FUNCTIONS (Phase 2)
+// ============================================================================
+
+/**
+ * Confirm a proposal (set proposal_id confirmation, no slot-level)
+ * Only one confirmation per (proposal_id, user_id) allowed
+ */
+export const confirmProposal = async (proposalId: string, userId: string) => {
+  try {
+    // 1. Check if user already confirmed
+    const existing = await query(
+      `SELECT id FROM tournament.match_schedule_confirmations 
+       WHERE proposal_id = ? AND user_id = ?`,
+      [proposalId, userId]
+    );
+    
+    if (existing.rows && existing.rows.length > 0) {
+      throw new Error('User has already confirmed this proposal');
+    }
+    
+    // 2. Insert confirmation
+    const confirmationId = uuidv4();
+    await query(
+      `INSERT INTO tournament.match_schedule_confirmations 
+       (id, proposal_id, user_id, confirmed_at)
+       VALUES (?, ?, ?, NOW())`,
+      [confirmationId, proposalId, userId]
+    );
+    
+    // 3. Get proposal details
+    const proposal = await query(
+      `SELECT tournament_round_match_id, proposed_by_user_id, status 
+       FROM tournament.match_schedule_proposals WHERE id = ?`,
+      [proposalId]
+    );
+    
+    if (!proposal.rows || !proposal.rows.length) {
+      throw new Error('Proposal not found');
+    }
+    
+    // 4. Check if proposal is now fully confirmed
+    const isFullyConfirmed = await checkProposalFullyConfirmed(
+      proposalId,
+      proposal.rows[0].tournament_round_match_id
+    );
+    
+    if (isFullyConfirmed && proposal.rows[0].status !== 'confirmed') {
+      // 5. Mark proposal and slots as confirmed
+      await query(
+        `UPDATE tournament.match_schedule_proposals SET status = 'confirmed' WHERE id = ?`,
+        [proposalId]
+      );
+      
+      await query(
+        `UPDATE tournament.match_schedule_slots SET status = 'confirmed' WHERE proposal_id = ?`,
+        [proposalId]
+      );
+      
+      // 6. Update tournament_round_matches with first slot datetime
+      const slots = await query(
+        `SELECT slot_datetime FROM tournament.match_schedule_slots 
+         WHERE proposal_id = ? ORDER BY slot_datetime ASC LIMIT 1`,
+        [proposalId]
+      );
+      
+      if (slots.rows && slots.rows.length > 0) {
+        await query(
+          `UPDATE tournament.tournament_round_matches 
+           SET scheduled_datetime = ?, scheduled_status = 'confirmed', scheduled_confirmed_at = NOW()
+           WHERE id = ?`,
+          [slots.rows[0].slot_datetime, proposal.rows[0].tournament_round_match_id]
+        );
+      }
+    }
+    
+    return { success: true, fullyConfirmed: isFullyConfirmed };
+  } catch (error) {
+    console.error('[confirmProposal] Error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Cancel your own confirmation on a proposal
+ * Only allowed if you're the one who confirmed
+ */
+export const cancelConfirmation = async (proposalId: string, userId: string) => {
+  try {
+    // 1. Check that user has confirmed this proposal
+    const confirmation = await query(
+      `SELECT id FROM tournament.match_schedule_confirmations 
+       WHERE proposal_id = ? AND user_id = ?`,
+      [proposalId, userId]
+    );
+    
+    if (!confirmation.rows || !confirmation.rows.length) {
+      throw new Error('User has not confirmed this proposal');
+    }
+    
+    // 2. Delete confirmation
+    await query(
+      `DELETE FROM tournament.match_schedule_confirmations 
+       WHERE proposal_id = ? AND user_id = ?`,
+      [proposalId, userId]
+    );
+    
+    // 3. Get proposal status
+    const proposal = await query(
+      `SELECT status, tournament_round_match_id FROM tournament.match_schedule_proposals WHERE id = ?`,
+      [proposalId]
+    );
+    
+    if (proposal.rows && proposal.rows.length > 0 && proposal.rows[0].status === 'confirmed') {
+      // 4. Reset to pending if was confirmed
+      await query(
+        `UPDATE tournament.match_schedule_proposals SET status = 'pending' WHERE id = ?`,
+        [proposalId]
+      );
+      
+      await query(
+        `UPDATE tournament.match_schedule_slots SET status = 'pending' WHERE proposal_id = ?`,
+        [proposalId]
+      );
+      
+      // 5. Clear tournament_round_matches scheduling
+      await query(
+        `UPDATE tournament.tournament_round_matches 
+         SET scheduled_datetime = NULL, scheduled_status = 'pending', scheduled_confirmed_at = NULL
+         WHERE id = ?`,
+        [proposal.rows[0].tournament_round_match_id]
+      );
+    }
+    
+    return { success: true };
+  } catch (error) {
+    console.error('[cancelConfirmation] Error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Reject proposal and counter-propose with new slots
+ * Only the receiver (not proposer) can do this
+ */
+export const rejectAndCounterPropose = async (
+  proposalId: string,
+  userId: string,
+  newSlotDatetimes: string[],
+  notes?: string
+) => {
+  try {
+    // 1. Validate inputs
+    const validation = validateSlotDatetimes(newSlotDatetimes);
+    if (!validation.valid) {
+      throw new Error(validation.error);
+    }
+    
+    if (notes && notes.length > 500) {
+      throw new Error('Notes cannot exceed 500 characters');
+    }
+    
+    // 2. Get original proposal
+    const original = await query(
+      `SELECT tournament_round_match_id, proposed_by_user_id, tournament_id 
+       FROM tournament.match_schedule_proposals WHERE id = ?`,
+      [proposalId]
+    );
+    
+    if (!original.rows || !original.rows.length) {
+      throw new Error('Proposal not found');
+    }
+    
+    if (original.rows[0].proposed_by_user_id === userId) {
+      throw new Error('Proposer cannot reject their own proposal');
+    }
+    
+    // 3. Mark original as rejected
+    await query(
+      `UPDATE tournament.match_schedule_proposals SET status = 'rejected' WHERE id = ?`,
+      [proposalId]
+    );
+    
+    // 4. Create counter-proposal
+    const counterProposalId = uuidv4();
+    const maxSlotDatetime = new Date(Math.max(...newSlotDatetimes.map(dt => new Date(dt).getTime())));
+    const expiresAt = new Date(maxSlotDatetime.getTime() + 7 * 24 * 60 * 60 * 1000);
+    
+    await query(
+      `INSERT INTO tournament.match_schedule_proposals 
+       (id, tournament_round_match_id, proposed_by_user_id, proposed_at, status, notes, expires_at, user_id)
+       VALUES (?, ?, ?, NOW(), 'pending', ?, ?, ?)`,
+      [
+        counterProposalId,
+        original.rows[0].tournament_round_match_id,
+        userId,
+        notes || null,
+        expiresAt,
+        userId
+      ]
+    );
+    
+    // 5. Create new slots
+    let slotsCreated = 0;
+    for (const dtString of newSlotDatetimes) {
+      const slotId = uuidv4();
+      const roundedDt = roundToNearest30Min(new Date(dtString));
+      
+      const slotResult = await query(
+        `INSERT INTO tournament.match_schedule_slots 
+         (id, proposal_id, slot_datetime, slot_duration_minutes, status)
+         VALUES (?, ?, ?, 30, 'pending')`,
+        [slotId, counterProposalId, roundedDt]
+      );
+      
+      if (slotResult.rowCount) {
+        slotsCreated++;
+      }
+    }
+    
+    return { success: true, counterProposalId, slotsCreated };
+  } catch (error) {
+    console.error('[rejectAndCounterPropose] Error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Modify proposal (only proposer can do this)
+ * Deletes old slots and creates new ones, resets confirmations
+ */
+export const modifyProposal = async (
+  proposalId: string,
+  userId: string,
+  newSlotDatetimes: string[],
+  notes?: string
+) => {
+  try {
+    // 1. Validate inputs
+    const validation = validateSlotDatetimes(newSlotDatetimes);
+    if (!validation.valid) {
+      throw new Error(validation.error);
+    }
+    
+    if (notes && notes.length > 500) {
+      throw new Error('Notes cannot exceed 500 characters');
+    }
+    
+    // 2. Get proposal
+    const proposal = await query(
+      `SELECT proposed_by_user_id, tournament_round_match_id, status 
+       FROM tournament.match_schedule_proposals WHERE id = ?`,
+      [proposalId]
+    );
+    
+    if (!proposal.rows || !proposal.rows.length) {
+      throw new Error('Proposal not found');
+    }
+    
+    if (proposal.rows[0].proposed_by_user_id !== userId) {
+      throw new Error('Only proposer can modify proposal');
+    }
+    
+    // 3. Delete old slots (CASCADE deletes confirmations)
+    await query(
+      `DELETE FROM tournament.match_schedule_slots WHERE proposal_id = ?`,
+      [proposalId]
+    );
+    
+    // 4. Reset proposal status to pending
+    const maxSlotDatetime = new Date(Math.max(...newSlotDatetimes.map(dt => new Date(dt).getTime())));
+    const expiresAt = new Date(maxSlotDatetime.getTime() + 7 * 24 * 60 * 60 * 1000);
+    
+    await query(
+      `UPDATE tournament.match_schedule_proposals 
+       SET status = 'pending', notes = ?, expires_at = ?
+       WHERE id = ?`,
+      [notes || null, expiresAt, proposalId]
+    );
+    
+    // 5. Create new slots
+    let slotsCreated = 0;
+    for (const dtString of newSlotDatetimes) {
+      const slotId = uuidv4();
+      const roundedDt = roundToNearest30Min(new Date(dtString));
+      
+      const slotResult = await query(
+        `INSERT INTO tournament.match_schedule_slots 
+         (id, proposal_id, slot_datetime, slot_duration_minutes, status)
+         VALUES (?, ?, ?, 30, 'pending')`,
+        [slotId, proposalId, roundedDt]
+      );
+      
+      if (slotResult.rowCount) {
+        slotsCreated++;
+      }
+    }
+    
+    // 6. Reset tournament_round_matches
+    await query(
+      `UPDATE tournament.tournament_round_matches 
+       SET scheduled_datetime = NULL, scheduled_status = 'pending', scheduled_confirmed_at = NULL
+       WHERE id = ?`,
+      [proposal.rows[0].tournament_round_match_id]
+    );
+    
+    return { success: true, slotsCreated };
+  } catch (error) {
+    console.error('[modifyProposal] Error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Cancel a proposal (only proposer can do this)
+ */
+export const cancelProposal = async (proposalId: string, userId: string) => {
+  try {
+    // 1. Get proposal
+    const proposal = await query(
+      `SELECT proposed_by_user_id, tournament_round_match_id 
+       FROM tournament.match_schedule_proposals WHERE id = ?`,
+      [proposalId]
+    );
+    
+    if (!proposal.rows || !proposal.rows.length) {
+      throw new Error('Proposal not found');
+    }
+    
+    if (proposal.rows[0].proposed_by_user_id !== userId) {
+      throw new Error('Only proposer can cancel proposal');
+    }
+    
+    // 2. Mark as cancelled
+    await query(
+      `UPDATE tournament.match_schedule_proposals 
+       SET status = 'cancelled', cancelled_at = NOW()
+       WHERE id = ?`,
+      [proposalId]
+    );
+    
+    // 3. Mark slots as cancelled (soft cancel)
+    await query(
+      `UPDATE tournament.match_schedule_slots SET status = 'cancelled' WHERE proposal_id = ?`,
+      [proposalId]
+    );
+    
+    // 4. Reset tournament_round_matches
+    await query(
+      `UPDATE tournament.tournament_round_matches 
+       SET scheduled_datetime = NULL, scheduled_status = 'pending', scheduled_confirmed_at = NULL
+       WHERE id = ?`,
+      [proposal.rows[0].tournament_round_match_id]
+    );
+    
+    return { success: true };
+  } catch (error) {
+    console.error('[cancelProposal] Error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Check if proposal is fully confirmed
+ * 1v1: needs confirmation from the OTHER player
+ * Teams (2v2): needs at least 1 confirmation from the OTHER team
+ */
+export const checkProposalFullyConfirmed = async (
+  proposalId: string,
+  roundMatchId: string
+): Promise<boolean> => {
+  try {
+    // 1. Get match details
+    const match = await query(
+      `SELECT trm.player1_id, trm.player2_id, trm.team1_id, trm.team2_id, t.tournament_mode
+       FROM tournament.tournament_round_matches trm
+       LEFT JOIN tournament.tournaments t ON trm.tournament_id = t.id
+       WHERE trm.id = ?`,
+      [roundMatchId]
+    );
+    
+    if (!match.rows || !match.rows.length) {
+      return false;
+    }
+    
+    const m = match.rows[0];
+    const is2v2 = m.tournament_mode === 'team';
+    
+    // 2. Get proposal proposer
+    const proposal = await query(
+      `SELECT proposed_by_user_id FROM tournament.match_schedule_proposals WHERE id = ?`,
+      [proposalId]
+    );
+    
+    if (!proposal.rows || !proposal.rows.length) {
+      return false;
+    }
+    
+    const proposedByUser = proposal.rows[0].proposed_by_user_id;
+    
+    if (!is2v2) {
+      // 1v1: need OTHER player to confirm
+      const otherPlayer = proposedByUser === m.player1_id ? m.player2_id : m.player1_id;
+      
+      const confirmations = await query(
+        `SELECT COUNT(*) as count FROM tournament.match_schedule_confirmations
+         WHERE proposal_id = ? AND user_id = ?`,
+        [proposalId, otherPlayer]
+      );
+      
+      return confirmations.rows && confirmations.rows[0].count > 0;
+    } else {
+      // 2v2: need at least 1 from the OTHER team
+      const proposerTeam = await query(
+        `SELECT team_id FROM tournament.tournament_participants 
+         WHERE user_id = ? AND tournament_id = (
+           SELECT tournament_id FROM tournament.tournament_round_matches WHERE id = ?
+         )`,
+        [proposedByUser, roundMatchId]
+      );
+      
+      if (!proposerTeam.rows || !proposerTeam.rows.length) {
+        return false;
+      }
+      
+      const proposerTeamId = proposerTeam.rows[0].team_id;
+      const otherTeamId = proposerTeamId === m.team1_id ? m.team2_id : m.team1_id;
+      
+      // Count confirmations from other team
+      const confirmations = await query(
+        `SELECT COUNT(DISTINCT msc.user_id) as count
+         FROM tournament.match_schedule_confirmations msc
+         JOIN tournament.tournament_participants tp ON msc.user_id = tp.user_id
+         WHERE msc.proposal_id = ? AND tp.team_id = ?`,
+        [proposalId, otherTeamId]
+      );
+      
+      return confirmations.rows && confirmations.rows[0].count > 0;
+    }
+  } catch (error) {
+    console.error('[checkProposalFullyConfirmed] Error:', error);
+    return false;
   }
 };

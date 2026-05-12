@@ -9,7 +9,13 @@ import {
   confirmSlots,
   getRoundMatchProposal,
   getMatchProposal,
-  getParticipantsAvailability
+  getParticipantsAvailability,
+  confirmProposal,
+  cancelConfirmation,
+  rejectAndCounterPropose,
+  modifyProposal,
+  cancelProposal,
+  checkProposalFullyConfirmed
 } from '../services/tournamentSchedulingService.js';
 
 const router = Router();
@@ -1494,5 +1500,141 @@ router.get(
     }
   }
 );
+
+// ============================================================================
+// NEW PHASE 2 ENDPOINTS: Proposal confirmation, counter-proposal, etc.
+// ============================================================================
+
+/**
+ * POST /proposals/:proposalId/confirm
+ * Confirm a proposal (proposal-level confirmation)
+ */
+router.post('/proposals/:proposalId/confirm', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { proposalId } = req.params;
+    const userId = req.userId!;
+
+    if (!proposalId) {
+      return res.status(400).json({ error: 'Missing proposalId' });
+    }
+
+    const result = await confirmProposal(proposalId, userId);
+    res.json({ success: true, fullyConfirmed: result.fullyConfirmed });
+  } catch (error) {
+    console.error('❌ [SCHEDULING] Error confirming proposal:', error);
+    res.status(400).json({
+      error: (error as any).message || 'Failed to confirm proposal'
+    });
+  }
+});
+
+/**
+ * POST /proposals/:proposalId/cancel-confirmation
+ * Cancel your own confirmation on a proposal
+ */
+router.post('/proposals/:proposalId/cancel-confirmation', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { proposalId } = req.params;
+    const userId = req.userId!;
+
+    if (!proposalId) {
+      return res.status(400).json({ error: 'Missing proposalId' });
+    }
+
+    await cancelConfirmation(proposalId, userId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ [SCHEDULING] Error cancelling confirmation:', error);
+    res.status(400).json({
+      error: (error as any).message || 'Failed to cancel confirmation'
+    });
+  }
+});
+
+/**
+ * POST /proposals/:proposalId/counter-propose
+ * Reject proposal and make a counter-proposal with new slots
+ */
+router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { proposalId } = req.params;
+    const { slotDatetimes, notes } = req.body;
+    const userId = req.userId!;
+
+    if (!proposalId) {
+      return res.status(400).json({ error: 'Missing proposalId' });
+    }
+
+    if (!Array.isArray(slotDatetimes) || slotDatetimes.length === 0) {
+      return res.status(400).json({ error: 'slotDatetimes must be a non-empty array' });
+    }
+
+    const result = await rejectAndCounterPropose(proposalId, userId, slotDatetimes, notes);
+    res.json({
+      success: true,
+      counterProposalId: result.counterProposalId,
+      slotsCreated: result.slotsCreated
+    });
+  } catch (error) {
+    console.error('❌ [SCHEDULING] Error creating counter-proposal:', error);
+    res.status(400).json({
+      error: (error as any).message || 'Failed to create counter-proposal'
+    });
+  }
+});
+
+/**
+ * PUT /proposals/:proposalId
+ * Modify proposal (only proposer can do this)
+ */
+router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { proposalId } = req.params;
+    const { slotDatetimes, notes } = req.body;
+    const userId = req.userId!;
+
+    if (!proposalId) {
+      return res.status(400).json({ error: 'Missing proposalId' });
+    }
+
+    if (!Array.isArray(slotDatetimes) || slotDatetimes.length === 0) {
+      return res.status(400).json({ error: 'slotDatetimes must be a non-empty array' });
+    }
+
+    const result = await modifyProposal(proposalId, userId, slotDatetimes, notes);
+    res.json({
+      success: true,
+      slotsCreated: result.slotsCreated
+    });
+  } catch (error) {
+    console.error('❌ [SCHEDULING] Error modifying proposal:', error);
+    res.status(400).json({
+      error: (error as any).message || 'Failed to modify proposal'
+    });
+  }
+});
+
+/**
+ * DELETE /proposals/:proposalId
+ * Cancel a proposal (only proposer can do this)
+ */
+router.delete('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { proposalId } = req.params;
+    const userId = req.userId!;
+
+    if (!proposalId) {
+      return res.status(400).json({ error: 'Missing proposalId' });
+    }
+
+    await cancelProposal(proposalId, userId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ [SCHEDULING] Error cancelling proposal:', error);
+    res.status(400).json({
+      error: (error as any).message || 'Failed to cancel proposal'
+    });
+  }
+});
 
 export default router;
