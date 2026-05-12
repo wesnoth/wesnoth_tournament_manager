@@ -469,14 +469,6 @@ const TournamentDetail: React.FC = () => {
         scrollToHour = new Date().getHours();
       }
 
-      setSchedulingData({
-        participants,
-        proposal,
-        viewingTimezone,
-        displayDateStart,
-        scrollToHour
-      });
-
       // Open modal with preloaded data
       setScheduleProposalModal({
         isOpen: true,
