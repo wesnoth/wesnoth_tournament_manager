@@ -66,12 +66,24 @@ export default function ScheduleProposalModal({
   const [displayDateStart, setDisplayDateStart] = useState<Date>(initialDisplayDateStart || new Date());
   const [scrollToHour, setScrollToHour] = useState<number | null>(initialScrollToHour || null);
 
+  console.log('[ScheduleProposalModal] PROPS received:', {
+    isOpen,
+    roundMatchId,
+    matchId,
+    initialParticipants: initialParticipants?.length,
+    initialProposal: initialProposal?.id,
+    initialViewingTimezone,
+    initialDisplayDateStart: initialDisplayDateStart?.toLocaleDateString(),
+    initialScrollToHour
+  });
+
   // For scheduling, always use tournament_round_match_id (roundMatchId) since proposals are tied to tournament_round_matches
   // If roundMatchId is not provided, fallback to matchId (though this shouldn't happen)
   const targetId = roundMatchId || matchId;
   const isRoundMatch = !!roundMatchId;
   
   console.log('[ScheduleProposalModal] targetId:', targetId, 'isRoundMatch:', isRoundMatch, 'roundMatchId:', roundMatchId, 'matchId:', matchId);
+  console.log('[ScheduleProposalModal] Current state - participants:', participants.length, 'proposal:', proposal?.id, 'timezone:', viewingTimezone);
 
   // Initialize mode based on preloaded proposal data
   useEffect(() => {

@@ -272,15 +272,13 @@ const TournamentDetail: React.FC = () => {
     scheduled_datetime?: string;
     scheduled_status?: string;
     scheduled_by_player_id?: string;
+    // Preloaded scheduling data
+    initialParticipants?: any[];
+    initialProposal?: any;
+    initialViewingTimezone?: string;
+    initialDisplayDateStart?: Date;
+    initialScrollToHour?: number | null;
   }>({ isOpen: false });
-
-  const [schedulingData, setSchedulingData] = useState<{
-    participants: any[];
-    proposal: any;
-    viewingTimezone: string;
-    displayDateStart: Date;
-    scrollToHour: number | null;
-  } | null>(null);
   const [isLoadingScheduling, setIsLoadingScheduling] = useState(false);
 
     const [showReplayConfirmModal, setShowReplayConfirmModal] = useState(false);
@@ -479,12 +477,17 @@ const TournamentDetail: React.FC = () => {
         scrollToHour
       });
 
-      // Open modal
+      // Open modal with preloaded data
       setScheduleProposalModal({
         isOpen: true,
         tournamentId: id,
         roundMatchId: isRoundMatch ? roundMatchId : undefined,
-        matchId: !isRoundMatch ? matchId : undefined
+        matchId: !isRoundMatch ? matchId : undefined,
+        initialParticipants: participants,
+        initialProposal: proposal,
+        initialViewingTimezone: viewingTimezone,
+        initialDisplayDateStart: displayDateStart,
+        initialScrollToHour: scrollToHour
       });
     } catch (err) {
       console.error('Error preloading scheduling data:', err);
@@ -2939,18 +2942,14 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
         tournamentId={scheduleProposalModal.tournamentId || id}
         roundMatchId={scheduleProposalModal.roundMatchId}
         matchId={scheduleProposalModal.matchId}
-        initialParticipants={schedulingData?.participants}
-        initialProposal={schedulingData?.proposal}
-        initialViewingTimezone={schedulingData?.viewingTimezone}
-        initialDisplayDateStart={schedulingData?.displayDateStart}
-        initialScrollToHour={schedulingData?.scrollToHour}
-        onClose={() => {
-          setScheduleProposalModal({ isOpen: false });
-          setSchedulingData(null);
-        }}
+        initialParticipants={scheduleProposalModal.initialParticipants}
+        initialProposal={scheduleProposalModal.initialProposal}
+        initialViewingTimezone={scheduleProposalModal.initialViewingTimezone}
+        initialDisplayDateStart={scheduleProposalModal.initialDisplayDateStart}
+        initialScrollToHour={scheduleProposalModal.initialScrollToHour}
+        onClose={() => setScheduleProposalModal({ isOpen: false })}
         onSuccess={() => {
           setScheduleProposalModal({ isOpen: false });
-          setSchedulingData(null);
           fetchTournamentData();
         }}
       />
