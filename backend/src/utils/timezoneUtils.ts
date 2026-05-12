@@ -2,58 +2,21 @@
  * Timezone and availability utilities for scheduling system
  */
 
+import { IANA_TIMEZONES } from '../constants/timezones';
+
 /**
  * List of valid IANA timezones
- * This is a curated list of common timezones
+ * Dynamically fetched from Node.js Intl API, with fallback to complete IANA list
  */
 const VALID_TIMEZONES: string[] = (() => {
   try {
-    return (Intl as any).supportedValuesOf('timeZone') || getDefaultTimezoneList();
+    // Try to get timezones from Node.js runtime
+    return (Intl as any).supportedValuesOf('timeZone') || IANA_TIMEZONES;
   } catch {
-    return getDefaultTimezoneList();
+    // Fallback to complete IANA list
+    return IANA_TIMEZONES;
   }
 })();
-
-function getDefaultTimezoneList(): string[] {
-  return [
-    'UTC',
-    'Europe/Madrid',
-    'Europe/London',
-    'Europe/Paris',
-    'Europe/Berlin',
-    'Europe/Amsterdam',
-    'Europe/Brussels',
-    'Europe/Prague',
-    'Europe/Rome',
-    'Europe/Stockholm',
-    'Europe/Athens',
-    'Europe/Istanbul',
-    'Europe/Moscow',
-    'America/New_York',
-    'America/Chicago',
-    'America/Denver',
-    'America/Los_Angeles',
-    'America/Anchorage',
-    'America/Toronto',
-    'America/Mexico_City',
-    'America/Sao_Paulo',
-    'America/Buenos_Aires',
-    'Asia/Tokyo',
-    'Asia/Shanghai',
-    'Asia/Hong_Kong',
-    'Asia/Singapore',
-    'Asia/Bangkok',
-    'Asia/Dubai',
-    'Asia/Kolkata',
-    'Asia/Bangkok',
-    'Australia/Sydney',
-    'Australia/Melbourne',
-    'Australia/Brisbane',
-    'Pacific/Auckland',
-    'Africa/Cairo',
-    'Africa/Johannesburg',
-  ];
-}
 
 /**
  * Validate IANA timezone string
