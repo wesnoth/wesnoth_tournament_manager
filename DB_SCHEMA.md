@@ -175,6 +175,9 @@ Application-level user profile. One record per forum user who has interacted wit
 | `is_active` | tinyint(1) | 0 | 1 = active in the app |
 | `is_blocked` | tinyint(1) | 0 | 1 = blocked from the app (admin/moderator action; does not affect forum account) |
 | `is_admin` | tinyint(1) | 0 | 1 = site administrator (independent from forum admin/moderator status) |
+| `timezone` | varchar(100) | `'UTC'` | IANA timezone (e.g., `'America/New_York'`, `'Europe/Madrid'`) — for scheduling availability display |
+| `availability_schedule` | longtext | NULL | JSON: `{weekday: {start: "HH:MM", end: "HH:MM"}, ...}` — player's recurring availability for scheduling |
+| `availability_updated_at` | datetime | NULL | When availability was last updated |
 | `enable_ranked` | tinyint(1) | 0 | 1 = player has opted in to ranked ladder matches; required for replays to be counted as ranked |
 | `is_rated` | tinyint(1) | 0 | 1 = has enough games to appear in the ranked leaderboard |
 | `elo_provisional` | tinyint(1) | 0 | 1 = ELO still provisional (fewer than threshold games played) |
