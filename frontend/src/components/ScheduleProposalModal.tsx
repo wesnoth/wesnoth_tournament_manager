@@ -37,7 +37,7 @@ interface ProposalData {
     slot_datetime: string;
     status: string;
   }>;
-  confirmations: Record<string, Array<{ user_id: string; team_id?: string; confirmed_at: string }>>;
+  confirmations: Array<{ user_id: string; confirmed_at: string }>;
 }
 
 export default function ScheduleProposalModal({
@@ -295,11 +295,10 @@ export default function ScheduleProposalModal({
   const proposedSlotDatetimes = proposal?.slots?.map(s => s.slot_datetime) || [];
   const confirmedSlotsMap: Record<string, string[]> = {};
 
-  if (proposal?.confirmations && typeof proposal.confirmations === 'object' && !Array.isArray(proposal.confirmations)) {
-    Object.entries(proposal.confirmations).forEach(([slotId, confirmations]) => {
-      if (Array.isArray(confirmations)) {
-        confirmedSlotsMap[slotId] = confirmations.map((c: any) => c.user_id);
-      }
+  if (proposal?.confirmations && Array.isArray(proposal.confirmations)) {
+    proposal.confirmations.forEach((conf: any) => {
+      // For now, we're not grouping by slot_id since confirmations are proposal-level
+      // This data can be used later if needed for UI display
     });
   }
 

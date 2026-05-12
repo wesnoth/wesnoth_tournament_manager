@@ -655,28 +655,16 @@ export const getRoundMatchProposal = async (roundMatchId: string) => {
     const slots = slotsResult.rows || [];
     console.log('[getRoundMatchProposal] Found', slots.length, 'slots');
 
-    // Get confirmations for the proposal with their slots
+    // Get confirmations for the proposal
     const confirmResult = await query(
-      `SELECT msc.user_id, msc.confirmed_at, msc.slot_id
-       FROM match_schedule_confirmations msc
-       WHERE msc.proposal_id = ?
-       ORDER BY msc.confirmed_at ASC`,
+      `SELECT user_id, confirmed_at
+       FROM match_schedule_confirmations
+       WHERE proposal_id = ?
+       ORDER BY confirmed_at ASC`,
       [proposal.id]
     );
-    const confirmationsArray = confirmResult.rows || [];
-    console.log('[getRoundMatchProposal] Found', confirmationsArray.length, 'confirmations');
-
-    // Group confirmations by slot_id
-    const confirmations: Record<string, Array<{ user_id: string; confirmed_at: string }>> = {};
-    confirmationsArray.forEach((conf: any) => {
-      if (!confirmations[conf.slot_id]) {
-        confirmations[conf.slot_id] = [];
-      }
-      confirmations[conf.slot_id].push({
-        user_id: conf.user_id,
-        confirmed_at: conf.confirmed_at
-      });
-    });
+    const confirmations = confirmResult.rows || [];
+    console.log('[getRoundMatchProposal] Found', confirmations.length, 'confirmations');
 
     return {
       ...proposal,
@@ -725,28 +713,16 @@ export const getMatchProposal = async (matchId: string) => {
     const slots = slotsResult.rows || [];
     console.log('[getMatchProposal] Found', slots.length, 'slots');
 
-    // Get confirmations for the proposal with their slots
+    // Get confirmations for the proposal
     const confirmResult = await query(
-      `SELECT msc.user_id, msc.confirmed_at, msc.slot_id
-       FROM match_schedule_confirmations msc
-       WHERE msc.proposal_id = ?
-       ORDER BY msc.confirmed_at ASC`,
+      `SELECT user_id, confirmed_at
+       FROM match_schedule_confirmations
+       WHERE proposal_id = ?
+       ORDER BY confirmed_at ASC`,
       [proposal.id]
     );
-    const confirmationsArray = confirmResult.rows || [];
-    console.log('[getMatchProposal] Found', confirmationsArray.length, 'confirmations');
-
-    // Group confirmations by slot_id
-    const confirmations: Record<string, Array<{ user_id: string; confirmed_at: string }>> = {};
-    confirmationsArray.forEach((conf: any) => {
-      if (!confirmations[conf.slot_id]) {
-        confirmations[conf.slot_id] = [];
-      }
-      confirmations[conf.slot_id].push({
-        user_id: conf.user_id,
-        confirmed_at: conf.confirmed_at
-      });
-    });
+    const confirmations = confirmResult.rows || [];
+    console.log('[getMatchProposal] Found', confirmations.length, 'confirmations');
 
     return {
       ...proposal,
