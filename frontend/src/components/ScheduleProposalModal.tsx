@@ -85,6 +85,38 @@ export default function ScheduleProposalModal({
   console.log('[ScheduleProposalModal] targetId:', targetId, 'isRoundMatch:', isRoundMatch, 'roundMatchId:', roundMatchId, 'matchId:', matchId);
   console.log('[ScheduleProposalModal] Current state - participants:', participants.length, 'proposal:', proposal?.id, 'timezone:', viewingTimezone);
 
+  // Update state when preloaded data props change
+  useEffect(() => {
+    if (!isOpen) return;
+
+    console.log('[ScheduleProposalModal] useEffect - Updating from initial props');
+    
+    if (initialParticipants) {
+      setParticipants(initialParticipants);
+      console.log('[ScheduleProposalModal] Updated participants:', initialParticipants.length);
+    }
+    
+    if (initialViewingTimezone) {
+      setViewingTimezone(initialViewingTimezone);
+      console.log('[ScheduleProposalModal] Updated timezone:', initialViewingTimezone);
+    }
+    
+    if (initialDisplayDateStart) {
+      setDisplayDateStart(initialDisplayDateStart);
+      console.log('[ScheduleProposalModal] Updated displayDateStart:', initialDisplayDateStart.toLocaleDateString());
+    }
+    
+    if (initialScrollToHour !== null && initialScrollToHour !== undefined) {
+      setScrollToHour(initialScrollToHour);
+      console.log('[ScheduleProposalModal] Updated scrollToHour:', initialScrollToHour);
+    }
+    
+    if (initialProposal) {
+      setProposal(initialProposal);
+      console.log('[ScheduleProposalModal] Updated proposal:', initialProposal.id);
+    }
+  }, [isOpen, initialParticipants, initialProposal, initialViewingTimezone, initialDisplayDateStart, initialScrollToHour]);
+
   // Initialize mode based on preloaded proposal data
   useEffect(() => {
     if (!isOpen) return;
