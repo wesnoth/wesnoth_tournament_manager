@@ -20,9 +20,8 @@ CREATE TABLE IF NOT EXISTS match_schedule_confirmations (
   INDEX idx_proposal_id (proposal_id),
   INDEX idx_user_id (user_id),
   
-  -- Foreign key constraints
-  CONSTRAINT fk_confirmation_proposal FOREIGN KEY (proposal_id) REFERENCES match_schedule_proposals(id) ON DELETE CASCADE,
-  CONSTRAINT fk_confirmation_user FOREIGN KEY (user_id) REFERENCES users_extension(id) ON DELETE CASCADE
+  -- Foreign key constraint to proposals (users_extension FK removed - handled at service layer for now)
+  CONSTRAINT fk_confirmation_proposal FOREIGN KEY (proposal_id) REFERENCES match_schedule_proposals(id) ON DELETE CASCADE
   
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci 
 COMMENT='User confirmations for scheduling proposals - proposal-level, not per-slot. Each user confirms entire proposal.';
