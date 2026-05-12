@@ -54,6 +54,7 @@ export default function ScheduleProposalModal({
   const [notes, setNotes] = useState('');
   const [mode, setMode] = useState<'propose' | 'confirm' | 'counter' | 'edit_proposal'>('propose');
   const [displayDateStart, setDisplayDateStart] = useState<Date>(new Date());
+  const [scrollToHour, setScrollToHour] = useState<number | null>(null);
 
   // For scheduling, always use tournament_round_match_id (roundMatchId) since proposals are tied to tournament_round_matches
   // If roundMatchId is not provided, fallback to matchId (though this shouldn't happen)
@@ -104,9 +105,28 @@ export default function ScheduleProposalModal({
               console.log('[ScheduleProposalModal] Pre-selected proposed slots:', proposedSlotDatetimes.length);
             }
           }
+          
+          // If there's a proposal, set displayDateStart to earliest slot date and calculate scroll position
+          if (proposalRes.proposal.slots && proposalRes.proposal.slots.length > 0) {
+            const sortedSlots = proposalRes.proposal.slots
+              .map(s => new Date(s.slot_datetime))
+              .sort((a, b) => a.getTime() - b.getTime());
+            
+            const earliestSlot = sortedSlots[0];
+            setDisplayDateStart(new Date(earliestSlot.getFullYear(), earliestSlot.getMonth(), earliestSlot.getDate()));
+            setScrollToHour(earliestSlot.getHours());
+            console.log('[ScheduleProposalModal] Set displayDateStart to earliest slot date:', earliestSlot.toLocaleDateString(), 'Hour:', earliestSlot.getHours());
+          } else {
+            // No proposal, use today and current hour
+            const now = new Date();
+            setScrollToHour(now.getHours());
+          }
         } else {
           setMode('propose');
           setSelectedSlots(new Set());
+          // No proposal, use current hour for scroll position
+          const now = new Date();
+          setScrollToHour(now.getHours());
         }
       } catch (err) {
         console.error('Error loading scheduling data:', err);
@@ -342,6 +362,7 @@ export default function ScheduleProposalModal({
                   proposedSlots={proposedSlotDatetimes}
                   confirmedSlots={confirmedSlotsMap}
                   viewingTimezone={viewingTimezone}
+                  scrollToHour={scrollToHour}
                 />
               </div>
 

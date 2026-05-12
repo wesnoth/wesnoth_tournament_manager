@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 interface Participant {
@@ -25,6 +25,7 @@ interface SchedulingFreeBusyGridProps {
   proposedSlots?: string[];
   confirmedSlots?: Record<string, string[]>;
   viewingTimezone?: string;
+  scrollToHour?: number | null;
 }
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -170,9 +171,11 @@ export default function SchedulingFreeBusyGrid({
   readOnly = false,
   proposedSlots = [],
   confirmedSlots = {},
-  viewingTimezone = 'UTC'
+  viewingTimezone = 'UTC',
+  scrollToHour = null
 }: SchedulingFreeBusyGridProps) {
   const { t } = useTranslation();
+  const gridContainerRef = useRef<HTMLDivElement>(null);
 
   const slots = useMemo(() => generateSlots(dateStart, dateEnd, viewingTimezone), [dateStart, dateEnd, viewingTimezone]);
 
@@ -186,6 +189,23 @@ export default function SchedulingFreeBusyGrid({
     });
     return grouped;
   }, [slots]);
+
+  // Scroll to earliest hour if specified
+  useEffect(() => {
+    if (scrollToHour !== null && scrollToHour !== undefined && gridContainerRef.current) {
+      // Calculate the position of the hour in the grid and scroll to it
+      const rowHeight = 30; // Each 30-min slot row height in pixels
+      const hoursToScroll = scrollToHour * 2; // Each hour has 2 slots (30 min each)
+      const scrollPosition = hoursToScroll * rowHeight;
+      
+      // Small delay to ensure DOM is fully rendered
+      setTimeout(() => {
+        if (gridContainerRef.current) {
+          gridContainerRef.current.scrollTop = Math.max(0, scrollPosition - 100);
+        }
+      }, 100);
+    }
+  }, [scrollToHour]);
 
   const getSlotKey = (slot: GridSlot): string => {
     return slotToUTCDatetime(slot, viewingTimezone);
@@ -226,7 +246,7 @@ export default function SchedulingFreeBusyGrid({
       </div>
 
       {/* Grid Container */}
-      <div className="overflow-x-auto border border-gray-200 rounded-lg">
+      <div ref={gridContainerRef} className="overflow-auto border border-gray-200 rounded-lg" style={{ maxHeight: '600px' }}>
         <table className="border-collapse text-xs whitespace-nowrap">
           <thead>
             {/* Day header */}
