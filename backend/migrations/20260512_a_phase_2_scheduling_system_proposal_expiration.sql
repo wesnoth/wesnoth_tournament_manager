@@ -13,7 +13,3 @@ ALTER TABLE match_schedule_proposals
 ADD INDEX IF NOT EXISTS idx_expires_at (expires_at),
 ADD INDEX IF NOT EXISTS idx_cancelled_at (cancelled_at),
 ADD INDEX IF NOT EXISTS idx_user_id (user_id);
-
--- 3. Add foreign key constraint for user_id (separate ALTER to avoid constraint name issues)
-ALTER TABLE match_schedule_proposals
-ADD CONSTRAINT fk_proposal_user_id FOREIGN KEY (user_id) REFERENCES users_extension(id) ON DELETE SET NULL;
