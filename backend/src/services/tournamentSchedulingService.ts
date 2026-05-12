@@ -622,20 +622,26 @@ const checkAllSlotsInProposalConfirmed = async (proposalId: string): Promise<boo
  */
 export const getRoundMatchProposal = async (roundMatchId: string) => {
   try {
-    // Get active proposal
+    console.log('[getRoundMatchProposal] Fetching proposal for roundMatchId:', roundMatchId);
+    
+    // Get active proposal (status can be pending or confirmed)
     const proposalResult = await query(
       `SELECT id, proposed_by_user_id, proposed_at, status, notes
        FROM match_schedule_proposals
-       WHERE tournament_round_match_id = ? AND status = 'active'
+       WHERE tournament_round_match_id = ? AND status IN ('pending', 'confirmed')
        LIMIT 1`,
       [roundMatchId]
     );
 
+    console.log('[getRoundMatchProposal] Query result rows:', proposalResult.rows?.length || 0);
+
     if (!proposalResult.rows || proposalResult.rows.length === 0) {
+      console.log('[getRoundMatchProposal] No proposal found for roundMatchId:', roundMatchId);
       return null;
     }
 
     const proposal = proposalResult.rows[0];
+    console.log('[getRoundMatchProposal] Found proposal:', proposal.id, 'Status:', proposal.status);
 
     // Get slots
     const slotsResult = await query(
@@ -647,6 +653,7 @@ export const getRoundMatchProposal = async (roundMatchId: string) => {
     );
 
     const slots = slotsResult.rows || [];
+    console.log('[getRoundMatchProposal] Found', slots.length, 'slots');
 
     // Get confirmations for the proposal (proposal-level, not per-slot)
     const confirmResult = await query(
@@ -657,6 +664,7 @@ export const getRoundMatchProposal = async (roundMatchId: string) => {
       [proposal.id]
     );
     const confirmations = confirmResult.rows || [];
+    console.log('[getRoundMatchProposal] Found', confirmations.length, 'confirmations');
 
     return {
       ...proposal,
@@ -674,19 +682,25 @@ export const getRoundMatchProposal = async (roundMatchId: string) => {
  */
 export const getMatchProposal = async (matchId: string) => {
   try {
+    console.log('[getMatchProposal] Fetching proposal for matchId:', matchId);
+    
     const proposalResult = await query(
       `SELECT id, proposed_by_user_id, proposed_at, status, notes
        FROM match_schedule_proposals
-       WHERE tournament_match_id = ? AND status = 'active'
+       WHERE tournament_match_id = ? AND status IN ('pending', 'confirmed')
        LIMIT 1`,
       [matchId]
     );
 
+    console.log('[getMatchProposal] Query result rows:', proposalResult.rows?.length || 0);
+
     if (!proposalResult.rows || proposalResult.rows.length === 0) {
+      console.log('[getMatchProposal] No proposal found for matchId:', matchId);
       return null;
     }
 
     const proposal = proposalResult.rows[0];
+    console.log('[getMatchProposal] Found proposal:', proposal.id, 'Status:', proposal.status);
 
     const slotsResult = await query(
       `SELECT id, slot_datetime, status
@@ -697,6 +711,7 @@ export const getMatchProposal = async (matchId: string) => {
     );
 
     const slots = slotsResult.rows || [];
+    console.log('[getMatchProposal] Found', slots.length, 'slots');
 
     // Get confirmations for the proposal (proposal-level, not per-slot)
     const confirmResult = await query(
@@ -707,6 +722,7 @@ export const getMatchProposal = async (matchId: string) => {
       [proposal.id]
     );
     const confirmations = confirmResult.rows || [];
+    console.log('[getMatchProposal] Found', confirmations.length, 'confirmations');
 
     return {
       ...proposal,
