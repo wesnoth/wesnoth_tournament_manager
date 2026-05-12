@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import SchedulingFreeBusyGrid from './SchedulingFreeBusyGrid';
-import { tournamentSchedulingService } from '../services/tournamentSchedulingService';
 import { useAuthStore } from '../store/authStore';
 
 interface ScheduleProposalModalProps {
@@ -9,6 +8,12 @@ interface ScheduleProposalModalProps {
   tournamentId: string;
   roundMatchId?: string;
   matchId?: string;
+  // Preloaded data from parent
+  initialParticipants?: Participant[];
+  initialProposal?: ProposalData | null;
+  initialViewingTimezone?: string;
+  initialDisplayDateStart?: Date;
+  initialScrollToHour?: number | null;
   onClose: () => void;
   onSuccess?: () => void;
 }
@@ -40,6 +45,11 @@ export default function ScheduleProposalModal({
   tournamentId,
   roundMatchId,
   matchId,
+  initialParticipants,
+  initialProposal,
+  initialViewingTimezone,
+  initialDisplayDateStart,
+  initialScrollToHour,
   onClose,
   onSuccess
 }: ScheduleProposalModalProps) {
@@ -47,14 +57,14 @@ export default function ScheduleProposalModal({
   const { userId } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [participants, setParticipants] = useState<Participant[]>([]);
-  const [viewingTimezone, setViewingTimezone] = useState('UTC');
-  const [proposal, setProposal] = useState<ProposalData | null>(null);
-  const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set()); // Always contains datetimes (string ISO)
+  const [participants, setParticipants] = useState<Participant[]>(initialParticipants || []);
+  const [viewingTimezone, setViewingTimezone] = useState(initialViewingTimezone || 'UTC');
+  const [proposal, setProposal] = useState<ProposalData | null>(initialProposal || null);
+  const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState('');
   const [mode, setMode] = useState<'propose' | 'confirm' | 'counter' | 'edit_proposal'>('propose');
-  const [displayDateStart, setDisplayDateStart] = useState<Date>(new Date());
-  const [scrollToHour, setScrollToHour] = useState<number | null>(null);
+  const [displayDateStart, setDisplayDateStart] = useState<Date>(initialDisplayDateStart || new Date());
+  const [scrollToHour, setScrollToHour] = useState<number | null>(initialScrollToHour || null);
 
   // For scheduling, always use tournament_round_match_id (roundMatchId) since proposals are tied to tournament_round_matches
   // If roundMatchId is not provided, fallback to matchId (though this shouldn't happen)
@@ -63,81 +73,32 @@ export default function ScheduleProposalModal({
   
   console.log('[ScheduleProposalModal] targetId:', targetId, 'isRoundMatch:', isRoundMatch, 'roundMatchId:', roundMatchId, 'matchId:', matchId);
 
-  // Load data when modal opens
+  // Initialize mode based on preloaded proposal data
   useEffect(() => {
-    if (!isOpen || !targetId) return;
+    if (!isOpen) return;
 
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        setError('');
-
-        // Load participants availability
-        const availRes = isRoundMatch
-          ? await tournamentSchedulingService.getRoundMatchParticipantsAvailability(tournamentId, targetId)
-          : await tournamentSchedulingService.getMatchParticipantsAvailability(tournamentId, targetId);
-
-        setParticipants(availRes.participants || []);
-        const receivedTimezone = availRes.viewing_timezone || 'UTC';
-        console.log('[ScheduleProposalModal] Received viewing_timezone:', receivedTimezone);
-        setViewingTimezone(receivedTimezone);
-
-        // Load active proposal if exists
-        const proposalRes = isRoundMatch
-          ? await tournamentSchedulingService.getRoundMatchProposal(tournamentId, targetId)
-          : await tournamentSchedulingService.getMatchProposal(tournamentId, targetId);
-
-        if (proposalRes.proposal) {
-          setProposal(proposalRes.proposal);
-          // Check if current user is the proposer
-          console.log('[ScheduleProposalModal] UserId:', userId, 'Proposer:', proposalRes.proposal.proposed_by_user_id);
-          if (userId && proposalRes.proposal.proposed_by_user_id === userId) {
-            console.log('[ScheduleProposalModal] Setting mode to edit_proposal');
-            setMode('edit_proposal');
-            setSelectedSlots(new Set());
-          } else {
-            console.log('[ScheduleProposalModal] Setting mode to confirm');
-            setMode('confirm');
-            // Pre-select proposed slots for opponent to confirm or modify
-            if (proposalRes.proposal.slots) {
-              const proposedSlotDatetimes = proposalRes.proposal.slots.map(s => s.slot_datetime);
-              setSelectedSlots(new Set(proposedSlotDatetimes));
-              console.log('[ScheduleProposalModal] Pre-selected proposed slots:', proposedSlotDatetimes.length);
-            }
-          }
-          
-          // If there's a proposal, set displayDateStart to earliest slot date and calculate scroll position
-          if (proposalRes.proposal.slots && proposalRes.proposal.slots.length > 0) {
-            const sortedSlots = proposalRes.proposal.slots
-              .map(s => new Date(s.slot_datetime))
-              .sort((a, b) => a.getTime() - b.getTime());
-            
-            const earliestSlot = sortedSlots[0];
-            setDisplayDateStart(new Date(earliestSlot.getFullYear(), earliestSlot.getMonth(), earliestSlot.getDate()));
-            setScrollToHour(earliestSlot.getHours());
-            console.log('[ScheduleProposalModal] Set displayDateStart to earliest slot date:', earliestSlot.toLocaleDateString(), 'Hour:', earliestSlot.getHours());
-          } else {
-            // No proposal, use today and current hour
-            const now = new Date();
-            setScrollToHour(now.getHours());
-          }
-        } else {
-          setMode('propose');
-          setSelectedSlots(new Set());
-          // No proposal, use current hour for scroll position
-          const now = new Date();
-          setScrollToHour(now.getHours());
+    if (proposal) {
+      // Check if current user is the proposer
+      console.log('[ScheduleProposalModal] UserId:', userId, 'Proposer:', proposal.proposed_by_user_id);
+      if (userId && proposal.proposed_by_user_id === userId) {
+        console.log('[ScheduleProposalModal] Setting mode to edit_proposal');
+        setMode('edit_proposal');
+        setSelectedSlots(new Set());
+      } else {
+        console.log('[ScheduleProposalModal] Setting mode to confirm');
+        setMode('confirm');
+        // Pre-select proposed slots for opponent to confirm or modify
+        if (proposal.slots) {
+          const proposedSlotDatetimes = proposal.slots.map(s => s.slot_datetime);
+          setSelectedSlots(new Set(proposedSlotDatetimes));
+          console.log('[ScheduleProposalModal] Pre-selected proposed slots:', proposedSlotDatetimes.length);
         }
-      } catch (err) {
-        console.error('Error loading scheduling data:', err);
-        setError('Failed to load scheduling data');
-      } finally {
-        setLoading(false);
       }
-    };
-
-    loadData();
-  }, [isOpen, targetId, tournamentId, isRoundMatch, userId]);
+    } else {
+      setMode('propose');
+      setSelectedSlots(new Set());
+    }
+  }, [isOpen, proposal, userId]);
 
   const handleSlotToggle = (slotDatetime: string, selected: boolean) => {
     const newSelected = new Set(selectedSlots);

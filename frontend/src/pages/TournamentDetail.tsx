@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { publicService, tournamentService, api } from '../services/api';
+import { tournamentSchedulingService } from '../services/tournamentSchedulingService';
 import TournamentForm from '../components/TournamentForm';
 import MatchConfirmationModal from '../components/MatchConfirmationModal';
 import MatchDetailsModal from '../components/MatchDetailsModal';
@@ -273,6 +274,15 @@ const TournamentDetail: React.FC = () => {
     scheduled_by_player_id?: string;
   }>({ isOpen: false });
 
+  const [schedulingData, setSchedulingData] = useState<{
+    participants: any[];
+    proposal: any;
+    viewingTimezone: string;
+    displayDateStart: Date;
+    scrollToHour: number | null;
+  } | null>(null);
+  const [isLoadingScheduling, setIsLoadingScheduling] = useState(false);
+
     const [showReplayConfirmModal, setShowReplayConfirmModal] = useState(false);
   const [selectedTournamentReplay, setSelectedTournamentReplay] = useState<any>(null);
   const [replayModalChoice, setReplayModalChoice] = useState<'I won' | 'I lost' | 'cancel'>('I won');
@@ -396,6 +406,91 @@ const TournamentDetail: React.FC = () => {
       setError(t('error_loading_tournament'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePreloadSchedulingData = async (roundMatchId: string, isRoundMatch: boolean, matchId?: string) => {
+    try {
+      setIsLoadingScheduling(true);
+      const targetId = roundMatchId || matchId;
+
+      // Load participants availability
+      const availRes = isRoundMatch
+        ? await tournamentSchedulingService.getRoundMatchParticipantsAvailability(id!, targetId)
+        : await tournamentSchedulingService.getMatchParticipantsAvailability(id!, targetId);
+
+      const participants = availRes.participants || [];
+      const viewingTimezone = availRes.viewing_timezone || 'UTC';
+
+      // Load active proposal if exists
+      const proposalRes = isRoundMatch
+        ? await tournamentSchedulingService.getRoundMatchProposal(id!, targetId)
+        : await tournamentSchedulingService.getMatchProposal(id!, targetId);
+
+      const proposal = proposalRes.proposal || null;
+
+      // Calculate displayDateStart and scrollToHour
+      let displayDateStart = new Date();
+      let scrollToHour: number | null = null;
+
+      if (proposal && proposal.slots && proposal.slots.length > 0) {
+        // Convert UTC slots to viewing timezone to get correct date and time
+        const sortedSlots = proposal.slots
+          .map((s: any) => new Date(s.slot_datetime))
+          .sort((a: any, b: any) => a.getTime() - b.getTime());
+
+        const earliestSlot = sortedSlots[0];
+
+        // Convert UTC time to viewing timezone
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: viewingTimezone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          hour12: false
+        });
+
+        const parts = formatter.formatToParts(earliestSlot);
+        const year = parseInt(parts.find(p => p.type === 'year')?.value || '2025');
+        const month = parseInt(parts.find(p => p.type === 'month')?.value || '1') - 1;
+        const day = parseInt(parts.find(p => p.type === 'day')?.value || '1');
+        const hour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
+
+        displayDateStart = new Date(year, month, day);
+        scrollToHour = hour;
+
+        console.log('[TournamentDetail] Scheduling data precalculated:', {
+          earliestSlotUTC: earliestSlot.toISOString(),
+          displayDateStart: displayDateStart.toLocaleDateString(),
+          scrollToHour,
+          viewingTimezone
+        });
+      } else {
+        // No proposal, use current time
+        scrollToHour = new Date().getHours();
+      }
+
+      setSchedulingData({
+        participants,
+        proposal,
+        viewingTimezone,
+        displayDateStart,
+        scrollToHour
+      });
+
+      // Open modal
+      setScheduleProposalModal({
+        isOpen: true,
+        tournamentId: id,
+        roundMatchId: isRoundMatch ? roundMatchId : undefined,
+        matchId: !isRoundMatch ? matchId : undefined
+      });
+    } catch (err) {
+      console.error('Error preloading scheduling data:', err);
+      setError('Failed to load scheduling data');
+    } finally {
+      setIsLoadingScheduling(false);
     }
   };
 
@@ -2362,17 +2457,8 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                             <div className="flex flex-col gap-1">
                                               <button
                                                 className="px-3 py-1 bg-green-500 text-white rounded text-xs font-semibold hover:bg-green-600 transition-colors whitespace-nowrap"
-                                                onClick={() => setScheduleProposalModal({ 
-                                                  isOpen: true,
-                                                   tournamentId: id,
-                                                   roundMatchId: match.tournament_round_match_id || match.id,
-                                                  matchId: undefined,
-                                                  player1_nickname: match.player1_nickname,
-                                                  player2_nickname: match.player2_nickname,
-                                                  scheduled_datetime: match.scheduled_datetime,
-                                                  scheduled_status: match.scheduled_status,
-                                                  scheduled_by_player_id: match.scheduled_by_player_id
-                                                })}
+                                                onClick={() => handlePreloadSchedulingData(match.tournament_round_match_id || match.id, true)}
+                                                disabled={isLoadingScheduling}
                                                 title="Click to reschedule the match"
                                               >
                                                 ✅ Confirmed
@@ -2397,17 +2483,8 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                             <div className="flex flex-col gap-1">
                                               <button
                                                 className="px-3 py-1 bg-purple-500 text-white rounded text-xs font-semibold hover:bg-purple-600 transition-colors whitespace-nowrap"
-                                                onClick={() => setScheduleProposalModal({ 
-                                                  isOpen: true,
-                                                   tournamentId: id,
-                                                   roundMatchId: match.tournament_round_match_id || match.id,
-                                                  matchId: undefined,
-                                                  player1_nickname: match.player1_nickname,
-                                                  player2_nickname: match.player2_nickname,
-                                                  scheduled_datetime: match.scheduled_datetime,
-                                                  scheduled_status: match.scheduled_status,
-                                                  scheduled_by_player_id: match.scheduled_by_player_id
-                                                })}
+                                                onClick={() => handlePreloadSchedulingData(match.tournament_round_match_id || match.id, true)}
+                                                disabled={isLoadingScheduling}
                                                 title={schedStatus.isUserProposer ? 'View proposed schedule' : 'Confirm opponent proposal'}
                                               >
                                                 {schedStatus.isUserProposer ? '⏳ Awaiting Confirmation' : '✋ Awaiting Your Confirmation'}
@@ -2431,16 +2508,8 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                         return (
                                           <button
                                             className="px-3 py-1 bg-purple-500 text-white rounded text-xs font-semibold hover:bg-purple-600 transition-colors whitespace-nowrap"
-                                            onClick={() => setScheduleProposalModal({ 
-                                              isOpen: true,
-                                                   tournamentId: id,
-                                                   roundMatchId: match.id,
-                                              player1_nickname: match.player1_nickname,
-                                              player2_nickname: match.player2_nickname,
-                                              scheduled_datetime: match.scheduled_datetime,
-                                              scheduled_status: match.scheduled_status,
-                                              scheduled_by_player_id: match.scheduled_by_player_id
-                                            })}
+                                            onClick={() => handlePreloadSchedulingData(match.id, true)}
+                                            disabled={isLoadingScheduling}
                                             title="Schedule or view match time"
                                           >
                                             🗓️ Schedule
@@ -2870,9 +2939,18 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
         tournamentId={scheduleProposalModal.tournamentId || id}
         roundMatchId={scheduleProposalModal.roundMatchId}
         matchId={scheduleProposalModal.matchId}
-        onClose={() => setScheduleProposalModal({ isOpen: false })}
+        initialParticipants={schedulingData?.participants}
+        initialProposal={schedulingData?.proposal}
+        initialViewingTimezone={schedulingData?.viewingTimezone}
+        initialDisplayDateStart={schedulingData?.displayDateStart}
+        initialScrollToHour={schedulingData?.scrollToHour}
+        onClose={() => {
+          setScheduleProposalModal({ isOpen: false });
+          setSchedulingData(null);
+        }}
         onSuccess={() => {
           setScheduleProposalModal({ isOpen: false });
+          setSchedulingData(null);
           fetchTournamentData();
         }}
       />
