@@ -331,7 +331,7 @@ export const createRoundMatchProposal = async (
 
   // 1. Mark any previous active proposals as superseded
   await query(
-    `UPDATE tournament.match_schedule_proposals 
+    `UPDATE match_schedule_proposals 
      SET status = 'superseded' 
      WHERE tournament_round_match_id = ? AND status = 'active' AND proposed_by_user_id = ?`,
     [tournamentRoundMatchId, proposedByUserId]
@@ -343,7 +343,7 @@ export const createRoundMatchProposal = async (
 
   // 3. Create new proposal
   const result = await query(
-    `INSERT INTO tournament.match_schedule_proposals 
+    `INSERT INTO match_schedule_proposals 
       (id, tournament_round_match_id, proposed_by_user_id, proposed_at, status, notes, expires_at, user_id)
      VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)`,
     [proposalId, tournamentRoundMatchId, proposedByUserId, now, notes || null, expiresAt, proposedByUserId]
@@ -361,7 +361,7 @@ export const createRoundMatchProposal = async (
     const roundedDt = roundToNearest30Min(new Date(dtString));
     
     const slotResult = await query(
-      `INSERT INTO tournament.match_schedule_slots 
+      `INSERT INTO match_schedule_slots 
         (id, proposal_id, slot_datetime, slot_duration_minutes, status)
        VALUES (?, ?, ?, 30, 'pending')`,
       [slotId, proposalId, roundedDt]
@@ -378,7 +378,7 @@ export const createRoundMatchProposal = async (
     const confirmationId = uuidv4();
     try {
       await query(
-        `INSERT INTO tournament.match_schedule_confirmations 
+        `INSERT INTO match_schedule_confirmations 
           (id, proposal_id, user_id, confirmed_at)
          VALUES (?, ?, ?, NOW())`,
         [confirmationId, proposalId, proposedByUserId]
@@ -458,7 +458,7 @@ export const createMatchProposal = async (
 
   // 1. Mark previous active proposals as superseded
   await query(
-    `UPDATE tournament.match_schedule_proposals 
+    `UPDATE match_schedule_proposals 
      SET status = 'superseded' 
      WHERE tournament_match_id = ? AND status = 'active' AND proposed_by_user_id = ?`,
     [tournamentMatchId, proposedByUserId]
@@ -470,7 +470,7 @@ export const createMatchProposal = async (
 
   // 3. Create proposal (proponent doesn't auto-confirm, just creates it)
   const result = await query(
-    `INSERT INTO tournament.match_schedule_proposals 
+    `INSERT INTO match_schedule_proposals 
       (id, tournament_match_id, proposed_by_user_id, proposed_at, status, notes, expires_at, user_id)
      VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)`,
     [proposalId, tournamentMatchId, proposedByUserId, now, notes || null, expiresAt, proposedByUserId]
@@ -488,7 +488,7 @@ export const createMatchProposal = async (
     const roundedDt = roundToNearest30Min(new Date(dtString));
     
     const slotResult = await query(
-      `INSERT INTO tournament.match_schedule_slots 
+      `INSERT INTO match_schedule_slots 
         (id, proposal_id, slot_datetime, slot_duration_minutes, status)
        VALUES (?, ?, ?, 30, 'pending')`,
       [slotId, proposalId, roundedDt]
@@ -883,7 +883,7 @@ export const confirmProposal = async (proposalId: string, userId: string) => {
   try {
     // 1. Check if user already confirmed
     const existing = await query(
-      `SELECT id FROM tournament.match_schedule_confirmations 
+      `SELECT id FROM match_schedule_confirmations 
        WHERE proposal_id = ? AND user_id = ?`,
       [proposalId, userId]
     );
@@ -895,7 +895,7 @@ export const confirmProposal = async (proposalId: string, userId: string) => {
     // 2. Insert confirmation
     const confirmationId = uuidv4();
     await query(
-      `INSERT INTO tournament.match_schedule_confirmations 
+      `INSERT INTO match_schedule_confirmations 
        (id, proposal_id, user_id, confirmed_at)
        VALUES (?, ?, ?, NOW())`,
       [confirmationId, proposalId, userId]
@@ -904,7 +904,7 @@ export const confirmProposal = async (proposalId: string, userId: string) => {
     // 3. Get proposal details
     const proposal = await query(
       `SELECT tournament_round_match_id, proposed_by_user_id, status 
-       FROM tournament.match_schedule_proposals WHERE id = ?`,
+       FROM match_schedule_proposals WHERE id = ?`,
       [proposalId]
     );
     
@@ -921,25 +921,25 @@ export const confirmProposal = async (proposalId: string, userId: string) => {
     if (isFullyConfirmed && proposal.rows[0].status !== 'confirmed') {
       // 5. Mark proposal and slots as confirmed
       await query(
-        `UPDATE tournament.match_schedule_proposals SET status = 'confirmed' WHERE id = ?`,
+        `UPDATE match_schedule_proposals SET status = 'confirmed' WHERE id = ?`,
         [proposalId]
       );
       
       await query(
-        `UPDATE tournament.match_schedule_slots SET status = 'confirmed' WHERE proposal_id = ?`,
+        `UPDATE match_schedule_slots SET status = 'confirmed' WHERE proposal_id = ?`,
         [proposalId]
       );
       
       // 6. Update tournament_round_matches with first slot datetime
       const slots = await query(
-        `SELECT slot_datetime FROM tournament.match_schedule_slots 
+        `SELECT slot_datetime FROM match_schedule_slots 
          WHERE proposal_id = ? ORDER BY slot_datetime ASC LIMIT 1`,
         [proposalId]
       );
       
       if (slots.rows && slots.rows.length > 0) {
         await query(
-          `UPDATE tournament.tournament_round_matches 
+          `UPDATE tournament_round_matches 
            SET scheduled_datetime = ?, scheduled_status = 'confirmed', scheduled_confirmed_at = NOW()
            WHERE id = ?`,
           [slots.rows[0].slot_datetime, proposal.rows[0].tournament_round_match_id]
@@ -962,7 +962,7 @@ export const cancelConfirmation = async (proposalId: string, userId: string) => 
   try {
     // 1. Check that user has confirmed this proposal
     const confirmation = await query(
-      `SELECT id FROM tournament.match_schedule_confirmations 
+      `SELECT id FROM match_schedule_confirmations 
        WHERE proposal_id = ? AND user_id = ?`,
       [proposalId, userId]
     );
@@ -973,32 +973,32 @@ export const cancelConfirmation = async (proposalId: string, userId: string) => 
     
     // 2. Delete confirmation
     await query(
-      `DELETE FROM tournament.match_schedule_confirmations 
+      `DELETE FROM match_schedule_confirmations 
        WHERE proposal_id = ? AND user_id = ?`,
       [proposalId, userId]
     );
     
     // 3. Get proposal status
     const proposal = await query(
-      `SELECT status, tournament_round_match_id FROM tournament.match_schedule_proposals WHERE id = ?`,
+      `SELECT status, tournament_round_match_id FROM match_schedule_proposals WHERE id = ?`,
       [proposalId]
     );
     
     if (proposal.rows && proposal.rows.length > 0 && proposal.rows[0].status === 'confirmed') {
       // 4. Reset to pending if was confirmed
       await query(
-        `UPDATE tournament.match_schedule_proposals SET status = 'pending' WHERE id = ?`,
+        `UPDATE match_schedule_proposals SET status = 'pending' WHERE id = ?`,
         [proposalId]
       );
       
       await query(
-        `UPDATE tournament.match_schedule_slots SET status = 'pending' WHERE proposal_id = ?`,
+        `UPDATE match_schedule_slots SET status = 'pending' WHERE proposal_id = ?`,
         [proposalId]
       );
       
       // 5. Clear tournament_round_matches scheduling
       await query(
-        `UPDATE tournament.tournament_round_matches 
+        `UPDATE tournament_round_matches 
          SET scheduled_datetime = NULL, scheduled_status = 'pending', scheduled_confirmed_at = NULL
          WHERE id = ?`,
         [proposal.rows[0].tournament_round_match_id]
@@ -1036,7 +1036,7 @@ export const rejectAndCounterPropose = async (
     // 2. Get original proposal
     const original = await query(
       `SELECT tournament_round_match_id, proposed_by_user_id, tournament_id 
-       FROM tournament.match_schedule_proposals WHERE id = ?`,
+       FROM match_schedule_proposals WHERE id = ?`,
       [proposalId]
     );
     
@@ -1050,7 +1050,7 @@ export const rejectAndCounterPropose = async (
     
     // 3. Mark original as rejected
     await query(
-      `UPDATE tournament.match_schedule_proposals SET status = 'rejected' WHERE id = ?`,
+      `UPDATE match_schedule_proposals SET status = 'rejected' WHERE id = ?`,
       [proposalId]
     );
     
@@ -1060,7 +1060,7 @@ export const rejectAndCounterPropose = async (
     const expiresAt = new Date(maxSlotDatetime.getTime() + 7 * 24 * 60 * 60 * 1000);
     
     await query(
-      `INSERT INTO tournament.match_schedule_proposals 
+      `INSERT INTO match_schedule_proposals 
        (id, tournament_round_match_id, proposed_by_user_id, proposed_at, status, notes, expires_at, user_id)
        VALUES (?, ?, ?, NOW(), 'pending', ?, ?, ?)`,
       [
@@ -1080,7 +1080,7 @@ export const rejectAndCounterPropose = async (
       const roundedDt = roundToNearest30Min(new Date(dtString));
       
       const slotResult = await query(
-        `INSERT INTO tournament.match_schedule_slots 
+        `INSERT INTO match_schedule_slots 
          (id, proposal_id, slot_datetime, slot_duration_minutes, status)
          VALUES (?, ?, ?, 30, 'pending')`,
         [slotId, counterProposalId, roundedDt]
@@ -1122,7 +1122,7 @@ export const modifyProposal = async (
     // 2. Get proposal
     const proposal = await query(
       `SELECT proposed_by_user_id, tournament_round_match_id, status 
-       FROM tournament.match_schedule_proposals WHERE id = ?`,
+       FROM match_schedule_proposals WHERE id = ?`,
       [proposalId]
     );
     
@@ -1136,7 +1136,7 @@ export const modifyProposal = async (
     
     // 3. Delete old slots (CASCADE deletes confirmations)
     await query(
-      `DELETE FROM tournament.match_schedule_slots WHERE proposal_id = ?`,
+      `DELETE FROM match_schedule_slots WHERE proposal_id = ?`,
       [proposalId]
     );
     
@@ -1145,7 +1145,7 @@ export const modifyProposal = async (
     const expiresAt = new Date(maxSlotDatetime.getTime() + 7 * 24 * 60 * 60 * 1000);
     
     await query(
-      `UPDATE tournament.match_schedule_proposals 
+      `UPDATE match_schedule_proposals 
        SET status = 'pending', notes = ?, expires_at = ?
        WHERE id = ?`,
       [notes || null, expiresAt, proposalId]
@@ -1158,7 +1158,7 @@ export const modifyProposal = async (
       const roundedDt = roundToNearest30Min(new Date(dtString));
       
       const slotResult = await query(
-        `INSERT INTO tournament.match_schedule_slots 
+        `INSERT INTO match_schedule_slots 
          (id, proposal_id, slot_datetime, slot_duration_minutes, status)
          VALUES (?, ?, ?, 30, 'pending')`,
         [slotId, proposalId, roundedDt]
@@ -1171,7 +1171,7 @@ export const modifyProposal = async (
     
     // 6. Reset tournament_round_matches
     await query(
-      `UPDATE tournament.tournament_round_matches 
+      `UPDATE tournament_round_matches 
        SET scheduled_datetime = NULL, scheduled_status = 'pending', scheduled_confirmed_at = NULL
        WHERE id = ?`,
       [proposal.rows[0].tournament_round_match_id]
@@ -1192,7 +1192,7 @@ export const cancelProposal = async (proposalId: string, userId: string) => {
     // 1. Get proposal
     const proposal = await query(
       `SELECT proposed_by_user_id, tournament_round_match_id 
-       FROM tournament.match_schedule_proposals WHERE id = ?`,
+       FROM match_schedule_proposals WHERE id = ?`,
       [proposalId]
     );
     
@@ -1206,7 +1206,7 @@ export const cancelProposal = async (proposalId: string, userId: string) => {
     
     // 2. Mark as cancelled
     await query(
-      `UPDATE tournament.match_schedule_proposals 
+      `UPDATE match_schedule_proposals 
        SET status = 'cancelled', cancelled_at = NOW()
        WHERE id = ?`,
       [proposalId]
@@ -1214,13 +1214,13 @@ export const cancelProposal = async (proposalId: string, userId: string) => {
     
     // 3. Mark slots as cancelled (soft cancel)
     await query(
-      `UPDATE tournament.match_schedule_slots SET status = 'cancelled' WHERE proposal_id = ?`,
+      `UPDATE match_schedule_slots SET status = 'cancelled' WHERE proposal_id = ?`,
       [proposalId]
     );
     
     // 4. Reset tournament_round_matches
     await query(
-      `UPDATE tournament.tournament_round_matches 
+      `UPDATE tournament_round_matches 
        SET scheduled_datetime = NULL, scheduled_status = 'pending', scheduled_confirmed_at = NULL
        WHERE id = ?`,
       [proposal.rows[0].tournament_round_match_id]
@@ -1246,7 +1246,7 @@ export const checkProposalFullyConfirmed = async (
     // 1. Get match details
     const match = await query(
       `SELECT trm.player1_id, trm.player2_id, trm.team1_id, trm.team2_id, t.tournament_mode
-       FROM tournament.tournament_round_matches trm
+       FROM tournament_round_matches trm
        LEFT JOIN tournament.tournaments t ON trm.tournament_id = t.id
        WHERE trm.id = ?`,
       [roundMatchId]
@@ -1261,7 +1261,7 @@ export const checkProposalFullyConfirmed = async (
     
     // 2. Get proposal proposer
     const proposal = await query(
-      `SELECT proposed_by_user_id FROM tournament.match_schedule_proposals WHERE id = ?`,
+      `SELECT proposed_by_user_id FROM match_schedule_proposals WHERE id = ?`,
       [proposalId]
     );
     
@@ -1276,7 +1276,7 @@ export const checkProposalFullyConfirmed = async (
       const otherPlayer = proposedByUser === m.player1_id ? m.player2_id : m.player1_id;
       
       const confirmations = await query(
-        `SELECT COUNT(*) as count FROM tournament.match_schedule_confirmations
+        `SELECT COUNT(*) as count FROM match_schedule_confirmations
          WHERE proposal_id = ? AND user_id = ?`,
         [proposalId, otherPlayer]
       );
@@ -1285,9 +1285,9 @@ export const checkProposalFullyConfirmed = async (
     } else {
       // 2v2: need at least 1 from the OTHER team
       const proposerTeam = await query(
-        `SELECT team_id FROM tournament.tournament_participants 
+        `SELECT team_id FROM tournament_participants 
          WHERE user_id = ? AND tournament_id = (
-           SELECT tournament_id FROM tournament.tournament_round_matches WHERE id = ?
+           SELECT tournament_id FROM tournament_round_matches WHERE id = ?
          )`,
         [proposedByUser, roundMatchId]
       );
@@ -1302,7 +1302,7 @@ export const checkProposalFullyConfirmed = async (
       // Count confirmations from other team
       const confirmations = await query(
         `SELECT COUNT(DISTINCT msc.user_id) as count
-         FROM tournament.match_schedule_confirmations msc
+         FROM match_schedule_confirmations msc
          JOIN tournament.tournament_participants tp ON msc.user_id = tp.user_id
          WHERE msc.proposal_id = ? AND tp.team_id = ?`,
         [proposalId, otherTeamId]
