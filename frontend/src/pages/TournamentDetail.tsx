@@ -280,6 +280,7 @@ const TournamentDetail: React.FC = () => {
     initialScrollToHour?: number | null;
   }>({ isOpen: false });
   const [isLoadingScheduling, setIsLoadingScheduling] = useState(false);
+  const [proposalCache, setProposalCache] = useState<Record<string, any>>({});
 
     const [showReplayConfirmModal, setShowReplayConfirmModal] = useState(false);
   const [selectedTournamentReplay, setSelectedTournamentReplay] = useState<any>(null);
@@ -426,6 +427,25 @@ const TournamentDetail: React.FC = () => {
         : await tournamentSchedulingService.getMatchProposal(id!, targetId);
 
       const proposal = proposalRes.proposal || null;
+
+      // Cache the proposal for display
+      if (proposal) {
+        const cacheKey = targetId;
+        let displaySlots: any[] = [];
+         
+        if (proposal.status === 'pending') {
+          displaySlots = proposal.slots?.filter((s: any) => s.status === 'pending') || [];
+        } else if (proposal.status === 'confirmed') {
+          displaySlots = proposal.slots?.filter((s: any) => s.status === 'confirmed') || [];
+        }
+         
+        const cachedProposal = {
+          ...proposal,
+          displaySlots,
+          allSlots: proposal.slots || []
+        };
+        setProposalCache(prev => ({ ...prev, [cacheKey]: cachedProposal }));
+      }
 
       // Calculate displayDateStart and scrollToHour
       let displayDateStart = new Date();
@@ -1078,6 +1098,93 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
   const loadAllMatchSchedules = async (matchIds: string[]) => {
     // This function is now deprecated - schedule data is included in roundMatches
     console.log('📌 Schedule data now included in round-matches endpoint, no separate requests needed');
+  };
+
+  // Helper to get proposal and filter slots based on proposal status
+  const getProposalWithSlots = async (matchId: string, roundMatchId?: string) => {
+    try {
+      const cacheKey = roundMatchId || matchId;
+      
+      // Check cache first
+      if (proposalCache[cacheKey]) {
+        return proposalCache[cacheKey];
+      }
+
+      // Fetch from API
+      const proposalRes = roundMatchId
+        ? await tournamentSchedulingService.getRoundMatchProposal(tournament?.id || id!, roundMatchId)
+        : await tournamentSchedulingService.getMatchProposal(tournament?.id || id!, matchId);
+
+      const proposal = proposalRes.proposal;
+      if (!proposal) return null;
+
+      // Filter slots based on proposal status
+      let displaySlots: any[] = [];
+      if (proposal.status === 'pending') {
+        // Show only pending slots
+        displaySlots = proposal.slots?.filter((s: any) => s.status === 'pending') || [];
+      } else if (proposal.status === 'confirmed') {
+        // Show only confirmed slots
+        displaySlots = proposal.slots?.filter((s: any) => s.status === 'confirmed') || [];
+      } else if (proposal.status === 'rejected') {
+        // Don't show rejected proposals
+        displaySlots = [];
+      }
+
+      const proposalData = {
+        ...proposal,
+        displaySlots,
+        allSlots: proposal.slots || []
+      };
+
+      // Cache it
+      setProposalCache(prev => ({ ...prev, [cacheKey]: proposalData }));
+      return proposalData;
+    } catch (err) {
+      console.error('Error loading proposal with slots:', err);
+      return null;
+    }
+  };
+
+  // Helper to render schedule slots for a match
+  const renderScheduleSlots = (proposal: any) => {
+    if (!proposal || !proposal.displaySlots || proposal.displaySlots.length === 0) {
+      return null;
+    }
+
+    const slots = proposal.displaySlots;
+    if (slots.length === 1) {
+      // Single slot - just show datetime
+      return (
+        <span className="text-xs text-gray-600">
+          {new Date(slots[0].slot_datetime).toLocaleString('es-ES', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+          })}
+        </span>
+      );
+    }
+
+    // Multiple slots - show all times
+    return (
+      <div className="flex flex-col gap-1">
+        {slots.map((slot: any, idx: number) => (
+          <span key={idx} className="text-xs text-gray-600">
+            {new Date(slot.slot_datetime).toLocaleString('es-ES', {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+            {slot.status === 'confirmed' && <span className="ml-1 text-green-600">✓</span>}
+          </span>
+        ))}
+      </div>
+    );
   };
 
   const handleRenameTeam = async () => {
@@ -2450,6 +2557,9 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                        const schedStatus = getScheduleStatus(match);
                                         
                                         if (schedStatus.status === 'confirmed') {
+                                          const cacheKey = match.tournament_round_match_id || match.id;
+                                          const cachedProposal = proposalCache[cacheKey];
+                                           
                                           return (
                                             <div className="flex flex-col gap-1">
                                               <button
@@ -2460,7 +2570,8 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                               >
                                                 ✅ Confirmed
                                               </button>
-                                              {schedStatus.datetime && (
+                                              {cachedProposal && renderScheduleSlots(cachedProposal)}
+                                              {!cachedProposal && schedStatus.datetime && (
                                                 <span className="text-xs text-gray-600">
                                                   {new Date(schedStatus.datetime).toLocaleString('es-ES', {
                                                     year: 'numeric',
@@ -2474,8 +2585,11 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                             </div>
                                           );
                                         }
-                                        
+                                         
                                         if (schedStatus.status === 'awaiting_confirmation') {
+                                          const cacheKey = match.tournament_round_match_id || match.id;
+                                          const cachedProposal = proposalCache[cacheKey];
+                                           
                                           return (
                                             <div className="flex flex-col gap-1">
                                               <button
@@ -2486,7 +2600,8 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                               >
                                                 {schedStatus.isUserProposer ? '⏳ Awaiting Confirmation' : '✋ Awaiting Your Confirmation'}
                                               </button>
-                                              {schedStatus.datetime && (
+                                              {cachedProposal && renderScheduleSlots(cachedProposal)}
+                                              {!cachedProposal && schedStatus.datetime && (
                                                 <span className="text-xs text-orange-600">
                                                   {new Date(schedStatus.datetime).toLocaleString('es-ES', {
                                                     year: 'numeric',
