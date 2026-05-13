@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import SchedulingFreeBusyGrid from './SchedulingFreeBusyGrid';
 import { useAuthStore } from '../store/authStore';
@@ -326,6 +326,22 @@ export default function ScheduleProposalModal({
     }
   };
 
+  // Memoize formatted slot data to avoid expensive date calculations on every render
+  const formattedSlots = useMemo(() => {
+    if (!proposal?.slots) return [];
+    
+    return proposal.slots.map(slot => ({
+      id: slot.id,
+      dateStr: new Date(slot.slot_datetime).toLocaleDateString(),
+      timeStr: new Date(slot.slot_datetime).toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        hour12: true 
+      }),
+      status: slot.status
+    }));
+  }, [proposal?.slots]);
+
   if (!isOpen) return null;
 
   const dateEnd = new Date(displayDateStart);
@@ -480,16 +496,14 @@ export default function ScheduleProposalModal({
                   </div>
                    
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                    {proposal.slots.map((slot) => {
-                      const isConfirmed = confirmedSlotIds.has(slot.id);
-                      const slotDate = new Date(slot.slot_datetime);
-                      const dateStr = slotDate.toLocaleDateString();
-                      const timeStr = slotDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-                       
+                    {formattedSlots.map((formatted, idx) => {
+                      const slot = proposal.slots[idx];
+                      const isConfirmed = confirmedSlotIds.has(formatted.id);
+                        
                       return (
                         <button
-                          key={slot.id}
-                          onClick={() => handleConfirmationSlotToggle(slot.id)}
+                          key={formatted.id}
+                          onClick={() => handleConfirmationSlotToggle(formatted.id)}
                           disabled={loading}
                           className={`p-3 rounded border-2 transition-all text-left ${
                             isConfirmed
@@ -505,9 +519,9 @@ export default function ScheduleProposalModal({
                               className="w-4 h-4"
                             />
                             <div className="flex-1 min-w-0">
-                              <div className="font-semibold text-sm">{dateStr}</div>
-                              <div className="text-xs">{timeStr}</div>
-                              <div className="text-xs opacity-75 capitalize">{slot.status}</div>
+                              <div className="font-semibold text-sm">{formatted.dateStr}</div>
+                              <div className="text-xs">{formatted.timeStr}</div>
+                              <div className="text-xs opacity-75 capitalize">{formatted.status}</div>
                             </div>
                           </div>
                         </button>

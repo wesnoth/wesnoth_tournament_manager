@@ -254,10 +254,6 @@ export const validateSlotDatetimes = (
     return { valid: false, error: 'At least one slot datetime required' };
   }
 
-  if (datetimes.length > 10) {
-    return { valid: false, error: 'Maximum 10 slots per proposal' };
-  }
-
   for (const dt of datetimes) {
     const dateObj = new Date(dt);
     if (isNaN(dateObj.getTime())) {
