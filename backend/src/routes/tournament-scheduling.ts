@@ -10,6 +10,7 @@ import {
   getMatchProposal,
   getParticipantsAvailability,
   confirmProposal,
+  confirmPartialSlots,
   cancelConfirmation,
   rejectAndCounterPropose,
   modifyProposal,
@@ -1141,8 +1142,8 @@ router.post(
 
 /**
  * POST /api/tournament/:tournamentId/round-match/:roundMatchId/confirm-slots
- * Confirm (accept) an existing proposal for a round match
- * All proposed slots are confirmed in one action
+ * Confirm (accept) an existing proposal for a round match with partial slot selection
+ * Can select which slots to confirm from the proposed set
  */
 router.post(
   '/tournament/:tournamentId/round-match/:roundMatchId/confirm-slots',
@@ -1150,7 +1151,7 @@ router.post(
   async (req: AuthRequest, res: Response) => {
     try {
       const { roundMatchId, tournamentId } = req.params;
-      const { proposal_id } = req.body;
+     const { proposal_id, confirmed_slot_ids } = req.body;
       const userId = req.userId;
 
       if (!userId || !roundMatchId || !proposal_id) {
@@ -1159,68 +1160,76 @@ router.post(
         });
       }
 
-      // Verify user is a participant in this match
-      const matchResult = await query(
-        `SELECT trm.player1_id, trm.player2_id, t.tournament_mode 
-         FROM tournament_round_matches trm
-         JOIN tournaments t ON t.id = trm.tournament_id
-         WHERE trm.id = ? AND trm.tournament_id = ?`,
-        [roundMatchId, tournamentId]
-      );
+     // Validate confirmed_slot_ids is an array (can be empty to reject all)
+     if (!Array.isArray(confirmed_slot_ids)) {
+       return res.status(400).json({
+         error: 'confirmed_slot_ids must be an array of slot IDs'
+       });
+     }
 
-      if (!matchResult.rows || matchResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Match not found' });
-      }
+     // Verify user is a participant in this match
+     const matchResult = await query(
+       `SELECT trm.player1_id, trm.player2_id, t.tournament_mode 
+        FROM tournament_round_matches trm
+        JOIN tournaments t ON t.id = trm.tournament_id
+        WHERE trm.id = ? AND trm.tournament_id = ?`,
+       [roundMatchId, tournamentId]
+     );
 
-      const match = matchResult.rows[0];
-      let isParticipant = false;
-      let userTeamId: string | null = null;
+     if (!matchResult.rows || matchResult.rows.length === 0) {
+       return res.status(404).json({ error: 'Match not found' });
+     }
 
-      if (match.tournament_mode === 'team') {
-        // Team tournament - check if user is on one of the teams
-        const userTeamResult = await query(
-          `SELECT team_id FROM tournament_participants 
-           WHERE tournament_id = ? AND user_id = ? 
-           LIMIT 1`,
-          [tournamentId, userId]
-        );
+     const match = matchResult.rows[0];
+     let isParticipant = false;
+     let userTeamId: string | null = null;
 
-        if (userTeamResult.rows && userTeamResult.rows.length > 0) {
-          userTeamId = userTeamResult.rows[0].team_id;
-          isParticipant = userTeamId === match.player1_id || userTeamId === match.player2_id;
-        }
-      } else {
-        // 1v1 tournament - check if user is one of the players
-        isParticipant = userId === match.player1_id || userId === match.player2_id;
-      }
+     if (match.tournament_mode === 'team') {
+       // Team tournament - check if user is on one of the teams
+       const userTeamResult = await query(
+         `SELECT team_id FROM tournament_participants 
+          WHERE tournament_id = ? AND user_id = ? 
+          LIMIT 1`,
+         [tournamentId, userId]
+       );
 
-      if (!isParticipant) {
-        return res.status(403).json({ error: 'You are not a participant in this match' });
-      }
+       if (userTeamResult.rows && userTeamResult.rows.length > 0) {
+         userTeamId = userTeamResult.rows[0].team_id;
+         isParticipant = userTeamId === match.player1_id || userTeamId === match.player2_id;
+       }
+     } else {
+       // 1v1 tournament - check if user is one of the players
+       isParticipant = userId === match.player1_id || userId === match.player2_id;
+     }
 
-      // Confirm the proposal (proposal-level confirmation)
-      const isFullyConfirmed = await confirmProposal(proposal_id, userId);
+     if (!isParticipant) {
+       return res.status(403).json({ error: 'You are not a participant in this match' });
+     }
 
-      console.log(`✅ [SCHEDULING] User ${userId} confirmed proposal ${proposal_id}, fully confirmed: ${isFullyConfirmed}`);
+     // Confirm the proposal with partial slot selection
+     const result = await confirmPartialSlots(proposal_id, userId, confirmed_slot_ids);
 
-      res.json({
-        success: true,
-        isFullyConfirmed
-      });
-    } catch (error) {
-      console.error('❌ [SCHEDULING] Error confirming slots:', error);
-      res.status(500).json({
-        error: 'Failed to confirm slots',
-        details: (error as any).message
-      });
-    }
-  }
+     console.log(`✅ [SCHEDULING] User ${userId} confirmed proposal ${proposal_id} with ${confirmed_slot_ids.length} slots, fully confirmed: ${result.fullyConfirmed}`);
+
+     res.json({
+       success: true,
+       fullyConfirmed: result.fullyConfirmed,
+       confirmedSlots: result.confirmedSlots
+     });
+   } catch (error) {
+     console.error('❌ [SCHEDULING] Error confirming slots:', error);
+     res.status(500).json({
+       error: 'Failed to confirm slots',
+       details: (error as any).message
+     });
+   }
+ }
 );
 
 /**
  * POST /api/tournament/:tournamentId/match/:matchId/confirm-slots
- * Confirm (accept) an existing proposal for a match
- * All proposed slots are confirmed in one action
+ * Confirm (accept) an existing proposal for a match with partial slot selection
+ * Can select which slots to confirm from the proposed set
  */
 router.post(
   '/tournament/:tournamentId/match/:matchId/confirm-slots',
@@ -1228,7 +1237,7 @@ router.post(
   async (req: AuthRequest, res: Response) => {
     try {
       const { matchId, tournamentId } = req.params;
-      const { proposal_id } = req.body;
+     const { proposal_id, confirmed_slot_ids } = req.body;
       const userId = req.userId;
 
       if (!userId || !matchId || !proposal_id) {
@@ -1237,62 +1246,70 @@ router.post(
         });
       }
 
-      // Verify user is a participant in this match
-      const matchResult = await query(
-        `SELECT tm.player1_id, tm.player2_id, t.tournament_mode 
-         FROM tournament_matches tm
-         JOIN tournaments t ON t.id = tm.tournament_id
-         WHERE tm.id = ? AND tm.tournament_id = ?`,
-        [matchId, tournamentId]
-      );
+     // Validate confirmed_slot_ids is an array (can be empty to reject all)
+     if (!Array.isArray(confirmed_slot_ids)) {
+       return res.status(400).json({
+         error: 'confirmed_slot_ids must be an array of slot IDs'
+       });
+     }
 
-      if (!matchResult.rows || matchResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Match not found' });
-      }
+     // Verify user is a participant in this match
+     const matchResult = await query(
+       `SELECT tm.player1_id, tm.player2_id, t.tournament_mode 
+        FROM tournament_matches tm
+        JOIN tournaments t ON t.id = tm.tournament_id
+        WHERE tm.id = ? AND tm.tournament_id = ?`,
+       [matchId, tournamentId]
+     );
 
-      const match = matchResult.rows[0];
-      let isParticipant = false;
-      let userTeamId: string | null = null;
+     if (!matchResult.rows || matchResult.rows.length === 0) {
+       return res.status(404).json({ error: 'Match not found' });
+     }
 
-      if (match.tournament_mode === 'team') {
-        // Team tournament - check if user is on one of the teams
-        const userTeamResult = await query(
-          `SELECT team_id FROM tournament_participants 
-           WHERE tournament_id = ? AND user_id = ? 
-           LIMIT 1`,
-          [tournamentId, userId]
-        );
+     const match = matchResult.rows[0];
+     let isParticipant = false;
+     let userTeamId: string | null = null;
 
-        if (userTeamResult.rows && userTeamResult.rows.length > 0) {
-          userTeamId = userTeamResult.rows[0].team_id;
-          isParticipant = userTeamId === match.player1_id || userTeamId === match.player2_id;
-        }
-      } else {
-        // 1v1 tournament - check if user is one of the players
-        isParticipant = userId === match.player1_id || userId === match.player2_id;
-      }
+     if (match.tournament_mode === 'team') {
+       // Team tournament - check if user is on one of the teams
+       const userTeamResult = await query(
+         `SELECT team_id FROM tournament_participants 
+          WHERE tournament_id = ? AND user_id = ? 
+          LIMIT 1`,
+         [tournamentId, userId]
+       );
 
-      if (!isParticipant) {
-        return res.status(403).json({ error: 'You are not a participant in this match' });
-      }
+       if (userTeamResult.rows && userTeamResult.rows.length > 0) {
+         userTeamId = userTeamResult.rows[0].team_id;
+         isParticipant = userTeamId === match.player1_id || userTeamId === match.player2_id;
+       }
+     } else {
+       // 1v1 tournament - check if user is one of the players
+       isParticipant = userId === match.player1_id || userId === match.player2_id;
+     }
 
-      // Confirm the proposal (proposal-level confirmation)
-      const isFullyConfirmed = await confirmProposal(proposal_id, userId);
+     if (!isParticipant) {
+       return res.status(403).json({ error: 'You are not a participant in this match' });
+     }
 
-      console.log(`✅ [SCHEDULING] User ${userId} confirmed proposal ${proposal_id}, fully confirmed: ${isFullyConfirmed}`);
+     // Confirm the proposal with partial slot selection
+     const result = await confirmPartialSlots(proposal_id, userId, confirmed_slot_ids);
 
-      res.json({
-        success: true,
-        isFullyConfirmed
-      });
-    } catch (error) {
-      console.error('❌ [SCHEDULING] Error confirming slots:', error);
-      res.status(500).json({
-        error: 'Failed to confirm slots',
-        details: (error as any).message
-      });
-    }
-  }
+     console.log(`✅ [SCHEDULING] User ${userId} confirmed proposal ${proposal_id} with ${confirmed_slot_ids.length} slots, fully confirmed: ${result.fullyConfirmed}`);
+
+     res.json({
+       success: true,
+       fullyConfirmed: result.fullyConfirmed,
+       confirmedSlots: result.confirmedSlots
+     });
+   } catch (error) {
+     console.error('❌ [SCHEDULING] Error confirming slots:', error);
+     res.status(500).json({
+       error: 'Failed to confirm slots',
+       details: (error as any).message
+     });
+   }
+ }
 );
 
 /**

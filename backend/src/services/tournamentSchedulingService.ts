@@ -971,6 +971,149 @@ export const confirmProposal = async (proposalId: string, userId: string) => {
 };
 
 /**
+ * Confirm a proposal with partial slot selection
+ * User can select which proposed slots to confirm; others are marked as rejected
+ * Once a slot is rejected, it cannot be reverted by other confirmers
+ */
+export const confirmPartialSlots = async (
+  proposalId: string,
+  userId: string,
+  confirmedSlotIds: string[]
+): Promise<{ success: boolean; fullyConfirmed: boolean; confirmedSlots: any[] }> => {
+  try {
+    // 1. Check if user already confirmed
+    const existing = await query(
+      `SELECT id FROM match_schedule_confirmations 
+       WHERE proposal_id = ? AND user_id = ?`,
+      [proposalId, userId]
+    );
+    
+    if (existing.rows && existing.rows.length > 0) {
+      throw new Error('User has already confirmed this proposal');
+    }
+    
+    // 2. Get all slots for this proposal
+    const slotsResult = await query(
+      `SELECT id, status FROM match_schedule_slots 
+       WHERE proposal_id = ? ORDER BY slot_datetime ASC`,
+      [proposalId]
+    );
+    
+    if (!slotsResult.rows || slotsResult.rows.length === 0) {
+      throw new Error('No slots found for this proposal');
+    }
+    
+    const allSlots = slotsResult.rows;
+    const allSlotIds = new Set(allSlots.map((s: any) => s.id));
+    const confirmedSet = new Set(confirmedSlotIds);
+    
+    // 3. Validate that confirmed slots are subset of proposed slots
+    for (const slotId of confirmedSlotIds) {
+      if (!allSlotIds.has(slotId)) {
+        throw new Error(`Slot ${slotId} is not part of this proposal`);
+      }
+    }
+    
+    // 4. Mark slots as confirmed or rejected (only if pending)
+    for (const slot of allSlots) {
+      if (slot.status === 'pending') {
+        const newStatus = confirmedSet.has(slot.id) ? 'confirmed' : 'rejected';
+        await query(
+          `UPDATE match_schedule_slots SET status = ? WHERE id = ?`,
+          [newStatus, slot.id]
+        );
+      }
+    }
+    
+    // 5. Insert confirmation record
+    const confirmationId = uuidv4();
+    await query(
+      `INSERT INTO match_schedule_confirmations 
+       (id, proposal_id, user_id, confirmed_at)
+       VALUES (?, ?, ?, NOW())`,
+      [confirmationId, proposalId, userId]
+    );
+    
+    // 6. Get updated slot states
+    const updatedSlotsResult = await query(
+      `SELECT id, status FROM match_schedule_slots WHERE proposal_id = ?`,
+      [proposalId]
+    );
+    const updatedSlots = updatedSlotsResult.rows || [];
+    
+    // Count confirmed and rejected slots
+    const confirmedCount = updatedSlots.filter((s: any) => s.status === 'confirmed').length;
+    const rejectedCount = updatedSlots.filter((s: any) => s.status === 'rejected').length;
+    const totalSlots = updatedSlots.length;
+    
+    // 7. Determine proposal status
+    let newProposalStatus = 'pending';
+    if (rejectedCount === totalSlots) {
+      // All slots rejected
+      newProposalStatus = 'rejected';
+    } else if (confirmedCount > 0) {
+      // At least one slot confirmed
+      newProposalStatus = 'confirmed';
+    }
+    
+    // 8. Update proposal status
+    const proposal = await query(
+      `SELECT status, tournament_round_match_id FROM match_schedule_proposals WHERE id = ?`,
+      [proposalId]
+    );
+    
+    if (!proposal.rows || !proposal.rows.length) {
+      throw new Error('Proposal not found');
+    }
+    
+    const oldProposalStatus = proposal.rows[0].status;
+    
+    await query(
+      `UPDATE match_schedule_proposals SET status = ? WHERE id = ?`,
+      [newProposalStatus, proposalId]
+    );
+    
+    // 9. If proposal became confirmed and it wasn't, update tournament_round_matches
+    if (newProposalStatus === 'confirmed' && oldProposalStatus !== 'confirmed') {
+      const confirmedSlotsForUpdate = updatedSlots.filter((s: any) => s.status === 'confirmed');
+      if (confirmedSlotsForUpdate.length > 0) {
+        // Get the earliest confirmed slot
+        const earliestSlot = await query(
+          `SELECT slot_datetime FROM match_schedule_slots 
+           WHERE proposal_id = ? AND status = 'confirmed'
+           ORDER BY slot_datetime ASC LIMIT 1`,
+          [proposalId]
+        );
+        
+        if (earliestSlot.rows && earliestSlot.rows.length > 0) {
+          await query(
+            `UPDATE tournament_round_matches 
+             SET scheduled_datetime = ?, scheduled_status = 'confirmed', scheduled_confirmed_at = NOW()
+             WHERE id = ?`,
+            [earliestSlot.rows[0].slot_datetime, proposal.rows[0].tournament_round_match_id]
+          );
+        }
+      }
+    }
+    
+    // 10. Check if fully confirmed (all other participants have also confirmed)
+    const isFullyConfirmed = await checkProposalFullyConfirmed(
+      proposalId,
+      proposal.rows[0].tournament_round_match_id
+    );
+    
+    return {
+      success: true,
+      fullyConfirmed: isFullyConfirmed,
+      confirmedSlots: updatedSlots
+    };
+  } catch (error) {
+    console.error('[confirmPartialSlots] Error:', error);
+    throw error;
+  }
+};
+
+/**
  * Cancel your own confirmation on a proposal
  * Only allowed if you're the one who confirmed
  */
