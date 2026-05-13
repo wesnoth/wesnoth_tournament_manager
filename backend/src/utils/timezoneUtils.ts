@@ -6,16 +6,20 @@ import { IANA_TIMEZONES } from '../constants/timezones.js';
 
 /**
  * List of valid IANA timezones
- * Dynamically fetched from Node.js Intl API, with fallback to complete IANA list
+ * Combines Node.js Intl API supported timezones with complete IANA list for broader compatibility
  */
 const VALID_TIMEZONES: string[] = (() => {
+  const timezones = new Set<string>(IANA_TIMEZONES);
+  
   try {
-    // Try to get timezones from Node.js runtime
-    return (Intl as any).supportedValuesOf('timeZone') || IANA_TIMEZONES;
+    // Add timezones from Node.js Intl API
+    const intlTimezones = (Intl as any).supportedValuesOf('timeZone') || [];
+    intlTimezones.forEach((tz: string) => timezones.add(tz));
   } catch {
-    // Fallback to complete IANA list
-    return IANA_TIMEZONES;
+    // If Intl API fails, we still have the complete IANA list
   }
+  
+  return Array.from(timezones);
 })();
 
 /**
