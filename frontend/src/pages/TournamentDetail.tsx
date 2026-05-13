@@ -330,8 +330,12 @@ const TournamentDetail: React.FC = () => {
       setParticipants(participantsRes.data?.standings || []);
       const matchesData = matchesRes.data || [];
       setMatches(matchesData);
-      setRoundMatches(roundMaturesRes.data || []);
+      const roundMatchesData = roundMaturesRes.data || [];
+      setRoundMatches(roundMatchesData);
       setRounds(roundsRes.data || []);
+      
+      // Pre-load proposals for matches with confirmed or pending schedules
+      await preloadProposals(roundMatchesData);
       
       // DEBUG: Log roundMatches with replay info
       console.log('🎬 [ROUND-MATCHES] Received roundMatches:', roundMaturesRes.data);
@@ -1143,6 +1147,25 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
     } catch (err) {
       console.error('Error loading proposal with slots:', err);
       return null;
+    }
+  };
+
+  // Pre-load proposals for all matches with confirmed or pending schedules
+  const preloadProposals = async (roundMatches: any[]) => {
+    const matchesToLoad = roundMatches.filter(m => 
+      m.scheduled_status === 'confirmed' || (m.scheduled_status && m.scheduled_status !== 'pending')
+    );
+
+    if (matchesToLoad.length === 0) return;
+
+    console.log(`📋 Pre-loading proposals for ${matchesToLoad.length} scheduled matches...`);
+    
+    // Load proposals in parallel (up to 5 at a time)
+    for (let i = 0; i < matchesToLoad.length; i += 5) {
+      const batch = matchesToLoad.slice(i, i + 5);
+      await Promise.all(
+        batch.map(m => getProposalWithSlots(m.id, m.id))
+      );
     }
   };
 
