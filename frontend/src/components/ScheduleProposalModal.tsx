@@ -142,11 +142,11 @@ export default function ScheduleProposalModal({
         setMode('confirm');
         // Pre-select proposed slots for opponent to confirm or modify
         if (proposal.slots) {
-          const proposedSlotIds = proposal.slots.map(s => s.id);
+          const proposedSlotDatetimes = proposal.slots.map(s => s.slot_datetime);
           // Initialize confirmedSlotIds with all proposed slots (all checked by default)
-          setConfirmedSlotIds(new Set(proposedSlotIds));
+          setConfirmedSlotIds(new Set(proposedSlotDatetimes));
           setHasStartedConfirmationSelection(false);
-          console.log('[ScheduleProposalModal] Pre-selected proposed slots:', proposedSlotIds.length);
+          console.log('[ScheduleProposalModal] Pre-selected proposed slots:', proposedSlotDatetimes.length);
         }
       }
     } else {
