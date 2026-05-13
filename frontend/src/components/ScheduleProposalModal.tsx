@@ -275,11 +275,20 @@ export default function ScheduleProposalModal({
       setLoading(true);
       setError('');
 
-      // Send confirmed slot IDs to backend
-      // In confirm mode, use confirmedSlotIds; in propose mode, use selectedSlots
-      const slotIdsToSend = mode === 'confirm' 
-        ? Array.from(confirmedSlotIds)
-        : Array.from(selectedSlots);
+      // Convert confirmed slot datetimes back to their slot IDs for backend
+      let slotIdsToSend: string[] = [];
+      if (mode === 'confirm') {
+        // Map datetimes back to slot IDs from proposal
+        slotIdsToSend = proposal.slots
+          .filter(s => confirmedSlotIds.has(s.slot_datetime))
+          .map(s => s.id);
+      } else {
+        // In propose mode, selectedSlots are datetimes, but we need to convert
+        // This shouldn't happen for confirm, but handle it for consistency
+        slotIdsToSend = proposal.slots
+          .filter(s => selectedSlots.has(s.slot_datetime))
+          .map(s => s.id);
+      }
 
       const response = isRoundMatch
         ? await tournamentSchedulingService.confirmRoundMatchSlots(tournamentId, targetId!, proposal.id, slotIdsToSend)
