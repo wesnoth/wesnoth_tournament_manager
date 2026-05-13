@@ -2,7 +2,7 @@
  * Timezone and availability utilities for scheduling system
  */
 
-import { IANA_TIMEZONES } from '../constants/timezones';
+import { IANA_TIMEZONES } from '../constants/timezones.js';
 
 /**
  * List of valid IANA timezones
