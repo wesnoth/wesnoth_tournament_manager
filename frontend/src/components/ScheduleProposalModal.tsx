@@ -424,14 +424,20 @@ export default function ScheduleProposalModal({
               </div>
 
               {/* Selected slots summary */}
-              {selectedSlots.size > 0 && (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded">
-                  <p className="text-sm font-semibold text-blue-900">
-                    {selectedSlots.size} slot{selectedSlots.size !== 1 ? 's' : ''} selected ({groupedRanges.length} range{groupedRanges.length !== 1 ? 's' : ''})
+              {((mode === 'confirm' && confirmedSlotIds.size > 0) || (mode !== 'confirm' && selectedSlots.size > 0)) && (
+                <div className={`p-3 rounded ${mode === 'confirm' ? 'bg-green-50 border border-green-200' : 'bg-blue-50 border border-blue-200'}`}>
+                  <p className={`text-sm font-semibold ${mode === 'confirm' ? 'text-green-900' : 'text-blue-900'}`}>
+                    {mode === 'confirm' 
+                      ? `${confirmedSlotIds.size} slot${confirmedSlotIds.size !== 1 ? 's' : ''} to confirm` 
+                      : `${selectedSlots.size} slot${selectedSlots.size !== 1 ? 's' : ''} selected`
+                    }
                   </p>
                   <div className="mt-3 space-y-2">
-                    {groupedRanges.map((range, idx) => (
-                      <div key={idx} className="text-sm text-blue-800 p-2 bg-white rounded border border-blue-100">
+                    {groupSlotsIntoRanges(mode === 'confirm' 
+                      ? Array.from(confirmedSlotIds) 
+                      : Array.from(selectedSlots)
+                    ).map((range, idx) => (
+                      <div key={idx} className={`text-sm p-2 bg-white rounded border ${mode === 'confirm' ? 'text-green-800 border-green-100' : 'text-blue-800 border-blue-100'}`}>
                         <div className="font-semibold">
                           {range.start.toLocaleDateString()} - {range.hours}
                         </div>

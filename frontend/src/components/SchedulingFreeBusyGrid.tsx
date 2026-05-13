@@ -248,24 +248,37 @@ export default function SchedulingFreeBusyGrid({
   return (
     <div className="w-full space-y-4">
       {/* Legend */}
-      <div className="sticky top-0 z-20 bg-white flex items-center gap-6 text-xs p-4 border border-gray-200 rounded-lg">
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 bg-green-100 border border-green-300 rounded"></div>
-          <span>Available</span>
+      {confirmMode ? (
+        <div className="sticky top-0 z-20 bg-white flex items-center gap-6 text-xs p-4 border border-gray-200 rounded-lg">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-blue-200 border border-blue-400 rounded"></div>
+            <span>Proposed</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-green-500 border border-green-700 rounded"></div>
+            <span>Confirmed</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-red-300 border border-red-500 rounded"></div>
+            <span>Rejected</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 bg-gray-100 border border-gray-300 rounded"></div>
-          <span>Busy</span>
+      ) : (
+        <div className="sticky top-0 z-20 bg-white flex items-center gap-6 text-xs p-4 border border-gray-200 rounded-lg">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-green-100 border border-green-300 rounded"></div>
+            <span>Available</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-gray-100 border border-gray-300 rounded"></div>
+            <span>Busy</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-blue-200 border border-blue-400 rounded"></div>
+            <span>Proposed</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 bg-blue-200 border border-blue-400 rounded"></div>
-          <span>Proposed</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 bg-green-400 border border-green-600 rounded"></div>
-          <span>Confirmed</span>
-        </div>
-      </div>
+      )}
 
       {/* Grid Container */}
       <div ref={gridContainerRef} className="overflow-auto border border-gray-200 rounded-lg" style={{ maxHeight: '600px' }}>
@@ -344,7 +357,16 @@ export default function SchedulingFreeBusyGrid({
                     let bgColor = dayColor;
                     let borderColor = 'border-gray-200';
 
-                    if (isConfirmed) {
+                    if (confirmMode && isProposed) {
+                      // In confirm mode: distinguish confirmed vs rejected proposed slots
+                      if (isSelected) {
+                        bgColor = 'bg-green-500';
+                        borderColor = 'border-green-700';
+                      } else {
+                        bgColor = 'bg-red-300';
+                        borderColor = 'border-red-500';
+                      }
+                    } else if (isConfirmed) {
                       bgColor = 'bg-green-400';
                       borderColor = 'border-green-600';
                     } else if (isProposed) {
