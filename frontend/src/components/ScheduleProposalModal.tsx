@@ -166,6 +166,27 @@ export default function ScheduleProposalModal({
   };
 
   /**
+   * In confirm mode: first click deselects all others and keeps only this one
+   * Subsequent clicks: normal toggle
+   */
+  const handleConfirmSlotToggle = (slotDatetime: string, selected: boolean) => {
+    if (!hasStartedConfirmationSelection) {
+      // First click: clear all and select only this one
+      setConfirmedSlotIds(new Set([slotDatetime]));
+      setHasStartedConfirmationSelection(true);
+    } else {
+      // Subsequent clicks: normal toggle
+      const newConfirmed = new Set(confirmedSlotIds);
+      if (selected) {
+        newConfirmed.add(slotDatetime);
+      } else {
+        newConfirmed.delete(slotDatetime);
+      }
+      setConfirmedSlotIds(newConfirmed);
+    }
+  };
+
+  /**
    * Group contiguous slots into ranges
    */
   const groupSlotsIntoRanges = (slotDatetimes: string[]): Array<{ start: Date; end: Date; hours: string }> => {
@@ -403,16 +424,7 @@ export default function ScheduleProposalModal({
                   dateStart={displayDateStart}
                   dateEnd={dateEnd}
                   selectedSlots={mode === 'confirm' ? confirmedSlotIds : selectedSlots}
-                  onSlotToggle={mode === 'confirm' ? (slotId: string, selected: boolean) => {
-                    const newConfirmed = new Set(confirmedSlotIds);
-                    if (selected) {
-                      newConfirmed.add(slotId);
-                    } else {
-                      newConfirmed.delete(slotId);
-                    }
-                    setConfirmedSlotIds(newConfirmed);
-                    setHasStartedConfirmationSelection(true);
-                  } : handleSlotToggle}
+                  onSlotToggle={mode === 'confirm' ? handleConfirmSlotToggle : handleSlotToggle}
                   readOnly={false}
                   proposedSlots={proposedSlotDatetimes}
                   confirmedSlots={confirmedSlotsMap}

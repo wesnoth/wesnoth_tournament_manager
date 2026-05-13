@@ -217,25 +217,16 @@ export default function SchedulingFreeBusyGrid({
 
   const handleSlotClick = (slot: GridSlot) => {
     if (readOnly || !onSlotToggle) return;
-    
+     
     const key = getSlotKey(slot);
-    
+     
     // In confirm mode, only allow clicking proposed slots
     if (confirmMode && proposedSlots.length > 0 && !proposedSlots.includes(key)) {
       return;
     }
-    
-    // In confirm mode with first click: clear all and select this one
-    if (confirmMode && !hasStartedConfirmationSelection && selectedSlots.size === proposedSlots.length) {
-      // First click - clear all others
-      selectedSlots.forEach(slot => {
-        if (slot !== key) {
-          onSlotToggle(slot, false);
-        }
-      });
-    }
-    
+     
     // Toggle this slot
+    // In confirm mode, the handler manages first-click-clear-all logic
     onSlotToggle(key, !selectedSlots.has(key));
   };
 
