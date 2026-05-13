@@ -2642,88 +2642,98 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                             <td className="px-4 py-3 text-gray-700">
                               {(match as any).series_status !== 'completed' && (
                                 <>
-                                  {canScheduleMatch(match) && (
-                                    <>
-                                      {(() => {
-                                       const schedStatus = getScheduleStatus(match);
-                                        
-                                        if (schedStatus.status === 'confirmed') {
-                                          const cacheKey = match.tournament_round_match_id || match.id;
-                                          const cachedProposal = proposalCache[cacheKey];
-                                           
-                                          return (
-                                            <div className="flex flex-col gap-1">
-                                              <button
-                                                className="px-3 py-1 bg-green-500 text-white rounded text-xs font-semibold hover:bg-green-600 transition-colors whitespace-nowrap"
-                                                onClick={() => handlePreloadSchedulingData(match.tournament_round_match_id || match.id, true)}
-                                                disabled={isLoadingScheduling}
-                                                title="Click to reschedule the match"
-                                              >
-                                                ✅ Confirmed
-                                              </button>
-                                              {cachedProposal && renderScheduleSlots(cachedProposal)}
-                                              {!cachedProposal && schedStatus.datetime && (
-                                                <span className="text-xs text-gray-600">
-                                                  {new Date(schedStatus.datetime).toLocaleString('es-ES', {
-                                                    year: 'numeric',
-                                                    month: '2-digit',
-                                                    day: '2-digit',
-                                                    hour: '2-digit',
-                                                    minute: '2-digit'
-                                                  })}
-                                                </span>
-                                              )}
-                                            </div>
-                                          );
-                                        }
-                                         
-                                        if (schedStatus.status === 'awaiting_confirmation') {
-                                          const cacheKey = match.tournament_round_match_id || match.id;
-                                          const cachedProposal = proposalCache[cacheKey];
-                                           
-                                          return (
-                                            <div className="flex flex-col gap-1">
-                                              <button
-                                                className="px-3 py-1 bg-purple-500 text-white rounded text-xs font-semibold hover:bg-purple-600 transition-colors whitespace-nowrap"
-                                                onClick={() => handlePreloadSchedulingData(match.tournament_round_match_id || match.id, true)}
-                                                disabled={isLoadingScheduling}
-                                                title={schedStatus.isUserProposer ? 'View proposed schedule' : 'Confirm opponent proposal'}
-                                              >
-                                                {schedStatus.isUserProposer ? '⏳ Awaiting Confirmation' : '✋ Awaiting Your Confirmation'}
-                                              </button>
-                                              {cachedProposal && renderScheduleSlots(cachedProposal)}
-                                              {!cachedProposal && schedStatus.datetime && (
-                                                <span className="text-xs text-orange-600">
-                                                  {new Date(schedStatus.datetime).toLocaleString('es-ES', {
-                                                    year: 'numeric',
-                                                    month: '2-digit',
-                                                    day: '2-digit',
-                                                    hour: '2-digit',
-                                                    minute: '2-digit'
-                                                  })}
-                                                </span>
-                                              )}
-                                            </div>
-                                          );
-                                        }
-                                        
-                                        // status === 'no_schedule'
-                                        return (
-                                          <button
-                                            className="px-3 py-1 bg-purple-500 text-white rounded text-xs font-semibold hover:bg-purple-600 transition-colors whitespace-nowrap"
-                                            onClick={() => handlePreloadSchedulingData(match.id, true)}
-                                            disabled={isLoadingScheduling}
-                                            title="Schedule or view match time"
-                                          >
-                                            🗓️ Schedule
-                                          </button>
-                                        );
-                                      })()}
-                                    </>
-                                  )}
-                                  {!canScheduleMatch(match) && (
-                                    <span className="text-xs text-gray-500">Awaiting schedule</span>
-                                  )}
+                                  {(() => {
+                                    const schedStatus = getScheduleStatus(match);
+                                    const cacheKey = match.tournament_round_match_id || match.id;
+                                    const cachedProposal = proposalCache[cacheKey];
+                                    
+                                    if (schedStatus.status === 'confirmed') {
+                                      return (
+                                       <div className="flex flex-col gap-1">
+                                         {canScheduleMatch(match) && (
+                                           <button
+                                             className="px-3 py-1 bg-green-500 text-white rounded text-xs font-semibold hover:bg-green-600 transition-colors whitespace-nowrap"
+                                             onClick={() => handlePreloadSchedulingData(match.tournament_round_match_id || match.id, true)}
+                                             disabled={isLoadingScheduling}
+                                             title="Click to reschedule the match"
+                                           >
+                                             ✅ Confirmed
+                                           </button>
+                                         )}
+                                         {!canScheduleMatch(match) && (
+                                           <span className="px-3 py-1 bg-green-500 text-white rounded text-xs font-semibold">
+                                             ✅ Confirmed
+                                           </span>
+                                         )}
+                                         {cachedProposal && renderScheduleSlots(cachedProposal)}
+                                         {!cachedProposal && schedStatus.datetime && (
+                                           <span className="text-xs text-gray-600">
+                                             {new Date(schedStatus.datetime).toLocaleString('es-ES', {
+                                               year: 'numeric',
+                                               month: '2-digit',
+                                               day: '2-digit',
+                                               hour: '2-digit',
+                                               minute: '2-digit'
+                                             })}
+                                           </span>
+                                         )}
+                                       </div>
+                                      );
+                                    }
+                                    
+                                    if (schedStatus.status === 'awaiting_confirmation') {
+                                      return (
+                                       <div className="flex flex-col gap-1">
+                                         {canScheduleMatch(match) && (
+                                           <button
+                                             className="px-3 py-1 bg-purple-500 text-white rounded text-xs font-semibold hover:bg-purple-600 transition-colors whitespace-nowrap"
+                                             onClick={() => handlePreloadSchedulingData(match.tournament_round_match_id || match.id, true)}
+                                             disabled={isLoadingScheduling}
+                                             title={schedStatus.isUserProposer ? 'View proposed schedule' : 'Confirm opponent proposal'}
+                                           >
+                                             {schedStatus.isUserProposer ? '⏳ Awaiting Confirmation' : '✋ Awaiting Your Confirmation'}
+                                           </button>
+                                         )}
+                                         {!canScheduleMatch(match) && (
+                                           <span className="px-3 py-1 bg-purple-500 text-white rounded text-xs font-semibold">
+                                             ⏳ Awaiting Confirmation
+                                           </span>
+                                         )}
+                                         {cachedProposal && renderScheduleSlots(cachedProposal)}
+                                         {!cachedProposal && schedStatus.datetime && (
+                                           <span className="text-xs text-orange-600">
+                                             {new Date(schedStatus.datetime).toLocaleString('es-ES', {
+                                               year: 'numeric',
+                                               month: '2-digit',
+                                               day: '2-digit',
+                                               hour: '2-digit',
+                                               minute: '2-digit'
+                                             })}
+                                           </span>
+                                         )}
+                                       </div>
+                                      );
+                                    }
+                                    
+                                    // status === 'no_schedule'
+                                    return (
+                                      <>
+                                       {canScheduleMatch(match) && (
+                                         <button
+                                           className="px-3 py-1 bg-purple-500 text-white rounded text-xs font-semibold hover:bg-purple-600 transition-colors whitespace-nowrap"
+                                           onClick={() => handlePreloadSchedulingData(match.id, true)}
+                                           disabled={isLoadingScheduling}
+                                           title="Schedule or view match time"
+                                         >
+                                           🗓️ Schedule
+                                         </button>
+                                       )}
+                                       {!canScheduleMatch(match) && (
+                                         <span className="text-xs text-gray-500">Pending schedule</span>
+                                       )}
+                                      </>
+                                    );
+                                  })()}
                                 </>
                               )}
                               {(match as any).series_status === 'completed' && (
