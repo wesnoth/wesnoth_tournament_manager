@@ -17,6 +17,50 @@ interface AvailabilityRangeEditorProps {
 
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
+// Generate time options: 00:00, 00:30, 01:00, 01:30, ..., 23:30
+const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
+  const hours = Math.floor(i / 2);
+  const minutes = (i % 2) * 30;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+});
+
+// Validate and round time to nearest 30-minute mark
+const roundTo30Minutes = (time: string): string => {
+  const [hours, minutes] = time.split(':').map(Number);
+  if (minutes < 15) {
+    return `${String(hours).padStart(2, '0')}:00`;
+  } else if (minutes < 45) {
+    return `${String(hours).padStart(2, '0')}:30`;
+  } else {
+    const nextHour = (hours + 1) % 24;
+    return `${String(nextHour).padStart(2, '0')}:00`;
+  }
+};
+
+// Time picker component
+const TimePickerSelect: React.FC<{
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}> = ({ value, onChange, disabled }) => {
+  const rounded = roundTo30Minutes(value);
+  
+  return (
+    <select
+      value={rounded}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
+      className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-200 w-16"
+    >
+      {TIME_OPTIONS.map((time) => (
+        <option key={time} value={time}>
+          {time}
+        </option>
+      ))}
+    </select>
+  );
+};
+
 const AvailabilityRangeEditor: React.FC<AvailabilityRangeEditorProps> = ({ value, onChange }) => {
   const { t } = useTranslation();
   const [schedule, setSchedule] = useState<AvailabilitySchedule>(
@@ -96,18 +140,14 @@ const AvailabilityRangeEditor: React.FC<AvailabilityRangeEditorProps> = ({ value
                     ) : (
                       (schedule[day] || []).map((range, index) => (
                         <div key={`${day}-${index}`} className="flex items-center gap-1 bg-blue-50 px-2 py-1 rounded text-sm">
-                          <input
-                            type="time"
+                          <TimePickerSelect
                             value={range.start}
-                            onChange={(e) => updateRange(day, index, 'start', e.target.value)}
-                            className="px-1 py-0 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-200 w-16"
+                            onChange={(val) => updateRange(day, index, 'start', val)}
                           />
                           <span className="text-gray-400 text-xs">–</span>
-                          <input
-                            type="time"
+                          <TimePickerSelect
                             value={range.end}
-                            onChange={(e) => updateRange(day, index, 'end', e.target.value)}
-                            className="px-1 py-0 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-200 w-16"
+                            onChange={(val) => updateRange(day, index, 'end', val)}
                           />
                           <button
                             onClick={() => removeRange(day, index)}
