@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import SchedulingFreeBusyGrid from './SchedulingFreeBusyGrid';
 import { useAuthStore } from '../store/authStore';
+import { tournamentSchedulingService } from '../services/tournamentSchedulingService';
 
 interface ScheduleProposalModalProps {
   isOpen: boolean;
