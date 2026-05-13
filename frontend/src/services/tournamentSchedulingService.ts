@@ -109,30 +109,34 @@ export const tournamentSchedulingService = {
   confirmRoundMatchSlots: async (
     tournamentId: string,
     roundMatchId: string,
-    proposalId: string
+    proposalId: string,
+    confirmedSlotIds: string[] = []
   ) => {
     const response = await api.post(
       `/tournament-scheduling/tournament/${tournamentId}/round-match/${roundMatchId}/confirm-slots`,
       {
-        proposal_id: proposalId
+        proposal_id: proposalId,
+        confirmed_slot_ids: confirmedSlotIds
       }
     );
     return response.data;
   },
 
   /**
-   * Confirm an existing proposal for a match
-   * All slots in the proposal are confirmed in one action
+   * Confirm an existing proposal for a match with partial slot selection
+   * Can select which slots to confirm from the proposed set
    */
   confirmMatchSlots: async (
     tournamentId: string,
     matchId: string,
-    proposalId: string
+    proposalId: string,
+    confirmedSlotIds: string[] = []
   ) => {
     const response = await api.post(
       `/tournament-scheduling/tournament/${tournamentId}/match/${matchId}/confirm-slots`,
       {
-        proposal_id: proposalId
+        proposal_id: proposalId,
+        confirmed_slot_ids: confirmedSlotIds
       }
     );
     return response.data;

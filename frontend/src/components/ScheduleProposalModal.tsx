@@ -65,6 +65,9 @@ export default function ScheduleProposalModal({
   const [mode, setMode] = useState<'propose' | 'confirm' | 'counter' | 'edit_proposal'>('propose');
   const [displayDateStart, setDisplayDateStart] = useState<Date>(initialDisplayDateStart || new Date());
   const [scrollToHour, setScrollToHour] = useState<number | null>(initialScrollToHour || null);
+  // For slot-level confirmation: track which slots user has explicitly selected
+  const [confirmedSlotIds, setConfirmedSlotIds] = useState<Set<string>>(new Set());
+  const [hasStartedConfirmationSelection, setHasStartedConfirmationSelection] = useState(false);
 
   console.log('[ScheduleProposalModal] PROPS received:', {
     isOpen,
@@ -138,9 +141,11 @@ export default function ScheduleProposalModal({
         setMode('confirm');
         // Pre-select proposed slots for opponent to confirm or modify
         if (proposal.slots) {
-          const proposedSlotDatetimes = proposal.slots.map(s => s.slot_datetime);
-          setSelectedSlots(new Set(proposedSlotDatetimes));
-          console.log('[ScheduleProposalModal] Pre-selected proposed slots:', proposedSlotDatetimes.length);
+          const proposedSlotIds = proposal.slots.map(s => s.id);
+          // Initialize confirmedSlotIds with all proposed slots (all checked by default)
+          setConfirmedSlotIds(new Set(proposedSlotIds));
+          setHasStartedConfirmationSelection(false);
+          console.log('[ScheduleProposalModal] Pre-selected proposed slots:', proposedSlotIds.length);
         }
       }
     } else {
@@ -248,11 +253,15 @@ export default function ScheduleProposalModal({
       setLoading(true);
       setError('');
 
-      // Simply confirm the proposal by sending proposal_id
-      // Backend will mark ALL slots of this proposal as confirmed
+      // Send confirmed slot IDs to backend
+      // In confirm mode, use confirmedSlotIds; in propose mode, use selectedSlots
+      const slotIdsToSend = mode === 'confirm' 
+        ? Array.from(confirmedSlotIds)
+        : Array.from(selectedSlots);
+
       const response = isRoundMatch
-        ? await tournamentSchedulingService.confirmRoundMatchSlots(tournamentId, targetId!, proposal.id)
-        : await tournamentSchedulingService.confirmMatchSlots(tournamentId, targetId!, proposal.id);
+        ? await tournamentSchedulingService.confirmRoundMatchSlots(tournamentId, targetId!, proposal.id, slotIdsToSend)
+        : await tournamentSchedulingService.confirmMatchSlots(tournamentId, targetId!, proposal.id, slotIdsToSend);
 
       if (response.success) {
         onSuccess?.();
@@ -264,6 +273,30 @@ export default function ScheduleProposalModal({
     } finally {
       setLoading(false);
     }
+  };
+
+  // Handle slot selection in confirmation mode
+  const handleConfirmationSlotToggle = (slotId: string) => {
+    const newConfirmed = new Set(confirmedSlotIds);
+    
+    if (!hasStartedConfirmationSelection) {
+      // First click: deselect all, then select only this one
+      setHasStartedConfirmationSelection(true);
+      newConfirmed.clear();
+      newConfirmed.add(slotId);
+      console.log('[ScheduleProposalModal] First slot selection, cleared all and selected:', slotId);
+    } else {
+      // Subsequent clicks: toggle individual slots
+      if (newConfirmed.has(slotId)) {
+        newConfirmed.delete(slotId);
+        console.log('[ScheduleProposalModal] Deselected slot:', slotId);
+      } else {
+        newConfirmed.add(slotId);
+        console.log('[ScheduleProposalModal] Selected slot:', slotId);
+      }
+    }
+    
+    setConfirmedSlotIds(newConfirmed);
   };
 
   const handleCancelProposal = async () => {
@@ -433,6 +466,62 @@ export default function ScheduleProposalModal({
                 </div>
               )}
 
+              {/* Slot selection UI in confirmation mode */}
+              {mode === 'confirm' && proposal?.slots && proposal.slots.length > 0 && (
+                <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm font-semibold text-purple-900">
+                      Select Slots to Confirm ({confirmedSlotIds.size}/{proposal.slots.length})
+                    </p>
+                    <p className="text-xs text-purple-700">
+                      Click a slot to start, then select/deselect individually
+                    </p>
+                  </div>
+                   
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {proposal.slots.map((slot) => {
+                      const isConfirmed = confirmedSlotIds.has(slot.id);
+                      const slotDate = new Date(slot.slot_datetime);
+                      const dateStr = slotDate.toLocaleDateString();
+                      const timeStr = slotDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+                       
+                      return (
+                        <button
+                          key={slot.id}
+                          onClick={() => handleConfirmationSlotToggle(slot.id)}
+                          disabled={loading}
+                          className={`p-3 rounded border-2 transition-all text-left ${
+                            isConfirmed
+                              ? 'bg-green-100 border-green-400 text-green-900'
+                              : 'bg-red-100 border-red-400 text-red-900'
+                          } hover:opacity-80 disabled:opacity-50`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={isConfirmed}
+                              readOnly
+                              className="w-4 h-4"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold text-sm">{dateStr}</div>
+                              <div className="text-xs">{timeStr}</div>
+                              <div className="text-xs opacity-75 capitalize">{slot.status}</div>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                   
+                  <div className="mt-3 p-2 bg-white rounded border border-purple-200 text-xs text-purple-800">
+                    <strong>Color code:</strong> 
+                    <span className="ml-2 inline-block px-2 py-1 bg-green-100 border border-green-400 rounded mr-2">Green = Confirmed</span>
+                    <span className="inline-block px-2 py-1 bg-red-100 border border-red-400 rounded">Red = Rejected</span>
+                  </div>
+                </div>
+              )}
+
               {/* Notes textarea */}
               <div className="space-y-2">
                 <label className="block text-sm font-semibold text-gray-800">
@@ -503,9 +592,9 @@ export default function ScheduleProposalModal({
                 <button
                   onClick={handleConfirmSlots}
                   className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium disabled:opacity-50"
-                  disabled={loading || selectedSlots.size === 0}
+                  disabled={loading || confirmedSlotIds.size === 0}
                 >
-                  {loading ? 'Confirming...' : 'Confirm Selected Slots'}
+                  {loading ? 'Confirming...' : `Confirm ${confirmedSlotIds.size} Slot${confirmedSlotIds.size !== 1 ? 's' : ''}`}
                 </button>
               </>
             )}
