@@ -1153,36 +1153,80 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
     }
 
     const slots = proposal.displaySlots;
-    if (slots.length === 1) {
-      // Single slot - just show datetime
+    
+    // Sort and group confirmed slots into ranges
+    const sortedSlots = slots
+      .map((s: any) => ({ ...s, dateObj: new Date(s.slot_datetime) }))
+      .sort((a: any, b: any) => a.dateObj.getTime() - b.dateObj.getTime());
+
+    // Group contiguous slots (30-min intervals)
+    const ranges: Array<{ start: Date; end: Date }> = [];
+    if (sortedSlots.length > 0) {
+      let currentStart = sortedSlots[0].dateObj;
+      let currentEnd = sortedSlots[0].dateObj;
+
+      for (let i = 1; i < sortedSlots.length; i++) {
+        const current = sortedSlots[i].dateObj;
+        const prevEnd = new Date(currentEnd.getTime() + 30 * 60 * 1000); // Add 30 min
+
+        if (current.getTime() === prevEnd.getTime()) {
+          // Contiguous - extend current range
+          currentEnd = current;
+        } else {
+          // Gap found - save range and start new one
+          const endTime = new Date(currentEnd.getTime() + 30 * 60 * 1000);
+          ranges.push({ start: currentStart, end: endTime });
+          currentStart = current;
+          currentEnd = current;
+        }
+      }
+      // Add final range
+      const endTime = new Date(currentEnd.getTime() + 30 * 60 * 1000);
+      ranges.push({ start: currentStart, end: endTime });
+    }
+
+    // Show ranges in single line format
+    if (ranges.length === 1) {
+      const range = ranges[0];
+      const startStr = range.start.toLocaleString('es-ES', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      const endStr = range.end.toLocaleTimeString('es-ES', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
       return (
         <span className="text-xs text-gray-600">
-          {new Date(slots[0].slot_datetime).toLocaleString('es-ES', {
+          {startStr} - {endStr}
+        </span>
+      );
+    }
+
+    // Multiple ranges
+    return (
+      <div className="flex flex-col gap-1">
+        {ranges.map((range: any, idx: number) => {
+          const startStr = range.start.toLocaleString('es-ES', {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
             hour: '2-digit',
             minute: '2-digit'
-          })}
-        </span>
-      );
-    }
-
-    // Multiple slots - show all times
-    return (
-      <div className="flex flex-col gap-1">
-        {slots.map((slot: any, idx: number) => (
-          <span key={idx} className="text-xs text-gray-600">
-            {new Date(slot.slot_datetime).toLocaleString('es-ES', {
-              year: 'numeric',
-              month: '2-digit',
-              day: '2-digit',
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
-            {slot.status === 'confirmed' && <span className="ml-1 text-green-600">✓</span>}
-          </span>
-        ))}
+          });
+          const endStr = range.end.toLocaleTimeString('es-ES', {
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+          return (
+            <span key={idx} className="text-xs text-gray-600">
+              {startStr} - {endStr}
+            </span>
+          );
+        })}
       </div>
     );
   };
