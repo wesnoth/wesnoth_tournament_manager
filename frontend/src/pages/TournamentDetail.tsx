@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { publicService, tournamentService, api } from '../services/api';
+import { publicService, tournamentService, userService, api } from '../services/api';
 import { tournamentSchedulingService } from '../services/tournamentSchedulingService';
 import TournamentForm from '../components/TournamentForm';
 import MatchConfirmationModal from '../components/MatchConfirmationModal';
@@ -281,6 +281,7 @@ const TournamentDetail: React.FC = () => {
   }>({ isOpen: false });
   const [isLoadingScheduling, setIsLoadingScheduling] = useState(false);
   const [proposalCache, setProposalCache] = useState<Record<string, any>>({});
+  const [userTimezone, setUserTimezone] = useState<string>('UTC');
 
     const [showReplayConfirmModal, setShowReplayConfirmModal] = useState(false);
   const [selectedTournamentReplay, setSelectedTournamentReplay] = useState<any>(null);
@@ -308,6 +309,23 @@ const TournamentDetail: React.FC = () => {
       fetchTournamentData();
     }
   }, [id, userId]);
+
+  // Fetch user timezone once
+  useEffect(() => {
+    if (userId) {
+      userService
+        .getProfile()
+        .then((res) => {
+          if (res.data?.timezone) {
+            setUserTimezone(res.data.timezone);
+          }
+        })
+        .catch((err) => {
+          console.warn('Could not fetch user timezone:', err);
+          setUserTimezone('UTC');
+        });
+    }
+  }, [userId]);
 
   const fetchTournamentData = async () => {
     try {
@@ -1138,7 +1156,8 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
       const proposalData = {
         ...proposal,
         displaySlots,
-        allSlots: proposal.slots || []
+        allSlots: proposal.slots || [],
+        userTimezone
       };
 
       // Cache it
@@ -1169,6 +1188,18 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
     }
   };
 
+  // Helper to format a date in a specific timezone
+  const formatDateInTimezone = (date: Date, timezone: string, includeTime: boolean = true) => {
+    const formatter = new Intl.DateTimeFormat('es-ES', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      ...(includeTime && { hour: '2-digit', minute: '2-digit' })
+    });
+    return formatter.format(date);
+  };
+
   // Helper to render schedule slots for a match
   const renderScheduleSlots = (proposal: any) => {
     if (!proposal || !proposal.displaySlots || proposal.displaySlots.length === 0) {
@@ -1176,6 +1207,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
     }
 
     const slots = proposal.displaySlots;
+    const timezone = proposal.userTimezone || userTimezone || 'UTC';
     
     // Sort and group confirmed slots into ranges
     const sortedSlots = slots
@@ -1211,17 +1243,13 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
     // Show ranges in single line format
     if (ranges.length === 1) {
       const range = ranges[0];
-      const startStr = range.start.toLocaleString('es-ES', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
+      const startStr = formatDateInTimezone(range.start, timezone, true);
+      const endFormatter = new Intl.DateTimeFormat('es-ES', {
+        timeZone: timezone,
         hour: '2-digit',
         minute: '2-digit'
       });
-      const endStr = range.end.toLocaleTimeString('es-ES', {
-        hour: '2-digit',
-        minute: '2-digit'
-      });
+      const endStr = endFormatter.format(range.end);
       return (
         <span className="text-xs text-gray-600">
           {startStr} - {endStr}
@@ -1233,17 +1261,13 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
     return (
       <div className="flex flex-col gap-1">
         {ranges.map((range: any, idx: number) => {
-          const startStr = range.start.toLocaleString('es-ES', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
+          const startStr = formatDateInTimezone(range.start, timezone, true);
+          const endFormatter = new Intl.DateTimeFormat('es-ES', {
+            timeZone: timezone,
             hour: '2-digit',
             minute: '2-digit'
           });
-          const endStr = range.end.toLocaleTimeString('es-ES', {
-            hour: '2-digit',
-            minute: '2-digit'
-          });
+          const endStr = endFormatter.format(range.end);
           return (
             <span key={idx} className="text-xs text-gray-600">
               {startStr} - {endStr}
