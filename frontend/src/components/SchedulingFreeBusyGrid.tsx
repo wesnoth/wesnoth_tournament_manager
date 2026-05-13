@@ -26,6 +26,8 @@ interface SchedulingFreeBusyGridProps {
   confirmedSlots?: Record<string, string[]>;
   viewingTimezone?: string;
   scrollToHour?: number | null;
+  confirmMode?: boolean; // True when confirming proposal (only select proposed slots)
+  hasStartedConfirmationSelection?: boolean; // Track if first click has happened
 }
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -172,7 +174,9 @@ export default function SchedulingFreeBusyGrid({
   proposedSlots = [],
   confirmedSlots = {},
   viewingTimezone = 'UTC',
-  scrollToHour = null
+  scrollToHour = null,
+  confirmMode = false,
+  hasStartedConfirmationSelection = false
 }: SchedulingFreeBusyGridProps) {
   const { t } = useTranslation();
   const gridContainerRef = useRef<HTMLDivElement>(null);
@@ -213,7 +217,25 @@ export default function SchedulingFreeBusyGrid({
 
   const handleSlotClick = (slot: GridSlot) => {
     if (readOnly || !onSlotToggle) return;
+    
     const key = getSlotKey(slot);
+    
+    // In confirm mode, only allow clicking proposed slots
+    if (confirmMode && proposedSlots.length > 0 && !proposedSlots.includes(key)) {
+      return;
+    }
+    
+    // In confirm mode with first click: clear all and select this one
+    if (confirmMode && !hasStartedConfirmationSelection && selectedSlots.size === proposedSlots.length) {
+      // First click - clear all others
+      selectedSlots.forEach(slot => {
+        if (slot !== key) {
+          onSlotToggle(slot, false);
+        }
+      });
+    }
+    
+    // Toggle this slot
     onSlotToggle(key, !selectedSlots.has(key));
   };
 

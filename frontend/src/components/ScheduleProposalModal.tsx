@@ -327,21 +327,6 @@ export default function ScheduleProposalModal({
   };
 
   // Memoize formatted slot data to avoid expensive date calculations on every render
-  const formattedSlots = useMemo(() => {
-    if (!proposal?.slots) return [];
-    
-    return proposal.slots.map(slot => ({
-      id: slot.id,
-      dateStr: new Date(slot.slot_datetime).toLocaleDateString(),
-      timeStr: new Date(slot.slot_datetime).toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
-        minute: '2-digit', 
-        hour12: true 
-      }),
-      status: slot.status
-    }));
-  }, [proposal?.slots]);
-
   if (!isOpen) return null;
 
   const dateEnd = new Date(displayDateStart);
@@ -417,13 +402,24 @@ export default function ScheduleProposalModal({
                   participants={participants}
                   dateStart={displayDateStart}
                   dateEnd={dateEnd}
-                  selectedSlots={selectedSlots}
-                  onSlotToggle={handleSlotToggle}
-                  readOnly={mode === 'confirm' && !proposal}
+                  selectedSlots={mode === 'confirm' ? confirmedSlotIds : selectedSlots}
+                  onSlotToggle={mode === 'confirm' ? (slotId: string, selected: boolean) => {
+                    const newConfirmed = new Set(confirmedSlotIds);
+                    if (selected) {
+                      newConfirmed.add(slotId);
+                    } else {
+                      newConfirmed.delete(slotId);
+                    }
+                    setConfirmedSlotIds(newConfirmed);
+                    setHasStartedConfirmationSelection(true);
+                  } : handleSlotToggle}
+                  readOnly={false}
                   proposedSlots={proposedSlotDatetimes}
                   confirmedSlots={confirmedSlotsMap}
                   viewingTimezone={viewingTimezone}
                   scrollToHour={scrollToHour}
+                  confirmMode={mode === 'confirm'}
+                  hasStartedConfirmationSelection={hasStartedConfirmationSelection}
                 />
               </div>
 
@@ -480,60 +476,6 @@ export default function ScheduleProposalModal({
                       </div>
                     </div>
                   )}
-                </div>
-              )}
-
-              {/* Slot selection UI in confirmation mode */}
-              {mode === 'confirm' && proposal?.slots && proposal.slots.length > 0 && (
-                <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-lg">
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-sm font-semibold text-purple-900">
-                      Select Slots to Confirm ({confirmedSlotIds.size}/{proposal.slots.length})
-                    </p>
-                    <p className="text-xs text-purple-700">
-                      Click a slot to start, then select/deselect individually
-                    </p>
-                  </div>
-                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                    {formattedSlots.map((formatted, idx) => {
-                      const slot = proposal.slots[idx];
-                      const isConfirmed = confirmedSlotIds.has(formatted.id);
-                        
-                      return (
-                        <button
-                          key={formatted.id}
-                          onClick={() => handleConfirmationSlotToggle(formatted.id)}
-                          disabled={loading}
-                          className={`p-3 rounded border-2 transition-all text-left ${
-                            isConfirmed
-                              ? 'bg-green-100 border-green-400 text-green-900'
-                              : 'bg-red-100 border-red-400 text-red-900'
-                          } hover:opacity-80 disabled:opacity-50`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={isConfirmed}
-                              readOnly
-                              className="w-4 h-4"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <div className="font-semibold text-sm">{formatted.dateStr}</div>
-                              <div className="text-xs">{formatted.timeStr}</div>
-                              <div className="text-xs opacity-75 capitalize">{formatted.status}</div>
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                   
-                  <div className="mt-3 p-2 bg-white rounded border border-purple-200 text-xs text-purple-800">
-                    <strong>Color code:</strong> 
-                    <span className="ml-2 inline-block px-2 py-1 bg-green-100 border border-green-400 rounded mr-2">Green = Confirmed</span>
-                    <span className="inline-block px-2 py-1 bg-red-100 border border-red-400 rounded">Red = Rejected</span>
-                  </div>
                 </div>
               )}
 
