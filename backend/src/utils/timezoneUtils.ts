@@ -26,7 +26,21 @@ const VALID_TIMEZONES: string[] = (() => {
  * Validate IANA timezone string
  */
 export function validateTimezone(tz: string): boolean {
-  return VALID_TIMEZONES.includes(tz);
+  if (!tz || typeof tz !== 'string') {
+    console.warn('[validateTimezone] Invalid input:', tz);
+    return false;
+  }
+  
+  if (VALID_TIMEZONES.length === 0) {
+    console.warn('[validateTimezone] VALID_TIMEZONES is empty!');
+    return false;
+  }
+  
+  const isValid = VALID_TIMEZONES.includes(tz);
+  if (!isValid) {
+    console.warn(`[validateTimezone] Timezone "${tz}" not in list. List has ${VALID_TIMEZONES.length} timezones. Sample:`, VALID_TIMEZONES.slice(0, 5));
+  }
+  return isValid;
 }
 
 /**
