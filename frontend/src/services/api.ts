@@ -235,6 +235,10 @@ export const adminService = {
   forceDiscardReplay: (replayId: string) => api.post(`/admin/replays/${replayId}/force-discard`),
   reprocessReplay: (replayId: string) => api.post(`/admin/replays/${replayId}/reprocess`),
   
+  // System Settings
+  getSystemSettings: () => api.get('/admin/system-settings'),
+  updateSystemSetting: (key: string, value: string) => api.put(`/admin/system-settings/${key}`, { setting_value: value }),
+  
   // News/Announcements
   getNews: () => api.get('/admin/news'),
   createNews: (data: any) => api.post('/admin/news', data),

@@ -61,7 +61,10 @@ export class SyncGamesFromForumJob {
 
     try {
       console.log('🌐 [FORUM SYNC] Starting forum database sync...');
-      this.lastRunAt = new Date();
+      // Capture sync start time - this will be the checkpoint for next sync
+      // This prevents the gap between when we query and when we update the timestamp
+      const syncStartTime = new Date();
+      this.lastRunAt = syncStartTime;
 
       // Get last check timestamp from system_settings
       const settingsResult = await query(
@@ -106,7 +109,8 @@ export class SyncGamesFromForumJob {
       
       if (!gamesResult || gamesResult.length === 0) {
         console.log('ℹ️  [FORUM SYNC] No new games found');
-        this.updateLastCheckTimestamp();
+        // Even if no games found, update checkpoint to syncStartTime to prevent gaps
+        this.updateLastCheckTimestamp(syncStartTime);
         return;
       }
 
@@ -234,8 +238,10 @@ export class SyncGamesFromForumJob {
       console.log(`✅ [FORUM SYNC] Processed ${processedWithAddon} games with addon, ${skippedWithoutAddon} without addon, ${skippedDuplicateNicknames} with duplicate nicknames`);
       console.log(`❌ [FORUM SYNC] ${this.errorCount} errors during processing`);
 
-      // Update last check timestamp with the latest game timestamp
-      await this.updateLastCheckTimestamp(latestGameTimestamp);
+      // Update checkpoint to syncStartTime (not latestGameTimestamp)
+      // This ensures the next sync starts exactly where this one started, with no gaps
+      // latestGameTimestamp is only tracked for logging purposes
+      await this.updateLastCheckTimestamp(syncStartTime);
 
     } catch (error) {
       this.errorCount++;

@@ -64,6 +64,13 @@ const AdminReplays: React.FC = () => {
   const [discarding, setDiscarding] = useState<string | null>(null);
   const [reprocessing, setReprocessing] = useState<string | null>(null);
   const [summaryModal, setSummaryModal] = useState<{ open: boolean; json: string; filename: string }>({ open: false, json: '', filename: '' });
+  
+  // System settings state
+  const [systemSettings, setSystemSettings] = useState<any[]>([]);
+  const [loadingSettings, setLoadingSettings] = useState(false);
+  const [editingSettingKey, setEditingSettingKey] = useState<string | null>(null);
+  const [editingSettingValue, setEditingSettingValue] = useState('');
+  const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated || (!isAdmin && !isTournamentModerator)) {
@@ -71,6 +78,7 @@ const AdminReplays: React.FC = () => {
       return;
     }
     fetchReplays();
+    fetchSystemSettings();
   }, [isAuthenticated, isAdmin, isTournamentModerator, navigate, statusFilter]);
 
   const fetchReplays = async () => {
@@ -118,6 +126,46 @@ const AdminReplays: React.FC = () => {
     }
   };
 
+  const fetchSystemSettings = async () => {
+    try {
+      setLoadingSettings(true);
+      const res = await adminService.getSystemSettings();
+      setSystemSettings(res.data || []);
+    } catch (err: any) {
+      console.error('Failed to fetch system settings:', err);
+    } finally {
+      setLoadingSettings(false);
+    }
+  };
+
+  const handleEditSetting = (settingKey: string, currentValue: string) => {
+    setEditingSettingKey(settingKey);
+    setEditingSettingValue(currentValue);
+  };
+
+  const handleSaveSetting = async () => {
+    if (!editingSettingKey) return;
+    
+    setSavingSettings(true);
+    try {
+      await adminService.updateSystemSetting(editingSettingKey, editingSettingValue);
+      setMessage('Setting updated successfully');
+      setTimeout(() => setMessage(''), 4000);
+      setEditingSettingKey(null);
+      setEditingSettingValue('');
+      fetchSystemSettings();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to update setting');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingSettingKey(null);
+    setEditingSettingValue('');
+  };
+
   const openSummary = (replay: any) => {
     let pretty = '—';
     if (replay.parse_summary) {
@@ -140,6 +188,51 @@ const AdminReplays: React.FC = () => {
 
         {error && <p className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</p>}
         {message && <p className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-4">{message}</p>}
+
+        {/* System Settings Section */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">System Settings</h2>
+          
+          {loadingSettings ? (
+            <p className="text-gray-600">{t('loading')}</p>
+          ) : systemSettings.length === 0 ? (
+            <p className="text-gray-500">No system settings found</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse bg-white rounded-lg text-sm">
+                <thead>
+                  <tr className="bg-gray-100 border-b border-gray-200">
+                    <th className="px-4 py-3 text-left font-semibold text-gray-800">Key</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-800">Value</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-800">Description</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-800">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {systemSettings.map((setting) => (
+                    <tr key={setting.setting_key} className="border-b border-gray-200 hover:bg-gray-50">
+                      <td className="px-4 py-2 text-gray-800 font-mono text-xs">{setting.setting_key}</td>
+                      <td className="px-4 py-2 text-gray-700 font-mono text-xs max-w-sm truncate" title={setting.setting_value}>
+                        {setting.setting_value}
+                      </td>
+                      <td className="px-4 py-2 text-gray-600 text-xs max-w-xs truncate" title={setting.description}>
+                        {setting.description || '—'}
+                      </td>
+                      <td className="px-4 py-2">
+                        <button
+                          onClick={() => handleEditSetting(setting.setting_key, setting.setting_value)}
+                          className="text-blue-600 hover:text-blue-800 text-sm font-semibold"
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
 
         {/* Filter */}
         <div className="bg-white rounded-lg shadow-md p-4 mb-6 flex gap-4 items-center flex-wrap">
@@ -260,8 +353,44 @@ const AdminReplays: React.FC = () => {
         )}
       </div>
 
+      {/* Edit System Setting Modal */}
+      {editingSettingKey && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={handleCancelEdit}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-800">Edit Setting</h2>
+              <p className="text-xs text-gray-500 mt-2 font-mono">{editingSettingKey}</p>
+            </div>
+            <div className="px-6 py-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">New Value:</label>
+              <textarea
+                value={editingSettingValue}
+                onChange={(e) => setEditingSettingValue(e.target.value)}
+                rows={4}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 font-mono text-sm"
+              />
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+              <button
+                onClick={handleCancelEdit}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveSetting}
+                disabled={savingSettings}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {savingSettings ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Parse Summary Modal */}
-      {summaryModal.open && (
+      {editingSettingKey === null && summaryModal.open && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={() => setSummaryModal({ open: false, json: '', filename: '' })}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col" style={{ maxHeight: '85vh' }} onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">

@@ -2607,5 +2607,66 @@ router.post('/user/tournaments/:id/confirm-replacement/:participantId', authMidd
   }
 });
 
+// Get system settings
+router.get('/system-settings', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const result = await query(
+      `SELECT id, setting_key, setting_value, description, created_at, updated_at, updated_by
+       FROM system_settings
+       ORDER BY setting_key`
+    );
+
+    res.json(result.rows || []);
+  } catch (error) {
+    console.error('Error fetching system settings:', error);
+    res.status(500).json({ error: 'Failed to fetch system settings', details: (error as any).message });
+  }
+});
+
+// Update system setting
+router.put('/system-settings/:setting_key', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const { setting_key } = req.params;
+    const { setting_value } = req.body;
+
+    if (!setting_value && setting_value !== '0' && setting_value !== 'false') {
+      return res.status(400).json({ error: 'setting_value is required' });
+    }
+
+    const ip = getUserIP(req);
+
+    // Update the setting
+    const result = await query(
+      `UPDATE system_settings 
+       SET setting_value = ?, updated_at = NOW(), updated_by = ?
+       WHERE setting_key = ?`,
+      [String(setting_value), req.userId, setting_key]
+    );
+
+    if ((result as any).affectedRows === 0) {
+      return res.status(404).json({ error: 'Setting not found' });
+    }
+
+    // Log audit event
+    await logAuditEvent({
+      event_type: 'ADMIN_ACTION',
+      user_id: req.userId,
+      ip_address: ip,
+      user_agent: getUserAgent(req),
+      details: { setting_key, new_value: setting_value }
+    });
+
+    res.json({ 
+      success: true, 
+      message: `Setting "${setting_key}" updated successfully`,
+      setting_key,
+      setting_value
+    });
+  } catch (error) {
+    console.error('Error updating system setting:', error);
+    res.status(500).json({ error: 'Failed to update system setting', details: (error as any).message });
+  }
+});
+
 export default router;
 
