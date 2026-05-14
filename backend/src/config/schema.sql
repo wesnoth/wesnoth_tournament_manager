@@ -1,337 +1,1017 @@
--- Users extension table (actual user profiles with app-specific data)
--- Extends forum phpbb3_users with tournament application fields
-CREATE TABLE IF NOT EXISTS users_extension (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id INTEGER NOT NULL UNIQUE COMMENT 'Foreign key to forum phpbb3_users.user_id',
-  nickname VARCHAR(255) NOT NULL UNIQUE,
-  email VARCHAR(255) NOT NULL UNIQUE,
-  language VARCHAR(2) DEFAULT 'en',
-  discord_id VARCHAR(255),
-  elo_rating INTEGER DEFAULT 1200,
-  level VARCHAR(50) DEFAULT 'novato',
-  is_active BOOLEAN DEFAULT false,
-  is_blocked BOOLEAN DEFAULT false,
-  is_admin BOOLEAN DEFAULT false,
-  is_moderator BOOLEAN DEFAULT false,
-  country VARCHAR(2),
-  avatar VARCHAR(255),
-  enable_ranked BOOLEAN DEFAULT false,
-  is_rated BOOLEAN DEFAULT false,
-  matches_played INTEGER DEFAULT 0,
-  total_wins INTEGER DEFAULT 0,
-  total_losses INTEGER DEFAULT 0,
-  trend VARCHAR(50),
-  timezone VARCHAR(100) DEFAULT 'UTC' COMMENT 'IANA timezone name (e.g., Europe/Madrid, America/New_York)',
-  availability_schedule JSON NULL COMMENT 'Object with day keys (monday-sunday) containing array of {start, end} time ranges',
-  availability_updated_at DATETIME NULL COMMENT 'Timestamp when availability was last modified',
-  last_match_date DATETIME NULL COMMENT 'Timestamp of the last match the player participated in (for inactive status check)',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+/*M!999999\- enable the sandbox mode */ 
+-- MariaDB dump 10.19-11.8.6-MariaDB, for debian-linux-gnu (x86_64)
+--
+-- Host: 192.168.1.3    Database: tournament
+-- ------------------------------------------------------
+-- Server version	11.8.6-MariaDB-0+deb13u1 from Debian
 
--- Password policy table
-CREATE TABLE IF NOT EXISTS password_policy (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  min_length INTEGER DEFAULT 8,
-  require_uppercase BOOLEAN DEFAULT true,
-  require_lowercase BOOLEAN DEFAULT true,
-  require_numbers BOOLEAN DEFAULT true,
-  require_symbols BOOLEAN DEFAULT true,
-  previous_passwords_count INTEGER DEFAULT 5,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!40101 SET NAMES utf8mb4 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*M!100616 SET @OLD_NOTE_VERBOSITY=@@NOTE_VERBOSITY, NOTE_VERBOSITY=0 */;
 
--- Password history table
-CREATE TABLE IF NOT EXISTS password_history (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users_extension(id) ON DELETE CASCADE,
-  password_hash VARCHAR(255) NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+--
+-- Table structure for table `audit_logs`
+--
 
--- Registration requests table
-CREATE TABLE IF NOT EXISTS registration_requests (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  nickname VARCHAR(255) NOT NULL UNIQUE,
-  email VARCHAR(255) NOT NULL,
-  language VARCHAR(2),
-  discord_id VARCHAR(255),
-  status VARCHAR(20) DEFAULT 'pending',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  reviewed_at TIMESTAMP,
-  reviewed_by UUID REFERENCES users_extension(id)
-);
+DROP TABLE IF EXISTS `audit_logs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `audit_logs` (
+  `id` char(36) NOT NULL,
+  `event_type` varchar(50) NOT NULL,
+  `user_id` char(36) DEFAULT NULL,
+  `username` varchar(255) DEFAULT NULL,
+  `ip_address` varchar(45) DEFAULT NULL,
+  `user_agent` text DEFAULT NULL,
+  `details` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`details`)),
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_audit_logs_user_id` (`user_id`),
+  KEY `idx_audit_logs_event_type` (`event_type`),
+  KEY `idx_audit_logs_created_at` (`created_at`),
+  KEY `idx_audit_logs_ip_address` (`ip_address`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Matches table
-CREATE TABLE IF NOT EXISTS matches (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  winner_id UUID NOT NULL REFERENCES users_extension(id),
-  loser_id UUID NOT NULL REFERENCES users_extension(id),
-  map VARCHAR(255) NOT NULL,
-  winner_faction VARCHAR(255) NOT NULL,
-  loser_faction VARCHAR(255) NOT NULL,
-  winner_comments TEXT,
-  winner_rating INTEGER CHECK (winner_rating >= 1 AND winner_rating <= 5),
-  loser_comments TEXT,
-  loser_rating INTEGER CHECK (loser_rating >= 1 AND loser_rating <= 5),
-  status VARCHAR(20) DEFAULT 'unconfirmed',
-  replay_file_path VARCHAR(500),
-  replay_downloads INTEGER DEFAULT 0,
-  tournament_id UUID,
-  elo_change INTEGER,
-  winner_elo_before INTEGER,
-  winner_elo_after INTEGER,
-  loser_elo_before INTEGER,
-  loser_elo_after INTEGER,
-  winner_level_before VARCHAR(50),
-  winner_level_after VARCHAR(50),
-  loser_level_before VARCHAR(50),
-  loser_level_after VARCHAR(50),
-  winner_ranking_pos INTEGER,
-  winner_ranking_change INTEGER,
-  loser_ranking_pos INTEGER,
-  loser_ranking_change INTEGER,
-  admin_reviewed BOOLEAN DEFAULT false,
-  admin_reviewed_at TIMESTAMP,
-  admin_reviewed_by UUID REFERENCES users_extension(id),
-  round_id UUID REFERENCES tournament_rounds(id) ON DELETE SET NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+--
+-- Table structure for table `balance_events`
+--
 
--- Tournaments table
-CREATE TABLE IF NOT EXISTS tournaments (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name VARCHAR(255) NOT NULL,
-  description TEXT NOT NULL,
-  creator_id UUID NOT NULL REFERENCES users_extension(id),
-  status VARCHAR(30) DEFAULT 'registration_open',
-  tournament_type VARCHAR(50) NOT NULL,
-  max_participants INTEGER NOT NULL,
-  current_round INTEGER DEFAULT 0,
-  total_rounds INTEGER DEFAULT 0,
-  round_duration_days INTEGER DEFAULT 7,
-  auto_advance_round BOOLEAN DEFAULT false,
-  round_deadline TIMESTAMP,
-  general_rounds INTEGER DEFAULT 0,
-  final_rounds INTEGER DEFAULT 0,
-  general_rounds_format VARCHAR(10) DEFAULT 'bo3' CHECK (general_rounds_format IN ('bo1', 'bo3', 'bo5')),
-  final_rounds_format VARCHAR(10) DEFAULT 'bo5' CHECK (final_rounds_format IN ('bo1', 'bo3', 'bo5')),
-  approved_at TIMESTAMP,
-  registration_closed_at TIMESTAMP,
-  prepared_at TIMESTAMP,
-  started_at TIMESTAMP,
-  finished_at TIMESTAMP,
-  winner_id UUID REFERENCES users_extension(id),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+DROP TABLE IF EXISTS `balance_events`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `balance_events` (
+  `id` char(36) NOT NULL,
+  `event_date` datetime NOT NULL DEFAULT current_timestamp(),
+  `patch_version` varchar(20) DEFAULT NULL,
+  `event_type` varchar(50) NOT NULL,
+  `faction_id` char(36) DEFAULT NULL,
+  `map_id` char(36) DEFAULT NULL,
+  `description` text NOT NULL,
+  `notes` text DEFAULT NULL,
+  `created_by` char(36) DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `snapshot_before_date` date DEFAULT NULL,
+  `snapshot_after_date` date DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_event_type` (`event_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Tournament participants table
-CREATE TABLE IF NOT EXISTS tournament_participants (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tournament_id UUID NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES users_extension(id),
-  participation_status VARCHAR(20) DEFAULT 'pending',
-  tournament_ranking INTEGER,
-  tournament_wins INTEGER DEFAULT 0,
-  tournament_losses INTEGER DEFAULT 0,
-  tournament_points INTEGER DEFAULT 0,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(tournament_id, user_id)
-);
+--
+-- Table structure for table `countries`
+--
 
--- Tournament rounds configuration table
-CREATE TABLE IF NOT EXISTS tournament_rounds (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tournament_id UUID NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
-  round_number INTEGER NOT NULL,
-  round_type VARCHAR(20) NOT NULL CHECK (round_type IN ('general', 'final')),
-  match_format VARCHAR(10) NOT NULL CHECK (match_format IN ('bo1', 'bo3', 'bo5')),
-  round_status VARCHAR(20) DEFAULT 'pending' CHECK (round_status IN ('pending', 'in_progress', 'completed')),
-  round_phase_label VARCHAR(100),
-  round_phase_description VARCHAR(255),
-  round_classification VARCHAR(50) CHECK (round_classification IN ('standard', 'swiss', 'general', 'elimination', 'quarterfinals', 'semifinals', 'final')),
-  players_remaining INTEGER,
-  players_advancing_to_next INTEGER,
-  round_start_date TIMESTAMP,
-  round_end_date TIMESTAMP,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(tournament_id, round_number)
-);
+DROP TABLE IF EXISTS `countries`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `countries` (
+  `code` varchar(2) NOT NULL,
+  `names_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT '{}' CHECK (json_valid(`names_json`)),
+  `flag_emoji` varchar(10) DEFAULT NULL,
+  `official_name` varchar(255) DEFAULT NULL,
+  `region` varchar(100) DEFAULT NULL,
+  `is_active` tinyint(1) DEFAULT 1,
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- News table
-CREATE TABLE IF NOT EXISTS news (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  title VARCHAR(255) NOT NULL,
-  content TEXT NOT NULL,
-  translations JSONB DEFAULT '{"en":{},"es":{},"zh":{},"de":{}}',
-  author_id UUID NOT NULL REFERENCES users_extension(id),
-  language_code VARCHAR(10) DEFAULT 'en',
-  published_at TIMESTAMP,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (id, language_code)
-);
+--
+-- Table structure for table `faction_map_statistics`
+--
 
--- FAQ table
-CREATE TABLE IF NOT EXISTS faq (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  question VARCHAR(500) NOT NULL,
-  answer TEXT NOT NULL,
-  language_code VARCHAR(10) DEFAULT 'en',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+DROP TABLE IF EXISTS `faction_map_statistics`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `faction_map_statistics` (
+  `id` char(36) NOT NULL,
+  `map_id` char(36) NOT NULL,
+  `faction_id` char(36) NOT NULL,
+  `opponent_faction_id` char(36) NOT NULL,
+  `total_games` int(11) DEFAULT 0,
+  `wins` int(11) DEFAULT 0,
+  `losses` int(11) DEFAULT 0,
+  `winrate` decimal(5,2) DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `last_updated` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `faction_side` tinyint(1) NOT NULL DEFAULT 0 COMMENT '0=unknown, 1=played as side 1, 2=played as side 2',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_faction_map_opponent_side` (`map_id`,`faction_id`,`opponent_faction_id`,`faction_side`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Factions table
-CREATE TABLE IF NOT EXISTS factions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name VARCHAR(255) NOT NULL UNIQUE,
-  description TEXT,
-  icon_path VARCHAR(500),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+--
+-- Table structure for table `faction_map_statistics_history`
+--
 
--- Game maps table
-CREATE TABLE IF NOT EXISTS game_maps (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name VARCHAR(255) NOT NULL UNIQUE,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  usage_count INTEGER DEFAULT 1
-);
+DROP TABLE IF EXISTS `faction_map_statistics_history`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `faction_map_statistics_history` (
+  `id` char(36) NOT NULL,
+  `snapshot_date` date NOT NULL,
+  `snapshot_timestamp` datetime NOT NULL DEFAULT current_timestamp(),
+  `map_id` char(36) NOT NULL,
+  `faction_id` char(36) NOT NULL,
+  `opponent_faction_id` char(36) NOT NULL,
+  `faction_side` tinyint(4) NOT NULL DEFAULT 1,
+  `total_games` int(11) DEFAULT 0,
+  `wins` int(11) DEFAULT 0,
+  `losses` int(11) DEFAULT 0,
+  `winrate` decimal(5,2) DEFAULT NULL,
+  `sample_size_category` varchar(20) DEFAULT NULL,
+  `confidence_level` decimal(5,2) DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_snapshot_date` (`snapshot_date`),
+  KEY `idx_map_faction` (`map_id`,`faction_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Online users table
-CREATE TABLE IF NOT EXISTS online_users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL UNIQUE REFERENCES users_extension(id),
-  last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+--
+-- Table structure for table `faction_translations`
+--
 
--- Chat messages table
-CREATE TABLE IF NOT EXISTS chat_messages (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  sender_id UUID NOT NULL REFERENCES users_extension(id),
-  receiver_id UUID NOT NULL REFERENCES users_extension(id),
-  message TEXT NOT NULL,
-  is_read BOOLEAN DEFAULT false,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+DROP TABLE IF EXISTS `faction_translations`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `faction_translations` (
+  `id` char(36) NOT NULL,
+  `faction_id` char(36) NOT NULL,
+  `language_code` varchar(10) NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `description` text DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_faction_lang` (`faction_id`,`language_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Tournament matches table (tracks individual matches in tournament rounds)
-CREATE TABLE IF NOT EXISTS tournament_matches (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tournament_id UUID NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
-  round_id UUID NOT NULL REFERENCES tournament_rounds(id) ON DELETE CASCADE,
-  player1_id UUID NOT NULL REFERENCES users_extension(id) ON DELETE CASCADE,
-  player2_id UUID NOT NULL REFERENCES users_extension(id) ON DELETE CASCADE,
-  winner_id UUID REFERENCES users_extension(id) ON DELETE SET NULL,
-  match_id UUID REFERENCES matches(id) ON DELETE SET NULL,
-  tournament_round_match_id UUID,
-  match_status VARCHAR(20) DEFAULT 'pending' CHECK (match_status IN ('pending', 'in_progress', 'completed', 'cancelled')),
-  played_at TIMESTAMP,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+--
+-- Table structure for table `factions`
+--
 
--- Tournament round matches table (tracks Best Of series per player pairing)
-CREATE TABLE IF NOT EXISTS tournament_round_matches (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tournament_id UUID NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
-  round_id UUID NOT NULL REFERENCES tournament_rounds(id) ON DELETE CASCADE,
-  player1_id UUID NOT NULL REFERENCES users_extension(id) ON DELETE CASCADE,
-  player2_id UUID NOT NULL REFERENCES users_extension(id) ON DELETE CASCADE,
-  best_of INT NOT NULL CHECK (best_of IN (1, 3, 5)),
-  wins_required INT NOT NULL,
-  player1_wins INT NOT NULL DEFAULT 0,
-  player2_wins INT NOT NULL DEFAULT 0,
-  matches_scheduled INT NOT NULL DEFAULT 0,
-  series_status VARCHAR(50) NOT NULL DEFAULT 'in_progress' CHECK (series_status IN ('in_progress', 'completed')),
-  winner_id UUID REFERENCES users_extension(id) ON DELETE SET NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(tournament_id, round_id, player1_id, player2_id)
-);
+DROP TABLE IF EXISTS `factions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `factions` (
+  `id` char(36) NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `description` text DEFAULT NULL,
+  `icon_path` varchar(500) DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `is_active` tinyint(1) DEFAULT 1,
+  `is_ranked` tinyint(1) DEFAULT 1,
+  PRIMARY KEY (`id`),
+  KEY `idx_is_ranked` (`is_ranked`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Add foreign key constraint for tournament_round_match_id after table creation
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.table_constraints 
-    WHERE table_name = 'tournament_matches' 
-    AND constraint_name = 'fk_tournament_round_match_id'
-  ) THEN
-    ALTER TABLE tournament_matches
-    ADD CONSTRAINT fk_tournament_round_match_id
-    FOREIGN KEY (tournament_round_match_id)
-    REFERENCES tournament_round_matches(id) ON DELETE SET NULL;
-  END IF;
-END $$;
+--
+-- Table structure for table `faq`
+--
 
--- Create indexes
-CREATE INDEX IF NOT EXISTS idx_users_extension_nickname ON users_extension(nickname);
-CREATE INDEX IF NOT EXISTS idx_users_extension_email ON users_extension(email);
-CREATE INDEX IF NOT EXISTS idx_matches_winner ON matches(winner_id);
-CREATE INDEX IF NOT EXISTS idx_matches_loser ON matches(loser_id);
-CREATE INDEX IF NOT EXISTS idx_matches_tournament ON matches(tournament_id);
-CREATE INDEX IF NOT EXISTS idx_matches_round ON matches(round_id);
-CREATE INDEX IF NOT EXISTS idx_tournament_creator ON tournaments(creator_id);
-CREATE INDEX IF NOT EXISTS idx_tournament_status ON tournaments(status);
-CREATE INDEX IF NOT EXISTS idx_tournament_rounds_tournament ON tournament_rounds(tournament_id);
-CREATE INDEX IF NOT EXISTS idx_tournament_rounds_status ON tournament_rounds(round_status);
-CREATE INDEX IF NOT EXISTS idx_tournament_round_matches_tournament ON tournament_round_matches(tournament_id);
-CREATE INDEX IF NOT EXISTS idx_tournament_round_matches_round ON tournament_round_matches(round_id);
-CREATE INDEX IF NOT EXISTS idx_tournament_round_matches_status ON tournament_round_matches(series_status);
-CREATE INDEX IF NOT EXISTS idx_news_author ON news(author_id);
-CREATE INDEX IF NOT EXISTS idx_news_language_code ON news(language_code);
-CREATE INDEX IF NOT EXISTS idx_chat_sender ON chat_messages(sender_id);
-CREATE INDEX IF NOT EXISTS idx_chat_receiver ON chat_messages(receiver_id);
+DROP TABLE IF EXISTS `faq`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `faq` (
+  `id` char(36) NOT NULL,
+  `question` varchar(500) NOT NULL,
+  `answer` text NOT NULL,
+  `translations` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT '{"de": {}, "en": {}, "es": {}, "zh": {}}' CHECK (json_valid(`translations`)),
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `language_code` varchar(10) DEFAULT 'en',
+  `order` int(11) DEFAULT 0,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Match scheduling tables (Phase 1)
--- Stores proposals for scheduling matches at tournament_round_matches or tournament_matches level
-CREATE TABLE IF NOT EXISTS match_schedule_proposals (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tournament_round_match_id UUID REFERENCES tournament_round_matches(id) ON DELETE CASCADE,
-  tournament_match_id UUID REFERENCES tournament_matches(id) ON DELETE CASCADE,
-  proposed_by_user_id UUID NOT NULL REFERENCES users_extension(id) ON DELETE CASCADE,
-  proposed_at TIMESTAMP NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'superseded', 'resolved')),
-  notes TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+--
+-- Table structure for table `game_maps`
+--
 
-CREATE INDEX IF NOT EXISTS idx_match_schedule_proposals_round_match ON match_schedule_proposals(tournament_round_match_id);
-CREATE INDEX IF NOT EXISTS idx_match_schedule_proposals_match ON match_schedule_proposals(tournament_match_id);
-CREATE INDEX IF NOT EXISTS idx_match_schedule_proposals_status ON match_schedule_proposals(status);
-CREATE INDEX IF NOT EXISTS idx_match_schedule_proposals_proposed_by ON match_schedule_proposals(proposed_by_user_id);
+DROP TABLE IF EXISTS `game_maps`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `game_maps` (
+  `id` char(36) NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `usage_count` int(11) DEFAULT 1,
+  `is_active` tinyint(1) DEFAULT 1,
+  `is_ranked` tinyint(1) DEFAULT 1,
+  PRIMARY KEY (`id`),
+  KEY `idx_is_ranked` (`is_ranked`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Individual time slots within a proposal (slots are in UTC, rounded to nearest 30-minute mark)
-CREATE TABLE IF NOT EXISTS match_schedule_slots (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  proposal_id UUID NOT NULL REFERENCES match_schedule_proposals(id) ON DELETE CASCADE,
-  slot_datetime TIMESTAMP NOT NULL,
-  slot_duration_minutes INTEGER DEFAULT 30,
-  status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed')),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(proposal_id, slot_datetime)
-);
+--
+-- Table structure for table `global_statistics`
+--
 
-CREATE INDEX IF NOT EXISTS idx_match_schedule_slots_proposal ON match_schedule_slots(proposal_id);
-CREATE INDEX IF NOT EXISTS idx_match_schedule_slots_datetime ON match_schedule_slots(slot_datetime);
-CREATE INDEX IF NOT EXISTS idx_match_schedule_slots_status ON match_schedule_slots(status);
+DROP TABLE IF EXISTS `global_statistics`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `global_statistics` (
+  `id` char(36) NOT NULL DEFAULT uuid(),
+  `statistic_key` varchar(100) NOT NULL,
+  `statistic_value` bigint(20) NOT NULL DEFAULT 0,
+  `last_updated` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `calculated_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `statistic_key` (`statistic_key`),
+  KEY `idx_statistic_key` (`statistic_key`),
+  KEY `idx_last_updated` (`last_updated`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- User/team confirmations for proposed time slots
-CREATE TABLE IF NOT EXISTS match_schedule_confirmations (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  slot_id UUID NOT NULL REFERENCES match_schedule_slots(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES users_extension(id) ON DELETE CASCADE,
-  confirmed_at TIMESTAMP NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(slot_id, user_id)
-);
+--
+-- Table structure for table `map_translations`
+--
 
-CREATE INDEX IF NOT EXISTS idx_match_schedule_confirmations_slot ON match_schedule_confirmations(slot_id);
-CREATE INDEX IF NOT EXISTS idx_match_schedule_confirmations_user ON match_schedule_confirmations(user_id);
+DROP TABLE IF EXISTS `map_translations`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `map_translations` (
+  `id` char(36) NOT NULL,
+  `map_id` char(36) NOT NULL,
+  `language_code` varchar(10) NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `description` text DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_map_lang` (`map_id`,`language_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `match_schedule_confirmations`
+--
+
+DROP TABLE IF EXISTS `match_schedule_confirmations`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `match_schedule_confirmations` (
+  `id` char(36) NOT NULL COMMENT 'UUID v4',
+  `proposal_id` char(36) NOT NULL COMMENT 'Reference to match_schedule_proposals.id - CHANGED FROM slot_id',
+  `user_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `confirmed_at` datetime NOT NULL COMMENT 'Timestamp of confirmation',
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_proposal_user` (`proposal_id`,`user_id`),
+  KEY `idx_proposal_id` (`proposal_id`),
+  KEY `idx_user_id` (`user_id`),
+  CONSTRAINT `fk_confirmation_proposal` FOREIGN KEY (`proposal_id`) REFERENCES `match_schedule_proposals` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='User confirmations for scheduling proposals - proposal-level, not per-slot. Each user confirms entire proposal.';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `match_schedule_proposals`
+--
+
+DROP TABLE IF EXISTS `match_schedule_proposals`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `match_schedule_proposals` (
+  `id` char(36) NOT NULL COMMENT 'UUID v4',
+  `tournament_round_match_id` char(36) DEFAULT NULL COMMENT 'Reference to tournament_round_matches.id (series-level)',
+  `tournament_match_id` char(36) DEFAULT NULL COMMENT 'Reference to tournament_matches.id (game-level)',
+  `proposed_by_user_id` char(36) NOT NULL COMMENT 'User who made the proposal',
+  `proposed_at` datetime NOT NULL,
+  `status` varchar(20) NOT NULL DEFAULT 'active' COMMENT 'active | superseded | resolved',
+  `expires_at` datetime DEFAULT NULL COMMENT 'Calculated when proposal created: max(slot_datetime) + 7 days. Used to auto-expire stale proposals',
+  `cancelled_at` datetime DEFAULT NULL COMMENT 'Timestamp when proposal was cancelled or expired. After 7 days in cancelled state, proposal is purged',
+  `user_id` char(36) DEFAULT NULL COMMENT 'FK→users_extension.id. For future P2P proposals without tournament context. NULL if tournament-based.',
+  `notes` text DEFAULT NULL COMMENT 'Player notes (max 500 chars)',
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_round_match_id` (`tournament_round_match_id`),
+  KEY `idx_match_id` (`tournament_match_id`),
+  KEY `idx_proposed_by` (`proposed_by_user_id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_expires_at` (`expires_at`),
+  KEY `idx_cancelled_at` (`cancelled_at`),
+  KEY `idx_user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Scheduling proposals at round or individual match level';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `match_schedule_slots`
+--
+
+DROP TABLE IF EXISTS `match_schedule_slots`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `match_schedule_slots` (
+  `id` char(36) NOT NULL COMMENT 'UUID v4',
+  `proposal_id` char(36) NOT NULL COMMENT 'Reference to match_schedule_proposals.id',
+  `slot_datetime` datetime NOT NULL COMMENT 'UTC timestamp, rounded to nearest 30-minute mark (HH:00 or HH:30)',
+  `slot_duration_minutes` int(11) DEFAULT 30 COMMENT 'Always 30 minutes',
+  `status` varchar(20) NOT NULL DEFAULT 'pending' COMMENT 'pending | confirmed',
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_proposal_slot_time` (`proposal_id`,`slot_datetime`),
+  KEY `idx_proposal_id` (`proposal_id`),
+  KEY `idx_slot_datetime` (`slot_datetime`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Individual 30-minute time slots within proposals';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `matches`
+--
+
+DROP TABLE IF EXISTS `matches`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `matches` (
+  `id` char(36) NOT NULL,
+  `winner_id` char(36) NOT NULL,
+  `loser_id` char(36) NOT NULL,
+  `map` varchar(255) NOT NULL,
+  `winner_faction` varchar(255) NOT NULL,
+  `loser_faction` varchar(255) NOT NULL,
+  `winner_comments` text DEFAULT NULL,
+  `winner_rating` int(11) DEFAULT NULL,
+  `loser_comments` text DEFAULT NULL,
+  `loser_rating` int(11) DEFAULT NULL,
+  `loser_confirmed` tinyint(1) DEFAULT 0,
+  `replay_file_path` varchar(1000) DEFAULT NULL,
+  `tournament_id` char(36) DEFAULT NULL,
+  `elo_change` int(11) DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `status` varchar(50) DEFAULT 'unconfirmed',
+  `auto_reported` tinyint(1) NOT NULL DEFAULT 0,
+  `replay_id` char(36) DEFAULT NULL,
+  `admin_reviewed` tinyint(1) DEFAULT 0,
+  `admin_reviewed_at` datetime DEFAULT NULL,
+  `admin_reviewed_by` char(36) DEFAULT NULL,
+  `winner_elo_before` int(11) DEFAULT 1600,
+  `winner_elo_after` int(11) DEFAULT 1600,
+  `loser_elo_before` int(11) DEFAULT 1600,
+  `loser_elo_after` int(11) DEFAULT 1600,
+  `winner_level_before` varchar(50) DEFAULT 'novato',
+  `winner_level_after` varchar(50) DEFAULT 'novato',
+  `loser_level_before` varchar(50) DEFAULT 'novato',
+  `loser_level_after` varchar(50) DEFAULT 'novato',
+  `replay_downloads` int(11) DEFAULT 0,
+  `winner_ranking_pos` int(11) DEFAULT NULL,
+  `winner_ranking_change` int(11) DEFAULT NULL,
+  `loser_ranking_pos` int(11) DEFAULT NULL,
+  `loser_ranking_change` int(11) DEFAULT NULL,
+  `round_id` char(36) DEFAULT NULL,
+  `tournament_type` varchar(20) DEFAULT NULL,
+  `tournament_mode` varchar(20) DEFAULT NULL,
+  `winner_side` tinyint(1) DEFAULT NULL COMMENT '1 or 2 — which side the winner played',
+  `game_id` int(11) DEFAULT NULL COMMENT 'wesnothd game_id from forum',
+  `wesnoth_version` varchar(20) DEFAULT NULL COMMENT 'e.g. 1.18.0',
+  `instance_uuid` char(36) DEFAULT NULL COMMENT 'wesnothd instance UUID from forum',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_replay_game` (`instance_uuid`,`game_id`),
+  KEY `idx_winner_id` (`winner_id`),
+  KEY `idx_tournament_id` (`tournament_id`),
+  KEY `idx_created_at` (`created_at`),
+  KEY `idx_auto_reported` (`auto_reported`),
+  KEY `idx_replay_id` (`replay_id`),
+  CONSTRAINT `fk_matches_replay` FOREIGN KEY (`replay_id`) REFERENCES `replays` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_matches_replay_id` FOREIGN KEY (`replay_id`) REFERENCES `replays` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `matches_faction_fix_backup_20260429`
+--
+
+DROP TABLE IF EXISTS `matches_faction_fix_backup_20260429`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `matches_faction_fix_backup_20260429` (
+  `id` char(36) NOT NULL,
+  `winner_id` char(36) NOT NULL,
+  `loser_id` char(36) NOT NULL,
+  `map` varchar(255) NOT NULL,
+  `winner_faction` varchar(255) NOT NULL,
+  `loser_faction` varchar(255) NOT NULL,
+  `winner_comments` text DEFAULT NULL,
+  `winner_rating` int(11) DEFAULT NULL,
+  `loser_comments` text DEFAULT NULL,
+  `loser_rating` int(11) DEFAULT NULL,
+  `loser_confirmed` tinyint(1) DEFAULT 0,
+  `replay_file_path` varchar(1000) DEFAULT NULL,
+  `tournament_id` char(36) DEFAULT NULL,
+  `elo_change` int(11) DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `status` varchar(50) DEFAULT 'unconfirmed',
+  `auto_reported` tinyint(1) NOT NULL DEFAULT 0,
+  `replay_id` char(36) DEFAULT NULL,
+  `admin_reviewed` tinyint(1) DEFAULT 0,
+  `admin_reviewed_at` datetime DEFAULT NULL,
+  `admin_reviewed_by` char(36) DEFAULT NULL,
+  `winner_elo_before` int(11) DEFAULT 1600,
+  `winner_elo_after` int(11) DEFAULT 1600,
+  `loser_elo_before` int(11) DEFAULT 1600,
+  `loser_elo_after` int(11) DEFAULT 1600,
+  `winner_level_before` varchar(50) DEFAULT 'novato',
+  `winner_level_after` varchar(50) DEFAULT 'novato',
+  `loser_level_before` varchar(50) DEFAULT 'novato',
+  `loser_level_after` varchar(50) DEFAULT 'novato',
+  `replay_downloads` int(11) DEFAULT 0,
+  `winner_ranking_pos` int(11) DEFAULT NULL,
+  `winner_ranking_change` int(11) DEFAULT NULL,
+  `loser_ranking_pos` int(11) DEFAULT NULL,
+  `loser_ranking_change` int(11) DEFAULT NULL,
+  `round_id` char(36) DEFAULT NULL,
+  `tournament_type` varchar(20) DEFAULT NULL,
+  `tournament_mode` varchar(20) DEFAULT NULL,
+  `winner_side` tinyint(1) DEFAULT NULL COMMENT '1 or 2 — which side the winner played',
+  `game_id` int(11) DEFAULT NULL COMMENT 'wesnothd game_id from forum',
+  `wesnoth_version` varchar(20) DEFAULT NULL COMMENT 'e.g. 1.18.0',
+  `instance_uuid` char(36) DEFAULT NULL COMMENT 'wesnothd instance UUID from forum'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `migrations`
+--
+
+DROP TABLE IF EXISTS `migrations`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `migrations` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `executed_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=104 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `news`
+--
+
+DROP TABLE IF EXISTS `news`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `news` (
+  `id` char(36) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `content` text NOT NULL,
+  `translations` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT '{"de": {}, "en": {}, "es": {}, "zh": {}}' CHECK (json_valid(`translations`)),
+  `author_id` char(36) NOT NULL,
+  `published_at` datetime DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `language_code` varchar(10) DEFAULT 'en',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `player_match_statistics`
+--
+
+DROP TABLE IF EXISTS `player_match_statistics`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `player_match_statistics` (
+  `id` char(36) NOT NULL,
+  `player_id` char(36) NOT NULL,
+  `opponent_id` char(36) DEFAULT NULL,
+  `map_id` char(36) DEFAULT NULL,
+  `faction_id` char(36) DEFAULT NULL,
+  `opponent_faction_id` char(36) DEFAULT NULL,
+  `total_games` int(11) DEFAULT 0,
+  `wins` int(11) DEFAULT 0,
+  `losses` int(11) DEFAULT 0,
+  `winrate` decimal(5,2) DEFAULT NULL,
+  `avg_elo_change` decimal(8,2) DEFAULT NULL,
+  `last_elo_against_me` decimal(8,2) DEFAULT NULL,
+  `elo_gained` decimal(8,2) DEFAULT 0.00,
+  `elo_lost` decimal(8,2) DEFAULT 0.00,
+  `last_match_date` datetime DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `last_updated` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `player_side` tinyint(1) NOT NULL DEFAULT 0 COMMENT '0=all sides aggregate, 1=played as side 1, 2=played as side 2',
+  PRIMARY KEY (`id`),
+  KEY `idx_player_id` (`player_id`),
+  KEY `idx_opponent_id` (`opponent_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `player_of_month`
+--
+
+DROP TABLE IF EXISTS `player_of_month`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `player_of_month` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `player_id` char(36) NOT NULL,
+  `nickname` varchar(255) NOT NULL,
+  `elo_rating` int(11) NOT NULL,
+  `ranking_position` int(11) NOT NULL,
+  `elo_gained` int(11) DEFAULT 0,
+  `positions_gained` int(11) DEFAULT 0,
+  `month_year` date NOT NULL,
+  `calculated_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=56 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `replay_parsing_logs`
+--
+
+DROP TABLE IF EXISTS `replay_parsing_logs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `replay_parsing_logs` (
+  `id` char(36) NOT NULL,
+  `replay_id` char(36) NOT NULL,
+  `stage` varchar(50) DEFAULT NULL,
+  `status` varchar(20) DEFAULT NULL,
+  `duration_ms` int(11) DEFAULT NULL,
+  `error_message` text DEFAULT NULL,
+  `details` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`details`)),
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_replay_id` (`replay_id`),
+  KEY `idx_stage` (`stage`),
+  KEY `idx_status` (`status`),
+  CONSTRAINT `fk_parsing_logs_replay_id` FOREIGN KEY (`replay_id`) REFERENCES `replays` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `replay_participants`
+--
+
+DROP TABLE IF EXISTS `replay_participants`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `replay_participants` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `replay_id` varchar(36) NOT NULL,
+  `player_id` char(36) DEFAULT NULL,
+  `player_name` varchar(255) DEFAULT NULL,
+  `side` int(11) DEFAULT NULL,
+  `faction_name` varchar(255) DEFAULT NULL,
+  `result_side` int(11) DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_replay` (`replay_id`),
+  KEY `idx_player` (`player_id`),
+  CONSTRAINT `replay_participants_ibfk_1` FOREIGN KEY (`replay_id`) REFERENCES `replays` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `replay_participants_ibfk_2` FOREIGN KEY (`player_id`) REFERENCES `users_extension` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=187 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `replays`
+--
+
+DROP TABLE IF EXISTS `replays`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `replays` (
+  `id` char(36) NOT NULL,
+  `replay_filename` varchar(500) NOT NULL,
+  `replay_path` varchar(1000) NOT NULL,
+  `file_size_bytes` bigint(20) DEFAULT NULL,
+  `parsed` tinyint(1) NOT NULL DEFAULT 0,
+  `need_integration` tinyint(1) NOT NULL DEFAULT 0,
+  `integration_confidence` tinyint(1) DEFAULT 0,
+  `match_id` char(36) DEFAULT NULL,
+  `tournament_match_id` char(36) DEFAULT NULL,
+  `tournament_id` char(36) DEFAULT NULL,
+  `tournament_round_match_id` char(36) DEFAULT NULL,
+  `parse_status` varchar(50) NOT NULL DEFAULT 'pending',
+  `parse_error_message` text DEFAULT NULL,
+  `parse_stage` varchar(20) DEFAULT NULL,
+  `parse_summary` text DEFAULT NULL,
+  `detected_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `file_write_closed_at` datetime DEFAULT NULL,
+  `file_mtime` datetime DEFAULT NULL,
+  `parsing_started_at` datetime DEFAULT NULL,
+  `parsing_completed_at` datetime DEFAULT NULL,
+  `wesnoth_version` varchar(20) DEFAULT NULL,
+  `map_name` varchar(255) DEFAULT NULL,
+  `era_id` varchar(100) DEFAULT NULL,
+  `tournament_addon_id` varchar(100) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `deleted_at` datetime DEFAULT NULL,
+  `game_id` int(10) unsigned DEFAULT NULL,
+  `start_time` timestamp NULL DEFAULT NULL,
+  `end_time` timestamp NULL DEFAULT NULL,
+  `is_reload` tinyint(1) DEFAULT 0,
+  `detected_from` varchar(50) DEFAULT 'manual',
+  `instance_uuid` char(36) DEFAULT NULL,
+  `game_name` varchar(255) DEFAULT NULL,
+  `oos` tinyint(1) DEFAULT 0,
+  `replay_url` varchar(1000) DEFAULT NULL,
+  `last_checked_at` datetime DEFAULT NULL,
+  `discard_vote_1` char(36) DEFAULT NULL COMMENT 'First player user_id who voted to discard this replay',
+  `discard_vote_2` char(36) DEFAULT NULL COMMENT 'Second player user_id who voted to discard this replay',
+  `cancel_requested_by` varchar(36) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `replay_filename` (`replay_filename`),
+  UNIQUE KEY `uq_instance_game` (`instance_uuid`,`game_id`),
+  KEY `idx_parsed` (`parsed`),
+  KEY `idx_need_integration` (`need_integration`),
+  KEY `idx_match_id` (`match_id`),
+  KEY `idx_parse_status` (`parse_status`),
+  KEY `idx_detected_at` (`detected_at`),
+  KEY `idx_tournament_addon` (`tournament_addon_id`),
+  KEY `idx_parsed_status` (`parsed`,`parse_status`),
+  KEY `idx_parse_summary` (`parse_summary`(100)),
+  KEY `idx_match_link` (`match_id`),
+  KEY `idx_last_checked` (`last_checked_at`),
+  KEY `idx_end_time` (`end_time`),
+  KEY `idx_detected_from` (`detected_from`),
+  KEY `idx_cancel_requested_by` (`cancel_requested_by`),
+  KEY `idx_replay_trm_id` (`tournament_round_match_id`),
+  KEY `idx_replay_tournament_id` (`tournament_id`),
+  KEY `fk_replays_tournament_match_id` (`tournament_match_id`),
+  CONSTRAINT `fk_replays_match_id` FOREIGN KEY (`match_id`) REFERENCES `matches` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_replays_tournament_match_id` FOREIGN KEY (`tournament_match_id`) REFERENCES `tournament_matches` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `system_settings`
+--
+
+DROP TABLE IF EXISTS `system_settings`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `system_settings` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `setting_key` varchar(100) NOT NULL,
+  `setting_value` text DEFAULT NULL,
+  `description` text DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `updated_by` char(36) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `setting_key` (`setting_key`)
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `team_substitutes`
+--
+
+DROP TABLE IF EXISTS `team_substitutes`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `team_substitutes` (
+  `id` char(36) NOT NULL,
+  `team_id` char(36) NOT NULL,
+  `player_id` char(36) NOT NULL,
+  `substitute_order` smallint(6) DEFAULT 1,
+  `added_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_team_id` (`team_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `tournament_matches`
+--
+
+DROP TABLE IF EXISTS `tournament_matches`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tournament_matches` (
+  `id` char(36) NOT NULL,
+  `tournament_id` char(36) NOT NULL,
+  `round_id` char(36) NOT NULL,
+  `player1_id` char(36) NOT NULL,
+  `player2_id` char(36) NOT NULL,
+  `winner_id` char(36) DEFAULT NULL,
+  `loser_id` char(36) DEFAULT NULL,
+  `match_id` char(36) DEFAULT NULL,
+  `match_status` varchar(20) DEFAULT 'pending',
+  `played_at` datetime DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `tournament_round_match_id` char(36) DEFAULT NULL,
+  `organizer_action` varchar(50) DEFAULT NULL,
+  `map` varchar(255) DEFAULT NULL,
+  `winner_faction` varchar(255) DEFAULT NULL,
+  `loser_faction` varchar(255) DEFAULT NULL,
+  `winner_comments` text DEFAULT NULL,
+  `winner_rating` int(11) DEFAULT NULL,
+  `loser_comments` text DEFAULT NULL,
+  `loser_rating` int(11) DEFAULT NULL,
+  `replay_file_path` varchar(500) DEFAULT NULL,
+  `status` varchar(20) DEFAULT 'unconfirmed',
+  `replay_downloads` int(11) DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_tournament_id` (`tournament_id`),
+  KEY `idx_round_id` (`round_id`),
+  KEY `idx_player1_id` (`player1_id`),
+  KEY `idx_player2_id` (`player2_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `tournament_participants`
+--
+
+DROP TABLE IF EXISTS `tournament_participants`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tournament_participants` (
+  `id` char(36) NOT NULL,
+  `tournament_id` char(36) NOT NULL,
+  `user_id` char(36) NOT NULL,
+  `current_round` int(11) DEFAULT 1,
+  `status` varchar(20) DEFAULT 'active',
+  `created_at` datetime DEFAULT current_timestamp(),
+  `participation_status` varchar(30) DEFAULT 'pending' COMMENT 'Participant status: pending (join request), accepted (active), unconfirmed (awaiting confirmation), pending_replacement (substitute waiting confirmation), replaced (was replaced mid-tournament), rejected' CHECK (`participation_status` in ('pending','accepted','pending_replacement','replaced','rejected','unconfirmed')),
+  `tournament_ranking` int(11) DEFAULT NULL,
+  `tournament_wins` int(11) DEFAULT 0,
+  `tournament_losses` int(11) DEFAULT 0,
+  `tournament_points` int(11) DEFAULT 0,
+  `omp` decimal(8,2) DEFAULT 0.00,
+  `gwp` decimal(5,2) DEFAULT 0.00,
+  `ogp` decimal(5,2) DEFAULT 0.00,
+  `team_id` char(36) DEFAULT NULL,
+  `team_position` smallint(6) DEFAULT NULL,
+  `replacement_requested_at` datetime DEFAULT NULL,
+  `replaced_by_participant_id` char(36) DEFAULT NULL,
+  `requested_replacement_of_id` char(36) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_tournament_id` (`tournament_id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_team_id` (`team_id`),
+  KEY `idx_tournament_participants_replacement_requested_at` (`replacement_requested_at`),
+  KEY `idx_tournament_participants_replaced_by` (`replaced_by_participant_id`),
+  KEY `idx_tournament_participants_replacement_of` (`requested_replacement_of_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `tournament_round_matches`
+--
+
+DROP TABLE IF EXISTS `tournament_round_matches`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tournament_round_matches` (
+  `id` char(36) NOT NULL,
+  `tournament_id` char(36) NOT NULL,
+  `round_id` char(36) NOT NULL,
+  `player1_id` char(36) NOT NULL,
+  `player2_id` char(36) NOT NULL,
+  `best_of` int(11) NOT NULL,
+  `wins_required` int(11) NOT NULL,
+  `player1_wins` int(11) DEFAULT 0,
+  `player2_wins` int(11) DEFAULT 0,
+  `matches_scheduled` int(11) DEFAULT 0,
+  `series_status` varchar(50) DEFAULT 'in_progress',
+  `winner_id` char(36) DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `scheduled_datetime` datetime DEFAULT NULL COMMENT 'Proposed/confirmed schedule time (UTC)',
+  `scheduled_status` varchar(20) DEFAULT 'pending' COMMENT 'pending, player1_proposed, player2_proposed, confirmed',
+  `scheduled_by_player_id` char(36) DEFAULT NULL COMMENT 'Which player proposed the schedule',
+  `scheduled_confirmed_at` datetime DEFAULT NULL COMMENT 'When both players confirmed (UTC)',
+  PRIMARY KEY (`id`),
+  KEY `idx_tournament_id` (`tournament_id`),
+  KEY `idx_round_id` (`round_id`),
+  KEY `idx_scheduled_status` (`scheduled_status`),
+  KEY `idx_scheduled_datetime` (`scheduled_datetime`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `tournament_rounds`
+--
+
+DROP TABLE IF EXISTS `tournament_rounds`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tournament_rounds` (
+  `id` char(36) NOT NULL,
+  `tournament_id` char(36) NOT NULL,
+  `round_number` int(11) NOT NULL,
+  `match_format` varchar(10) NOT NULL,
+  `round_status` varchar(20) DEFAULT 'pending',
+  `round_start_date` datetime DEFAULT NULL,
+  `round_end_date` datetime DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `round_type` varchar(20) DEFAULT 'general',
+  `round_classification` varchar(50) DEFAULT 'standard',
+  `players_remaining` int(11) DEFAULT NULL,
+  `players_advancing_to_next` int(11) DEFAULT NULL,
+  `round_phase_label` varchar(100) DEFAULT NULL,
+  `round_phase_description` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_tournament_id` (`tournament_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `tournament_teams`
+--
+
+DROP TABLE IF EXISTS `tournament_teams`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tournament_teams` (
+  `id` char(36) NOT NULL,
+  `tournament_id` char(36) NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `created_by` char(36) NOT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `tournament_wins` int(11) DEFAULT 0,
+  `tournament_losses` int(11) DEFAULT 0,
+  `tournament_points` int(11) DEFAULT 0,
+  `omp` decimal(10,2) DEFAULT 0.00,
+  `gwp` decimal(5,2) DEFAULT 0.00,
+  `ogp` decimal(5,2) DEFAULT 0.00,
+  `status` varchar(20) DEFAULT 'active',
+  `current_round` int(11) DEFAULT 1,
+  `tournament_ranking` int(11) DEFAULT NULL,
+  `team_elo` int(11) DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_tournament_id` (`tournament_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `tournament_unranked_factions`
+--
+
+DROP TABLE IF EXISTS `tournament_unranked_factions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tournament_unranked_factions` (
+  `id` char(36) NOT NULL,
+  `tournament_id` char(36) NOT NULL,
+  `faction_id` char(36) NOT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_tournament_id` (`tournament_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `tournament_unranked_maps`
+--
+
+DROP TABLE IF EXISTS `tournament_unranked_maps`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tournament_unranked_maps` (
+  `id` char(36) NOT NULL,
+  `tournament_id` char(36) NOT NULL,
+  `map_id` char(36) NOT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_tournament_id` (`tournament_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `tournaments`
+--
+
+DROP TABLE IF EXISTS `tournaments`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tournaments` (
+  `id` char(36) NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `description` text NOT NULL,
+  `creator_id` char(36) NOT NULL,
+  `status` varchar(20) DEFAULT 'pending',
+  `approved_at` datetime DEFAULT NULL,
+  `started_at` datetime DEFAULT NULL,
+  `finished_at` datetime DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `general_rounds` int(11) DEFAULT 0,
+  `final_rounds` int(11) DEFAULT 0,
+  `registration_closed_at` datetime DEFAULT NULL,
+  `prepared_at` datetime DEFAULT NULL,
+  `tournament_type` varchar(50) DEFAULT NULL,
+  `max_participants` int(11) DEFAULT NULL,
+  `round_duration_days` int(11) DEFAULT 7,
+  `auto_advance_round` tinyint(1) DEFAULT 0,
+  `current_round` int(11) DEFAULT 0,
+  `total_rounds` int(11) DEFAULT 0,
+  `general_rounds_format` varchar(10) DEFAULT 'bo3',
+  `final_rounds_format` varchar(10) DEFAULT 'bo5',
+  `discord_thread_id` varchar(255) DEFAULT NULL,
+  `tournament_mode` varchar(20) DEFAULT 'ranked',
+  PRIMARY KEY (`id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `user_notifications`
+--
+
+DROP TABLE IF EXISTS `user_notifications`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `user_notifications` (
+  `id` char(36) NOT NULL,
+  `user_id` char(36) NOT NULL,
+  `tournament_id` char(36) NOT NULL,
+  `match_id` char(36) NOT NULL,
+  `type` varchar(50) NOT NULL COMMENT 'schedule_proposal, schedule_confirmed, schedule_cancelled',
+  `title` varchar(255) NOT NULL,
+  `message` text NOT NULL,
+  `is_read` tinyint(1) DEFAULT 0,
+  `created_at` timestamp NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `message_extra` text DEFAULT NULL COMMENT 'Optional comment from schedule proposer',
+  `is_deleted` tinyint(1) DEFAULT 0 COMMENT 'Soft delete flag for retention',
+  PRIMARY KEY (`id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_tournament_id` (`tournament_id`),
+  KEY `idx_match_id` (`match_id`),
+  KEY `idx_is_read` (`is_read`),
+  KEY `idx_created_at` (`created_at`),
+  KEY `idx_user_is_read` (`user_id`,`is_read`),
+  KEY `idx_user_created_at` (`user_id`,`created_at` DESC),
+  KEY `idx_user_undeleted` (`user_id`,`is_deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Notifications shown as toasts when users access the app';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `users_extension`
+--
+
+DROP TABLE IF EXISTS `users_extension`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `users_extension` (
+  `id` char(36) NOT NULL,
+  `nickname` varchar(255) NOT NULL,
+  `language` varchar(2) DEFAULT 'en',
+  `discord_id` varchar(255) DEFAULT NULL,
+  `elo_rating` int(11) DEFAULT 1400,
+  `level` varchar(50) DEFAULT 'novato',
+  `is_active` tinyint(1) DEFAULT 0,
+  `is_blocked` tinyint(1) DEFAULT 0,
+  `is_admin` tinyint(1) DEFAULT 0,
+  `timezone` varchar(100) DEFAULT 'UTC' COMMENT 'IANA timezone name (e.g., Europe/Madrid, America/New_York)',
+  `availability_schedule` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT 'Object with day keys (monday-sunday) containing array of {start, end} time ranges' CHECK (json_valid(`availability_schedule`)),
+  `availability_updated_at` datetime DEFAULT NULL COMMENT 'Timestamp when availability was last modified',
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `is_rated` tinyint(1) DEFAULT 0,
+  `matches_played` int(11) DEFAULT 0,
+  `elo_provisional` tinyint(1) DEFAULT 0,
+  `total_wins` int(11) DEFAULT 0,
+  `total_losses` int(11) DEFAULT 0,
+  `trend` varchar(10) DEFAULT '-',
+  `failed_login_attempts` int(11) DEFAULT 0,
+  `locked_until` datetime DEFAULT NULL,
+  `last_login_attempt` datetime DEFAULT NULL,
+  `country` varchar(2) DEFAULT NULL,
+  `avatar` varchar(255) DEFAULT NULL,
+  `enable_ranked` tinyint(1) NOT NULL DEFAULT 0,
+  `last_match_date` datetime DEFAULT NULL COMMENT 'Timestamp of last match participation — used to determine active status',
+  PRIMARY KEY (`id`),
+  KEY `idx_nickname` (`nickname`),
+  KEY `idx_users_extension_last_match_date` (`last_match_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+
+/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
+/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
+/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+/*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
+
+-- Dump completed on 2026-05-14 21:42:14
