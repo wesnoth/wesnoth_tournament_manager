@@ -121,7 +121,7 @@ export async function createMatch(input: CreateMatchInput): Promise<CreateMatchR
     await query(
       `UPDATE users_extension
        SET elo_rating = ?, is_rated = ?, matches_played = ?,
-           total_wins = total_wins + 1, trend = ?, level = ?, updated_at = NOW()
+           total_wins = total_wins + 1, trend = ?, level = ?, is_active = 1, updated_at = NOW()
        WHERE id = ?`,
       [winnerNewRating, winnerIsNowRated, newWinnerMatches, winnerTrend, getUserLevel(winnerNewRating), winner.id]
     );
@@ -132,7 +132,7 @@ export async function createMatch(input: CreateMatchInput): Promise<CreateMatchR
     await query(
       `UPDATE users_extension
        SET elo_rating = ?, is_rated = ?, matches_played = ?,
-           total_losses = total_losses + 1, trend = ?, level = ?, updated_at = NOW()
+           total_losses = total_losses + 1, trend = ?, level = ?, is_active = 1, updated_at = NOW()
        WHERE id = ?`,
       [loserNewRating, loserIsNowRated, newLoserMatches, loserTrend, getUserLevel(loserNewRating), loser.id]
     );
