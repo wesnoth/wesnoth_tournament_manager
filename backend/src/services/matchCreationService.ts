@@ -121,7 +121,7 @@ export async function createMatch(input: CreateMatchInput): Promise<CreateMatchR
     await query(
       `UPDATE users_extension
        SET elo_rating = ?, is_rated = ?, matches_played = ?,
-           total_wins = total_wins + 1, trend = ?, level = ?, is_active = 1, updated_at = NOW()
+           total_wins = total_wins + 1, trend = ?, level = ?, is_active = 1, last_match_date = NOW(), updated_at = NOW()
        WHERE id = ?`,
       [winnerNewRating, winnerIsNowRated, newWinnerMatches, winnerTrend, getUserLevel(winnerNewRating), winner.id]
     );
@@ -132,7 +132,7 @@ export async function createMatch(input: CreateMatchInput): Promise<CreateMatchR
     await query(
       `UPDATE users_extension
        SET elo_rating = ?, is_rated = ?, matches_played = ?,
-           total_losses = total_losses + 1, trend = ?, level = ?, is_active = 1, updated_at = NOW()
+           total_losses = total_losses + 1, trend = ?, level = ?, is_active = 1, last_match_date = NOW(), updated_at = NOW()
        WHERE id = ?`,
       [loserNewRating, loserIsNowRated, newLoserMatches, loserTrend, getUserLevel(loserNewRating), loser.id]
     );
@@ -255,7 +255,38 @@ export async function updateTournamentRoundMatch(
         throw loseErr;
       }
 
-      console.log(`   ✅ [TOURNAMENT LINK] Team stats updated successfully`);
+      // Update last_match_date for all 4 team members
+      try {
+        await query(
+          `UPDATE users_extension ue
+           SET ue.last_match_date = NOW(), ue.is_active = 1, ue.updated_at = NOW()
+           WHERE ue.id IN (
+             SELECT player_id FROM tournament_team_members WHERE team_id = ?
+           )`,
+          [winnerId]
+        );
+        console.log(`      ✅ Winner team members marked active`);
+      } catch (err) {
+        console.error(`      ❌ Failed to update winner team members:`, err);
+        throw err;
+      }
+
+      try {
+        await query(
+          `UPDATE users_extension ue
+           SET ue.last_match_date = NOW(), ue.is_active = 1, ue.updated_at = NOW()
+           WHERE ue.id IN (
+             SELECT player_id FROM tournament_team_members WHERE team_id = ?
+           )`,
+          [loserId]
+        );
+        console.log(`      ✅ Loser team members marked active`);
+      } catch (err) {
+        console.error(`      ❌ Failed to update loser team members:`, err);
+        throw err;
+      }
+
+      console.log(`   ✅ [TOURNAMENT LINK] Team stats and member activity updated successfully`);
     } else {
       // 1v1 tournament: winnerId and loserId are PLAYER UUIDs
       await query(

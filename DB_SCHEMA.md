@@ -188,6 +188,7 @@ Application-level user profile. One record per forum user who has interacted wit
 | `failed_login_attempts` | int | 0 | Brute-force protection counter |
 | `locked_until` | datetime | NULL | Account locked until this time (brute-force lockout) |
 | `last_login_attempt` | datetime | NULL | Timestamp of last login attempt |
+| `last_match_date` | datetime | NULL | Timestamp of last match participation — used to determine active status |
 | `country` | varchar(2) | NULL | ISO 3166-1 alpha-2 country code |
 | `avatar` | varchar(255) | NULL | Avatar identifier |
 | `created_at` | datetime | now() | |

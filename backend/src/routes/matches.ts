@@ -1972,6 +1972,7 @@ router.post('/report-confidence-1-replay', authMiddleware, async (req: AuthReque
              trend = ?,
              level = ?,
              is_active = 1,
+             last_match_date = NOW(),
              updated_at = CURRENT_TIMESTAMP 
          WHERE id = ?`,
         [finalWinnerRating, winnerIsNowRated, newWinnerMatches, winnerTrend, getUserLevel(finalWinnerRating), winnerId]
@@ -1997,6 +1998,7 @@ router.post('/report-confidence-1-replay', authMiddleware, async (req: AuthReque
              trend = ?,
              level = ?,
              is_active = 1,
+             last_match_date = NOW(),
              updated_at = CURRENT_TIMESTAMP 
          WHERE id = ?`,
         [finalLoserRating, loserIsNowRated, newLoserMatches, loserTrend, getUserLevel(finalLoserRating), loserId]

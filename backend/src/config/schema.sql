@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS users_extension (
   timezone VARCHAR(100) DEFAULT 'UTC' COMMENT 'IANA timezone name (e.g., Europe/Madrid, America/New_York)',
   availability_schedule JSON NULL COMMENT 'Object with day keys (monday-sunday) containing array of {start, end} time ranges',
   availability_updated_at DATETIME NULL COMMENT 'Timestamp when availability was last modified',
+  last_match_date DATETIME NULL COMMENT 'Timestamp of the last match the player participated in (for inactive status check)',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

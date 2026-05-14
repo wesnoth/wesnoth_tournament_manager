@@ -208,13 +208,7 @@ export const initializeScheduledJobs = (): void => {
            SET is_active = 0, updated_at = CURRENT_TIMESTAMP
            WHERE is_active = 1 
              AND is_blocked = 0
-             AND id NOT IN (
-               SELECT DISTINCT u.id
-               FROM users_extension u
-               INNER JOIN matches m ON (m.winner_id = u.id OR m.loser_id = u.id)
-               WHERE m.status != 'cancelled' 
-                 AND m.created_at >= DATE_SUB(CURRENT_DATE, INTERVAL 30 DAY)
-             )`
+             AND (last_match_date IS NULL OR last_match_date < DATE_SUB(NOW(), INTERVAL 30 DAY))`
         );
         console.log(`✅ [CRON] Marked inactive players as inactive`);
       } catch (error) {
