@@ -899,12 +899,6 @@ User confirmations of proposed schedules. Records agreement to the schedule prop
 
 ---
 
-### `password_history` / `password_policy`
-
-> ⚠️ **Legacy tables** — retained from the Supabase era. Password management is now delegated entirely to the Wesnoth forum. These tables are not used by the current application and may be removed in a future cleanup migration.
-
----
-
 ## General Notes
 
 ### ID conventions
