@@ -2202,23 +2202,77 @@ router.delete('/proposals/:proposalId', authMiddleware, async (req: AuthRequest,
       return res.status(400).json({ error: 'Missing proposalId' });
     }
 
-    // Get proposal details before canceling
+    // Get proposal details before canceling (handles both round matches and direct matches)
     const proposalResult = await query(
-      `SELECT p.tournament_round_match_id, t.id as tournament_id, t.name as tournament_name, t.tournament_mode
+      `SELECT p.tournament_round_match_id, p.tournament_match_id, p.proposed_by_user_id
        FROM match_schedule_proposals p
-       JOIN tournament_round_matches trm ON p.tournament_round_match_id = trm.id
-       JOIN tournaments t ON trm.tournament_id = t.id
        WHERE p.id = ?`,
       [proposalId]
     );
 
+    if (!proposalResult.rows || proposalResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Proposal not found' });
+    }
+
+    const proposal = proposalResult.rows[0];
+    if (proposal.proposed_by_user_id !== userId) {
+      return res.status(403).json({ error: 'Only proposer can cancel proposal' });
+    }
+
     // Cancel the proposal
     await cancelProposal(proposalId, userId);
 
-    // Send notifications if proposal was found
-    if (proposalResult.rows && proposalResult.rows.length > 0) {
-      const { tournament_id: tournamentId, tournament_name: tournamentName, tournament_mode: tournamentMode, tournament_round_match_id: roundMatchId } = proposalResult.rows[0];
+    // Send notifications - get tournament info based on whether it's a round match or direct match
+    let tournamentId: string | null = null;
+    let tournamentName: string = 'Tournament';
+    let tournamentMode: string = '1v1';
+    let roundMatchId: string | null = null;
+    let matchId: string | null = null;
+    let player1Id: string | null = null;
+    let player2Id: string | null = null;
 
+    if (proposal.tournament_round_match_id) {
+      // Round match proposal
+      const roundMatchResult = await query(
+        `SELECT trm.id, trm.player1_id, trm.player2_id, t.id as tournament_id, t.name, t.tournament_mode
+         FROM tournament_round_matches trm
+         JOIN tournaments t ON trm.tournament_id = t.id
+         WHERE trm.id = ?`,
+        [proposal.tournament_round_match_id]
+      );
+      
+      if (roundMatchResult.rows && roundMatchResult.rows.length > 0) {
+        const row = roundMatchResult.rows[0];
+        roundMatchId = row.id;
+        player1Id = row.player1_id;
+        player2Id = row.player2_id;
+        tournamentId = row.tournament_id;
+        tournamentName = row.name;
+        tournamentMode = row.tournament_mode;
+      }
+    } else if (proposal.tournament_match_id) {
+      // Direct match proposal
+      const matchResult = await query(
+        `SELECT tm.id, tm.player1_id, tm.player2_id, t.id as tournament_id, t.name, t.tournament_mode
+         FROM tournament_matches tm
+         JOIN tournaments t ON tm.tournament_id = t.id
+         WHERE tm.id = ?`,
+        [proposal.tournament_match_id]
+      );
+      
+      if (matchResult.rows && matchResult.rows.length > 0) {
+        const row = matchResult.rows[0];
+        matchId = row.id;
+        player1Id = row.player1_id;
+        player2Id = row.player2_id;
+        tournamentId = row.tournament_id;
+        tournamentName = row.name;
+        tournamentMode = row.tournament_mode;
+      }
+    }
+
+    // Send notifications if we have tournament info
+    if (tournamentId && (roundMatchId || matchId)) {
       // Get proposer info
       let proposerName = 'Player';
       const proposerResult = await query(
@@ -2234,14 +2288,8 @@ router.delete('/proposals/:proposalId', authMiddleware, async (req: AuthRequest,
       let opponentDiscordIds: string[] = [];
       let opponentName = 'Opponent';
 
-      const matchResult = await query(
-        `SELECT player1_id, player2_id FROM tournament_round_matches WHERE id = ?`,
-        [roundMatchId]
-      );
-
-      if (matchResult.rows && matchResult.rows.length > 0) {
-        const match = matchResult.rows[0];
-        const opponentId = userId === match.player1_id ? match.player2_id : match.player1_id;
+      if (player1Id && player2Id) {
+        const opponentId = userId === player1Id ? player2Id : player1Id;
 
         if (tournamentMode === 'team') {
           const teamResult = await query(
@@ -2293,12 +2341,13 @@ router.delete('/proposals/:proposalId', authMiddleware, async (req: AuthRequest,
         }
       ).catch(err => console.error('⚠️ Discord notification failed:', err));
 
-      // Store notification in database
+      // Store notification in database (use roundMatchId if available, otherwise matchId)
+      const targetMatchId = roundMatchId || matchId || '';
       const notificationTitle = `🚫 Proposal Cancelled - ${tournamentName}`;
       await storeNotificationForUsers(
         opponentIds,
         tournamentId,
-        roundMatchId,
+        targetMatchId,
         'schedule_cancelled',
         notificationTitle,
         notificationMessage,
