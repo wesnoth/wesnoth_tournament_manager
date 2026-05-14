@@ -2062,6 +2062,64 @@ router.post('/report-confidence-1-replay', authMiddleware, async (req: AuthReque
       console.log(`ℹ️  [CONFIDENCE-1] No tournament_round_match - this is a direct match`);
     }
     
+    // Update last_match_date for team members if this is a team tournament
+    if (replay.tournament_round_match_id && winnerId !== loserId) {
+      // Check if this is a team tournament
+      const teamCheckResult = await query(
+        `SELECT t.tournament_mode FROM tournaments t 
+         JOIN tournament_rounds tr ON tr.tournament_id = t.id 
+         JOIN tournament_round_matches trm ON trm.round_id = tr.id
+         WHERE trm.id = ?`,
+        [replay.tournament_round_match_id]
+      );
+      
+      if (teamCheckResult.rows.length > 0 && (teamCheckResult as any).rows[0].tournament_mode === 'team') {
+        console.log(`🎯 [CONFIDENCE-1] Team tournament - updating last_match_date for all 4 team members`);
+        
+        // Get tournament_id for querying participants
+        const tourneyIdResult = await query(
+          `SELECT tournament_id FROM tournament_round_matches WHERE id = ?`,
+          [replay.tournament_round_match_id]
+        );
+        
+        if (tourneyIdResult.rows.length > 0) {
+          const tournamentId = (tourneyIdResult as any).rows[0].tournament_id;
+          
+          // Update winner team members
+          try {
+            await query(
+              `UPDATE users_extension ue
+               SET ue.last_match_date = NOW(), ue.updated_at = NOW()
+               WHERE ue.id IN (
+                 SELECT user_id FROM tournament_participants 
+                 WHERE tournament_id = ? AND team_id = ?
+               )`,
+              [tournamentId, winnerIdForTournament]
+            );
+            console.log(`✅ [CONFIDENCE-1] Updated last_match_date for winner team members`);
+          } catch (err) {
+            console.error(`❌ [CONFIDENCE-1] Error updating winner team members:`, err);
+          }
+          
+          // Update loser team members
+          try {
+            await query(
+              `UPDATE users_extension ue
+               SET ue.last_match_date = NOW(), ue.updated_at = NOW()
+               WHERE ue.id IN (
+                 SELECT user_id FROM tournament_participants 
+                 WHERE tournament_id = ? AND team_id = ?
+               )`,
+              [tournamentId, loserIdForTournament]
+            );
+            console.log(`✅ [CONFIDENCE-1] Updated last_match_date for loser team members`);
+          } catch (err) {
+            console.error(`❌ [CONFIDENCE-1] Error updating loser team members:`, err);
+          }
+        }
+      }
+    }
+
     console.log(`${'='.repeat(80)}\n`);
 
     // STEP 2: Create/update tournament_matches entry (use mapped winnerIdForTournament)
