@@ -2089,7 +2089,7 @@ router.post('/report-confidence-1-replay', authMiddleware, async (req: AuthReque
           try {
             await query(
               `UPDATE users_extension ue
-               SET ue.last_match_date = NOW(), ue.updated_at = NOW()
+               SET ue.last_match_date = NOW(), ue.is_active = 1, ue.updated_at = NOW()
                WHERE ue.id IN (
                  SELECT user_id FROM tournament_participants 
                  WHERE tournament_id = ? AND team_id = ?
@@ -2105,7 +2105,7 @@ router.post('/report-confidence-1-replay', authMiddleware, async (req: AuthReque
           try {
             await query(
               `UPDATE users_extension ue
-               SET ue.last_match_date = NOW(), ue.updated_at = NOW()
+               SET ue.last_match_date = NOW(), ue.is_active = 1, ue.updated_at = NOW()
                WHERE ue.id IN (
                  SELECT user_id FROM tournament_participants 
                  WHERE tournament_id = ? AND team_id = ?

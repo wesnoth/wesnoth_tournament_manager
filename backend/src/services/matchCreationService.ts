@@ -261,9 +261,10 @@ export async function updateTournamentRoundMatch(
           `UPDATE users_extension ue
            SET ue.last_match_date = NOW(), ue.is_active = 1, ue.updated_at = NOW()
            WHERE ue.id IN (
-             SELECT player_id FROM tournament_team_members WHERE team_id = ?
+             SELECT user_id FROM tournament_participants 
+             WHERE tournament_id = ? AND team_id = ?
            )`,
-          [winnerId]
+          [rm.tournament_id, winnerId]
         );
         console.log(`      ✅ Winner team members marked active`);
       } catch (err) {
@@ -276,9 +277,10 @@ export async function updateTournamentRoundMatch(
           `UPDATE users_extension ue
            SET ue.last_match_date = NOW(), ue.is_active = 1, ue.updated_at = NOW()
            WHERE ue.id IN (
-             SELECT player_id FROM tournament_team_members WHERE team_id = ?
+             SELECT user_id FROM tournament_participants 
+             WHERE tournament_id = ? AND team_id = ?
            )`,
-          [loserId]
+          [rm.tournament_id, loserId]
         );
         console.log(`      ✅ Loser team members marked active`);
       } catch (err) {
