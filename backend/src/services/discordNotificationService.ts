@@ -99,6 +99,62 @@ function buildScheduleConfirmationEmbed(
 }
 
 /**
+ * Build Discord message for schedule proposal change
+ */
+function buildScheduleChangedEmbed(
+  tournamentName: string,
+  data: DiscordScheduleNotificationData
+): any {
+  const changedByName = data.fromTeamName || data.fromUserName || 'Unknown';
+  const againstName = data.toTeamName || data.toUserName || 'Unknown';
+
+  const fields: Array<{ name: string; value: string; inline?: boolean }> = [
+    { name: '📋 Tournament', value: tournamentName, inline: false },
+    { name: '✏️ Changed by', value: changedByName, inline: true },
+    { name: '🆚 Against', value: againstName, inline: true },
+  ];
+
+  if (data.proposedTimeRanges) {
+    fields.push({ name: '📅 New Proposed Time Slots (UTC)', value: data.proposedTimeRanges, inline: false });
+  }
+
+  return {
+    title: '✏️ Proposal Changed',
+    description: 'The proposed schedule has been updated.',
+    color: 0xffa500,
+    fields,
+    footer: { text: 'Proposal Changed' },
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
+ * Build Discord message for schedule proposal cancellation
+ */
+function buildScheduleCancelledEmbed(
+  tournamentName: string,
+  data: DiscordScheduleNotificationData
+): any {
+  const cancelledByName = data.fromTeamName || data.fromUserName || 'Unknown';
+  const againstName = data.toTeamName || data.toUserName || 'Unknown';
+
+  const fields: Array<{ name: string; value: string; inline?: boolean }> = [
+    { name: '📋 Tournament', value: tournamentName, inline: false },
+    { name: '🚫 Cancelled by', value: cancelledByName, inline: true },
+    { name: '🆚 Against', value: againstName, inline: true },
+  ];
+
+  return {
+    title: '🚫 Proposal Cancelled',
+    description: 'The proposed schedule has been withdrawn.',
+    color: 0xff0000,
+    fields,
+    footer: { text: 'Proposal Cancelled' },
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
  * Build Discord message for schedule rejection
  */
 function buildScheduleRejectionEmbed(
@@ -129,7 +185,7 @@ function buildScheduleRejectionEmbed(
  */
 export async function sendDiscordNotification(
   tournamentId: string,
-  notificationType: 'schedule_proposal' | 'schedule_confirmed' | 'schedule_rejected',
+  notificationType: 'schedule_proposal' | 'schedule_confirmed' | 'schedule_rejected' | 'schedule_changed' | 'schedule_cancelled',
   notificationData: DiscordScheduleNotificationData
 ): Promise<boolean> {
   if (!DISCORD_ENABLED) {
@@ -162,8 +218,12 @@ export async function sendDiscordNotification(
       embed = buildScheduleProposalEmbed(tournamentName, notificationData);
     } else if (notificationType === 'schedule_confirmed') {
       embed = buildScheduleConfirmationEmbed(tournamentName, notificationData);
-    } else {
+    } else if (notificationType === 'schedule_rejected') {
       embed = buildScheduleRejectionEmbed(tournamentName, notificationData);
+    } else if (notificationType === 'schedule_changed') {
+      embed = buildScheduleChangedEmbed(tournamentName, notificationData);
+    } else {
+      embed = buildScheduleCancelledEmbed(tournamentName, notificationData);
     }
 
     // Build message content with mentions
@@ -226,7 +286,7 @@ export async function storeNotificationForUsers(
   userIds: string[],
   tournamentId: string,
   matchId: string,
-  type: 'schedule_proposal' | 'schedule_confirmed' | 'schedule_rejected',
+  type: 'schedule_proposal' | 'schedule_confirmed' | 'schedule_rejected' | 'schedule_changed' | 'schedule_cancelled',
   title: string,
   message: string,
   messageExtra?: string | null

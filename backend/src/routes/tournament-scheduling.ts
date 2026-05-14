@@ -2072,6 +2072,111 @@ router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, re
     }
 
     const result = await modifyProposal(proposalId, userId, slotDatetimes, notes);
+
+    // Get proposal details for notification
+    const proposalResult = await query(
+      `SELECT p.tournament_round_match_id, p.tournament_match_id, t.id as tournament_id, t.name as tournament_name, t.tournament_mode
+       FROM match_schedule_proposals p
+       JOIN tournament_round_matches trm ON p.tournament_round_match_id = trm.id
+       JOIN tournaments t ON trm.tournament_id = t.id
+       WHERE p.id = ?`,
+      [proposalId]
+    );
+
+    if (proposalResult.rows && proposalResult.rows.length > 0) {
+      const { tournament_id: tournamentId, tournament_name: tournamentName, tournament_mode: tournamentMode, tournament_round_match_id: roundMatchId } = proposalResult.rows[0];
+
+      // Get proposer info
+      let proposerName = 'Player';
+      const proposerResult = await query(
+        `SELECT nickname, discord_id FROM users_extension WHERE id = ?`,
+        [userId]
+      );
+      if (proposerResult.rows && proposerResult.rows.length > 0) {
+        proposerName = proposerResult.rows[0].nickname;
+      }
+
+      // Get opponent info
+      let opponentIds: string[] = [];
+      let opponentDiscordIds: string[] = [];
+      let opponentName = 'Opponent';
+
+      const matchResult = await query(
+        `SELECT player1_id, player2_id FROM tournament_round_matches WHERE id = ?`,
+        [roundMatchId]
+      );
+
+      if (matchResult.rows && matchResult.rows.length > 0) {
+        const match = matchResult.rows[0];
+        const opponentId = userId === match.player1_id ? match.player2_id : match.player1_id;
+
+        if (tournamentMode === 'team') {
+          const teamResult = await query(
+            'SELECT name FROM tournament_teams WHERE id = ?',
+            [opponentId]
+          );
+          opponentName = teamResult.rows && teamResult.rows.length > 0 ? teamResult.rows[0].name : 'Opponent Team';
+
+          const teamMembersResult = await query(
+            `SELECT tp.user_id, ue.discord_id FROM tournament_participants tp
+             LEFT JOIN users_extension ue ON tp.user_id = ue.id
+             WHERE tp.tournament_id = ? AND tp.team_id = ?`,
+            [tournamentId, opponentId]
+          );
+
+          if (teamMembersResult.rows) {
+            opponentIds = teamMembersResult.rows.map((row: any) => row.user_id);
+            opponentDiscordIds = teamMembersResult.rows
+              .map((row: any) => row.discord_id)
+              .filter((id: string | null) => id !== null && id !== undefined);
+          }
+        } else {
+          opponentIds = [opponentId];
+          const opponentResult = await query(
+            'SELECT nickname, discord_id FROM users_extension WHERE id = ?',
+            [opponentId]
+          );
+          opponentName = opponentResult.rows && opponentResult.rows.length > 0 ? opponentResult.rows[0].nickname : 'Opponent';
+          if (opponentResult.rows && opponentResult.rows.length > 0 && opponentResult.rows[0].discord_id) {
+            opponentDiscordIds = [opponentResult.rows[0].discord_id];
+          }
+        }
+      }
+
+      // Build notification message
+      const ranges = groupSlotsIntoRanges(slotDatetimes);
+      const notificationMessage = buildNotificationMessage('changed', proposerName, ranges, notes);
+      const formattedRanges = formatTimeRangesForDiscord(ranges);
+
+      // Send Discord notification
+      await sendDiscordNotification(
+        tournamentId,
+        'schedule_changed',
+        {
+          tournamentName,
+          fromUserName: tournamentMode === '1v1' ? proposerName : undefined,
+          fromTeamName: tournamentMode === 'team' ? proposerName : undefined,
+          toUserName: tournamentMode === '1v1' ? opponentName : undefined,
+          toTeamName: tournamentMode === 'team' ? opponentName : undefined,
+          toDiscordIds: opponentDiscordIds.length > 0 ? opponentDiscordIds : undefined,
+          proposedTimeRanges: formattedRanges,
+          messageExtra: notes || undefined,
+        }
+      ).catch(err => console.error('⚠️ Discord notification failed:', err));
+
+      // Store notification in database
+      const notificationTitle = `✏️ Proposal Changed - ${tournamentName}`;
+      await storeNotificationForUsers(
+        opponentIds,
+        tournamentId,
+        roundMatchId,
+        'schedule_changed',
+        notificationTitle,
+        notificationMessage,
+        null
+      ).catch(err => console.error('⚠️ Error storing notifications:', err));
+    }
+
     res.json({
       success: true,
       slotsCreated: result.slotsCreated
@@ -2097,7 +2202,110 @@ router.delete('/proposals/:proposalId', authMiddleware, async (req: AuthRequest,
       return res.status(400).json({ error: 'Missing proposalId' });
     }
 
+    // Get proposal details before canceling
+    const proposalResult = await query(
+      `SELECT p.tournament_round_match_id, t.id as tournament_id, t.name as tournament_name, t.tournament_mode
+       FROM match_schedule_proposals p
+       JOIN tournament_round_matches trm ON p.tournament_round_match_id = trm.id
+       JOIN tournaments t ON trm.tournament_id = t.id
+       WHERE p.id = ?`,
+      [proposalId]
+    );
+
+    // Cancel the proposal
     await cancelProposal(proposalId, userId);
+
+    // Send notifications if proposal was found
+    if (proposalResult.rows && proposalResult.rows.length > 0) {
+      const { tournament_id: tournamentId, tournament_name: tournamentName, tournament_mode: tournamentMode, tournament_round_match_id: roundMatchId } = proposalResult.rows[0];
+
+      // Get proposer info
+      let proposerName = 'Player';
+      const proposerResult = await query(
+        `SELECT nickname FROM users_extension WHERE id = ?`,
+        [userId]
+      );
+      if (proposerResult.rows && proposerResult.rows.length > 0) {
+        proposerName = proposerResult.rows[0].nickname;
+      }
+
+      // Get opponent info
+      let opponentIds: string[] = [];
+      let opponentDiscordIds: string[] = [];
+      let opponentName = 'Opponent';
+
+      const matchResult = await query(
+        `SELECT player1_id, player2_id FROM tournament_round_matches WHERE id = ?`,
+        [roundMatchId]
+      );
+
+      if (matchResult.rows && matchResult.rows.length > 0) {
+        const match = matchResult.rows[0];
+        const opponentId = userId === match.player1_id ? match.player2_id : match.player1_id;
+
+        if (tournamentMode === 'team') {
+          const teamResult = await query(
+            'SELECT name FROM tournament_teams WHERE id = ?',
+            [opponentId]
+          );
+          opponentName = teamResult.rows && teamResult.rows.length > 0 ? teamResult.rows[0].name : 'Opponent Team';
+
+          const teamMembersResult = await query(
+            `SELECT tp.user_id, ue.discord_id FROM tournament_participants tp
+             LEFT JOIN users_extension ue ON tp.user_id = ue.id
+             WHERE tp.tournament_id = ? AND tp.team_id = ?`,
+            [tournamentId, opponentId]
+          );
+
+          if (teamMembersResult.rows) {
+            opponentIds = teamMembersResult.rows.map((row: any) => row.user_id);
+            opponentDiscordIds = teamMembersResult.rows
+              .map((row: any) => row.discord_id)
+              .filter((id: string | null) => id !== null && id !== undefined);
+          }
+        } else {
+          opponentIds = [opponentId];
+          const opponentResult = await query(
+            'SELECT nickname, discord_id FROM users_extension WHERE id = ?',
+            [opponentId]
+          );
+          opponentName = opponentResult.rows && opponentResult.rows.length > 0 ? opponentResult.rows[0].nickname : 'Opponent';
+          if (opponentResult.rows && opponentResult.rows.length > 0 && opponentResult.rows[0].discord_id) {
+            opponentDiscordIds = [opponentResult.rows[0].discord_id];
+          }
+        }
+      }
+
+      // Build notification message (no ranges for cancellation)
+      const notificationMessage = buildNotificationMessage('cancelled', proposerName, []);
+
+      // Send Discord notification
+      await sendDiscordNotification(
+        tournamentId,
+        'schedule_cancelled',
+        {
+          tournamentName,
+          fromUserName: tournamentMode === '1v1' ? proposerName : undefined,
+          fromTeamName: tournamentMode === 'team' ? proposerName : undefined,
+          toUserName: tournamentMode === '1v1' ? opponentName : undefined,
+          toTeamName: tournamentMode === 'team' ? opponentName : undefined,
+          toDiscordIds: opponentDiscordIds.length > 0 ? opponentDiscordIds : undefined,
+        }
+      ).catch(err => console.error('⚠️ Discord notification failed:', err));
+
+      // Store notification in database
+      const notificationTitle = `🚫 Proposal Cancelled - ${tournamentName}`;
+      await storeNotificationForUsers(
+        opponentIds,
+        tournamentId,
+        roundMatchId,
+        'schedule_cancelled',
+        notificationTitle,
+        notificationMessage,
+        null
+      ).catch(err => console.error('⚠️ Error storing notifications:', err));
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error('❌ [SCHEDULING] Error cancelling proposal:', error);

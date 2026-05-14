@@ -125,7 +125,7 @@ export function formatTimeRangesForDiscord(ranges: TimeRange[]): string {
  * @returns Formatted message string
  */
 export function buildNotificationMessage(
-  notificationType: 'proposal' | 'confirmed' | 'rejected' | 'counter',
+  notificationType: 'proposal' | 'confirmed' | 'rejected' | 'counter' | 'changed' | 'cancelled',
   actorName: string,
   ranges: TimeRange[],
   notes?: string | null
@@ -144,6 +144,12 @@ export function buildNotificationMessage(
       break;
     case 'counter':
       message = `🔄 **Counter Proposal** - ${actorName} rejects the proposal and proposes:\n${formatTimeRangesForDiscord(ranges)}`;
+      break;
+    case 'changed':
+      message = `✏️ **Proposal Changed** - ${actorName} has updated the proposed slots:\n${formatTimeRangesForDiscord(ranges)}`;
+      break;
+    case 'cancelled':
+      message = `🚫 **Proposal Cancelled** - ${actorName} has withdrawn the proposal`;
       break;
   }
 
