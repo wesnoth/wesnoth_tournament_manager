@@ -1359,21 +1359,25 @@ export const cancelProposal = async (proposalId: string, userId: string) => {
       throw new Error('Only proposer can cancel proposal');
     }
     
-    // 2. Mark as cancelled
+    // 2. Delete confirmations first (references slots and proposals)
     await query(
-      `UPDATE match_schedule_proposals 
-       SET status = 'cancelled', cancelled_at = NOW()
-       WHERE id = ?`,
+      `DELETE FROM match_schedule_confirmations WHERE proposal_id = ?`,
       [proposalId]
     );
     
-    // 3. Mark slots as cancelled (soft cancel)
+    // 3. Delete slots (references proposal)
     await query(
-      `UPDATE match_schedule_slots SET status = 'cancelled' WHERE proposal_id = ?`,
+      `DELETE FROM match_schedule_slots WHERE proposal_id = ?`,
       [proposalId]
     );
     
-    // 4. Reset tournament_round_matches
+    // 4. Delete proposal
+    await query(
+      `DELETE FROM match_schedule_proposals WHERE id = ?`,
+      [proposalId]
+    );
+    
+    // 5. Reset tournament_round_matches
     await query(
       `UPDATE tournament_round_matches 
        SET scheduled_datetime = NULL, scheduled_status = 'pending', scheduled_confirmed_at = NULL
