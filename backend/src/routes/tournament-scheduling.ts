@@ -1064,7 +1064,7 @@ router.post(
         // Get all users in the opponent team
         const teamMembersResult = await query(
           `SELECT tp.user_id, ue.discord_id FROM tournament_participants tp
-           LEFT JOIN users_extension ue ON tp.user_id = ue.user_id
+           LEFT JOIN users_extension ue ON tp.user_id = ue.id
            WHERE tp.tournament_id = ? AND tp.team_id = ?`,
           [tournamentId, opponentTeamId]
         );
@@ -1247,7 +1247,7 @@ router.post(
         // Get all users in the opponent team
         const teamMembersResult = await query(
           `SELECT tp.user_id, ue.discord_id FROM tournament_participants tp
-           LEFT JOIN users_extension ue ON tp.user_id = ue.user_id
+           LEFT JOIN users_extension ue ON tp.user_id = ue.id
            WHERE tp.tournament_id = ? AND tp.team_id = ?`,
           [tournamentId, opponentTeamId]
         );
@@ -1463,7 +1463,7 @@ router.post(
              // Get team members' Discord IDs
              const membersResult = await query(
                `SELECT ue.discord_id FROM tournament_participants tp
-                LEFT JOIN users_extension ue ON tp.user_id = ue.user_id
+                LEFT JOIN users_extension ue ON tp.user_id = ue.id
                 WHERE tp.tournament_id = ? AND tp.team_id = ? AND ue.discord_id IS NOT NULL`,
                [tournamentId, teamId]
              );
@@ -1964,7 +1964,7 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
             // Get team members' Discord IDs
             const membersResult = await query(
               `SELECT ue.discord_id FROM tournament_participants tp
-               LEFT JOIN users_extension ue ON tp.user_id = ue.user_id
+               LEFT JOIN users_extension ue ON tp.user_id = ue.id
                WHERE tp.tournament_id = ? AND tp.team_id = ? AND ue.discord_id IS NOT NULL`,
               [tournamentId, teamId]
             );
