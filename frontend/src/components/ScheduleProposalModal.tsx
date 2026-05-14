@@ -344,8 +344,8 @@ export default function ScheduleProposalModal({
       setLoading(true);
       setError('');
 
-      // TODO: Call backend to delete/cancel the proposal
-      // For now, just close and refresh
+      await tournamentSchedulingService.cancelProposal(proposal.id);
+      
       onSuccess?.();
       onClose();
     } catch (err) {

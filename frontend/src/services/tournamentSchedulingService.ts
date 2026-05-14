@@ -180,5 +180,15 @@ export const tournamentSchedulingService = {
       `/tournament-scheduling/tournament/${tournamentId}/match/${matchId}/participants-availability`
     );
     return response.data;
+  },
+
+  /**
+   * Cancel a proposal (delete it completely)
+   */
+  cancelProposal: async (proposalId: string) => {
+    const response = await api.delete(
+      `/tournament-scheduling/proposals/${proposalId}`
+    );
+    return response.data;
   }
 };
