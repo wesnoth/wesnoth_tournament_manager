@@ -2635,6 +2635,18 @@ router.put('/system-settings/:setting_key', moderatorOrAdminMiddleware, async (r
 
     const ip = getUserIP(req);
 
+    // Get the current value before updating
+    const currentResult = await query(
+      `SELECT setting_value FROM system_settings WHERE setting_key = ?`,
+      [setting_key]
+    );
+
+    if (!currentResult || (currentResult as any).rows.length === 0) {
+      return res.status(404).json({ error: 'Setting not found' });
+    }
+
+    const oldValue = (currentResult as any).rows[0].setting_value;
+
     // Update the setting
     const result = await query(
       `UPDATE system_settings 
@@ -2644,23 +2656,29 @@ router.put('/system-settings/:setting_key', moderatorOrAdminMiddleware, async (r
     );
 
     if ((result as any).affectedRows === 0) {
-      return res.status(404).json({ error: 'Setting not found' });
+      return res.status(404).json({ error: 'Failed to update setting' });
     }
 
-    // Log audit event
+    // Log audit event with before/after values
     await logAuditEvent({
       event_type: 'ADMIN_ACTION',
       user_id: req.userId,
       ip_address: ip,
       user_agent: getUserAgent(req),
-      details: { setting_key, new_value: setting_value }
+      details: { 
+        action: 'SYSTEM_SETTING_UPDATED',
+        setting_key, 
+        old_value: oldValue,
+        new_value: setting_value
+      }
     });
 
     res.json({ 
       success: true, 
       message: `Setting "${setting_key}" updated successfully`,
       setting_key,
-      setting_value
+      setting_value,
+      old_value: oldValue
     });
   } catch (error) {
     console.error('Error updating system setting:', error);
