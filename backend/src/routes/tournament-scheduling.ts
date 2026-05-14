@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { query } from '../config/database.js';
 import { authMiddleware, AuthRequest, optionalAuthMiddleware } from '../middleware/auth.js';
 import { sendDiscordNotification, storeNotificationForUsers } from '../services/discordNotificationService.js';
+import { groupSlotsIntoRanges, formatTimeRangesForDiscord, buildNotificationMessage } from '../utils/slotGrouping.js';
 import {
   createRoundMatchProposal,
   createMatchProposal,
@@ -1036,9 +1037,106 @@ router.post(
 
       console.log(`✅ [SCHEDULING] Round match proposal created: ${proposalId} with ${slotsCreated} slots`);
 
-      // TODO: Send notification to opponent
-      const opponentId = userId === match.player1_id ? match.player2_id : match.player1_id;
-      // await storeNotificationForUsers([opponentId], {...});
+      // Get opponent(s) for notification
+      let opponentIds: string[] = [];
+      let opponentName = 'Opponent';
+      let proposerName = 'Player';
+      let opponentDiscordIds: string[] = [];
+
+      if (match.tournament_mode === 'team') {
+        // Team tournament - get all members of opponent team
+        const opponentTeamId = userId === match.player1_id ? match.player2_id : match.player1_id;
+        
+        // Get opponent team name
+        const teamResult = await query(
+          'SELECT name FROM tournament_teams WHERE id = ?',
+          [opponentTeamId]
+        );
+        opponentName = teamResult.rows && teamResult.rows.length > 0 ? teamResult.rows[0].name : 'Opponent Team';
+
+        // Get proposer team name
+        const proposerTeamResult = await query(
+          'SELECT name FROM tournament_teams WHERE id = ?',
+          [userId === match.player1_id ? match.player1_id : match.player2_id]
+        );
+        proposerName = proposerTeamResult.rows && proposerTeamResult.rows.length > 0 ? proposerTeamResult.rows[0].name : 'Team';
+
+        // Get all users in the opponent team
+        const teamMembersResult = await query(
+          `SELECT tp.user_id, ue.discord_id FROM tournament_participants tp
+           LEFT JOIN users_extension ue ON tp.user_id = ue.user_id
+           WHERE tp.tournament_id = ? AND tp.team_id = ?`,
+          [tournamentId, opponentTeamId]
+        );
+
+        if (teamMembersResult.rows) {
+          opponentIds = teamMembersResult.rows.map((row: any) => row.user_id);
+          opponentDiscordIds = teamMembersResult.rows
+            .map((row: any) => row.discord_id)
+            .filter((id: string | null) => id !== null && id !== undefined);
+        }
+      } else {
+        // 1v1 tournament
+        const opponentId = userId === match.player1_id ? match.player2_id : match.player1_id;
+        opponentIds = [opponentId];
+
+        const opponentResult = await query(
+          'SELECT username, discord_id FROM users_extension WHERE user_id = ?',
+          [opponentId]
+        );
+        opponentName = opponentResult.rows && opponentResult.rows.length > 0 ? opponentResult.rows[0].username : 'Opponent';
+        
+        if (opponentResult.rows && opponentResult.rows.length > 0 && opponentResult.rows[0].discord_id) {
+          opponentDiscordIds = [opponentResult.rows[0].discord_id];
+        }
+
+        const proposerResult = await query(
+          'SELECT username FROM users_extension WHERE user_id = ?',
+          [userId]
+        );
+        proposerName = proposerResult.rows && proposerResult.rows.length > 0 ? proposerResult.rows[0].username : 'Player';
+      }
+
+      // Get tournament name
+      const tournamentResult = await query(
+        'SELECT name FROM tournaments WHERE id = ?',
+        [tournamentId]
+      );
+      const tournamentName = tournamentResult.rows && tournamentResult.rows.length > 0 ? tournamentResult.rows[0].name : 'Tournament';
+
+      // Group slots into ranges for display
+      const ranges = groupSlotsIntoRanges(slot_datetimes);
+      const formattedRanges = formatTimeRangesForDiscord(ranges);
+      const notificationMessage = buildNotificationMessage('proposal', proposerName, ranges, notes);
+
+      // Send Discord notification
+      await sendDiscordNotification(
+        tournamentId,
+        'schedule_proposal',
+        {
+          tournamentName,
+          fromTeamName: match.tournament_mode === 'team' ? proposerName : undefined,
+          fromUserName: match.tournament_mode === '1v1' ? proposerName : undefined,
+          toTeamName: match.tournament_mode === 'team' ? opponentName : undefined,
+          toUserName: match.tournament_mode === '1v1' ? opponentName : undefined,
+          toDiscordIds: opponentDiscordIds.length > 0 ? opponentDiscordIds : undefined,
+          proposedTimeRanges: formattedRanges,
+          messageExtra: notes || undefined,
+        }
+      ).catch(err => console.error('⚠️ Discord notification failed:', err));
+
+      // Store notification in database (fallback for offline users) - same format as Discord
+      const notificationTitle = `🗓️ Schedule Proposal - ${tournamentName}`;
+      
+      await storeNotificationForUsers(
+        opponentIds,
+        tournamentId,
+        roundMatchId,
+        'schedule_proposal',
+        notificationTitle,
+        notificationMessage,
+        null
+      ).catch(err => console.error('⚠️ Error storing notifications:', err));
 
       res.json({
         success: true,
@@ -1122,8 +1220,106 @@ router.post(
 
       console.log(`✅ [SCHEDULING] Match proposal created: ${proposalId} with ${slotsCreated} slots`);
 
-      const opponentId = userId === match.player1_id ? match.player2_id : match.player1_id;
-      // TODO: Send notification
+      // Get opponent(s) for notification
+      let opponentIds: string[] = [];
+      let opponentName = 'Opponent';
+      let proposerName = 'Player';
+      let opponentDiscordIds: string[] = [];
+
+      if (match.tournament_mode === 'team') {
+        // Team tournament - get all members of opponent team
+        const opponentTeamId = userId === match.player1_id ? match.player2_id : match.player1_id;
+        
+        // Get opponent team name
+        const teamResult = await query(
+          'SELECT name FROM tournament_teams WHERE id = ?',
+          [opponentTeamId]
+        );
+        opponentName = teamResult.rows && teamResult.rows.length > 0 ? teamResult.rows[0].name : 'Opponent Team';
+
+        // Get proposer team name
+        const proposerTeamResult = await query(
+          'SELECT name FROM tournament_teams WHERE id = ?',
+          [userId === match.player1_id ? match.player1_id : match.player2_id]
+        );
+        proposerName = proposerTeamResult.rows && proposerTeamResult.rows.length > 0 ? proposerTeamResult.rows[0].name : 'Team';
+
+        // Get all users in the opponent team
+        const teamMembersResult = await query(
+          `SELECT tp.user_id, ue.discord_id FROM tournament_participants tp
+           LEFT JOIN users_extension ue ON tp.user_id = ue.user_id
+           WHERE tp.tournament_id = ? AND tp.team_id = ?`,
+          [tournamentId, opponentTeamId]
+        );
+
+        if (teamMembersResult.rows) {
+          opponentIds = teamMembersResult.rows.map((row: any) => row.user_id);
+          opponentDiscordIds = teamMembersResult.rows
+            .map((row: any) => row.discord_id)
+            .filter((id: string | null) => id !== null && id !== undefined);
+        }
+      } else {
+        // 1v1 tournament
+        const opponentId = userId === match.player1_id ? match.player2_id : match.player1_id;
+        opponentIds = [opponentId];
+
+        const opponentResult = await query(
+          'SELECT username, discord_id FROM users_extension WHERE user_id = ?',
+          [opponentId]
+        );
+        opponentName = opponentResult.rows && opponentResult.rows.length > 0 ? opponentResult.rows[0].username : 'Opponent';
+        
+        if (opponentResult.rows && opponentResult.rows.length > 0 && opponentResult.rows[0].discord_id) {
+          opponentDiscordIds = [opponentResult.rows[0].discord_id];
+        }
+
+        const proposerResult = await query(
+          'SELECT username FROM users_extension WHERE user_id = ?',
+          [userId]
+        );
+        proposerName = proposerResult.rows && proposerResult.rows.length > 0 ? proposerResult.rows[0].username : 'Player';
+      }
+
+      // Get tournament name
+      const tournamentResult = await query(
+        'SELECT name FROM tournaments WHERE id = ?',
+        [tournamentId]
+      );
+      const tournamentName = tournamentResult.rows && tournamentResult.rows.length > 0 ? tournamentResult.rows[0].name : 'Tournament';
+
+      // Group slots into ranges for display
+      const ranges = groupSlotsIntoRanges(slot_datetimes);
+      const formattedRanges = formatTimeRangesForDiscord(ranges);
+      const notificationMessage = buildNotificationMessage('proposal', proposerName, ranges, notes);
+
+      // Send Discord notification
+      await sendDiscordNotification(
+        tournamentId,
+        'schedule_proposal',
+        {
+          tournamentName,
+          fromTeamName: match.tournament_mode === 'team' ? proposerName : undefined,
+          fromUserName: match.tournament_mode === '1v1' ? proposerName : undefined,
+          toTeamName: match.tournament_mode === 'team' ? opponentName : undefined,
+          toUserName: match.tournament_mode === '1v1' ? opponentName : undefined,
+          toDiscordIds: opponentDiscordIds.length > 0 ? opponentDiscordIds : undefined,
+          proposedTimeRanges: formattedRanges,
+          messageExtra: notes || undefined,
+        }
+      ).catch(err => console.error('⚠️ Discord notification failed:', err));
+
+      // Store notification in database (fallback for offline users) - same format as Discord
+      const notificationTitle = `🗓️ Schedule Proposal - ${tournamentName}`;
+      
+      await storeNotificationForUsers(
+        opponentIds,
+        tournamentId,
+        matchId,
+        'schedule_proposal',
+        notificationTitle,
+        notificationMessage,
+        null
+      ).catch(err => console.error('⚠️ Error storing notifications:', err));
 
       res.json({
         success: true,
@@ -1210,6 +1406,168 @@ router.post(
      const result = await confirmPartialSlots(proposal_id, userId, confirmed_slot_ids);
 
      console.log(`✅ [SCHEDULING] User ${userId} confirmed proposal ${proposal_id} with ${confirmed_slot_ids.length} slots, fully confirmed: ${result.fullyConfirmed}`);
+
+     // Get all slots for this proposal to get detailed info
+     const slotsResult = await query(
+       `SELECT id, slot_datetime, status FROM match_schedule_slots 
+        WHERE proposal_id = ? ORDER BY slot_datetime ASC`,
+       [proposal_id]
+     );
+
+     // Get proposer info for notification
+     const proposalResult = await query(
+       `SELECT proposed_by_user_id, tournament_round_match_id FROM match_schedule_proposals WHERE id = ?`,
+       [proposal_id]
+     );
+
+     if (proposalResult.rows && proposalResult.rows.length > 0) {
+       const proposerId = proposalResult.rows[0].proposed_by_user_id;
+       const roundMatchId = proposalResult.rows[0].tournament_round_match_id;
+
+       // Get tournament ID from match
+       const matchResult = await query(
+         `SELECT tournament_id, tournament_mode FROM tournament_round_matches WHERE id = ?`,
+         [roundMatchId]
+       );
+
+       if (matchResult.rows && matchResult.rows.length > 0) {
+         const tournamentId = matchResult.rows[0].tournament_id;
+         const tournamentMode = matchResult.rows[0].tournament_mode;
+
+         // Get tournament name
+         const tournamentResult = await query(
+           `SELECT name FROM tournaments WHERE id = ?`,
+           [tournamentId]
+         );
+         const tournamentName = tournamentResult.rows && tournamentResult.rows.length > 0 
+           ? tournamentResult.rows[0].name 
+           : 'Tournament';
+
+         // Separate confirmed and rejected slots
+         const confirmedSlots = slotsResult.rows?.filter((s: any) => s.status === 'confirmed').map((s: any) => s.slot_datetime) || [];
+         const rejectedSlots = slotsResult.rows?.filter((s: any) => s.status === 'rejected').map((s: any) => s.slot_datetime) || [];
+
+         // Get confirmer name
+         let confirmerName = 'Player';
+         let confirmerDiscordIds: string[] = [];
+         if (tournamentMode === 'team') {
+           const userTeamResult = await query(
+             `SELECT team_id FROM tournament_participants WHERE tournament_id = ? AND user_id = ? LIMIT 1`,
+             [tournamentId, userId]
+           );
+           if (userTeamResult.rows && userTeamResult.rows.length > 0) {
+             const teamId = userTeamResult.rows[0].team_id;
+             const teamResult = await query(`SELECT name FROM tournament_teams WHERE id = ?`, [teamId]);
+             confirmerName = teamResult.rows && teamResult.rows.length > 0 ? teamResult.rows[0].name : 'Team';
+
+             // Get team members' Discord IDs
+             const membersResult = await query(
+               `SELECT ue.discord_id FROM tournament_participants tp
+                LEFT JOIN users_extension ue ON tp.user_id = ue.user_id
+                WHERE tp.tournament_id = ? AND tp.team_id = ? AND ue.discord_id IS NOT NULL`,
+               [tournamentId, teamId]
+             );
+             confirmerDiscordIds = membersResult.rows?.map((r: any) => r.discord_id) || [];
+           }
+         } else {
+           const userResult = await query(
+             `SELECT username, discord_id FROM users_extension WHERE user_id = ?`,
+             [userId]
+           );
+           confirmerName = userResult.rows && userResult.rows.length > 0 ? userResult.rows[0].username : 'Player';
+           if (userResult.rows && userResult.rows.length > 0 && userResult.rows[0].discord_id) {
+             confirmerDiscordIds = [userResult.rows[0].discord_id];
+           }
+         }
+
+         // Get proposer name and Discord IDs
+         let proposerName = 'Player';
+         let proposerDiscordIds: string[] = [];
+         if (tournamentMode === 'team') {
+           const propTeamResult = await query(
+             `SELECT team_id FROM tournament_participants WHERE tournament_id = ? AND user_id = ? LIMIT 1`,
+             [tournamentId, proposerId]
+           );
+           if (propTeamResult.rows && propTeamResult.rows.length > 0) {
+             const teamId = propTeamResult.rows[0].team_id;
+             const teamResult = await query(`SELECT name FROM tournament_teams WHERE id = ?`, [teamId]);
+             proposerName = teamResult.rows && teamResult.rows.length > 0 ? teamResult.rows[0].name : 'Team';
+           }
+         } else {
+           const userResult = await query(
+             `SELECT username, discord_id FROM users_extension WHERE user_id = ?`,
+             [proposerId]
+           );
+           proposerName = userResult.rows && userResult.rows.length > 0 ? userResult.rows[0].username : 'Player';
+           if (userResult.rows && userResult.rows.length > 0 && userResult.rows[0].discord_id) {
+             proposerDiscordIds = [userResult.rows[0].discord_id];
+           }
+         }
+
+         // Send notifications based on action
+         if (confirmedSlots.length > 0) {
+           // Confirmed (fully or partially) - show only confirmed slots
+           const ranges = groupSlotsIntoRanges(confirmedSlots);
+           const notificationMessage = buildNotificationMessage('confirmed', confirmerName, ranges);
+           const formattedRanges = formatTimeRangesForDiscord(ranges);
+
+           await sendDiscordNotification(
+             tournamentId,
+             'schedule_confirmed',
+             {
+               tournamentName,
+               fromUserName: tournamentMode === '1v1' ? confirmerName : undefined,
+               fromTeamName: tournamentMode === 'team' ? confirmerName : undefined,
+               toUserName: tournamentMode === '1v1' ? proposerName : undefined,
+               toTeamName: tournamentMode === 'team' ? proposerName : undefined,
+               toDiscordIds: proposerDiscordIds.length > 0 ? proposerDiscordIds : undefined,
+               proposedTimeRanges: formattedRanges,
+             }
+           ).catch(err => console.error('⚠️ Discord notification failed:', err));
+
+           // Store both proposer and confirmer notifications
+           const allRecipients = [proposerId, userId];
+           const notificationTitle = `✅ Schedule Confirmed - ${tournamentName}`;
+           await storeNotificationForUsers(
+             allRecipients,
+             tournamentId,
+             roundMatchId,
+             'schedule_confirmed',
+             notificationTitle,
+             notificationMessage,
+             null
+           ).catch(err => console.error('⚠️ Error storing notifications:', err));
+         } else {
+           // Full rejection - no confirmed slots
+           const notificationMessage = buildNotificationMessage('rejected', confirmerName, []);
+
+           await sendDiscordNotification(
+             tournamentId,
+             'schedule_rejected',
+             {
+               tournamentName,
+               fromUserName: tournamentMode === '1v1' ? confirmerName : undefined,
+               fromTeamName: tournamentMode === 'team' ? confirmerName : undefined,
+               toUserName: tournamentMode === '1v1' ? proposerName : undefined,
+               toTeamName: tournamentMode === 'team' ? proposerName : undefined,
+               toDiscordIds: proposerDiscordIds.length > 0 ? proposerDiscordIds : undefined,
+             }
+           ).catch(err => console.error('⚠️ Discord notification failed:', err));
+
+           // Store rejection notification
+           const notificationTitle = `❌ Schedule Rejected - ${tournamentName}`;
+           await storeNotificationForUsers(
+             [proposerId],
+             tournamentId,
+             roundMatchId,
+             'schedule_rejected',
+             notificationTitle,
+             notificationMessage,
+             null
+           ).catch(err => console.error('⚠️ Error storing notifications:', err));
+         }
+       }
+     }
 
      res.json({
        success: true,
@@ -1551,7 +1909,137 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
       return res.status(400).json({ error: 'slotDatetimes must be a non-empty array' });
     }
 
+    // Get original proposal info before counter-proposing
+    const originalProposalResult = await query(
+      `SELECT proposed_by_user_id, tournament_round_match_id, tournament_match_id FROM match_schedule_proposals WHERE id = ?`,
+      [proposalId]
+    );
+
+    let proposerOfOriginal: string | null = null;
+    let roundMatchId: string | null = null;
+    let matchId: string | null = null;
+
+    if (originalProposalResult.rows && originalProposalResult.rows.length > 0) {
+      proposerOfOriginal = originalProposalResult.rows[0].proposed_by_user_id;
+      roundMatchId = originalProposalResult.rows[0].tournament_round_match_id;
+      matchId = originalProposalResult.rows[0].tournament_match_id;
+    }
+
     const result = await rejectAndCounterPropose(proposalId, userId, slotDatetimes, notes);
+
+    // Send counter-proposal notifications
+    if (proposerOfOriginal && roundMatchId) {
+      // Get match info
+      const matchResult = await query(
+        `SELECT tournament_id, tournament_mode FROM tournament_round_matches WHERE id = ?`,
+        [roundMatchId]
+      );
+
+      if (matchResult.rows && matchResult.rows.length > 0) {
+        const tournamentId = matchResult.rows[0].tournament_id;
+        const tournamentMode = matchResult.rows[0].tournament_mode;
+
+        // Get tournament name
+        const tournamentResult = await query(
+          `SELECT name FROM tournaments WHERE id = ?`,
+          [tournamentId]
+        );
+        const tournamentName = tournamentResult.rows && tournamentResult.rows.length > 0 
+          ? tournamentResult.rows[0].name 
+          : 'Tournament';
+
+        // Get counter-proposer name
+        let counterProposerName = 'Player';
+        let counterProposerDiscordIds: string[] = [];
+        if (tournamentMode === 'team') {
+          const userTeamResult = await query(
+            `SELECT team_id FROM tournament_participants WHERE tournament_id = ? AND user_id = ? LIMIT 1`,
+            [tournamentId, userId]
+          );
+          if (userTeamResult.rows && userTeamResult.rows.length > 0) {
+            const teamId = userTeamResult.rows[0].team_id;
+            const teamResult = await query(`SELECT name FROM tournament_teams WHERE id = ?`, [teamId]);
+            counterProposerName = teamResult.rows && teamResult.rows.length > 0 ? teamResult.rows[0].name : 'Team';
+
+            // Get team members' Discord IDs
+            const membersResult = await query(
+              `SELECT ue.discord_id FROM tournament_participants tp
+               LEFT JOIN users_extension ue ON tp.user_id = ue.user_id
+               WHERE tp.tournament_id = ? AND tp.team_id = ? AND ue.discord_id IS NOT NULL`,
+              [tournamentId, teamId]
+            );
+            counterProposerDiscordIds = membersResult.rows?.map((r: any) => r.discord_id) || [];
+          }
+        } else {
+          const userResult = await query(
+            `SELECT username, discord_id FROM users_extension WHERE user_id = ?`,
+            [userId]
+          );
+          counterProposerName = userResult.rows && userResult.rows.length > 0 ? userResult.rows[0].username : 'Player';
+          if (userResult.rows && userResult.rows.length > 0 && userResult.rows[0].discord_id) {
+            counterProposerDiscordIds = [userResult.rows[0].discord_id];
+          }
+        }
+
+        // Get original proposer name
+        let originalProposerName = 'Player';
+        let originalProposerDiscordIds: string[] = [];
+        if (tournamentMode === 'team') {
+          const propTeamResult = await query(
+            `SELECT team_id FROM tournament_participants WHERE tournament_id = ? AND user_id = ? LIMIT 1`,
+            [tournamentId, proposerOfOriginal]
+          );
+          if (propTeamResult.rows && propTeamResult.rows.length > 0) {
+            const teamId = propTeamResult.rows[0].team_id;
+            const teamResult = await query(`SELECT name FROM tournament_teams WHERE id = ?`, [teamId]);
+            originalProposerName = teamResult.rows && teamResult.rows.length > 0 ? teamResult.rows[0].name : 'Team';
+          }
+        } else {
+          const userResult = await query(
+            `SELECT username, discord_id FROM users_extension WHERE user_id = ?`,
+            [proposerOfOriginal]
+          );
+          originalProposerName = userResult.rows && userResult.rows.length > 0 ? userResult.rows[0].username : 'Player';
+          if (userResult.rows && userResult.rows.length > 0 && userResult.rows[0].discord_id) {
+            originalProposerDiscordIds = [userResult.rows[0].discord_id];
+          }
+        }
+
+        // Group slots into ranges and create notification message
+        const ranges = groupSlotsIntoRanges(slotDatetimes);
+        const notificationMessage = buildNotificationMessage('counter', counterProposerName, ranges, notes);
+        const formattedRanges = formatTimeRangesForDiscord(ranges);
+
+        // Send Discord notification
+        await sendDiscordNotification(
+          tournamentId,
+          'schedule_proposal',
+          {
+            tournamentName,
+            fromUserName: tournamentMode === '1v1' ? counterProposerName : undefined,
+            fromTeamName: tournamentMode === 'team' ? counterProposerName : undefined,
+            toUserName: tournamentMode === '1v1' ? originalProposerName : undefined,
+            toTeamName: tournamentMode === 'team' ? originalProposerName : undefined,
+            toDiscordIds: originalProposerDiscordIds.length > 0 ? originalProposerDiscordIds : undefined,
+            proposedTimeRanges: formattedRanges,
+            messageExtra: notes || undefined,
+          }
+        ).catch(err => console.error('⚠️ Discord notification failed:', err));
+
+        // Store notification in database
+        const notificationTitle = `🔄 Counter Proposal - ${tournamentName}`;
+        await storeNotificationForUsers(
+          [proposerOfOriginal],
+          tournamentId,
+          roundMatchId,
+          'schedule_proposal',
+          notificationTitle,
+          notificationMessage,
+          null
+        ).catch(err => console.error('⚠️ Error storing notifications:', err));
+      }
+    }
+
     res.json({
       success: true,
       counterProposalId: result.counterProposalId,

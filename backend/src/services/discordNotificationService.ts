@@ -19,12 +19,14 @@ interface DiscordScheduleNotificationData {
   toUserName?: string;
   toTeamName?: string;
   toDiscordIds?: string[];
-  proposedDateTime?: string;
+  proposedDateTime?: string; // Legacy: single datetime
+  proposedTimeRanges?: string; // New: formatted time ranges (from formatTimeRangesForDiscord)
   messageExtra?: string;
 }
 
 /**
  * Build Discord message for schedule proposal with clear structure
+ * Supports both legacy single datetime and new multiple time ranges
  */
 function buildScheduleProposalEmbed(
   tournamentName: string,
@@ -39,7 +41,10 @@ function buildScheduleProposalEmbed(
     { name: '📥 To', value: toName, inline: true },
   ];
 
-  if (data.proposedDateTime) {
+  // Use new format with time ranges if available, otherwise fall back to single datetime
+  if (data.proposedTimeRanges) {
+    fields.push({ name: '📅 Proposed Time Slots (UTC)', value: data.proposedTimeRanges, inline: false });
+  } else if (data.proposedDateTime) {
     fields.push({ name: '📅 Proposed Date/Time', value: data.proposedDateTime, inline: false });
   }
 
@@ -61,6 +66,7 @@ function buildScheduleProposalEmbed(
 
 /**
  * Build Discord message for schedule confirmation with clear structure
+ * Supports both legacy single datetime and new multiple time ranges
  */
 function buildScheduleConfirmationEmbed(
   tournamentName: string,
@@ -75,7 +81,10 @@ function buildScheduleConfirmationEmbed(
     { name: '🆚 Against', value: againstName, inline: true },
   ];
 
-  if (data.proposedDateTime) {
+  // Use new format with time ranges if available, otherwise fall back to single datetime
+  if (data.proposedTimeRanges) {
+    fields.push({ name: '📅 Confirmed Time Slot (UTC)', value: data.proposedTimeRanges, inline: false });
+  } else if (data.proposedDateTime) {
     fields.push({ name: '📅 Confirmed Date/Time', value: data.proposedDateTime, inline: false });
   }
 
@@ -90,11 +99,37 @@ function buildScheduleConfirmationEmbed(
 }
 
 /**
+ * Build Discord message for schedule rejection
+ */
+function buildScheduleRejectionEmbed(
+  tournamentName: string,
+  data: DiscordScheduleNotificationData
+): any {
+  const rejectedByName = data.fromTeamName || data.fromUserName || 'Unknown';
+  const againstName = data.toTeamName || data.toUserName || 'Unknown';
+
+  const fields: Array<{ name: string; value: string; inline?: boolean }> = [
+    { name: '📋 Tournament', value: tournamentName, inline: false },
+    { name: '❌ Rejected by', value: rejectedByName, inline: true },
+    { name: '🆚 Against', value: againstName, inline: true },
+  ];
+
+  return {
+    title: '❌ Schedule Rejected',
+    description: 'The proposed schedule was rejected.',
+    color: 0xff0000,
+    fields,
+    footer: { text: 'Schedule Rejected' },
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
  * Send an enhanced Discord notification to the tournament thread
  */
 export async function sendDiscordNotification(
   tournamentId: string,
-  notificationType: 'schedule_proposal' | 'schedule_confirmed',
+  notificationType: 'schedule_proposal' | 'schedule_confirmed' | 'schedule_rejected',
   notificationData: DiscordScheduleNotificationData
 ): Promise<boolean> {
   if (!DISCORD_ENABLED) {
@@ -122,9 +157,14 @@ export async function sendDiscordNotification(
     }
 
     // Build appropriate embed
-    const embed = notificationType === 'schedule_proposal'
-      ? buildScheduleProposalEmbed(tournamentName, notificationData)
-      : buildScheduleConfirmationEmbed(tournamentName, notificationData);
+    let embed;
+    if (notificationType === 'schedule_proposal') {
+      embed = buildScheduleProposalEmbed(tournamentName, notificationData);
+    } else if (notificationType === 'schedule_confirmed') {
+      embed = buildScheduleConfirmationEmbed(tournamentName, notificationData);
+    } else {
+      embed = buildScheduleRejectionEmbed(tournamentName, notificationData);
+    }
 
     // Build message content with mentions
     let messageContent = '';
@@ -186,7 +226,7 @@ export async function storeNotificationForUsers(
   userIds: string[],
   tournamentId: string,
   matchId: string,
-  type: 'schedule_proposal' | 'schedule_confirmed',
+  type: 'schedule_proposal' | 'schedule_confirmed' | 'schedule_rejected',
   title: string,
   message: string,
   messageExtra?: string | null
