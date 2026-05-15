@@ -1426,7 +1426,10 @@ router.post(
 
        // Get tournament ID from match
        const matchResult = await query(
-         `SELECT tournament_id, tournament_mode FROM tournament_round_matches WHERE id = ?`,
+         `SELECT trm.tournament_id, t.tournament_mode 
+          FROM tournament_round_matches trm
+          JOIN tournaments t ON trm.tournament_id = t.id
+          WHERE trm.id = ?`,
          [roundMatchId]
        );
 
@@ -1931,7 +1934,10 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
     if (proposerOfOriginal && roundMatchId) {
       // Get match info
       const matchResult = await query(
-        `SELECT tournament_id, tournament_mode FROM tournament_round_matches WHERE id = ?`,
+        `SELECT trm.tournament_id, t.tournament_mode 
+         FROM tournament_round_matches trm
+         JOIN tournaments t ON trm.tournament_id = t.id
+         WHERE trm.id = ?`,
         [roundMatchId]
       );
 
