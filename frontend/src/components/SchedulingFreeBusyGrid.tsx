@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useRef } from 'react';
+import React, { useMemo, useEffect, useRef, useState } from 'react';
 
 interface Participant {
   id: string;
@@ -17,6 +17,19 @@ interface GridSlot {
   slotKey: string;
 }
 
+interface DateSection {
+  dateKey: string;
+  daySlots: GridSlot[];
+  dayColor: string;
+  dateLabel: string;
+}
+
+interface FlatSlot {
+  slot: GridSlot;
+  dateKey: string;
+  dayColor: string;
+}
+
 interface SchedulingFreeBusyGridProps {
   participants: Participant[];
   dateStart: Date;
@@ -33,6 +46,9 @@ interface SchedulingFreeBusyGridProps {
 }
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const PARTICIPANT_COLUMN_WIDTH = 180;
+const SLOT_COLUMN_WIDTH = 56;
+const OVERSCAN_COLUMNS = 10;
 
 const slotToUTCDatetime = (slot: Pick<GridSlot, 'dateStr' | 'timeStr'>, viewingTimezone: string): string => {
   const localDateTimeStr = `${slot.dateStr}T${slot.timeStr}:00`;
@@ -159,6 +175,9 @@ export default function SchedulingFreeBusyGrid({
   confirmMode = false
 }: SchedulingFreeBusyGridProps) {
   const gridContainerRef = useRef<HTMLDivElement>(null);
+  const scrollRafRef = useRef<number | null>(null);
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const [viewportWidth, setViewportWidth] = useState(0);
 
   const slots = useMemo(
     () => generateSlots(dateStart, dateEnd, viewingTimezone),
@@ -187,7 +206,7 @@ export default function SchedulingFreeBusyGrid({
     return grouped;
   }, [slots]);
 
-  const dateSections = useMemo(() => {
+  const dateSections = useMemo<DateSection[]>(() => {
     const dateKeys = Object.keys(slotsByDate).sort();
     return dateKeys.map((dateKey, index) => {
       const daySlots = slotsByDate[dateKey];
@@ -207,6 +226,31 @@ export default function SchedulingFreeBusyGrid({
     });
   }, [slotsByDate]);
 
+  const dateSectionMeta = useMemo(() => {
+    const map = new Map<string, { dayColor: string; dateLabel: string }>();
+    for (const section of dateSections) {
+      map.set(section.dateKey, {
+        dayColor: section.dayColor,
+        dateLabel: section.dateLabel
+      });
+    }
+    return map;
+  }, [dateSections]);
+
+  const flatSlots = useMemo<FlatSlot[]>(() => {
+    const result: FlatSlot[] = [];
+    for (const section of dateSections) {
+      for (const slot of section.daySlots) {
+        result.push({
+          slot,
+          dateKey: section.dateKey,
+          dayColor: section.dayColor
+        });
+      }
+    }
+    return result;
+  }, [dateSections]);
+
   const participantAvailabilityBySlot = useMemo(() => {
     const lookup = new Map<string, Map<string, boolean>>();
 
@@ -221,19 +265,51 @@ export default function SchedulingFreeBusyGrid({
       }
 
       const availabilityBySlot = new Map<string, boolean>();
-      for (const slot of slots) {
-        const dayRanges = normalizedSchedule[slot.dayKey] || [];
+      for (const flatSlot of flatSlots) {
+        const dayRanges = normalizedSchedule[flatSlot.slot.dayKey] || [];
         const isAvailable = dayRanges.some(
-          range => slot.timeMinutes >= range.start && slot.timeMinutes < range.end
+          range => flatSlot.slot.timeMinutes >= range.start && flatSlot.slot.timeMinutes < range.end
         );
-        availabilityBySlot.set(slot.slotKey, isAvailable);
+        availabilityBySlot.set(flatSlot.slot.slotKey, isAvailable);
       }
 
       lookup.set(participant.id, availabilityBySlot);
     }
 
     return lookup;
-  }, [participants, slots]);
+  }, [participants, flatSlots]);
+
+  useEffect(() => {
+    const container = gridContainerRef.current;
+    if (!container) return undefined;
+
+    setViewportWidth(container.clientWidth);
+
+    const onScroll = () => {
+      if (scrollRafRef.current) {
+        window.cancelAnimationFrame(scrollRafRef.current);
+      }
+      const nextScrollLeft = container.scrollLeft;
+      scrollRafRef.current = window.requestAnimationFrame(() => {
+        setScrollLeft(nextScrollLeft);
+      });
+    };
+
+    container.addEventListener('scroll', onScroll, { passive: true });
+
+    const resizeObserver = new ResizeObserver(() => {
+      setViewportWidth(container.clientWidth);
+    });
+    resizeObserver.observe(container);
+
+    return () => {
+      container.removeEventListener('scroll', onScroll);
+      resizeObserver.disconnect();
+      if (scrollRafRef.current) {
+        window.cancelAnimationFrame(scrollRafRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (scrollToHour !== null && scrollToHour !== undefined && gridContainerRef.current) {
@@ -249,6 +325,63 @@ export default function SchedulingFreeBusyGrid({
     }
     return undefined;
   }, [scrollToHour]);
+
+  const virtualWindow = useMemo(() => {
+    const totalColumns = flatSlots.length;
+    const availableWidth = Math.max(0, viewportWidth - PARTICIPANT_COLUMN_WIDTH);
+    const visibleColumns = Math.max(1, Math.ceil(availableWidth / SLOT_COLUMN_WIDTH));
+    const startIndex = Math.max(0, Math.floor(scrollLeft / SLOT_COLUMN_WIDTH) - OVERSCAN_COLUMNS);
+    const endIndex = Math.min(totalColumns, startIndex + visibleColumns + OVERSCAN_COLUMNS * 2);
+    const leftSpacerWidth = startIndex * SLOT_COLUMN_WIDTH;
+    const rightSpacerWidth = Math.max(0, (totalColumns - endIndex) * SLOT_COLUMN_WIDTH);
+
+    return {
+      startIndex,
+      endIndex,
+      leftSpacerWidth,
+      rightSpacerWidth,
+      totalColumns
+    };
+  }, [flatSlots.length, viewportWidth, scrollLeft]);
+
+  const visibleFlatSlots = useMemo(
+    () => flatSlots.slice(virtualWindow.startIndex, virtualWindow.endIndex),
+    [flatSlots, virtualWindow.startIndex, virtualWindow.endIndex]
+  );
+
+  const visibleDaySegments = useMemo(() => {
+    if (visibleFlatSlots.length === 0) return [];
+
+    const segments: Array<{ dateKey: string; count: number; dayColor: string; dateLabel: string }> = [];
+    let currentDateKey = visibleFlatSlots[0].dateKey;
+    let currentCount = 0;
+
+    for (const item of visibleFlatSlots) {
+      if (item.dateKey === currentDateKey) {
+        currentCount++;
+      } else {
+        const previousMeta = dateSectionMeta.get(currentDateKey);
+        segments.push({
+          dateKey: currentDateKey,
+          count: currentCount,
+          dayColor: previousMeta?.dayColor || 'bg-blue-50',
+          dateLabel: previousMeta?.dateLabel || currentDateKey
+        });
+        currentDateKey = item.dateKey;
+        currentCount = 1;
+      }
+    }
+
+    const lastMeta = dateSectionMeta.get(currentDateKey);
+    segments.push({
+      dateKey: currentDateKey,
+      count: currentCount,
+      dayColor: lastMeta?.dayColor || 'bg-blue-50',
+      dateLabel: lastMeta?.dateLabel || currentDateKey
+    });
+
+    return segments;
+  }, [visibleFlatSlots, dateSectionMeta]);
 
   const handleSlotClick = (slot: GridSlot) => {
     if (readOnly || !onSlotToggle) return;
@@ -303,98 +436,120 @@ export default function SchedulingFreeBusyGrid({
         <table className="border-collapse text-xs whitespace-nowrap">
           <thead>
             <tr>
-              <th className="border border-gray-300 p-2 bg-gray-50 sticky left-0 z-10 text-left min-w-[180px]">
+              <th
+                className="border border-gray-300 p-2 bg-gray-50 sticky left-0 z-10 text-left min-w-[180px]"
+                style={{ width: `${PARTICIPANT_COLUMN_WIDTH}px` }}
+              >
                 Participant
               </th>
-              {dateSections.map(({ dateKey, daySlots, dayColor, dateLabel }) => (
+              {virtualWindow.leftSpacerWidth > 0 && (
+                <th className="border border-gray-300 p-0 bg-gray-50" style={{ width: `${virtualWindow.leftSpacerWidth}px` }} />
+              )}
+              {visibleDaySegments.map(({ dateKey, count, dayColor, dateLabel }) => (
                 <th
                   key={`date-${dateKey}`}
-                  colSpan={daySlots.length}
+                  colSpan={count}
                   className={`border border-gray-300 p-2 ${dayColor} font-semibold text-center text-xs`}
                 >
                   {dateLabel}
                 </th>
               ))}
+              {virtualWindow.rightSpacerWidth > 0 && (
+                <th className="border border-gray-300 p-0 bg-gray-50" style={{ width: `${virtualWindow.rightSpacerWidth}px` }} />
+              )}
             </tr>
             <tr>
               <th className="border border-gray-300 p-1 bg-gray-100 sticky left-0 z-10 min-w-[180px]"></th>
-              {dateSections.map(({ dateKey, daySlots, dayColor }) =>
-                daySlots.map(slot => (
-                  <th
-                    key={`${dateKey}-${slot.slotKey}`}
-                    className={`border border-gray-300 p-1 ${dayColor} text-center h-8`}
-                  >
-                    <span>{slot.timeStr}</span>
-                  </th>
-                ))
+              {virtualWindow.leftSpacerWidth > 0 && (
+                <th className="border border-gray-300 p-0 bg-gray-100" style={{ width: `${virtualWindow.leftSpacerWidth}px` }} />
+              )}
+              {visibleFlatSlots.map(({ slot, dateKey, dayColor }) => (
+                <th
+                  key={`${dateKey}-${slot.slotKey}`}
+                  className={`border border-gray-300 p-1 ${dayColor} text-center h-8`}
+                  style={{ minWidth: `${SLOT_COLUMN_WIDTH}px`, width: `${SLOT_COLUMN_WIDTH}px` }}
+                >
+                  <span>{slot.timeStr}</span>
+                </th>
+              ))}
+              {virtualWindow.rightSpacerWidth > 0 && (
+                <th className="border border-gray-300 p-0 bg-gray-100" style={{ width: `${virtualWindow.rightSpacerWidth}px` }} />
               )}
             </tr>
           </thead>
           <tbody>
             {participants.map(participant => (
               <tr key={participant.id}>
-                <td className="border border-gray-300 p-2 bg-gray-50 sticky left-0 z-10 font-semibold whitespace-nowrap min-w-[180px]">
+                <td
+                  className="border border-gray-300 p-2 bg-gray-50 sticky left-0 z-10 font-semibold whitespace-nowrap min-w-[180px]"
+                  style={{ width: `${PARTICIPANT_COLUMN_WIDTH}px` }}
+                >
                   <div className="text-xs font-semibold">{participant.nickname}</div>
                   <div className="text-xs text-gray-500">
                     {participant.timezone} {participant.timezone_offset && `(${participant.timezone_offset})`}
                   </div>
                 </td>
-                {dateSections.map(({ dateKey, daySlots, dayColor }) =>
-                  daySlots.map(slot => {
-                    const slotKey = slot.slotKey;
-                    const participantSlotAvailability = participantAvailabilityBySlot.get(participant.id);
-                    const isAvailable = participantSlotAvailability
-                      ? participantSlotAvailability.get(slotKey) ?? false
-                      : true;
-                    const isProposed = proposedSlotsSet.has(slotKey);
-                    const isConfirmed = confirmedSlotsSet.has(slotKey);
-                    const isSelected = selectedSlots.has(slotKey);
+                {virtualWindow.leftSpacerWidth > 0 && (
+                  <td className="border border-gray-200 p-0 bg-white" style={{ width: `${virtualWindow.leftSpacerWidth}px` }} />
+                )}
+                {visibleFlatSlots.map(({ slot, dateKey, dayColor }) => {
+                  const slotKey = slot.slotKey;
+                  const participantSlotAvailability = participantAvailabilityBySlot.get(participant.id);
+                  const isAvailable = participantSlotAvailability
+                    ? participantSlotAvailability.get(slotKey) ?? false
+                    : true;
+                  const isProposed = proposedSlotsSet.has(slotKey);
+                  const isConfirmed = confirmedSlotsSet.has(slotKey);
+                  const isSelected = selectedSlots.has(slotKey);
 
-                    let bgColor = dayColor;
-                    let borderColor = 'border-gray-200';
+                  let bgColor = dayColor;
+                  let borderColor = 'border-gray-200';
 
-                    if (confirmMode && isProposed) {
-                      if (isSelected) {
-                        bgColor = 'bg-green-500';
-                        borderColor = 'border-green-700';
-                      } else {
-                        bgColor = 'bg-red-300';
-                        borderColor = 'border-red-500';
-                      }
-                    } else if (isConfirmed) {
-                      bgColor = 'bg-green-400';
-                      borderColor = 'border-green-600';
-                    } else if (isProposed) {
-                      bgColor = 'bg-blue-200';
-                      borderColor = 'border-blue-400';
-                    } else if (isSelected) {
-                      bgColor = 'bg-yellow-100';
-                      borderColor = 'border-yellow-400';
-                    } else if (isAvailable) {
-                      bgColor = 'bg-green-100';
-                      borderColor = 'border-green-300';
+                  if (confirmMode && isProposed) {
+                    if (isSelected) {
+                      bgColor = 'bg-green-500';
+                      borderColor = 'border-green-700';
                     } else {
-                      bgColor = 'bg-gray-100';
-                      borderColor = 'border-gray-300';
+                      bgColor = 'bg-red-300';
+                      borderColor = 'border-red-500';
                     }
+                  } else if (isConfirmed) {
+                    bgColor = 'bg-green-400';
+                    borderColor = 'border-green-600';
+                  } else if (isProposed) {
+                    bgColor = 'bg-blue-200';
+                    borderColor = 'border-blue-400';
+                  } else if (isSelected) {
+                    bgColor = 'bg-yellow-100';
+                    borderColor = 'border-yellow-400';
+                  } else if (isAvailable) {
+                    bgColor = 'bg-green-100';
+                    borderColor = 'border-green-300';
+                  } else {
+                    bgColor = 'bg-gray-100';
+                    borderColor = 'border-gray-300';
+                  }
 
-                    return (
-                      <td
-                        key={`${participant.id}-${dateKey}-${slotKey}`}
-                        className={`border ${borderColor} p-0.5 h-8 cursor-${readOnly ? 'default' : 'pointer'} ${bgColor} ${
-                          !readOnly && !isProposed ? 'hover:opacity-75' : ''
-                        }`}
-                        onClick={() => handleSlotClick(slot)}
-                        title={`${participant.nickname} - ${slot.dateStr} ${slot.timeStr}`}
-                      >
-                        {isConfirmed && (
-                          <div className="w-full h-full flex items-center justify-center text-green-700 font-bold">
-                            ✓
-                          </div>
-                        )}
-                      </td>
-                    );
-                  })
+                  return (
+                    <td
+                      key={`${participant.id}-${dateKey}-${slotKey}`}
+                      className={`border ${borderColor} p-0.5 h-8 cursor-${readOnly ? 'default' : 'pointer'} ${bgColor} ${
+                        !readOnly && !isProposed ? 'hover:opacity-75' : ''
+                      }`}
+                      style={{ minWidth: `${SLOT_COLUMN_WIDTH}px`, width: `${SLOT_COLUMN_WIDTH}px` }}
+                      onClick={() => handleSlotClick(slot)}
+                      title={`${participant.nickname} - ${slot.dateStr} ${slot.timeStr}`}
+                    >
+                      {isConfirmed && (
+                        <div className="w-full h-full flex items-center justify-center text-green-700 font-bold">
+                          ✓
+                        </div>
+                      )}
+                    </td>
+                  );
+                })}
+                {virtualWindow.rightSpacerWidth > 0 && (
+                  <td className="border border-gray-200 p-0 bg-white" style={{ width: `${virtualWindow.rightSpacerWidth}px` }} />
                 )}
               </tr>
             ))}
