@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useDeferredValue, useTransition } from 'react';
 import SchedulingFreeBusyGrid from './SchedulingFreeBusyGrid';
 import { useAuthStore } from '../store/authStore';
 import { tournamentSchedulingService } from '../services/tournamentSchedulingService';
-import { groupSlotsIntoRanges } from '../utils/slotGrouping';
+import { groupSlotsIntoRanges, type GroupedTimeRange } from '../utils/slotGrouping';
 
 interface ScheduleProposalModalProps {
   isOpen: boolean;
@@ -41,6 +41,43 @@ interface ProposalData {
   confirmations: Array<{ user_id: string; confirmed_at: string }>;
 }
 
+const useAsyncGroupedRanges = (slotDatetimes: string[]): GroupedTimeRange[] => {
+  const deferredSlotDatetimes = useDeferredValue(slotDatetimes);
+  const [ranges, setRanges] = useState<GroupedTimeRange[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const compute = () => {
+      if (cancelled) return;
+      setRanges(groupSlotsIntoRanges(deferredSlotDatetimes));
+    };
+
+    const win = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+
+    if (typeof win.requestIdleCallback === 'function') {
+      const handle = win.requestIdleCallback(compute, { timeout: 120 });
+      return () => {
+        cancelled = true;
+        if (typeof win.cancelIdleCallback === 'function') {
+          win.cancelIdleCallback(handle);
+        }
+      };
+    }
+
+    const timer = window.setTimeout(compute, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [deferredSlotDatetimes]);
+
+  return ranges;
+};
+
 export default function ScheduleProposalModal({
   isOpen,
   tournamentId,
@@ -68,6 +105,7 @@ export default function ScheduleProposalModal({
   // For slot-level confirmation: track which slots user has explicitly selected
   const [confirmedSlotIds, setConfirmedSlotIds] = useState<Set<string>>(new Set());
   const [hasStartedConfirmationSelection, setHasStartedConfirmationSelection] = useState(false);
+  const [isSelectionPending, startSelectionTransition] = useTransition();
 
   // For scheduling, always use tournament_round_match_id (roundMatchId) since proposals are tied to tournament_round_matches
   // If roundMatchId is not provided, fallback to matchId (though this shouldn't happen)
@@ -135,7 +173,9 @@ export default function ScheduleProposalModal({
     } else {
       newSelected.delete(slotDatetime);
     }
-    setSelectedSlots(newSelected);
+    startSelectionTransition(() => {
+      setSelectedSlots(newSelected);
+    });
   };
 
   /**
@@ -145,8 +185,10 @@ export default function ScheduleProposalModal({
   const handleConfirmSlotToggle = (slotDatetime: string, selected: boolean) => {
     if (!hasStartedConfirmationSelection) {
       // First click: clear all and select only this one
-      setConfirmedSlotIds(new Set([slotDatetime]));
-      setHasStartedConfirmationSelection(true);
+      startSelectionTransition(() => {
+        setConfirmedSlotIds(new Set([slotDatetime]));
+        setHasStartedConfirmationSelection(true);
+      });
     } else {
       // Subsequent clicks: normal toggle
       const newConfirmed = new Set(confirmedSlotIds);
@@ -155,7 +197,9 @@ export default function ScheduleProposalModal({
       } else {
         newConfirmed.delete(slotDatetime);
       }
-      setConfirmedSlotIds(newConfirmed);
+      startSelectionTransition(() => {
+        setConfirmedSlotIds(newConfirmed);
+      });
     }
   };
 
@@ -267,10 +311,7 @@ export default function ScheduleProposalModal({
     () => (mode === 'confirm' ? Array.from(confirmedSlotIds) : Array.from(selectedSlots)),
     [mode, confirmedSlotIds, selectedSlots]
   );
-  const selectedRanges = useMemo(
-    () => groupSlotsIntoRanges(selectedRangeDatetimes),
-    [selectedRangeDatetimes]
-  );
+  const selectedRanges = useAsyncGroupedRanges(selectedRangeDatetimes);
   const proposalRanges = useMemo(
     () => (proposal?.slots?.length ? groupSlotsIntoRanges(proposal.slots.map(s => s.slot_datetime)) : []),
     [proposal]
@@ -376,6 +417,9 @@ export default function ScheduleProposalModal({
                       : `${selectedSlots.size} slot${selectedSlots.size !== 1 ? 's' : ''} selected`
                     }
                   </p>
+                  {isSelectionPending && (
+                    <p className="text-xs text-gray-500 mt-1">Updating ranges...</p>
+                  )}
                   <div className="mt-3 space-y-2">
                     {selectedRanges.map((range, idx) => (
                       <div key={idx} className={`text-sm p-2 bg-white rounded border ${mode === 'confirm' ? 'text-green-800 border-green-100' : 'text-blue-800 border-blue-100'}`}>
