@@ -263,22 +263,6 @@ export default function ScheduleProposalModal({
     }
   };
 
-  // Memoize formatted slot data to avoid expensive date calculations on every render
-  if (!isOpen) return null;
-
-  const dateEnd = new Date(displayDateStart);
-  dateEnd.setDate(dateEnd.getDate() + 14); // 14-day window
-
-  const proposedSlotDatetimes = proposal?.slots?.map(s => s.slot_datetime) || [];
-  const confirmedSlotsMap: Record<string, string[]> = {};
-
-  if (proposal?.confirmations && Array.isArray(proposal.confirmations)) {
-    proposal.confirmations.forEach((conf: any) => {
-      // For now, we're not grouping by slot_id since confirmations are proposal-level
-      // This data can be used later if needed for UI display
-    });
-  }
-
   const selectedRangeDatetimes = useMemo(
     () => (mode === 'confirm' ? Array.from(confirmedSlotIds) : Array.from(selectedSlots)),
     [mode, confirmedSlotIds, selectedSlots]
@@ -304,6 +288,15 @@ export default function ScheduleProposalModal({
       ),
     [proposal, proposalRanges]
   );
+
+  // Memoize formatted slot data to avoid expensive date calculations on every render
+  if (!isOpen) return null;
+
+  const dateEnd = new Date(displayDateStart);
+  dateEnd.setDate(dateEnd.getDate() + 14); // 14-day window
+
+  const proposedSlotDatetimes = proposal?.slots?.map(s => s.slot_datetime) || [];
+  const confirmedSlotsMap: Record<string, string[]> = {};
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
