@@ -435,18 +435,17 @@ const TournamentDetail: React.FC = () => {
       setIsLoadingScheduling(true);
       const targetId = roundMatchId || matchId;
 
-      // Load participants availability
-      const availRes = isRoundMatch
-        ? await tournamentSchedulingService.getRoundMatchParticipantsAvailability(id!, targetId)
-        : await tournamentSchedulingService.getMatchParticipantsAvailability(id!, targetId);
+      const [availRes, proposalRes] = await Promise.all([
+        isRoundMatch
+          ? tournamentSchedulingService.getRoundMatchParticipantsAvailability(id!, targetId)
+          : tournamentSchedulingService.getMatchParticipantsAvailability(id!, targetId),
+        isRoundMatch
+          ? tournamentSchedulingService.getRoundMatchProposal(id!, targetId)
+          : tournamentSchedulingService.getMatchProposal(id!, targetId)
+      ]);
 
       const participants = availRes.participants || [];
       const viewingTimezone = availRes.viewing_timezone || 'UTC';
-
-      // Load active proposal if exists
-      const proposalRes = isRoundMatch
-        ? await tournamentSchedulingService.getRoundMatchProposal(id!, targetId)
-        : await tournamentSchedulingService.getMatchProposal(id!, targetId);
 
       const proposal = proposalRes.proposal || null;
 
@@ -3168,4 +3167,3 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
 };
 
 export default TournamentDetail;
-

@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
 import SchedulingFreeBusyGrid from './SchedulingFreeBusyGrid';
 import { useAuthStore } from '../store/authStore';
 import { tournamentSchedulingService } from '../services/tournamentSchedulingService';
+import { groupSlotsIntoRanges } from '../utils/slotGrouping';
 
 interface ScheduleProposalModalProps {
   isOpen: boolean;
@@ -54,7 +54,6 @@ export default function ScheduleProposalModal({
   onClose,
   onSuccess
 }: ScheduleProposalModalProps) {
-  const { t } = useTranslation();
   const { userId } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -70,59 +69,37 @@ export default function ScheduleProposalModal({
   const [confirmedSlotIds, setConfirmedSlotIds] = useState<Set<string>>(new Set());
   const [hasStartedConfirmationSelection, setHasStartedConfirmationSelection] = useState(false);
 
-  console.log('[ScheduleProposalModal] PROPS received:', {
-    isOpen,
-    roundMatchId,
-    matchId,
-    initialParticipants: initialParticipants?.length,
-    initialProposal: initialProposal?.id,
-    initialViewingTimezone,
-    initialDisplayDateStart: initialDisplayDateStart?.toLocaleDateString(),
-    initialScrollToHour
-  });
-
   // For scheduling, always use tournament_round_match_id (roundMatchId) since proposals are tied to tournament_round_matches
   // If roundMatchId is not provided, fallback to matchId (though this shouldn't happen)
   const targetId = roundMatchId || matchId;
   const isRoundMatch = !!roundMatchId;
-  
-  console.log('[ScheduleProposalModal] targetId:', targetId, 'isRoundMatch:', isRoundMatch, 'roundMatchId:', roundMatchId, 'matchId:', matchId);
-  console.log('[ScheduleProposalModal] Current state - participants:', participants.length, 'proposal:', proposal?.id, 'timezone:', viewingTimezone);
 
   // Update state when preloaded data props change
   useEffect(() => {
     if (!isOpen) return;
-
-    console.log('[ScheduleProposalModal] useEffect - Updating from initial props');
     
     if (initialParticipants) {
       setParticipants(initialParticipants);
-      console.log('[ScheduleProposalModal] Updated participants:', initialParticipants.length);
     }
     
     if (initialViewingTimezone) {
       setViewingTimezone(initialViewingTimezone);
-      console.log('[ScheduleProposalModal] Updated timezone:', initialViewingTimezone);
     }
     
     if (initialDisplayDateStart) {
       setDisplayDateStart(initialDisplayDateStart);
-      console.log('[ScheduleProposalModal] Updated displayDateStart:', initialDisplayDateStart.toLocaleDateString());
     }
     
     if (initialScrollToHour !== null && initialScrollToHour !== undefined) {
       setScrollToHour(initialScrollToHour);
-      console.log('[ScheduleProposalModal] Updated scrollToHour:', initialScrollToHour);
     }
     
     if (initialProposal) {
       setProposal(initialProposal);
-      console.log('[ScheduleProposalModal] Updated proposal:', initialProposal.id);
     } else {
       // Clear proposal data when opening modal for new schedule (no existing proposal)
       setProposal(null);
       setSelectedSlots(new Set());
-      console.log('[ScheduleProposalModal] Cleared proposal data - new schedule');
     }
   }, [isOpen, initialParticipants, initialProposal, initialViewingTimezone, initialDisplayDateStart, initialScrollToHour]);
 
@@ -132,13 +109,10 @@ export default function ScheduleProposalModal({
 
     if (proposal) {
       // Check if current user is the proposer
-      console.log('[ScheduleProposalModal] UserId:', userId, 'Proposer:', proposal.proposed_by_user_id);
       if (userId && proposal.proposed_by_user_id === userId) {
-        console.log('[ScheduleProposalModal] Setting mode to edit_proposal');
         setMode('edit_proposal');
         setSelectedSlots(new Set());
       } else {
-        console.log('[ScheduleProposalModal] Setting mode to confirm');
         setMode('confirm');
         // Pre-select proposed slots for opponent to confirm or modify
         if (proposal.slots) {
@@ -146,7 +120,6 @@ export default function ScheduleProposalModal({
           // Initialize confirmedSlotIds with all proposed slots (all checked by default)
           setConfirmedSlotIds(new Set(proposedSlotDatetimes));
           setHasStartedConfirmationSelection(false);
-          console.log('[ScheduleProposalModal] Pre-selected proposed slots:', proposedSlotDatetimes.length);
         }
       }
     } else {
@@ -184,48 +157,6 @@ export default function ScheduleProposalModal({
       }
       setConfirmedSlotIds(newConfirmed);
     }
-  };
-
-  /**
-   * Group contiguous slots into ranges
-   */
-  const groupSlotsIntoRanges = (slotDatetimes: string[]): Array<{ start: Date; end: Date; hours: string }> => {
-    if (slotDatetimes.length === 0) return [];
-
-    const sorted = slotDatetimes
-      .map(dt => new Date(dt))
-      .sort((a, b) => a.getTime() - b.getTime());
-
-    const ranges: Array<{ start: Date; end: Date; hours: string }> = [];
-    let currentStart = sorted[0];
-    let currentEnd = sorted[0];
-
-    for (let i = 1; i < sorted.length; i++) {
-      const current = sorted[i];
-      const prevEnd = new Date(currentEnd);
-      prevEnd.setMinutes(prevEnd.getMinutes() + 30); // Add 30 min to get end time
-
-      if (current.getTime() === prevEnd.getTime()) {
-        // Contiguous, extend range
-        currentEnd = current;
-      } else {
-        // Gap found, save range and start new one
-        const endTime = new Date(currentEnd);
-        endTime.setMinutes(endTime.getMinutes() + 30);
-        const hours = `${String(currentStart.getHours()).padStart(2, '0')}:${String(currentStart.getMinutes()).padStart(2, '0')}-${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}`;
-        ranges.push({ start: currentStart, end: endTime, hours });
-        currentStart = current;
-        currentEnd = current;
-      }
-    }
-
-    // Add final range
-    const endTime = new Date(currentEnd);
-    endTime.setMinutes(endTime.getMinutes() + 30);
-    const hours = `${String(currentStart.getHours()).padStart(2, '0')}:${String(currentStart.getMinutes()).padStart(2, '0')}-${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}`;
-    ranges.push({ start: currentStart, end: endTime, hours });
-
-    return ranges;
   };
 
   const handleProposeSlots = async () => {
@@ -306,30 +237,6 @@ export default function ScheduleProposalModal({
     }
   };
 
-  // Handle slot selection in confirmation mode
-  const handleConfirmationSlotToggle = (slotId: string) => {
-    const newConfirmed = new Set(confirmedSlotIds);
-    
-    if (!hasStartedConfirmationSelection) {
-      // First click: deselect all, then select only this one
-      setHasStartedConfirmationSelection(true);
-      newConfirmed.clear();
-      newConfirmed.add(slotId);
-      console.log('[ScheduleProposalModal] First slot selection, cleared all and selected:', slotId);
-    } else {
-      // Subsequent clicks: toggle individual slots
-      if (newConfirmed.has(slotId)) {
-        newConfirmed.delete(slotId);
-        console.log('[ScheduleProposalModal] Deselected slot:', slotId);
-      } else {
-        newConfirmed.add(slotId);
-        console.log('[ScheduleProposalModal] Selected slot:', slotId);
-      }
-    }
-    
-    setConfirmedSlotIds(newConfirmed);
-  };
-
   const handleCancelProposal = async () => {
     if (!proposal) {
       setError('No proposal to cancel');
@@ -372,8 +279,31 @@ export default function ScheduleProposalModal({
     });
   }
 
-  const selectedSlotsArray = Array.from(selectedSlots);
-  const groupedRanges = groupSlotsIntoRanges(selectedSlotsArray);
+  const selectedRangeDatetimes = useMemo(
+    () => (mode === 'confirm' ? Array.from(confirmedSlotIds) : Array.from(selectedSlots)),
+    [mode, confirmedSlotIds, selectedSlots]
+  );
+  const selectedRanges = useMemo(
+    () => groupSlotsIntoRanges(selectedRangeDatetimes),
+    [selectedRangeDatetimes]
+  );
+  const proposalRanges = useMemo(
+    () => (proposal?.slots?.length ? groupSlotsIntoRanges(proposal.slots.map(s => s.slot_datetime)) : []),
+    [proposal]
+  );
+  const proposalStatusesByRange = useMemo(
+    () =>
+      proposalRanges.map((range) =>
+        (proposal?.slots || [])
+          .filter(s => {
+            const slotDate = new Date(s.slot_datetime);
+            return slotDate >= range.start && slotDate < range.end;
+          })
+          .map(s => s.status)
+          .join(', ')
+      ),
+    [proposal, proposalRanges]
+  );
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -454,10 +384,7 @@ export default function ScheduleProposalModal({
                     }
                   </p>
                   <div className="mt-3 space-y-2">
-                    {groupSlotsIntoRanges(mode === 'confirm' 
-                      ? Array.from(confirmedSlotIds) 
-                      : Array.from(selectedSlots)
-                    ).map((range, idx) => (
+                    {selectedRanges.map((range, idx) => (
                       <div key={idx} className={`text-sm p-2 bg-white rounded border ${mode === 'confirm' ? 'text-green-800 border-green-100' : 'text-blue-800 border-blue-100'}`}>
                         <div className="font-semibold">
                           {range.start.toLocaleDateString()} - {range.hours}
@@ -487,16 +414,13 @@ export default function ScheduleProposalModal({
                     <div className="mt-3">
                       <p className="text-xs font-semibold text-yellow-900 mb-2">Proposed Slots:</p>
                       <div className="space-y-1">
-                        {groupSlotsIntoRanges(proposal.slots.map(s => s.slot_datetime)).map((range, idx) => (
+                        {proposalRanges.map((range, idx) => (
                           <div key={idx} className="text-xs text-yellow-800 bg-white rounded px-2 py-1 border border-yellow-100">
                             <div className="font-semibold">
                               {range.start.toLocaleDateString()} - {range.hours}
                             </div>
                             <div className="text-xs text-gray-600">
-                              ({proposal.slots.filter(s => {
-                                const slotDate = new Date(s.slot_datetime);
-                                return slotDate >= range.start && slotDate < range.end;
-                              }).map(s => s.status).join(', ')})
+                              ({proposalStatusesByRange[idx]})
                             </div>
                           </div>
                         ))}
