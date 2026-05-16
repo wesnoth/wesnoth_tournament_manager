@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useDeferredValue, useTransition } from 'react';
+import React, { useEffect, useState, useMemo, useDeferredValue, useRef } from 'react';
 import SchedulingFreeBusyGrid from './SchedulingFreeBusyGrid';
 import { useAuthStore } from '../store/authStore';
 import { tournamentSchedulingService } from '../services/tournamentSchedulingService';
@@ -105,7 +105,7 @@ export default function ScheduleProposalModal({
   // For slot-level confirmation: track which slots user has explicitly selected
   const [confirmedSlotIds, setConfirmedSlotIds] = useState<Set<string>>(new Set());
   const [hasStartedConfirmationSelection, setHasStartedConfirmationSelection] = useState(false);
-  const [isSelectionPending, startSelectionTransition] = useTransition();
+  const hasStartedConfirmationSelectionRef = useRef(false);
 
   // For scheduling, always use tournament_round_match_id (roundMatchId) since proposals are tied to tournament_round_matches
   // If roundMatchId is not provided, fallback to matchId (though this shouldn't happen)
@@ -158,23 +158,26 @@ export default function ScheduleProposalModal({
           // Initialize confirmedSlotIds with all proposed slots (all checked by default)
           setConfirmedSlotIds(new Set(proposedSlotDatetimes));
           setHasStartedConfirmationSelection(false);
+          hasStartedConfirmationSelectionRef.current = false;
         }
       }
     } else {
       setMode('propose');
       setSelectedSlots(new Set());
+      setHasStartedConfirmationSelection(false);
+      hasStartedConfirmationSelectionRef.current = false;
     }
   }, [isOpen, proposal, userId]);
 
   const handleSlotToggle = (slotDatetime: string, selected: boolean) => {
-    const newSelected = new Set(selectedSlots);
-    if (selected) {
-      newSelected.add(slotDatetime);
-    } else {
-      newSelected.delete(slotDatetime);
-    }
-    startSelectionTransition(() => {
-      setSelectedSlots(newSelected);
+    setSelectedSlots((prevSelected) => {
+      const nextSelected = new Set(prevSelected);
+      if (selected) {
+        nextSelected.add(slotDatetime);
+      } else {
+        nextSelected.delete(slotDatetime);
+      }
+      return nextSelected;
     });
   };
 
@@ -183,22 +186,21 @@ export default function ScheduleProposalModal({
    * Subsequent clicks: normal toggle
    */
   const handleConfirmSlotToggle = (slotDatetime: string, selected: boolean) => {
-    if (!hasStartedConfirmationSelection) {
+    if (!hasStartedConfirmationSelectionRef.current) {
       // First click: clear all and select only this one
-      startSelectionTransition(() => {
-        setConfirmedSlotIds(new Set([slotDatetime]));
-        setHasStartedConfirmationSelection(true);
-      });
+      hasStartedConfirmationSelectionRef.current = true;
+      setHasStartedConfirmationSelection(true);
+      setConfirmedSlotIds(new Set([slotDatetime]));
     } else {
       // Subsequent clicks: normal toggle
-      const newConfirmed = new Set(confirmedSlotIds);
-      if (selected) {
-        newConfirmed.add(slotDatetime);
-      } else {
-        newConfirmed.delete(slotDatetime);
-      }
-      startSelectionTransition(() => {
-        setConfirmedSlotIds(newConfirmed);
+      setConfirmedSlotIds((prevConfirmed) => {
+        const nextConfirmed = new Set(prevConfirmed);
+        if (selected) {
+          nextConfirmed.add(slotDatetime);
+        } else {
+          nextConfirmed.delete(slotDatetime);
+        }
+        return nextConfirmed;
       });
     }
   };
@@ -417,9 +419,6 @@ export default function ScheduleProposalModal({
                       : `${selectedSlots.size} slot${selectedSlots.size !== 1 ? 's' : ''} selected`
                     }
                   </p>
-                  {isSelectionPending && (
-                    <p className="text-xs text-gray-500 mt-1">Updating ranges...</p>
-                  )}
                   <div className="mt-3 space-y-2">
                     {selectedRanges.map((range, idx) => (
                       <div key={idx} className={`text-sm p-2 bg-white rounded border ${mode === 'confirm' ? 'text-green-800 border-green-100' : 'text-blue-800 border-blue-100'}`}>
