@@ -330,7 +330,9 @@ export default function SchedulingFreeBusyGrid({
     const totalColumns = flatSlots.length;
     const availableWidth = Math.max(0, viewportWidth - PARTICIPANT_COLUMN_WIDTH);
     const visibleColumns = Math.max(1, Math.ceil(availableWidth / SLOT_COLUMN_WIDTH));
-    const startIndex = Math.max(0, Math.floor(scrollLeft / SLOT_COLUMN_WIDTH) - OVERSCAN_COLUMNS);
+    // scrollLeft includes the hidden/non-virtualized participant column width
+    const effectiveSlotsScrollLeft = Math.max(0, scrollLeft - PARTICIPANT_COLUMN_WIDTH);
+    const startIndex = Math.max(0, Math.floor(effectiveSlotsScrollLeft / SLOT_COLUMN_WIDTH) - OVERSCAN_COLUMNS);
     const endIndex = Math.min(totalColumns, startIndex + visibleColumns + OVERSCAN_COLUMNS * 2);
     const leftSpacerWidth = startIndex * SLOT_COLUMN_WIDTH;
     const rightSpacerWidth = Math.max(0, (totalColumns - endIndex) * SLOT_COLUMN_WIDTH);
@@ -433,7 +435,14 @@ export default function SchedulingFreeBusyGrid({
         className="overflow-auto border border-gray-200 rounded-lg"
         style={{ maxHeight: '600px' }}
       >
-        <table className="border-collapse text-xs whitespace-nowrap">
+        <table
+          className="border-collapse text-xs whitespace-nowrap"
+          style={{
+            tableLayout: 'fixed',
+            minWidth: `${PARTICIPANT_COLUMN_WIDTH + virtualWindow.totalColumns * SLOT_COLUMN_WIDTH}px`,
+            width: `${PARTICIPANT_COLUMN_WIDTH + virtualWindow.totalColumns * SLOT_COLUMN_WIDTH}px`
+          }}
+        >
           <thead>
             <tr>
               <th
@@ -443,7 +452,14 @@ export default function SchedulingFreeBusyGrid({
                 Participant
               </th>
               {virtualWindow.leftSpacerWidth > 0 && (
-                <th className="border border-gray-300 p-0 bg-gray-50" style={{ width: `${virtualWindow.leftSpacerWidth}px` }} />
+                <th
+                  className="border border-gray-300 p-0 bg-gray-50"
+                  style={{
+                    minWidth: `${virtualWindow.leftSpacerWidth}px`,
+                    width: `${virtualWindow.leftSpacerWidth}px`,
+                    maxWidth: `${virtualWindow.leftSpacerWidth}px`
+                  }}
+                />
               )}
               {visibleDaySegments.map(({ dateKey, count, dayColor, dateLabel }) => (
                 <th
@@ -455,13 +471,27 @@ export default function SchedulingFreeBusyGrid({
                 </th>
               ))}
               {virtualWindow.rightSpacerWidth > 0 && (
-                <th className="border border-gray-300 p-0 bg-gray-50" style={{ width: `${virtualWindow.rightSpacerWidth}px` }} />
+                <th
+                  className="border border-gray-300 p-0 bg-gray-50"
+                  style={{
+                    minWidth: `${virtualWindow.rightSpacerWidth}px`,
+                    width: `${virtualWindow.rightSpacerWidth}px`,
+                    maxWidth: `${virtualWindow.rightSpacerWidth}px`
+                  }}
+                />
               )}
             </tr>
             <tr>
               <th className="border border-gray-300 p-1 bg-gray-100 sticky left-0 z-10 min-w-[180px]"></th>
               {virtualWindow.leftSpacerWidth > 0 && (
-                <th className="border border-gray-300 p-0 bg-gray-100" style={{ width: `${virtualWindow.leftSpacerWidth}px` }} />
+                <th
+                  className="border border-gray-300 p-0 bg-gray-100"
+                  style={{
+                    minWidth: `${virtualWindow.leftSpacerWidth}px`,
+                    width: `${virtualWindow.leftSpacerWidth}px`,
+                    maxWidth: `${virtualWindow.leftSpacerWidth}px`
+                  }}
+                />
               )}
               {visibleFlatSlots.map(({ slot, dateKey, dayColor }) => (
                 <th
@@ -473,7 +503,14 @@ export default function SchedulingFreeBusyGrid({
                 </th>
               ))}
               {virtualWindow.rightSpacerWidth > 0 && (
-                <th className="border border-gray-300 p-0 bg-gray-100" style={{ width: `${virtualWindow.rightSpacerWidth}px` }} />
+                <th
+                  className="border border-gray-300 p-0 bg-gray-100"
+                  style={{
+                    minWidth: `${virtualWindow.rightSpacerWidth}px`,
+                    width: `${virtualWindow.rightSpacerWidth}px`,
+                    maxWidth: `${virtualWindow.rightSpacerWidth}px`
+                  }}
+                />
               )}
             </tr>
           </thead>
@@ -490,7 +527,14 @@ export default function SchedulingFreeBusyGrid({
                   </div>
                 </td>
                 {virtualWindow.leftSpacerWidth > 0 && (
-                  <td className="border border-gray-200 p-0 bg-white" style={{ width: `${virtualWindow.leftSpacerWidth}px` }} />
+                  <td
+                    className="border border-gray-200 p-0 bg-white"
+                    style={{
+                      minWidth: `${virtualWindow.leftSpacerWidth}px`,
+                      width: `${virtualWindow.leftSpacerWidth}px`,
+                      maxWidth: `${virtualWindow.leftSpacerWidth}px`
+                    }}
+                  />
                 )}
                 {visibleFlatSlots.map(({ slot, dateKey, dayColor }) => {
                   const slotKey = slot.slotKey;
@@ -549,7 +593,14 @@ export default function SchedulingFreeBusyGrid({
                   );
                 })}
                 {virtualWindow.rightSpacerWidth > 0 && (
-                  <td className="border border-gray-200 p-0 bg-white" style={{ width: `${virtualWindow.rightSpacerWidth}px` }} />
+                  <td
+                    className="border border-gray-200 p-0 bg-white"
+                    style={{
+                      minWidth: `${virtualWindow.rightSpacerWidth}px`,
+                      width: `${virtualWindow.rightSpacerWidth}px`,
+                      maxWidth: `${virtualWindow.rightSpacerWidth}px`
+                    }}
+                  />
                 )}
               </tr>
             ))}
