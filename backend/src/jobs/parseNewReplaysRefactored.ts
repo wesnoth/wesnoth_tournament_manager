@@ -182,7 +182,7 @@ export class ParseNewReplaysRefactorized {
             console.log(`⏳ [PARSE] Confidence=1 → Parsed but no match created (awaiting player confirmation)`);
             await query(
               `UPDATE replays SET parse_status = 'parsed', parsed = 1, need_integration = 1, integration_confidence = ?,
-               tournament_id = ?, tournament_round_match_id = ?, parse_summary = ? WHERE id = ?`,
+               tournament_id = ?, tournament_round_match_id = ?, parse_error_message = NULL, parse_summary = ? WHERE id = ?`,
               [parseSummary.confidenceLevel, parseSummary.linkedTournamentId, parseSummary.linkedTournamentRoundMatchId, JSON.stringify(parseSummary), replay.id]
             );
             parsedCount++;
@@ -225,7 +225,7 @@ export class ParseNewReplaysRefactorized {
             const replayMatchId = parseSummary.matchType === 'tournament_unranked' ? null : matchCreateResult.matchId;
             await query(
               `UPDATE replays SET parse_status = 'completed', parsed = 1, integration_confidence = ?,
-               tournament_id = ?, tournament_round_match_id = ?, match_id = ?, parse_summary = ? WHERE id = ?`,
+               tournament_id = ?, tournament_round_match_id = ?, match_id = ?, parse_error_message = NULL, parse_summary = ? WHERE id = ?`,
               [parseSummary.confidenceLevel, parseSummary.linkedTournamentId, parseSummary.linkedTournamentRoundMatchId, replayMatchId, JSON.stringify(parseSummary), replay.id]
             );
             
