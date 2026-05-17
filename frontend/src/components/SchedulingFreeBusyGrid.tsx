@@ -176,6 +176,8 @@ export default function SchedulingFreeBusyGrid({
 }: SchedulingFreeBusyGridProps) {
   const gridContainerRef = useRef<HTMLDivElement>(null);
   const scrollRafRef = useRef<number | null>(null);
+  const lastTouchActivationRef = useRef(0);
+  const lastActivationRef = useRef<{ key: string; at: number }>({ key: '', at: 0 });
   const [scrollLeft, setScrollLeft] = useState(0);
   const [viewportWidth, setViewportWidth] = useState(0);
 
@@ -385,10 +387,33 @@ export default function SchedulingFreeBusyGrid({
     return segments;
   }, [visibleFlatSlots, dateSectionMeta]);
 
-  const handleSlotClick = (slot: GridSlot) => {
+  const handleSlotToggleAction = (
+    slot: GridSlot,
+    source: 'click' | 'pointer',
+    pointerType?: string
+  ) => {
     if (readOnly || !onSlotToggle) return;
 
     const key = slot.slotKey;
+
+    const now = Date.now();
+    if (source === 'click' && now - lastTouchActivationRef.current < 450) {
+      return;
+    }
+
+    if (
+      lastActivationRef.current.key === key &&
+      now - lastActivationRef.current.at < 120
+    ) {
+      return;
+    }
+
+    if (source === 'pointer' && (pointerType === 'touch' || pointerType === 'pen')) {
+      lastTouchActivationRef.current = now;
+    }
+
+    lastActivationRef.current = { key, at: now };
+
     if (confirmMode && proposedSlotsSet.size > 0 && !proposedSlotsSet.has(key)) {
       return;
     }
@@ -578,10 +603,14 @@ export default function SchedulingFreeBusyGrid({
                     <td
                       key={`${participant.id}-${dateKey}-${slotKey}`}
                       className={`border ${borderColor} p-0.5 h-8 cursor-${readOnly ? 'default' : 'pointer'} ${bgColor} ${
-                        !readOnly && !isProposed ? 'hover:opacity-75' : ''
+                        !readOnly && !isProposed ? 'hover:opacity-75 touch-manipulation' : ''
                       }`}
                       style={{ minWidth: `${SLOT_COLUMN_WIDTH}px`, width: `${SLOT_COLUMN_WIDTH}px` }}
-                      onClick={() => handleSlotClick(slot)}
+                      onPointerUp={(event) => {
+                        if (event.button !== 0) return;
+                        handleSlotToggleAction(slot, 'pointer', event.pointerType);
+                      }}
+                      onClick={() => handleSlotToggleAction(slot, 'click')}
                       title={`${participant.nickname} - ${slot.dateStr} ${slot.timeStr}`}
                     >
                       {isConfirmed && (
