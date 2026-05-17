@@ -177,6 +177,12 @@ export default function SchedulingFreeBusyGrid({
   const gridContainerRef = useRef<HTMLDivElement>(null);
   const scrollRafRef = useRef<number | null>(null);
   const lastTouchActivationRef = useRef(0);
+  const touchGestureRef = useRef<{
+    startX: number;
+    startY: number;
+    moved: boolean;
+    slotKey: string;
+  } | null>(null);
   const [scrollLeft, setScrollLeft] = useState(0);
   const [viewportWidth, setViewportWidth] = useState(0);
 
@@ -406,6 +412,42 @@ export default function SchedulingFreeBusyGrid({
     onSlotToggle(key, !selectedSlots.has(key));
   };
 
+  const handleSlotTouchStart = (event: React.TouchEvent<HTMLTableCellElement>, slot: GridSlot) => {
+    if (event.touches.length !== 1) {
+      touchGestureRef.current = null;
+      return;
+    }
+    const touch = event.touches[0];
+    touchGestureRef.current = {
+      startX: touch.clientX,
+      startY: touch.clientY,
+      moved: false,
+      slotKey: slot.slotKey
+    };
+  };
+
+  const handleSlotTouchMove = (event: React.TouchEvent<HTMLTableCellElement>) => {
+    if (!touchGestureRef.current || event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    const deltaX = Math.abs(touch.clientX - touchGestureRef.current.startX);
+    const deltaY = Math.abs(touch.clientY - touchGestureRef.current.startY);
+    if (deltaX > 8 || deltaY > 8) {
+      touchGestureRef.current.moved = true;
+    }
+  };
+
+  const handleSlotTouchEnd = (
+    event: React.TouchEvent<HTMLTableCellElement>,
+    slot: GridSlot
+  ) => {
+    const gesture = touchGestureRef.current;
+    touchGestureRef.current = null;
+    if (!gesture) return;
+    if (gesture.moved) return;
+    if (gesture.slotKey !== slot.slotKey) return;
+    handleSlotToggleAction(slot, 'touch');
+  };
+
   return (
     <div className="w-full space-y-4">
       {confirmMode ? (
@@ -591,9 +633,11 @@ export default function SchedulingFreeBusyGrid({
                         !readOnly && !isProposed ? 'hover:opacity-75 touch-manipulation' : ''
                       }`}
                       style={{ minWidth: `${SLOT_COLUMN_WIDTH}px`, width: `${SLOT_COLUMN_WIDTH}px` }}
-                      onTouchEnd={(event) => {
-                        event.preventDefault();
-                        handleSlotToggleAction(slot, 'touch');
+                      onTouchStart={(event) => handleSlotTouchStart(event, slot)}
+                      onTouchMove={handleSlotTouchMove}
+                      onTouchEnd={(event) => handleSlotTouchEnd(event, slot)}
+                      onTouchCancel={() => {
+                        touchGestureRef.current = null;
                       }}
                       onClick={() => handleSlotToggleAction(slot, 'click')}
                       title={`${participant.nickname} - ${slot.dateStr} ${slot.timeStr}`}
