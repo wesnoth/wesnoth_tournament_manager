@@ -1772,6 +1772,7 @@ router.post('/report-confidence-1-replay', authMiddleware, async (req: AuthReque
     // Determine winner side from forumPlayers
     // For team tournaments, find any member of the winning team
     let winnerSide: number | null = null;
+    let winnerNickname: string = '';
     
     if (tournamentMode === 'team') {
       const teamInfo = Object.values(detectedTeams).find(
@@ -1782,10 +1783,26 @@ router.post('/report-confidence-1-replay', authMiddleware, async (req: AuthReque
         (p: any) => p.user_name?.toLowerCase() === teamMemberName?.toLowerCase()
       );
       winnerSide = teamMemberForumData?.side_number ?? null;
+      winnerNickname = teamMemberName || '';
     } else {
       // For 1v1, find the winner's forum player data
+      // The winner is one of the players in forumPlayers
+      // Determine by checking which player is NOT the loser or by using winner_choice
+      const isWinner = winner_choice === 'I won';
+      
+      if (isWinner) {
+        // Current user is the winner
+        winnerNickname = currentUserNickname;
+      } else {
+        // Current user is the loser, so find the opponent
+        const opponentPlayer = forumPlayers.find(
+          (p: any) => p?.user_name?.toLowerCase() !== currentUserNickname
+        );
+        winnerNickname = opponentPlayer?.user_name || '';
+      }
+      
       const winnerForumPlayer = forumPlayers.find(
-        (p: any) => p.user_name?.toLowerCase() === currentUserNickname
+        (p: any) => p.user_name?.toLowerCase() === winnerNickname.toLowerCase()
       );
       winnerSide = winnerForumPlayer?.side_number ?? null;
     }
