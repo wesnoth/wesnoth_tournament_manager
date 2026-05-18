@@ -212,13 +212,19 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
           {sortedMatches.map((match) => {
             // Special rendering for confidence=1 replays
             if (match.source_type === 'replay_confidence_1') {
-              // Use the data already extracted by backend (more reliable)
               const map = match.map || 'Unknown Map';
               const faction1 = match.winner_faction || 'Unknown';
               const faction2 = match.loser_faction || 'Unknown';
               const player1Name = match.winner_nickname || 'Player 1';
               const player2Name = match.loser_nickname || 'Player 2';
+              const side1 = match.winner_side || 1;
+              const side2 = match.loser_side || 2;
               const date = new Date(match.created_at).toLocaleDateString();
+              
+              // Determine opponent for logged-in user (for correct tooltip display)
+              const opponent = currentUserNickname.toLowerCase() === player1Name.toLowerCase() 
+                ? player2Name 
+                : player1Name;
 
               return (
                 <tr key={match.id} className="border-b border-yellow-200 hover:bg-yellow-50 bg-yellow-50">
@@ -231,9 +237,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                           <span className="font-semibold text-yellow-800">{player1Name}</span>
                         </div>
                         <span className="inline-block px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded font-semibold">{faction1}</span>
-                        {match.winner_side && (
-                          <span className={`inline-block px-1.5 py-0.5 text-xs rounded font-semibold ${match.winner_side === 1 ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>S{match.winner_side}</span>
-                        )}
+                        <span className={`inline-block px-1.5 py-0.5 text-xs rounded font-semibold ${side1 === 1 ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>S{side1}</span>
                       </div>
                     </div>
                   </td>
@@ -245,9 +249,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                           <span className="font-semibold text-yellow-800">{player2Name}</span>
                         </div>
                         <span className="inline-block px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded font-semibold">{faction2}</span>
-                        {match.winner_side && (
-                          <span className={`inline-block px-1.5 py-0.5 text-xs rounded font-semibold ${match.winner_side === 1 ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}`}>S{match.winner_side === 1 ? 2 : 1}</span>
-                        )}
+                        <span className={`inline-block px-1.5 py-0.5 text-xs rounded font-semibold ${side2 === 1 ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>S{side2}</span>
                       </div>
                     </div>
                   </td>
@@ -300,7 +302,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                               }`}
                               onClick={() => handleReportConfidence1Replay(match, 'I won')}
                               disabled={showConfirmationModal}
-                              title={`${t('replay_i_won')}: ${player1Name} beats ${player2Name}`}
+                              title={`${t('replay_i_won')}: ${currentUserNickname} beats ${opponent}`}
                             >
                               {t('replay_i_won')}
                             </button>
@@ -312,7 +314,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                               }`}
                               onClick={() => handleReportConfidence1Replay(match, 'I lost')}
                               disabled={showConfirmationModal}
-                              title={`${t('replay_i_lost')}: ${player2Name} beats ${player1Name}`}
+                              title={`${t('replay_i_lost')}: ${opponent} beats ${currentUserNickname}`}
                             >
                               {t('replay_i_lost')}
                             </button>

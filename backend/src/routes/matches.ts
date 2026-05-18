@@ -2617,14 +2617,25 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
         const winnerName = victory.winner_name || players[0]?.user_name || 'Unknown';
         const loserName = victory.loser_name || players[1]?.user_name || 'Unknown';
 
+        const winnerPlayer = players.find((p: any) => p.user_name === winnerName);
+        const loserPlayer = players.find((p: any) => p.user_name === loserName);
+
+        const resolvedFactions = parseSummary.resolvedFactions || parseSummary.finalFactions || {};
+        const winner_faction = (winnerPlayer ? resolvedFactions[`side${winnerPlayer.side_number}`] : null) || 'Unknown';
+        const loser_faction = (loserPlayer ? resolvedFactions[`side${loserPlayer.side_number}`] : null) || 'Unknown';
+        const winner_side = winnerPlayer?.side_number || null;
+        const loser_side = loserPlayer?.side_number || null;
+
         formattedReplays.push({
           id: r.id,
           winner_id: null,  // Unknown until reported
           loser_id: null,   // Unknown until reported
           winner_nickname: winnerName,
           loser_nickname: loserName,
-          winner_faction: victory.winner_faction || parseSummary.finalFactions?.side1 || 'Unknown',
-          loser_faction: victory.loser_faction || parseSummary.finalFactions?.side2 || 'Unknown',
+          winner_faction: winner_faction,
+          loser_faction: loser_faction,
+          winner_side: winner_side,
+          loser_side: loser_side,
           map: parseSummary.resolvedMap || parseSummary.forumMap || 'Unknown',
           status: 'pending_report',
           winner_elo_before: null,

@@ -261,6 +261,8 @@ router.get('/:id/matches', async (req, res) => {
 
             const winner_faction = (winnerPlayer ? resolvedFactions[`side${winnerPlayer.side_number}`] : null) || 'Unknown';
             const loser_faction  = (loserPlayer  ? resolvedFactions[`side${loserPlayer.side_number}`]  : null) || 'Unknown';
+            const winner_side = winnerPlayer?.side_number || null;
+            const loser_side = loserPlayer?.side_number || null;
 
             if (factionFilter) {
               if (winner_faction.toLowerCase() !== factionFilter.toLowerCase() && 
@@ -284,7 +286,8 @@ router.get('/:id/matches', async (req, res) => {
               loser_nickname: loserName,
               winner_faction: winner_faction,
               loser_faction: loser_faction,
-              winner_side: parseSummary.replayVictory?.winner_side || null,
+              winner_side: winner_side,
+              loser_side: loser_side,
               map: map,
               status: 'pending_report',
               winner_elo_before: null,
