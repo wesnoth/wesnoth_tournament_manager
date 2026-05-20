@@ -710,8 +710,8 @@ router.get('/replays', moderatorOrAdminMiddleware, async (req: AuthRequest, res)
 
     // Filter by map_name (case-insensitive)
     if (map) {
-      where += ' AND LOWER(map_name) LIKE LOWER(?)';
-      params.push(`%${map}%`);
+      where += ' AND LOWER(map_name) LIKE ?';
+      params.push(`%${(map as string).toLowerCase()}%`);
     }
 
     // Get current page (without pagination limit first)
