@@ -25,6 +25,8 @@ const AdminUsers: React.FC = () => {
   const [maintenanceReason, setMaintenanceReason] = useState('');
   const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
   const [togglingMaintenance, setTogglingMaintenance] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
 
   useEffect(() => {
     if (!isAuthenticated || (!isAdmin && !isTournamentModerator)) {
@@ -44,7 +46,7 @@ const AdminUsers: React.FC = () => {
       const res = await adminService.getAllUsers();
       const usersData = res.data || [];
       setUsers(usersData);
-      setFilteredUsers(usersData);
+      applyFilters(searchNIC, userStatusFilter, usersData);
       setError('');
     } catch (err: any) {
       console.error('Error fetching users:', err);
@@ -54,6 +56,29 @@ const AdminUsers: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const applyFilters = (nicValue: string, statusValue: string, usersData?: any[]) => {
+    const data = usersData || users;
+    let filtered = data;
+
+    // Filter by nickname
+    if (nicValue.trim() !== '') {
+      const lowerSearch = nicValue.toLowerCase();
+      filtered = filtered.filter((user: any) => user.nickname.toLowerCase().includes(lowerSearch));
+    }
+
+    // Filter by status
+    if (statusValue === 'blocked') {
+      filtered = filtered.filter((user: any) => !!user.is_blocked);
+    } else if (statusValue === 'active') {
+      filtered = filtered.filter((user: any) => !user.is_blocked && !!user.is_active);
+    } else if (statusValue === 'inactive') {
+      filtered = filtered.filter((user: any) => !user.is_blocked && !user.is_active);
+    }
+
+    setFilteredUsers(filtered);
+    setCurrentPage(1);
   };
 
   const fetchMaintenanceStatus = async () => {
@@ -97,25 +122,12 @@ const AdminUsers: React.FC = () => {
     applyFilters(searchNIC, status);
   };
 
-  const applyFilters = (nicValue: string, statusValue: string) => {
-    let filtered = users;
-
-    // Filter by nickname
-    if (nicValue.trim() !== '') {
-      const lowerSearch = nicValue.toLowerCase();
-      filtered = filtered.filter((user) => user.nickname.toLowerCase().includes(lowerSearch));
+  const handlePageChange = (newPage: number) => {
+    const totalPages = Math.ceil(filteredUsers.length / pageSize);
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-
-    // Filter by status
-    if (statusValue === 'blocked') {
-      filtered = filtered.filter((user) => !!user.is_blocked);
-    } else if (statusValue === 'active') {
-      filtered = filtered.filter((user) => !user.is_blocked && !!user.is_active);
-    } else if (statusValue === 'inactive') {
-      filtered = filtered.filter((user) => !user.is_blocked && !user.is_active);
-    }
-
-    setFilteredUsers(filtered);
   };
 
   const confirmAction = async () => {
@@ -271,11 +283,50 @@ const AdminUsers: React.FC = () => {
             </select>
           </div>
           <span className="text-sm text-gray-600">
-            {t('showing_count', { count: filteredUsers.length, total: users.length, page: 1, totalPages: 1 })}
+            {t('showing_count', { count: filteredUsers.slice((currentPage - 1) * pageSize, currentPage * pageSize).length, total: filteredUsers.length, page: currentPage, totalPages: Math.ceil(filteredUsers.length / pageSize) })}
           </span>
         </div>
 
-        {filteredUsers.length > 0 ? (
+        {/* Pagination Controls - Top */}
+        {Math.ceil(filteredUsers.length / pageSize) > 1 && (
+          <div className="flex justify-center items-center gap-2 mb-6">
+            <button 
+              className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handlePageChange(1)}
+              disabled={currentPage === 1}
+            >
+              {t('pagination_first')}
+            </button>
+            <button 
+              className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+            >
+              {t('pagination_prev')}
+            </button>
+            
+            <div className="text-gray-600 px-4">
+              {t('pagination_page_info', { page: currentPage, totalPages: Math.ceil(filteredUsers.length / pageSize) })}
+            </div>
+            
+            <button 
+              className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === Math.ceil(filteredUsers.length / pageSize)}
+            >
+              {t('pagination_next')}
+            </button>
+            <button 
+              className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handlePageChange(Math.ceil(filteredUsers.length / pageSize))}
+              disabled={currentPage === Math.ceil(filteredUsers.length / pageSize)}
+            >
+              {t('pagination_last')}
+            </button>
+          </div>
+        )}
+
+        {users.length > 0 ? (
           <div className="overflow-x-auto">
           <table className="w-full border-collapse bg-white shadow-md rounded-lg overflow-hidden">
             <thead>
@@ -290,10 +341,21 @@ const AdminUsers: React.FC = () => {
                 </tr>
             </thead>
             <tbody>
-              {filteredUsers.map((user) => {
+             {filteredUsers.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((user) => {
                 return (
                 <tr key={user.id} className="border-b border-gray-200 hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-700">{user.nickname}</td>
+                 <td className="px-4 py-3 text-gray-700">
+                   <a 
+                     href="#" 
+                     onClick={(e) => {
+                       e.preventDefault();
+                       navigate(`/player/${user.id}`);
+                     }}
+                     className="font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                   >
+                     {user.nickname}
+                   </a>
+                 </td>
                   <td className="px-4 py-3 text-gray-700">{user.elo_rating || 1200}</td>
                   <td className="px-4 py-3 text-gray-700">{user.level || t('level_novice')}</td>
                   <td className="px-4 py-3">
@@ -375,6 +437,45 @@ const AdminUsers: React.FC = () => {
           </div>
         ) : (
           <p className="text-center py-8 text-gray-600">{t('no_data')}</p>
+        )}
+
+        {/* Pagination Controls - Bottom */}
+        {Math.ceil(filteredUsers.length / pageSize) > 1 && (
+          <div className="flex justify-center items-center gap-2 mt-6">
+            <button 
+              className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handlePageChange(1)}
+              disabled={currentPage === 1}
+            >
+              {t('pagination_first')}
+            </button>
+            <button 
+              className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+            >
+              {t('pagination_prev')}
+            </button>
+            
+            <div className="text-gray-600 px-4">
+              {t('pagination_page_info', { page: currentPage, totalPages: Math.ceil(filteredUsers.length / pageSize) })}
+            </div>
+            
+            <button 
+              className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === Math.ceil(filteredUsers.length / pageSize)}
+            >
+              {t('pagination_next')}
+            </button>
+            <button 
+              className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handlePageChange(Math.ceil(filteredUsers.length / pageSize))}
+              disabled={currentPage === Math.ceil(filteredUsers.length / pageSize)}
+            >
+              {t('pagination_last')}
+            </button>
+          </div>
         )}
       </section>
 

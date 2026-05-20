@@ -18,15 +18,17 @@ const STATUS_COLORS: Record<string, string> = {
   reported: 'bg-purple-100 text-purple-800',
 };
 
-function parseSummaryPlayers(summaryJson: string | null): { side1: string; side2: string; map: string } {
+function parseSummaryPlayers(summaryJson: string | null): { side1: string; side1Id?: string; side2: string; side2Id?: string; map: string } {
   const empty = { side1: '—', side2: '—', map: '—' };
   if (!summaryJson) return empty;
   try {
     const s = JSON.parse(summaryJson);
     const side1 = s.forumPlayers?.[0]?.user_name || '—';
+    const side1Id = s.forumPlayers?.[0]?.user_id;
     const side2 = s.forumPlayers?.[1]?.user_name || '—';
+    const side2Id = s.forumPlayers?.[1]?.user_id;
     const map = s.finalMap || s.forumMap || s.resolvedMap || '—';
-    return { side1, side2, map };
+    return { side1, side1Id, side2, side2Id, map };
   } catch {
     return empty;
   }
@@ -64,6 +66,9 @@ const AdminReplays: React.FC = () => {
   const [discarding, setDiscarding] = useState<string | null>(null);
   const [reprocessing, setReprocessing] = useState<string | null>(null);
   const [summaryModal, setSummaryModal] = useState<{ open: boolean; json: string; filename: string }>({ open: false, json: '', filename: '' });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   
   // System settings state
   const [systemSettings, setSystemSettings] = useState<any[]>([]);
@@ -79,15 +84,19 @@ const AdminReplays: React.FC = () => {
     }
     fetchReplays();
     fetchSystemSettings();
-  }, [isAuthenticated, isAdmin, isTournamentModerator, navigate, statusFilter]);
+  }, [isAuthenticated, isAdmin, isTournamentModerator, navigate, statusFilter, currentPage]);
 
   const fetchReplays = async () => {
     try {
       setLoading(true);
-      const params: any = { limit: 200 };
+      const params: any = { page: currentPage };
       if (statusFilter !== 'all') params.status = statusFilter;
       const res = await adminService.getReplays(params);
       setReplays(res.data.replays || []);
+      if (res.data?.pagination) {
+        setTotalPages(res.data.pagination.totalPages);
+        setTotal(res.data.pagination.total);
+      }
       setError('');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load replays');
@@ -164,6 +173,13 @@ const AdminReplays: React.FC = () => {
   const handleCancelEdit = () => {
     setEditingSettingKey(null);
     setEditingSettingValue('');
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const openSummary = (replay: any) => {
@@ -254,7 +270,7 @@ const AdminReplays: React.FC = () => {
             <option value="discarded">Discarded</option>
             <option value="reported">Reported (has match)</option>
           </select>
-          <span className="text-sm text-gray-500 ml-auto">{replays.length} replays found</span>
+          <span className="text-sm text-gray-500 ml-auto">{t('showing_count', { count: replays.length, total, page: currentPage, totalPages })}</span>
           <button
             onClick={fetchReplays}
             className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
@@ -263,6 +279,45 @@ const AdminReplays: React.FC = () => {
             🔄 Refresh
           </button>
         </div>
+
+        {/* Pagination Controls - Top */}
+        {totalPages > 1 && (
+          <div className="flex justify-center items-center gap-2 mb-6">
+            <button 
+              className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handlePageChange(1)}
+              disabled={currentPage === 1}
+            >
+              {t('pagination_first')}
+            </button>
+            <button 
+              className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+            >
+              {t('pagination_prev')}
+            </button>
+            
+            <div className="text-gray-600 px-4">
+              {t('pagination_page_info', { page: currentPage, totalPages })}
+            </div>
+            
+            <button 
+              className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+            >
+              {t('pagination_next')}
+            </button>
+            <button 
+              className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handlePageChange(totalPages)}
+              disabled={currentPage === totalPages}
+            >
+              {t('pagination_last')}
+            </button>
+          </div>
+        )}
 
         {replays.length === 0 ? (
           <p className="text-center py-8 text-gray-600">{t('no_data')}</p>
@@ -286,7 +341,7 @@ const AdminReplays: React.FC = () => {
               </thead>
               <tbody>
                 {replays.map((replay) => {
-                  const { side1, side2, map } = parseSummaryPlayers(replay.parse_summary);
+                  const { side1, side1Id, side2, side2Id, map } = parseSummaryPlayers(replay.parse_summary);
                   const displayStatus = replay.match_id ? 'reported' : replay.parse_status;
                   return (
                     <tr key={replay.id} className="border-b border-gray-200 hover:bg-gray-50">
@@ -309,8 +364,38 @@ const AdminReplays: React.FC = () => {
                       <td className="px-3 py-2 text-red-700 text-xs max-w-[10rem] truncate" title={replay.parse_error_message ?? ''}>
                         {replay.parse_error_message || '—'}
                       </td>
-                      <td className="px-3 py-2 text-gray-700">{side1}</td>
-                      <td className="px-3 py-2 text-gray-700">{side2}</td>
+                      <td className="px-3 py-2 text-gray-700">
+                        {side1 !== '—' && side1Id ? (
+                          <a 
+                            href="#" 
+                            onClick={(e) => {
+                              e.preventDefault();
+                              navigate(`/player/${side1Id}`);
+                            }}
+                            className="font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                          >
+                            {side1}
+                          </a>
+                        ) : (
+                          side1
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-gray-700">
+                        {side2 !== '—' && side2Id ? (
+                          <a 
+                            href="#" 
+                            onClick={(e) => {
+                              e.preventDefault();
+                              navigate(`/player/${side2Id}`);
+                            }}
+                            className="font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                          >
+                            {side2}
+                          </a>
+                        ) : (
+                          side2
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-gray-700 max-w-[8rem] truncate" title={map}>{map}</td>
                       <td className="px-3 py-2">
                         <div className="flex gap-1 items-center">
@@ -349,6 +434,45 @@ const AdminReplays: React.FC = () => {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Pagination Controls - Bottom */}
+        {totalPages > 1 && (
+          <div className="flex justify-center items-center gap-2 mt-6">
+            <button 
+              className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handlePageChange(1)}
+              disabled={currentPage === 1}
+            >
+              {t('pagination_first')}
+            </button>
+            <button 
+              className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+            >
+              {t('pagination_prev')}
+            </button>
+            
+            <div className="text-gray-600 px-4">
+              {t('pagination_page_info', { page: currentPage, totalPages })}
+            </div>
+            
+            <button 
+              className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+            >
+              {t('pagination_next')}
+            </button>
+            <button 
+              className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handlePageChange(totalPages)}
+              disabled={currentPage === totalPages}
+            >
+              {t('pagination_last')}
+            </button>
           </div>
         )}
       </div>

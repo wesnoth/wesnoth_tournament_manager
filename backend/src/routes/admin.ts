@@ -14,7 +14,7 @@ const router = Router();
 const REPLACED_PLAYERS_TEAM_ID = '00000000-0000-0000-0000-000000000001';
 
 // Get all users
-router.get('/users', authMiddleware, async (req: AuthRequest, res) => {
+router.get('/users/all', authMiddleware, async (req: AuthRequest, res) => {
   try {
     // Check if user is admin
     const userResult = await query('SELECT is_admin FROM users_extension WHERE id = ?', [req.userId]);
@@ -685,7 +685,11 @@ router.delete('/audit-logs/old', authMiddleware, async (req: AuthRequest, res) =
 // List replays with filtering — accessible to admins and tournament moderators
 router.get('/replays', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
   try {
-    const { status, limit = 100, offset = 0 } = req.query;
+    const { status, page = '1' } = req.query;
+    const limit = 20;
+    const pageNum = Math.max(1, parseInt(page as string) || 1);
+    const offset = (pageNum - 1) * limit;
+
     const params: any[] = [];
     let where = 'WHERE deleted_at IS NULL';
     if (status && status !== 'all') {
@@ -696,6 +700,16 @@ router.get('/replays', moderatorOrAdminMiddleware, async (req: AuthRequest, res)
         params.push(status);
       }
     }
+
+    // Get total count
+    const countResult = await query(
+      `SELECT COUNT(*) as total FROM replays ${where}`,
+      params
+    );
+    const total = parseInt(countResult.rows[0].total);
+    const totalPages = Math.ceil(total / limit);
+
+    // Get current page
     const result = await query(
       `SELECT id, game_id, instance_uuid, replay_filename, parse_status, match_id,
               integration_confidence, parse_error_message, parse_summary,
@@ -703,9 +717,19 @@ router.get('/replays', moderatorOrAdminMiddleware, async (req: AuthRequest, res)
        FROM replays ${where}
        ORDER BY detected_at DESC
        LIMIT ? OFFSET ?`,
-      [...params, Number(limit), Number(offset)]
+      [...params, limit, offset]
     );
-    res.json({ replays: result.rows });
+
+    res.json({
+      replays: result.rows,
+      pagination: {
+        page: pageNum,
+        limit,
+        total,
+        totalPages,
+        showing: result.rows.length
+      }
+    });
   } catch (error) {
     console.error('List replays error:', error);
     res.status(500).json({ error: 'Failed to fetch replays' });
