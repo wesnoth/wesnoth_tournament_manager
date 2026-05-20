@@ -708,20 +708,13 @@ router.get('/replays', moderatorOrAdminMiddleware, async (req: AuthRequest, res)
       params.push(parseInt(game_id as string));
     }
 
-    // Filter by map_name
+    // Filter by map_name (case-insensitive)
     if (map) {
-      where += ' AND map_name LIKE ?';
+      where += ' AND LOWER(map_name) LIKE LOWER(?)';
       params.push(`%${map}%`);
     }
 
-    // Get total count (before player filter since player filter needs parsed results)
-    const countResult = await query(
-      `SELECT COUNT(*) as total FROM replays ${where}`,
-      params
-    );
-    let total = parseInt(countResult.rows[0].total);
-
-    // Get current page
+    // Get current page (without pagination limit first)
     let result = await query(
       `SELECT id, game_id, instance_uuid, replay_filename, parse_status, match_id,
               integration_confidence, parse_error_message, parse_summary,
@@ -731,8 +724,10 @@ router.get('/replays', moderatorOrAdminMiddleware, async (req: AuthRequest, res)
       params
     );
 
-    // Filter by player in parse_summary if provided
+    // Filter by player in parse_summary if provided (case-insensitive)
     let filtered = result.rows;
+    let total = filtered.length;
+    
     if (player) {
       const playerLower = (player as string).toLowerCase();
       filtered = filtered.filter((replay: any) => {
