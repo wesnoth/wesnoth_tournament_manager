@@ -63,6 +63,9 @@ const AdminReplays: React.FC = () => {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [gameIdFilter, setGameIdFilter] = useState('');
+  const [mapFilter, setMapFilter] = useState('');
+  const [playerFilter, setPlayerFilter] = useState('');
   const [discarding, setDiscarding] = useState<string | null>(null);
   const [reprocessing, setReprocessing] = useState<string | null>(null);
   const [summaryModal, setSummaryModal] = useState<{ open: boolean; json: string; filename: string }>({ open: false, json: '', filename: '' });
@@ -84,13 +87,16 @@ const AdminReplays: React.FC = () => {
     }
     fetchReplays();
     fetchSystemSettings();
-  }, [isAuthenticated, isAdmin, isTournamentModerator, navigate, statusFilter, currentPage]);
+  }, [isAuthenticated, isAdmin, isTournamentModerator, navigate, statusFilter, currentPage, gameIdFilter, mapFilter, playerFilter]);
 
   const fetchReplays = async () => {
     try {
       setLoading(true);
       const params: any = { page: currentPage };
       if (statusFilter !== 'all') params.status = statusFilter;
+      if (gameIdFilter.trim()) params.game_id = gameIdFilter;
+      if (mapFilter.trim()) params.map = mapFilter;
+      if (playerFilter.trim()) params.player = playerFilter;
       const res = await adminService.getReplays(params);
       setReplays(res.data.replays || []);
       if (res.data?.pagination) {
@@ -182,6 +188,14 @@ const AdminReplays: React.FC = () => {
     }
   };
 
+  const handleResetFilters = () => {
+    setStatusFilter('all');
+    setGameIdFilter('');
+    setMapFilter('');
+    setPlayerFilter('');
+    setCurrentPage(1);
+  };
+
   const openSummary = (replay: any) => {
     let pretty = '—';
     if (replay.parse_summary) {
@@ -251,33 +265,91 @@ const AdminReplays: React.FC = () => {
         </div>
 
         {/* Filter */}
-        <div className="bg-white rounded-lg shadow-md p-4 mb-6 flex gap-4 items-center flex-wrap">
-          <label className="text-sm font-semibold text-gray-600">{t('label_status', 'Status')}:</label>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
-          >
-            <option value="all">All</option>
-            <option value="new">New</option>
-            <option value="processing">Processing</option>
-            <option value="parsed">Parsed</option>
-            <option value="completed">Completed</option>
-            <option value="error">Error</option>
-            <option value="failed">Failed</option>
-            <option value="rejected">Rejected</option>
-            <option value="skipped">Skipped</option>
-            <option value="discarded">Discarded</option>
-            <option value="reported">Reported (has match)</option>
-          </select>
-          <span className="text-sm text-gray-500 ml-auto">{t('showing_count', { count: replays.length, total, page: currentPage, totalPages })}</span>
-          <button
-            onClick={fetchReplays}
-            className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
-            title="Refresh"
-          >
-            🔄 Refresh
-          </button>
+        <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+          <div className="flex gap-4 items-end flex-wrap mb-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-semibold text-gray-600">{t('label_status', 'Status')}:</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+              >
+                <option value="all">All</option>
+                <option value="new">New</option>
+                <option value="processing">Processing</option>
+                <option value="parsed">Parsed</option>
+                <option value="completed">Completed</option>
+                <option value="error">Error</option>
+                <option value="failed">Failed</option>
+                <option value="rejected">Rejected</option>
+                <option value="skipped">Skipped</option>
+                <option value="discarded">Discarded</option>
+                <option value="reported">Reported (has match)</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-semibold text-gray-600">Game ID:</label>
+              <input
+                type="number"
+                placeholder="Filter by game ID"
+                value={gameIdFilter}
+                onChange={(e) => {
+                  setGameIdFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-semibold text-gray-600">Map:</label>
+              <input
+                type="text"
+                placeholder="Filter by map name"
+                value={mapFilter}
+                onChange={(e) => {
+                  setMapFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-semibold text-gray-600">Player:</label>
+              <input
+                type="text"
+                placeholder="Filter by player nickname"
+                value={playerFilter}
+                onChange={(e) => {
+                  setPlayerFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <button
+              onClick={handleResetFilters}
+              className="px-4 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500 transition-colors text-sm font-semibold"
+            >
+              Reset Filters
+            </button>
+
+            <button
+              onClick={fetchReplays}
+              className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+              title="Refresh"
+            >
+              🔄 Refresh
+            </button>
+          </div>
+
+          <span className="text-sm text-gray-500">{t('showing_count', { count: replays.length, total, page: currentPage, totalPages })}</span>
         </div>
 
         {/* Pagination Controls - Top */}

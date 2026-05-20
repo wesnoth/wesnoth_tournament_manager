@@ -685,13 +685,14 @@ router.delete('/audit-logs/old', authMiddleware, async (req: AuthRequest, res) =
 // List replays with filtering — accessible to admins and tournament moderators
 router.get('/replays', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
   try {
-    const { status, page = '1' } = req.query;
+    const { status, page = '1', game_id, map, player } = req.query;
     const limit = 20;
     const pageNum = Math.max(1, parseInt(page as string) || 1);
     const offset = (pageNum - 1) * limit;
 
     const params: any[] = [];
     let where = 'WHERE deleted_at IS NULL';
+    
     if (status && status !== 'all') {
       if (status === 'reported') {
         where += ' AND match_id IS NOT NULL';
@@ -701,33 +702,66 @@ router.get('/replays', moderatorOrAdminMiddleware, async (req: AuthRequest, res)
       }
     }
 
-    // Get total count
+    // Filter by game_id
+    if (game_id) {
+      where += ' AND game_id = ?';
+      params.push(parseInt(game_id as string));
+    }
+
+    // Filter by map_name
+    if (map) {
+      where += ' AND map_name LIKE ?';
+      params.push(`%${map}%`);
+    }
+
+    // Get total count (before player filter since player filter needs parsed results)
     const countResult = await query(
       `SELECT COUNT(*) as total FROM replays ${where}`,
       params
     );
-    const total = parseInt(countResult.rows[0].total);
-    const totalPages = Math.ceil(total / limit);
+    let total = parseInt(countResult.rows[0].total);
 
     // Get current page
-    const result = await query(
+    let result = await query(
       `SELECT id, game_id, instance_uuid, replay_filename, parse_status, match_id,
               integration_confidence, parse_error_message, parse_summary,
               detected_at, start_time, map_name
        FROM replays ${where}
-       ORDER BY detected_at DESC
-       LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
+       ORDER BY detected_at DESC`,
+      params
     );
 
+    // Filter by player in parse_summary if provided
+    let filtered = result.rows;
+    if (player) {
+      const playerLower = (player as string).toLowerCase();
+      filtered = filtered.filter((replay: any) => {
+        if (!replay.parse_summary) return false;
+        try {
+          const summary = JSON.parse(replay.parse_summary);
+          const players = summary.forumPlayers || [];
+          return players.some((p: any) => 
+            (p.user_name && p.user_name.toLowerCase().includes(playerLower))
+          );
+        } catch {
+          return false;
+        }
+      });
+      total = filtered.length;
+    }
+
+    // Apply pagination on filtered results
+    const totalPages = Math.ceil(total / limit);
+    const paginatedReplays = filtered.slice(offset, offset + limit);
+
     res.json({
-      replays: result.rows,
+      replays: paginatedReplays,
       pagination: {
         page: pageNum,
         limit,
         total,
         totalPages,
-        showing: result.rows.length
+        showing: paginatedReplays.length
       }
     });
   } catch (error) {
