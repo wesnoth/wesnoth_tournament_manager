@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
@@ -63,9 +63,17 @@ const AdminReplays: React.FC = () => {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [gameIdFilter, setGameIdFilter] = useState('');
-  const [mapFilter, setMapFilter] = useState('');
-  const [playerFilter, setPlayerFilter] = useState('');
+  const [inputFilters, setInputFilters] = useState({
+    gameId: '',
+    map: '',
+    player: '',
+  });
+  const [appliedFilters, setAppliedFilters] = useState({
+    gameId: '',
+    map: '',
+    player: '',
+  });
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [discarding, setDiscarding] = useState<string | null>(null);
   const [reprocessing, setReprocessing] = useState<string | null>(null);
   const [summaryModal, setSummaryModal] = useState<{ open: boolean; json: string; filename: string }>({ open: false, json: '', filename: '' });
@@ -87,16 +95,16 @@ const AdminReplays: React.FC = () => {
     }
     fetchReplays();
     fetchSystemSettings();
-  }, [isAuthenticated, isAdmin, isTournamentModerator, navigate, statusFilter, currentPage, gameIdFilter, mapFilter, playerFilter]);
+  }, [isAuthenticated, isAdmin, isTournamentModerator, navigate, statusFilter, currentPage, appliedFilters]);
 
   const fetchReplays = async () => {
     try {
       setLoading(true);
       const params: any = { page: currentPage };
       if (statusFilter !== 'all') params.status = statusFilter;
-      if (gameIdFilter.trim()) params.game_id = gameIdFilter;
-      if (mapFilter.trim()) params.map = mapFilter;
-      if (playerFilter.trim()) params.player = playerFilter;
+      if (appliedFilters.gameId.trim()) params.game_id = appliedFilters.gameId;
+      if (appliedFilters.map.trim()) params.map = appliedFilters.map;
+      if (appliedFilters.player.trim()) params.player = appliedFilters.player;
       const res = await adminService.getReplays(params);
       setReplays(res.data.replays || []);
       if (res.data?.pagination) {
@@ -109,6 +117,30 @@ const AdminReplays: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Debounce filter changes
+  const handleFilterInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    
+    setInputFilters(prev => ({
+      ...prev,
+      [name]: value,
+    }));
+    
+    // Clear previous timer
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+    
+    // Set new timer to apply filters after 500ms
+    debounceTimer.current = setTimeout(() => {
+      setAppliedFilters(prev => ({
+        ...prev,
+        [name]: value,
+      }));
+      setCurrentPage(1);
+    }, 500);
   };
 
   const handleForceDiscard = async (replayId: string, filename: string) => {
@@ -190,9 +222,16 @@ const AdminReplays: React.FC = () => {
 
   const handleResetFilters = () => {
     setStatusFilter('all');
-    setGameIdFilter('');
-    setMapFilter('');
-    setPlayerFilter('');
+    setInputFilters({
+      gameId: '',
+      map: '',
+      player: '',
+    });
+    setAppliedFilters({
+      gameId: '',
+      map: '',
+      player: '',
+    });
     setCurrentPage(1);
   };
 
@@ -295,12 +334,10 @@ const AdminReplays: React.FC = () => {
               <label className="text-sm font-semibold text-gray-600">Game ID:</label>
               <input
                 type="number"
+                name="gameId"
                 placeholder="Filter by game ID"
-                value={gameIdFilter}
-                onChange={(e) => {
-                  setGameIdFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
+                value={inputFilters.gameId}
+                onChange={handleFilterInputChange}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
               />
             </div>
@@ -309,12 +346,10 @@ const AdminReplays: React.FC = () => {
               <label className="text-sm font-semibold text-gray-600">Map:</label>
               <input
                 type="text"
+                name="map"
                 placeholder="Filter by map name"
-                value={mapFilter}
-                onChange={(e) => {
-                  setMapFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
+                value={inputFilters.map}
+                onChange={handleFilterInputChange}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
               />
             </div>
@@ -323,12 +358,10 @@ const AdminReplays: React.FC = () => {
               <label className="text-sm font-semibold text-gray-600">Player:</label>
               <input
                 type="text"
+                name="player"
                 placeholder="Filter by player nickname"
-                value={playerFilter}
-                onChange={(e) => {
-                  setPlayerFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
+                value={inputFilters.player}
+                onChange={handleFilterInputChange}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
               />
             </div>
