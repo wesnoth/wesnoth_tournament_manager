@@ -708,12 +708,6 @@ router.get('/replays', moderatorOrAdminMiddleware, async (req: AuthRequest, res)
       params.push(parseInt(game_id as string));
     }
 
-    // Filter by map_name (case-insensitive)
-    if (map) {
-      where += ' AND LOWER(map_name) LIKE ?';
-      params.push(`%${(map as string).toLowerCase()}%`);
-    }
-
     // Get current page (without pagination limit first)
     let result = await query(
       `SELECT id, game_id, instance_uuid, replay_filename, parse_status, match_id,
@@ -724,10 +718,29 @@ router.get('/replays', moderatorOrAdminMiddleware, async (req: AuthRequest, res)
       params
     );
 
-    // Filter by player in parse_summary if provided (case-insensitive)
+    // Filter by map/player using the same data source shown in UI parse summary when available.
     let filtered = result.rows;
     let total = filtered.length;
-    
+
+    if (map) {
+      const mapLower = (map as string).toLowerCase().trim();
+      filtered = filtered.filter((replay: any) => {
+        let effectiveMap = replay.map_name || '';
+
+        if (replay.parse_summary) {
+          try {
+            const summary = JSON.parse(replay.parse_summary);
+            effectiveMap = summary.finalMap || summary.forumMap || summary.resolvedMap || effectiveMap;
+          } catch {
+            // Keep DB map_name fallback if parse_summary is invalid
+          }
+        }
+
+        return String(effectiveMap).toLowerCase().includes(mapLower);
+      });
+      total = filtered.length;
+    }
+
     if (player) {
       const playerLower = (player as string).toLowerCase();
       filtered = filtered.filter((replay: any) => {
@@ -2740,4 +2753,3 @@ router.put('/system-settings/:setting_key', moderatorOrAdminMiddleware, async (r
 });
 
 export default router;
-
