@@ -121,7 +121,6 @@ router.get('/:id/elo-history', async (req, res) => {
         m.winner_id,
         m.loser_id,
         m.created_at,
-        m.played_at,
         m.winner_elo_after,
         m.loser_elo_after,
         w.nickname AS winner_nickname,
@@ -133,7 +132,7 @@ router.get('/:id/elo-history', async (req, res) => {
         AND m.status = 'confirmed'
         AND m.winner_elo_after IS NOT NULL
         AND m.loser_elo_after IS NOT NULL
-      ORDER BY COALESCE(m.played_at, m.created_at) ASC`,
+      ORDER BY m.created_at ASC`,
       [id, id]
     );
 

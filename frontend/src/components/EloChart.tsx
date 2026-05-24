@@ -111,7 +111,7 @@ const EloChart: React.FC<EloChartProps> = ({ matches, currentPlayerId }) => {
 
     return [...matches]
       .map((match) => {
-        const matchDateRaw = match.played_at || match.created_at;
+        const matchDateRaw = match.created_at;
         const timestamp = new Date(matchDateRaw).getTime();
         if (!Number.isFinite(timestamp)) return null;
 
