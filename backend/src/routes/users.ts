@@ -110,6 +110,40 @@ router.get('/:id/stats', async (req, res) => {
   }
 });
 
+// Get full ELO history for charting (confirmed matches only, no pagination)
+router.get('/:id/elo-history', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await query(
+      `SELECT
+        m.id,
+        m.winner_id,
+        m.loser_id,
+        m.created_at,
+        m.played_at,
+        m.winner_elo_after,
+        m.loser_elo_after,
+        w.nickname AS winner_nickname,
+        l.nickname AS loser_nickname
+      FROM matches m
+      JOIN users_extension w ON m.winner_id = w.id
+      JOIN users_extension l ON m.loser_id = l.id
+      WHERE (m.winner_id = ? OR m.loser_id = ?)
+        AND m.status = 'confirmed'
+        AND m.winner_elo_after IS NOT NULL
+        AND m.loser_elo_after IS NOT NULL
+      ORDER BY COALESCE(m.played_at, m.created_at) ASC`,
+      [id, id]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching ELO history:', error);
+    res.status(500).json({ error: 'Failed to fetch ELO history' });
+  }
+});
+
 // Get user matches with pagination and filters (includes pending replays)
 router.get('/:id/matches', async (req, res) => {
   try {

@@ -33,6 +33,7 @@ const PlayerProfile: React.FC = () => {
   
   const [profile, setProfile] = useState<any>(null);
   const [matches, setMatches] = useState<any[]>([]);
+  const [eloHistoryMatches, setEloHistoryMatches] = useState<any[]>([]);
   const [opponentStats, setOpponentStats] = useState<any[]>([]);
   const [opponentStatsLoading, setOpponentStatsLoading] = useState(false);
   const [opponentStatsError, setOpponentStatsError] = useState('');
@@ -66,9 +67,13 @@ const PlayerProfile: React.FC = () => {
         setProfile(profileRes.data);
 
         // Fetch recent matches for the user
-        const matchesRes = await userService.getRecentMatches(id);
+        const [matchesRes, eloHistoryRes] = await Promise.all([
+          userService.getRecentMatches(id),
+          userService.getEloHistory(id),
+        ]);
         const matchesData = matchesRes.data?.data || matchesRes.data || [];
         setMatches(matchesData);
+        setEloHistoryMatches(eloHistoryRes.data || []);
 
         // Fetch factions
         const factionsRes = await publicService.getFactions();
@@ -300,7 +305,7 @@ const PlayerProfile: React.FC = () => {
               <div className="bg-white rounded-lg shadow-md p-8">
                 <Suspense fallback={<RouteLoader />}>
                   <EloChart 
-                    matches={matches}
+                    matches={eloHistoryMatches}
                     currentPlayerId={id || ''}
                   />
                 </Suspense>

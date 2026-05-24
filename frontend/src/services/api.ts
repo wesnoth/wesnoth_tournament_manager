@@ -106,6 +106,7 @@ export const userService = {
     api.put('/users/profile/update', data),
   getUserStats: (id: string) => api.get(`/users/${id}/stats`),
   getUserMonthlyStats: (id: string) => api.get(`/users/${id}/stats/month`),
+  getEloHistory: (id: string) => api.get(`/users/${id}/elo-history`),
   getRecentMatches: (id: string) => api.get(`/users/${id}/matches`),
   getMatches: () => api.get('/matches'),
   searchUsers: (query: string) => api.get(`/users/search/${query}`),

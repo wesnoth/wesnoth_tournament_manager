@@ -36,6 +36,7 @@ const User: React.FC = () => {
   
   const [profile, setProfile] = useState<any>(null);
   const [matches, setMatches] = useState<any[]>([]);
+  const [eloHistoryMatches, setEloHistoryMatches] = useState<any[]>([]);
   const [opponentStats, setOpponentStats] = useState<any[]>([]);
   const [opponentStatsLoading, setOpponentStatsLoading] = useState(false);
   const [opponentStatsError, setOpponentStatsError] = useState('');
@@ -74,10 +75,14 @@ const User: React.FC = () => {
         // Fetch recent matches for the current user
         if (userId) {
           console.log('Fetching matches for user ID:', userId);
-          const matchesRes = await userService.getRecentMatches(userId);
+          const [matchesRes, eloHistoryRes] = await Promise.all([
+            userService.getRecentMatches(userId),
+            userService.getEloHistory(userId),
+          ]);
           console.log('Matches response:', matchesRes.data);
           const matchesData = matchesRes.data?.data || matchesRes.data || [];
           setMatches(matchesData);
+          setEloHistoryMatches(eloHistoryRes.data || []);
         } else {
           console.warn('User ID not available:', userId);
         }
@@ -140,9 +145,13 @@ const User: React.FC = () => {
   const refetchMatches = async () => {
     try {
       if (userId) {
-        const matchesRes = await userService.getRecentMatches(userId);
+        const [matchesRes, eloHistoryRes] = await Promise.all([
+          userService.getRecentMatches(userId),
+          userService.getEloHistory(userId),
+        ]);
         const matchesData = matchesRes.data?.data || matchesRes.data || [];
         setMatches(matchesData);
+        setEloHistoryMatches(eloHistoryRes.data || []);
       }
       
       // Also refresh opponents if they were loaded
@@ -362,7 +371,7 @@ const User: React.FC = () => {
                 <div className="bg-white rounded-lg shadow-md p-8">
                   <Suspense fallback={<RouteLoader />}>
                     <EloChart 
-                      matches={matches}
+                      matches={eloHistoryMatches}
                       currentPlayerId={userId || ''}
                     />
                   </Suspense>
