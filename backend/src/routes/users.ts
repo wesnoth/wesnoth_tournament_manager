@@ -115,13 +115,27 @@ router.get('/:id/elo-history', async (req, res) => {
   try {
     const { id } = req.params;
 
+    const userResult = await query(
+      `SELECT elo_rating FROM users_extension WHERE id = ?`,
+      [id]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const currentElo = Number(userResult.rows[0].elo_rating ?? 1400);
+
     const result = await query(
       `SELECT
         m.id,
         m.winner_id,
         m.loser_id,
         m.created_at,
+        m.elo_change,
+        m.winner_elo_before,
         m.winner_elo_after,
+        m.loser_elo_before,
         m.loser_elo_after,
         w.nickname AS winner_nickname,
         l.nickname AS loser_nickname
@@ -129,14 +143,41 @@ router.get('/:id/elo-history', async (req, res) => {
       JOIN users_extension w ON m.winner_id = w.id
       JOIN users_extension l ON m.loser_id = l.id
       WHERE (m.winner_id = ? OR m.loser_id = ?)
-        AND m.status = 'confirmed'
-        AND m.winner_elo_after IS NOT NULL
-        AND m.loser_elo_after IS NOT NULL
-      ORDER BY m.created_at ASC`,
+        AND m.status != 'cancelled'
+      ORDER BY m.created_at DESC`,
       [id, id]
     );
 
-    res.json(result.rows);
+    let runningElo = currentElo;
+
+    const historyDesc = result.rows.map((match: any) => {
+      const isWinner = match.winner_id === id;
+      const eloAfterRaw = isWinner ? match.winner_elo_after : match.loser_elo_after;
+      const eloBeforeRaw = isWinner ? match.winner_elo_before : match.loser_elo_before;
+      const deltaRaw = Number(match.elo_change ?? 0);
+      const deltaForPlayer = isWinner ? deltaRaw : -deltaRaw;
+
+      const parsedEloAfter = Number(eloAfterRaw);
+      if (Number.isFinite(parsedEloAfter)) {
+        runningElo = parsedEloAfter;
+      }
+
+      const playerEloAfter = runningElo;
+
+      const parsedEloBefore = Number(eloBeforeRaw);
+      if (Number.isFinite(parsedEloBefore)) {
+        runningElo = parsedEloBefore;
+      } else {
+        runningElo = playerEloAfter - deltaForPlayer;
+      }
+
+      return {
+        ...match,
+        player_elo_after: playerEloAfter,
+      };
+    });
+
+    res.json(historyDesc.reverse());
   } catch (error) {
     console.error('Error fetching ELO history:', error);
     res.status(500).json({ error: 'Failed to fetch ELO history' });

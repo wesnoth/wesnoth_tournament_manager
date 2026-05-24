@@ -115,8 +115,10 @@ const EloChart: React.FC<EloChartProps> = ({ matches, currentPlayerId }) => {
         const timestamp = new Date(matchDateRaw).getTime();
         if (!Number.isFinite(timestamp)) return null;
 
+        const directElo = Number(match.player_elo_after);
         const isWinner = match.winner_id === currentPlayerId;
-        const elo = Number(isWinner ? match.winner_elo_after : match.loser_elo_after);
+        const fallbackElo = Number(isWinner ? match.winner_elo_after : match.loser_elo_after);
+        const elo = Number.isFinite(directElo) ? directElo : fallbackElo;
         if (!Number.isFinite(elo)) return null;
 
         return {
