@@ -42,7 +42,7 @@ interface ParseSummary {
   forumMap: string | null;
   forumMapId: string | null;
   forumFactions: Record<string, string>;
-  // Addon detection: ranked_era or ranked_map_picker
+  // Addon detection: ladder_era/ranked_era or ranked_map_picker
   hasRankedEra: boolean;
   hasRankedMapPicker: boolean;
   selectedMapName: string | null; // Map name from selected_map_name in replay when ranked_map_picker is used
@@ -423,15 +423,17 @@ export class ParseNewReplaysRefactorized {
       for (const addon of (addonCheckResult as any).rows) {
         scenarioId = addon.id;
         eraAddonId = addon.addon_id;
-        if (addon.addon_id === 'ranked_era') {
+        if (addon.addon_id === 'ranked_era' || addon.addon_id === 'ladder_era') {
           parseSummary.hasRankedEra = true;
-          console.log(`   ✅ Detected ranked_era addon (factions will be from forum)`);
-          // Normalize "Ranked " prefix from forum factions for ranked_era
-          for (const sideKey of Object.keys(parseSummary.forumFactions)) {
-            const faction = parseSummary.forumFactions[sideKey];
-            if (faction.startsWith('Ranked ')) {
-              parseSummary.forumFactions[sideKey] = faction.substring(7); // Remove "Ranked " prefix
-              console.log(`      Normalized faction: "${faction}" → "${parseSummary.forumFactions[sideKey]}"`);
+          console.log(`   ✅ Detected ${addon.addon_id} addon (factions will be from forum)`);
+          // Normalize "Ranked " prefix from forum factions only for ranked_era
+          if (addon.addon_id === 'ranked_era') {
+            for (const sideKey of Object.keys(parseSummary.forumFactions)) {
+              const faction = parseSummary.forumFactions[sideKey];
+              if (faction.startsWith('Ranked ')) {
+                parseSummary.forumFactions[sideKey] = faction.substring(7); // Remove "Ranked " prefix
+                console.log(`      Normalized faction: "${faction}" → "${parseSummary.forumFactions[sideKey]}"`);
+              }
             }
           }
         } else if (addon.addon_id === 'ranked_map_picker') {
@@ -677,7 +679,8 @@ export class ParseNewReplaysRefactorized {
         : (parseSummary.forumMap || 'Unknown');
       const mapRaw = mapSource;
       const mapId = parseSummary.forumMapId || null;
-      const mapResolved = await this.resolveMap(mapRaw, mapId);
+      const shouldIgnoreLadderSuffix = eraAddonId?.toLowerCase() === 'ladder_era';
+      const mapResolved = await this.resolveMap(mapRaw, mapId, shouldIgnoreLadderSuffix);
       parseSummary.finalMap = mapResolved.name;
       parseSummary.resolvedMap = mapResolved.name;
       parseSummary.mapIsRanked = mapResolved.isRanked;
@@ -1371,7 +1374,11 @@ export class ParseNewReplaysRefactorized {
    * Prefers ranked results: never stops early on an unranked match — saves it as
    * fallback and keeps searching for a ranked entry.
    */
-  private async resolveMap(mapName: string | null, mapId: string | null = null): Promise<{ name: string | null; isRanked: boolean }> {
+  private async resolveMap(
+    mapName: string | null,
+    mapId: string | null = null,
+    ignoreLadderSuffix: boolean = false
+  ): Promise<{ name: string | null; isRanked: boolean }> {
     if (!mapName) {
       return { name: null, isRanked: false };
     }
@@ -1384,6 +1391,13 @@ export class ParseNewReplaysRefactorized {
 
     // Remove all apostrophes for comparison (handles "Sullas Ruins" vs "Sulla's Ruins")
     const removeApostrophes = (s: string) => s.replace(/'/g, '');
+    // Ignore Ladder suffixes from forum/replay naming only when ladder_era is detected
+    const stripLadderSuffix = (s: string) =>
+      s
+        .replace(/\s*\(ladder\)\s*$/i, '')
+        .replace(/[_\s-]+ladder\s*$/i, '')
+        .replace(/\s+/g, ' ')
+        .trim();
 
     const mapNameNorm = normalizeQuotes(mapName);
     const mapNameNoApos = removeApostrophes(mapName);  // Apply to ORIGINAL, not to normalized
@@ -1429,14 +1443,20 @@ export class ParseNewReplaysRefactorized {
       if (mapId) {
         const mapIdWithoutPrefix = mapId.replace(/^multiplayer_/, '').replace(/_/g, ' ');
         console.log(`   [MAP DEBUG] Step 0: Trying by map ID: "${mapId}" → "${mapIdWithoutPrefix}"`);
-        let hit = await tryQuery(
-          `SELECT name, is_ranked FROM game_maps WHERE REPLACE(LOWER(name), "'", "") = REPLACE(LOWER(?), "'", "") ORDER BY is_ranked DESC LIMIT 1`,
-          [mapIdWithoutPrefix],
-          `Map ID exact match`
-        );
-        if (hit) {
-          console.log(`   📌 Matched by map ID: ${mapId} → ${hit.name}`);
-          return hit;
+        const mapIdCandidates = ignoreLadderSuffix
+          ? [mapIdWithoutPrefix, stripLadderSuffix(mapIdWithoutPrefix)].filter((candidate, index, arr) => candidate && arr.indexOf(candidate) === index)
+          : [mapIdWithoutPrefix];
+
+        for (const mapIdCandidate of mapIdCandidates) {
+          const hit = await tryQuery(
+            `SELECT name, is_ranked FROM game_maps WHERE REPLACE(LOWER(name), "'", "") = REPLACE(LOWER(?), "'", "") ORDER BY is_ranked DESC LIMIT 1`,
+            [mapIdCandidate],
+            mapIdCandidate === mapIdWithoutPrefix ? `Map ID exact match` : `Map ID exact match without Ladder suffix`
+          );
+          if (hit) {
+            console.log(`   📌 Matched by map ID: ${mapId} → ${hit.name}`);
+            return hit;
+          }
         }
       }
 
@@ -1448,6 +1468,18 @@ export class ParseNewReplaysRefactorized {
         `Exact match on original "${mapName}"`
       );
       if (hit) return hit;
+
+      // 1d. Exact match ignoring Ladder suffix in source map naming
+      const mapNameNoLadder = ignoreLadderSuffix ? stripLadderSuffix(mapNameNorm) : mapNameNorm;
+      if (ignoreLadderSuffix && mapNameNoLadder && mapNameNoLadder !== mapNameNorm) {
+        console.log(`   [MAP DEBUG] Step 1d: Trying without Ladder suffix: "${mapNameNorm}" → "${mapNameNoLadder}"`);
+        hit = await tryQuery(
+          `SELECT name, is_ranked FROM game_maps WHERE REPLACE(LOWER(name), "'", "") = REPLACE(LOWER(?), "'", "") ORDER BY is_ranked DESC LIMIT 1`,
+          [mapNameNoLadder],
+          `Exact match without Ladder suffix "${mapNameNoLadder}"`
+        );
+        if (hit) return hit;
+      }
 
       // 1b. Exact match with normalized quotes (handles forum U+2019 vs DB U+0027)
       console.log(`   [MAP DEBUG] Step 1b: mapNameNorm !== mapName? ${mapNameNorm !== mapName}`);
@@ -1510,6 +1542,17 @@ export class ParseNewReplaysRefactorized {
           );
           if (hit) return hit;
         }
+
+        // 2d. Exact match on cleaned name without Ladder suffix
+        const cleanedNoLadder = ignoreLadderSuffix ? stripLadderSuffix(cleanedNorm) : cleanedNorm;
+        if (ignoreLadderSuffix && cleanedNoLadder && cleanedNoLadder !== cleanedNorm) {
+          hit = await tryQuery(
+            `SELECT name, is_ranked FROM game_maps WHERE REPLACE(LOWER(name), "'", "") = REPLACE(LOWER(?), "'", "") ORDER BY is_ranked DESC LIMIT 1`,
+            [cleanedNoLadder],
+            `Exact match on cleaned normalized without Ladder suffix "${cleanedNoLadder}"`
+          );
+          if (hit) return hit;
+        }
       }
 
       // 3. LIKE on normalized map name
@@ -1569,6 +1612,7 @@ export class ParseNewReplaysRefactorized {
       // Remove suffix based on addon
       if (addonId?.toLowerCase() === 'ladder_era') {
         name = name.replace(/_Ladder_Random$/i, '');
+        name = name.replace(/_Ladder$/i, '');
       } else if (addonId?.toLowerCase() === 'ranked_era') {
         name = name.replace(/_Ranked_Random$/i, '');
       }
