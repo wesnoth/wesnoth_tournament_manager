@@ -150,6 +150,9 @@ export function buildNotificationMessage(
       break;
     case 'cancelled':
       message = `🚫 **Proposal Cancelled** - ${actorName} has withdrawn the proposal`;
+      if (ranges.length > 0) {
+        message += `:\n${formatTimeRangesForDiscord(ranges)}`;
+      }
       break;
   }
 

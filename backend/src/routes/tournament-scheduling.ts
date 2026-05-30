@@ -35,6 +35,41 @@ const isoToMySQLDatetime = (isoString: string): string => {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 };
 
+interface TeamNotificationContext {
+  teamName: string;
+  memberUserIds: string[];
+  memberNames: string[];
+  memberDiscordIds: string[];
+}
+
+const getTeamNotificationContext = async (tournamentId: string, teamId: string): Promise<TeamNotificationContext> => {
+  const teamResult = await query(
+    'SELECT name FROM tournament_teams WHERE id = ?',
+    [teamId]
+  );
+  const teamName = teamResult.rows && teamResult.rows.length > 0
+    ? teamResult.rows[0].name
+    : 'Team';
+
+  const membersResult = await query(
+    `SELECT tp.user_id, ue.discord_id, COALESCE(ue.nickname, ue.username, tp.user_id) AS display_name
+     FROM tournament_participants tp
+     LEFT JOIN users_extension ue ON tp.user_id = ue.id
+     WHERE tp.tournament_id = ? AND tp.team_id = ?`,
+    [tournamentId, teamId]
+  );
+
+  const rows = membersResult.rows || [];
+  return {
+    teamName,
+    memberUserIds: rows.map((row: any) => row.user_id),
+    memberNames: rows.map((row: any) => row.display_name),
+    memberDiscordIds: rows
+      .map((row: any) => row.discord_id)
+      .filter((id: string | null) => id !== null && id !== undefined),
+  };
+};
+
 /**
  * GET /pending-confirmations
  * Get all schedules pending confirmation for the current user
@@ -463,42 +498,34 @@ router.post('/:tournamentRoundMatchId/propose-schedule', authMiddleware, async (
     // For team tournaments, get team members; for 1v1, get opponent user
     let opponentName = 'Opponent';
     let proposerName = 'Player';
+    let actorUserName = 'Player';
     let opponentEmail = null;
     let opponentSocketRecipients: string[] = [];
+    let proposerTeamMembers: string[] = [];
+    let opponentTeamMembers: string[] = [];
+
+    const actorResult = await query(
+      `SELECT COALESCE(nickname, username, id) AS display_name FROM users_extension WHERE id = ? LIMIT 1`,
+      [userId]
+    );
+    if (actorResult.rows && actorResult.rows.length > 0) {
+      actorUserName = actorResult.rows[0].display_name;
+    }
 
     if (match.tournament_mode === 'team') {
       // Team tournament - get all members of opponent team
-      const teamResult = await query(
-        'SELECT name FROM tournament_teams WHERE id = ?',
-        [opponentId]
-      );
-      opponentName = teamResult.rows && teamResult.rows.length > 0 ? teamResult.rows[0].name : 'Opponent Team';
+      const proposerTeamId = isPlayer1 ? match.player1_id : match.player2_id;
+      const proposerTeamContext = await getTeamNotificationContext(match.tournament_id, proposerTeamId);
+      const opponentTeamContext = await getTeamNotificationContext(match.tournament_id, opponentId);
 
-      // Get proposer team name
-      const proposerTeamResult = await query(
-        'SELECT name FROM tournament_teams WHERE id = ?',
-        [isPlayer1 ? match.player1_id : match.player2_id]
-      );
-      proposerName = proposerTeamResult.rows && proposerTeamResult.rows.length > 0 ? proposerTeamResult.rows[0].name : 'Team';
+      proposerName = proposerTeamContext.teamName;
+      opponentName = opponentTeamContext.teamName;
+      proposerTeamMembers = proposerTeamContext.memberNames;
+      opponentTeamMembers = opponentTeamContext.memberNames;
+      opponentSocketRecipients = opponentTeamContext.memberUserIds;
 
-      // Get all users in the opponent team with their Discord IDs
-      const teamMembersResult = await query(
-        `SELECT tp.user_id, ue.discord_id FROM tournament_participants tp
-         LEFT JOIN users_extension ue ON tp.user_id = ue.id
-         WHERE tp.tournament_id = ? AND tp.team_id = ?`,
-        [match.tournament_id, opponentId]
-      );
-
-      if (teamMembersResult.rows) {
-        opponentSocketRecipients = teamMembersResult.rows.map((row: any) => row.user_id);
-        // Collect Discord IDs for mentions (filter out null values)
-        const opponentDiscordIds = teamMembersResult.rows
-          .map((row: any) => row.discord_id)
-          .filter((id: string | null) => id !== null && id !== undefined);
-        
-        if (opponentDiscordIds.length > 0) {
-          opponentEmail = opponentDiscordIds; // Store Discord IDs for later use
-        }
+      if (opponentTeamContext.memberDiscordIds.length > 0) {
+        opponentEmail = opponentTeamContext.memberDiscordIds;
       }
     } else {
       // 1v1 tournament
@@ -543,9 +570,12 @@ router.post('/:tournamentRoundMatchId/propose-schedule', authMiddleware, async (
       'schedule_proposal',
       {
         tournamentName,
+        actionByUserName: actorUserName,
         fromTeamName: match.tournament_mode === 'team' ? proposerName : undefined,
-        fromUserName: match.tournament_mode === '1v1' ? proposerName : undefined,
+        fromTeamMembers: match.tournament_mode === 'team' ? proposerTeamMembers : undefined,
+        fromUserName: match.tournament_mode === '1v1' ? proposerName : actorUserName,
         toTeamName: match.tournament_mode === 'team' ? opponentName : undefined,
+        toTeamMembers: match.tournament_mode === 'team' ? opponentTeamMembers : undefined,
         toUserName: match.tournament_mode === '1v1' ? opponentName : undefined,
         toDiscordIds: Array.isArray(opponentEmail) ? opponentEmail : undefined,
         proposedDateTime: scheduleTimeUTC,
@@ -691,6 +721,9 @@ router.post('/:tournamentRoundMatchId/confirm-schedule', authMiddleware, async (
     let opponentName = 'Opponent';
     let proposerSocketRecipients: string[] = [];
     let confirmerSocketRecipients: string[] = [];
+    let proposerTeamMembers: string[] = [];
+    let confirmerTeamMembers: string[] = [];
+    let proposerTeamName: string | undefined;
 
     const proposerId = match.scheduled_by_player_id;
     const confirmerId = userId;
@@ -729,33 +762,14 @@ router.post('/:tournamentRoundMatchId/confirm-schedule', authMiddleware, async (
 
     if (match.tournament_mode === 'team') {
       // Get proposer team name and members with Discord IDs
-      const proposerTeamResult = await query(
-        'SELECT name FROM tournament_teams WHERE id = ?',
-        [proposerTeamId]
-      );
-      opponentName = proposerTeamResult.rows && proposerTeamResult.rows.length > 0 ? proposerTeamResult.rows[0].name : 'Opponent Team';
-
-      // Get proposer team members with Discord IDs
-      const proposerMembersResult = await query(
-        `SELECT tp.user_id, ue.discord_id FROM tournament_participants tp
-         LEFT JOIN users_extension ue ON tp.user_id = ue.id
-         WHERE tp.tournament_id = ? AND tp.team_id = ?`,
-        [match.tournament_id, proposerTeamId]
-      );
-      if (proposerMembersResult.rows) {
-        proposerSocketRecipients = proposerMembersResult.rows.map((row: any) => row.user_id);
-      }
-
-      // Get confirmer team members with Discord IDs
-      const confirmerMembersResult = await query(
-        `SELECT tp.user_id, ue.discord_id FROM tournament_participants tp
-         LEFT JOIN users_extension ue ON tp.user_id = ue.id
-         WHERE tp.tournament_id = ? AND tp.team_id = ?`,
-        [match.tournament_id, confirmerTeamId]
-      );
-      if (confirmerMembersResult.rows) {
-        confirmerSocketRecipients = confirmerMembersResult.rows.map((row: any) => row.user_id);
-      }
+      const proposerTeamContext = await getTeamNotificationContext(match.tournament_id, proposerTeamId!);
+      const confirmerTeamContext = await getTeamNotificationContext(match.tournament_id, confirmerTeamId!);
+      proposerTeamName = proposerTeamContext.teamName;
+      opponentName = proposerTeamContext.teamName;
+      proposerSocketRecipients = proposerTeamContext.memberUserIds;
+      confirmerSocketRecipients = confirmerTeamContext.memberUserIds;
+      proposerTeamMembers = proposerTeamContext.memberNames;
+      confirmerTeamMembers = confirmerTeamContext.memberNames;
     } else {
       // 1v1 tournament
       const proposerResult = await query(
@@ -777,8 +791,17 @@ router.post('/:tournamentRoundMatchId/confirm-schedule', authMiddleware, async (
 
     // Get confirmer name (the one who just confirmed)
     let confirmerName = 'Team';
+    let confirmerUserName = 'Player';
     let proposerDiscordIds: string[] = [];
     let confirmerDiscordIds: string[] = [];
+
+    const confirmerUserResult = await query(
+      `SELECT COALESCE(nickname, username, id) AS display_name FROM users_extension WHERE id = ? LIMIT 1`,
+      [confirmerId]
+    );
+    if (confirmerUserResult.rows && confirmerUserResult.rows.length > 0) {
+      confirmerUserName = confirmerUserResult.rows[0].display_name;
+    }
     
     if (match.tournament_mode === 'team') {
       const confirmerTeamResult = await query(
@@ -839,12 +862,15 @@ router.post('/:tournamentRoundMatchId/confirm-schedule', authMiddleware, async (
       'schedule_confirmed',
       {
         tournamentName,
-        fromUserName: match.tournament_mode === '1v1' ? opponentName : undefined,
-        fromTeamName: match.tournament_mode === 'team' ? opponentName : undefined,
+        actionByUserName: confirmerUserName,
+        fromUserName: match.tournament_mode === '1v1' ? confirmerName : confirmerUserName,
+        fromTeamName: match.tournament_mode === 'team' ? confirmerName : undefined,
+        fromTeamMembers: match.tournament_mode === 'team' ? confirmerTeamMembers : undefined,
         fromDiscordId: proposerDiscordIds.length > 0 ? proposerDiscordIds[0] : undefined,
-        toUserName: match.tournament_mode === '1v1' ? confirmerName : undefined,
-        toTeamName: match.tournament_mode === 'team' ? confirmerName : undefined,
-        toDiscordIds: confirmerDiscordIds.length > 0 ? confirmerDiscordIds : undefined,
+        toUserName: match.tournament_mode === '1v1' ? opponentName : undefined,
+        toTeamName: match.tournament_mode === 'team' ? proposerTeamName : undefined,
+        toTeamMembers: match.tournament_mode === 'team' ? proposerTeamMembers : undefined,
+        toDiscordIds: proposerDiscordIds.length > 0 ? proposerDiscordIds : undefined,
         proposedDateTime: scheduleTimeUTC,
       }
     ).catch(err => console.error('⚠️ Discord notification failed:', err));
@@ -1004,6 +1030,7 @@ router.post(
 
       const match = matchResult.rows[0];
       let isParticipant = false;
+      let userTeamId: string | null = null;
 
       if (match.tournament_mode === 'team') {
         // Team tournament - check if user is on one of the teams
@@ -1015,7 +1042,7 @@ router.post(
         );
 
         if (userTeamResult.rows && userTeamResult.rows.length > 0) {
-          const userTeamId = userTeamResult.rows[0].team_id;
+          userTeamId = userTeamResult.rows[0].team_id;
           isParticipant = userTeamId === match.player1_id || userTeamId === match.player2_id;
         }
       } else {
@@ -1041,40 +1068,32 @@ router.post(
       let opponentIds: string[] = [];
       let opponentName = 'Opponent';
       let proposerName = 'Player';
+      let actorUserName = 'Player';
       let opponentDiscordIds: string[] = [];
+      let proposerTeamMembers: string[] = [];
+      let opponentTeamMembers: string[] = [];
+
+      const actorResult = await query(
+        `SELECT COALESCE(nickname, username, id) AS display_name FROM users_extension WHERE id = ? LIMIT 1`,
+        [userId]
+      );
+      if (actorResult.rows && actorResult.rows.length > 0) {
+        actorUserName = actorResult.rows[0].display_name;
+      }
 
       if (match.tournament_mode === 'team') {
         // Team tournament - get all members of opponent team
-        const opponentTeamId = userId === match.player1_id ? match.player2_id : match.player1_id;
-        
-        // Get opponent team name
-        const teamResult = await query(
-          'SELECT name FROM tournament_teams WHERE id = ?',
-          [opponentTeamId]
-        );
-        opponentName = teamResult.rows && teamResult.rows.length > 0 ? teamResult.rows[0].name : 'Opponent Team';
+        const proposerTeamId = userTeamId!;
+        const opponentTeamId = proposerTeamId === match.player1_id ? match.player2_id : match.player1_id;
+        const proposerTeamContext = await getTeamNotificationContext(tournamentId, proposerTeamId);
+        const opponentTeamContext = await getTeamNotificationContext(tournamentId, opponentTeamId);
 
-        // Get proposer team name
-        const proposerTeamResult = await query(
-          'SELECT name FROM tournament_teams WHERE id = ?',
-          [userId === match.player1_id ? match.player1_id : match.player2_id]
-        );
-        proposerName = proposerTeamResult.rows && proposerTeamResult.rows.length > 0 ? proposerTeamResult.rows[0].name : 'Team';
-
-        // Get all users in the opponent team
-        const teamMembersResult = await query(
-          `SELECT tp.user_id, ue.discord_id FROM tournament_participants tp
-           LEFT JOIN users_extension ue ON tp.user_id = ue.id
-           WHERE tp.tournament_id = ? AND tp.team_id = ?`,
-          [tournamentId, opponentTeamId]
-        );
-
-        if (teamMembersResult.rows) {
-          opponentIds = teamMembersResult.rows.map((row: any) => row.user_id);
-          opponentDiscordIds = teamMembersResult.rows
-            .map((row: any) => row.discord_id)
-            .filter((id: string | null) => id !== null && id !== undefined);
-        }
+        proposerName = proposerTeamContext.teamName;
+        opponentName = opponentTeamContext.teamName;
+        proposerTeamMembers = proposerTeamContext.memberNames;
+        opponentTeamMembers = opponentTeamContext.memberNames;
+        opponentIds = opponentTeamContext.memberUserIds;
+        opponentDiscordIds = opponentTeamContext.memberDiscordIds;
       } else {
         // 1v1 tournament
         const opponentId = userId === match.player1_id ? match.player2_id : match.player1_id;
@@ -1115,9 +1134,12 @@ router.post(
         'schedule_proposal',
         {
           tournamentName,
+          actionByUserName: actorUserName,
           fromTeamName: match.tournament_mode === 'team' ? proposerName : undefined,
-          fromUserName: match.tournament_mode === '1v1' ? proposerName : undefined,
+          fromTeamMembers: match.tournament_mode === 'team' ? proposerTeamMembers : undefined,
+          fromUserName: match.tournament_mode === '1v1' ? proposerName : actorUserName,
           toTeamName: match.tournament_mode === 'team' ? opponentName : undefined,
+          toTeamMembers: match.tournament_mode === 'team' ? opponentTeamMembers : undefined,
           toUserName: match.tournament_mode === '1v1' ? opponentName : undefined,
           toDiscordIds: opponentDiscordIds.length > 0 ? opponentDiscordIds : undefined,
           proposedTimeRanges: formattedRanges,
@@ -1187,6 +1209,7 @@ router.post(
 
       const match = matchResult.rows[0];
       let isParticipant = false;
+      let userTeamId: string | null = null;
 
       if (match.tournament_mode === 'team') {
         // Team tournament - check if user is on one of the teams
@@ -1198,7 +1221,7 @@ router.post(
         );
 
         if (userTeamResult.rows && userTeamResult.rows.length > 0) {
-          const userTeamId = userTeamResult.rows[0].team_id;
+          userTeamId = userTeamResult.rows[0].team_id;
           isParticipant = userTeamId === match.player1_id || userTeamId === match.player2_id;
         }
       } else {
@@ -1224,40 +1247,32 @@ router.post(
       let opponentIds: string[] = [];
       let opponentName = 'Opponent';
       let proposerName = 'Player';
+      let actorUserName = 'Player';
       let opponentDiscordIds: string[] = [];
+      let proposerTeamMembers: string[] = [];
+      let opponentTeamMembers: string[] = [];
+
+      const actorResult = await query(
+        `SELECT COALESCE(nickname, username, id) AS display_name FROM users_extension WHERE id = ? LIMIT 1`,
+        [userId]
+      );
+      if (actorResult.rows && actorResult.rows.length > 0) {
+        actorUserName = actorResult.rows[0].display_name;
+      }
 
       if (match.tournament_mode === 'team') {
         // Team tournament - get all members of opponent team
-        const opponentTeamId = userId === match.player1_id ? match.player2_id : match.player1_id;
-        
-        // Get opponent team name
-        const teamResult = await query(
-          'SELECT name FROM tournament_teams WHERE id = ?',
-          [opponentTeamId]
-        );
-        opponentName = teamResult.rows && teamResult.rows.length > 0 ? teamResult.rows[0].name : 'Opponent Team';
+        const proposerTeamId = userTeamId!;
+        const opponentTeamId = proposerTeamId === match.player1_id ? match.player2_id : match.player1_id;
+        const proposerTeamContext = await getTeamNotificationContext(tournamentId, proposerTeamId);
+        const opponentTeamContext = await getTeamNotificationContext(tournamentId, opponentTeamId);
 
-        // Get proposer team name
-        const proposerTeamResult = await query(
-          'SELECT name FROM tournament_teams WHERE id = ?',
-          [userId === match.player1_id ? match.player1_id : match.player2_id]
-        );
-        proposerName = proposerTeamResult.rows && proposerTeamResult.rows.length > 0 ? proposerTeamResult.rows[0].name : 'Team';
-
-        // Get all users in the opponent team
-        const teamMembersResult = await query(
-          `SELECT tp.user_id, ue.discord_id FROM tournament_participants tp
-           LEFT JOIN users_extension ue ON tp.user_id = ue.id
-           WHERE tp.tournament_id = ? AND tp.team_id = ?`,
-          [tournamentId, opponentTeamId]
-        );
-
-        if (teamMembersResult.rows) {
-          opponentIds = teamMembersResult.rows.map((row: any) => row.user_id);
-          opponentDiscordIds = teamMembersResult.rows
-            .map((row: any) => row.discord_id)
-            .filter((id: string | null) => id !== null && id !== undefined);
-        }
+        proposerName = proposerTeamContext.teamName;
+        opponentName = opponentTeamContext.teamName;
+        proposerTeamMembers = proposerTeamContext.memberNames;
+        opponentTeamMembers = opponentTeamContext.memberNames;
+        opponentIds = opponentTeamContext.memberUserIds;
+        opponentDiscordIds = opponentTeamContext.memberDiscordIds;
       } else {
         // 1v1 tournament
         const opponentId = userId === match.player1_id ? match.player2_id : match.player1_id;
@@ -1298,9 +1313,12 @@ router.post(
         'schedule_proposal',
         {
           tournamentName,
+          actionByUserName: actorUserName,
           fromTeamName: match.tournament_mode === 'team' ? proposerName : undefined,
-          fromUserName: match.tournament_mode === '1v1' ? proposerName : undefined,
+          fromTeamMembers: match.tournament_mode === 'team' ? proposerTeamMembers : undefined,
+          fromUserName: match.tournament_mode === '1v1' ? proposerName : actorUserName,
           toTeamName: match.tournament_mode === 'team' ? opponentName : undefined,
+          toTeamMembers: match.tournament_mode === 'team' ? opponentTeamMembers : undefined,
           toUserName: match.tournament_mode === '1v1' ? opponentName : undefined,
           toDiscordIds: opponentDiscordIds.length > 0 ? opponentDiscordIds : undefined,
           proposedTimeRanges: formattedRanges,
@@ -1449,10 +1467,13 @@ router.post(
          // Separate confirmed and rejected slots
          const confirmedSlots = slotsResult.rows?.filter((s: any) => s.status === 'confirmed').map((s: any) => s.slot_datetime) || [];
          const rejectedSlots = slotsResult.rows?.filter((s: any) => s.status === 'rejected').map((s: any) => s.slot_datetime) || [];
+         const rejectedRanges = groupSlotsIntoRanges(rejectedSlots);
+         const formattedRejectedRanges = rejectedRanges.length > 0 ? formatTimeRangesForDiscord(rejectedRanges) : undefined;
 
          // Get confirmer name
          let confirmerName = 'Player';
-         let confirmerDiscordIds: string[] = [];
+         let confirmerUserName = 'Player';
+         let confirmerTeamMembers: string[] = [];
          if (tournamentMode === 'team') {
            const userTeamResult = await query(
              `SELECT team_id FROM tournament_participants WHERE tournament_id = ? AND user_id = ? LIMIT 1`,
@@ -1460,17 +1481,17 @@ router.post(
            );
            if (userTeamResult.rows && userTeamResult.rows.length > 0) {
              const teamId = userTeamResult.rows[0].team_id;
-             const teamResult = await query(`SELECT name FROM tournament_teams WHERE id = ?`, [teamId]);
-             confirmerName = teamResult.rows && teamResult.rows.length > 0 ? teamResult.rows[0].name : 'Team';
+             const teamContext = await getTeamNotificationContext(tournamentId, teamId);
+             confirmerName = teamContext.teamName;
+             confirmerTeamMembers = teamContext.memberNames;
+           }
 
-             // Get team members' Discord IDs
-             const membersResult = await query(
-               `SELECT ue.discord_id FROM tournament_participants tp
-                LEFT JOIN users_extension ue ON tp.user_id = ue.id
-                WHERE tp.tournament_id = ? AND tp.team_id = ? AND ue.discord_id IS NOT NULL`,
-               [tournamentId, teamId]
-             );
-             confirmerDiscordIds = membersResult.rows?.map((r: any) => r.discord_id) || [];
+           const confirmerUserResult = await query(
+             `SELECT COALESCE(nickname, username, id) AS display_name FROM users_extension WHERE id = ? LIMIT 1`,
+             [userId]
+           );
+           if (confirmerUserResult.rows && confirmerUserResult.rows.length > 0) {
+             confirmerUserName = confirmerUserResult.rows[0].display_name;
            }
          } else {
            const userResult = await query(
@@ -1478,14 +1499,13 @@ router.post(
              [userId]
            );
            confirmerName = userResult.rows && userResult.rows.length > 0 ? userResult.rows[0].username : 'Player';
-           if (userResult.rows && userResult.rows.length > 0 && userResult.rows[0].discord_id) {
-             confirmerDiscordIds = [userResult.rows[0].discord_id];
-           }
+           confirmerUserName = confirmerName;
          }
 
          // Get proposer name and Discord IDs
          let proposerName = 'Player';
          let proposerDiscordIds: string[] = [];
+         let proposerTeamMembers: string[] = [];
          if (tournamentMode === 'team') {
            const propTeamResult = await query(
              `SELECT team_id FROM tournament_participants WHERE tournament_id = ? AND user_id = ? LIMIT 1`,
@@ -1493,8 +1513,10 @@ router.post(
            );
            if (propTeamResult.rows && propTeamResult.rows.length > 0) {
              const teamId = propTeamResult.rows[0].team_id;
-             const teamResult = await query(`SELECT name FROM tournament_teams WHERE id = ?`, [teamId]);
-             proposerName = teamResult.rows && teamResult.rows.length > 0 ? teamResult.rows[0].name : 'Team';
+             const teamContext = await getTeamNotificationContext(tournamentId, teamId);
+             proposerName = teamContext.teamName;
+             proposerTeamMembers = teamContext.memberNames;
+             proposerDiscordIds = teamContext.memberDiscordIds;
            }
          } else {
            const userResult = await query(
@@ -1519,10 +1541,13 @@ router.post(
              'schedule_confirmed',
              {
                tournamentName,
-               fromUserName: tournamentMode === '1v1' ? confirmerName : undefined,
+               actionByUserName: confirmerUserName,
+               fromUserName: tournamentMode === '1v1' ? confirmerName : confirmerUserName,
                fromTeamName: tournamentMode === 'team' ? confirmerName : undefined,
+               fromTeamMembers: tournamentMode === 'team' ? confirmerTeamMembers : undefined,
                toUserName: tournamentMode === '1v1' ? proposerName : undefined,
                toTeamName: tournamentMode === 'team' ? proposerName : undefined,
+               toTeamMembers: tournamentMode === 'team' ? proposerTeamMembers : undefined,
                toDiscordIds: proposerDiscordIds.length > 0 ? proposerDiscordIds : undefined,
                proposedTimeRanges: formattedRanges,
              }
@@ -1549,11 +1574,15 @@ router.post(
              'schedule_rejected',
              {
                tournamentName,
-               fromUserName: tournamentMode === '1v1' ? confirmerName : undefined,
+               actionByUserName: confirmerUserName,
+               fromUserName: tournamentMode === '1v1' ? confirmerName : confirmerUserName,
                fromTeamName: tournamentMode === 'team' ? confirmerName : undefined,
+               fromTeamMembers: tournamentMode === 'team' ? confirmerTeamMembers : undefined,
                toUserName: tournamentMode === '1v1' ? proposerName : undefined,
                toTeamName: tournamentMode === 'team' ? proposerName : undefined,
+               toTeamMembers: tournamentMode === 'team' ? proposerTeamMembers : undefined,
                toDiscordIds: proposerDiscordIds.length > 0 ? proposerDiscordIds : undefined,
+               proposedTimeRanges: formattedRejectedRanges,
              }
            ).catch(err => console.error('⚠️ Discord notification failed:', err));
 
@@ -1956,7 +1985,8 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
 
         // Get counter-proposer name
         let counterProposerName = 'Player';
-        let counterProposerDiscordIds: string[] = [];
+        let counterProposerUserName = 'Player';
+        let counterProposerMembers: string[] = [];
         if (tournamentMode === 'team') {
           const userTeamResult = await query(
             `SELECT team_id FROM tournament_participants WHERE tournament_id = ? AND user_id = ? LIMIT 1`,
@@ -1964,17 +1994,17 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
           );
           if (userTeamResult.rows && userTeamResult.rows.length > 0) {
             const teamId = userTeamResult.rows[0].team_id;
-            const teamResult = await query(`SELECT name FROM tournament_teams WHERE id = ?`, [teamId]);
-            counterProposerName = teamResult.rows && teamResult.rows.length > 0 ? teamResult.rows[0].name : 'Team';
+            const teamContext = await getTeamNotificationContext(tournamentId, teamId);
+            counterProposerName = teamContext.teamName;
+            counterProposerMembers = teamContext.memberNames;
+          }
 
-            // Get team members' Discord IDs
-            const membersResult = await query(
-              `SELECT ue.discord_id FROM tournament_participants tp
-               LEFT JOIN users_extension ue ON tp.user_id = ue.id
-               WHERE tp.tournament_id = ? AND tp.team_id = ? AND ue.discord_id IS NOT NULL`,
-              [tournamentId, teamId]
-            );
-            counterProposerDiscordIds = membersResult.rows?.map((r: any) => r.discord_id) || [];
+          const actorResult = await query(
+            `SELECT COALESCE(nickname, username, id) AS display_name FROM users_extension WHERE id = ? LIMIT 1`,
+            [userId]
+          );
+          if (actorResult.rows && actorResult.rows.length > 0) {
+            counterProposerUserName = actorResult.rows[0].display_name;
           }
         } else {
           const userResult = await query(
@@ -1982,14 +2012,13 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
             [userId]
           );
           counterProposerName = userResult.rows && userResult.rows.length > 0 ? userResult.rows[0].username : 'Player';
-          if (userResult.rows && userResult.rows.length > 0 && userResult.rows[0].discord_id) {
-            counterProposerDiscordIds = [userResult.rows[0].discord_id];
-          }
+          counterProposerUserName = counterProposerName;
         }
 
         // Get original proposer name
         let originalProposerName = 'Player';
         let originalProposerDiscordIds: string[] = [];
+        let originalProposerMembers: string[] = [];
         if (tournamentMode === 'team') {
           const propTeamResult = await query(
             `SELECT team_id FROM tournament_participants WHERE tournament_id = ? AND user_id = ? LIMIT 1`,
@@ -1997,8 +2026,10 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
           );
           if (propTeamResult.rows && propTeamResult.rows.length > 0) {
             const teamId = propTeamResult.rows[0].team_id;
-            const teamResult = await query(`SELECT name FROM tournament_teams WHERE id = ?`, [teamId]);
-            originalProposerName = teamResult.rows && teamResult.rows.length > 0 ? teamResult.rows[0].name : 'Team';
+            const teamContext = await getTeamNotificationContext(tournamentId, teamId);
+            originalProposerName = teamContext.teamName;
+            originalProposerMembers = teamContext.memberNames;
+            originalProposerDiscordIds = teamContext.memberDiscordIds;
           }
         } else {
           const userResult = await query(
@@ -2022,10 +2053,13 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
           'schedule_proposal',
           {
             tournamentName,
-            fromUserName: tournamentMode === '1v1' ? counterProposerName : undefined,
+            actionByUserName: counterProposerUserName,
+            fromUserName: tournamentMode === '1v1' ? counterProposerName : counterProposerUserName,
             fromTeamName: tournamentMode === 'team' ? counterProposerName : undefined,
+            fromTeamMembers: tournamentMode === 'team' ? counterProposerMembers : undefined,
             toUserName: tournamentMode === '1v1' ? originalProposerName : undefined,
             toTeamName: tournamentMode === 'team' ? originalProposerName : undefined,
+            toTeamMembers: tournamentMode === 'team' ? originalProposerMembers : undefined,
             toDiscordIds: originalProposerDiscordIds.length > 0 ? originalProposerDiscordIds : undefined,
             proposedTimeRanges: formattedRanges,
             messageExtra: notes || undefined,
@@ -2094,18 +2128,22 @@ router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, re
 
       // Get proposer info
       let proposerName = 'Player';
+      let proposerUserName = 'Player';
+      let proposerTeamMembers: string[] = [];
       const proposerResult = await query(
-        `SELECT nickname, discord_id FROM users_extension WHERE id = ?`,
+        `SELECT COALESCE(nickname, username, id) AS display_name, discord_id FROM users_extension WHERE id = ?`,
         [userId]
       );
       if (proposerResult.rows && proposerResult.rows.length > 0) {
-        proposerName = proposerResult.rows[0].nickname;
+        proposerUserName = proposerResult.rows[0].display_name;
+        proposerName = proposerUserName;
       }
 
       // Get opponent info
       let opponentIds: string[] = [];
       let opponentDiscordIds: string[] = [];
       let opponentName = 'Opponent';
+      let opponentTeamMembers: string[] = [];
 
       const matchResult = await query(
         `SELECT player1_id, player2_id FROM tournament_round_matches WHERE id = ?`,
@@ -2117,25 +2155,26 @@ router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, re
         const opponentId = userId === match.player1_id ? match.player2_id : match.player1_id;
 
         if (tournamentMode === 'team') {
-          const teamResult = await query(
-            'SELECT name FROM tournament_teams WHERE id = ?',
-            [opponentId]
+          const proposerTeamResult = await query(
+            `SELECT team_id FROM tournament_participants WHERE tournament_id = ? AND user_id = ? LIMIT 1`,
+            [tournamentId, userId]
           );
-          opponentName = teamResult.rows && teamResult.rows.length > 0 ? teamResult.rows[0].name : 'Opponent Team';
+          const proposerTeamId = proposerTeamResult.rows && proposerTeamResult.rows.length > 0
+            ? proposerTeamResult.rows[0].team_id
+            : null;
+          const opponentTeamId = proposerTeamId === match.player1_id ? match.player2_id : match.player1_id;
 
-          const teamMembersResult = await query(
-            `SELECT tp.user_id, ue.discord_id FROM tournament_participants tp
-             LEFT JOIN users_extension ue ON tp.user_id = ue.id
-             WHERE tp.tournament_id = ? AND tp.team_id = ?`,
-            [tournamentId, opponentId]
-          );
-
-          if (teamMembersResult.rows) {
-            opponentIds = teamMembersResult.rows.map((row: any) => row.user_id);
-            opponentDiscordIds = teamMembersResult.rows
-              .map((row: any) => row.discord_id)
-              .filter((id: string | null) => id !== null && id !== undefined);
+          if (proposerTeamId) {
+            const proposerTeamContext = await getTeamNotificationContext(tournamentId, proposerTeamId);
+            proposerName = proposerTeamContext.teamName;
+            proposerTeamMembers = proposerTeamContext.memberNames;
           }
+
+          const opponentTeamContext = await getTeamNotificationContext(tournamentId, opponentTeamId);
+          opponentName = opponentTeamContext.teamName;
+          opponentTeamMembers = opponentTeamContext.memberNames;
+          opponentIds = opponentTeamContext.memberUserIds;
+          opponentDiscordIds = opponentTeamContext.memberDiscordIds;
         } else {
           opponentIds = [opponentId];
           const opponentResult = await query(
@@ -2160,10 +2199,13 @@ router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, re
         'schedule_changed',
         {
           tournamentName,
-          fromUserName: tournamentMode === '1v1' ? proposerName : undefined,
+          actionByUserName: proposerUserName,
+          fromUserName: tournamentMode === '1v1' ? proposerName : proposerUserName,
           fromTeamName: tournamentMode === 'team' ? proposerName : undefined,
+          fromTeamMembers: tournamentMode === 'team' ? proposerTeamMembers : undefined,
           toUserName: tournamentMode === '1v1' ? opponentName : undefined,
           toTeamName: tournamentMode === 'team' ? opponentName : undefined,
+          toTeamMembers: tournamentMode === 'team' ? opponentTeamMembers : undefined,
           toDiscordIds: opponentDiscordIds.length > 0 ? opponentDiscordIds : undefined,
           proposedTimeRanges: formattedRanges,
           messageExtra: notes || undefined,
@@ -2210,7 +2252,7 @@ router.delete('/proposals/:proposalId', authMiddleware, async (req: AuthRequest,
 
     // Get proposal details before canceling (handles both round matches and direct matches)
     const proposalResult = await query(
-      `SELECT p.tournament_round_match_id, p.tournament_match_id, p.proposed_by_user_id
+      `SELECT p.id, p.tournament_round_match_id, p.tournament_match_id, p.proposed_by_user_id
        FROM match_schedule_proposals p
        WHERE p.id = ?`,
       [proposalId]
@@ -2224,6 +2266,20 @@ router.delete('/proposals/:proposalId', authMiddleware, async (req: AuthRequest,
     if (proposal.proposed_by_user_id !== userId) {
       return res.status(403).json({ error: 'Only proposer can cancel proposal' });
     }
+
+    // Get current proposal slots before deleting proposal/slots
+    const proposalSlotsResult = await query(
+      `SELECT slot_datetime
+       FROM match_schedule_slots
+       WHERE proposal_id = ?
+       ORDER BY slot_datetime ASC`,
+      [proposal.id]
+    );
+    const cancelledSlotDatetimes = (proposalSlotsResult.rows || []).map((row: any) => row.slot_datetime);
+    const cancelledRanges = groupSlotsIntoRanges(cancelledSlotDatetimes);
+    const formattedCancelledRanges = cancelledRanges.length > 0
+      ? formatTimeRangesForDiscord(cancelledRanges)
+      : undefined;
 
     // Cancel the proposal
     await cancelProposal(proposalId, userId);
@@ -2293,27 +2349,72 @@ router.delete('/proposals/:proposalId', authMiddleware, async (req: AuthRequest,
       let opponentIds: string[] = [];
       let opponentDiscordIds: string[] = [];
       let opponentName = 'Opponent';
+      let cancellingTeamName: string | undefined;
+      let cancellingTeamMembers: string[] = [];
+      let opponentTeamMembers: string[] = [];
 
       if (player1Id && player2Id) {
         const opponentId = userId === player1Id ? player2Id : player1Id;
 
         if (tournamentMode === 'team') {
-          const teamResult = await query(
-            'SELECT name FROM tournament_teams WHERE id = ?',
-            [opponentId]
+          const cancellerTeamResult = await query(
+            `SELECT team_id
+             FROM tournament_participants
+             WHERE tournament_id = ? AND user_id = ?
+             LIMIT 1`,
+            [tournamentId, userId]
           );
-          opponentName = teamResult.rows && teamResult.rows.length > 0 ? teamResult.rows[0].name : 'Opponent Team';
 
-          const teamMembersResult = await query(
-            `SELECT tp.user_id, ue.discord_id FROM tournament_participants tp
+          const cancellerTeamId = cancellerTeamResult.rows && cancellerTeamResult.rows.length > 0
+            ? cancellerTeamResult.rows[0].team_id
+            : null;
+
+          const opponentTeamId = cancellerTeamId === player1Id ? player2Id : player1Id;
+
+          const cancellingTeamResult = await query(
+            'SELECT name FROM tournament_teams WHERE id = ?',
+            [cancellerTeamId]
+          );
+          cancellingTeamName = cancellingTeamResult.rows && cancellingTeamResult.rows.length > 0
+            ? cancellingTeamResult.rows[0].name
+            : 'Cancelling Team';
+
+          const opponentTeamResult = await query(
+            'SELECT name FROM tournament_teams WHERE id = ?',
+            [opponentTeamId]
+          );
+          opponentName = opponentTeamResult.rows && opponentTeamResult.rows.length > 0
+            ? opponentTeamResult.rows[0].name
+            : 'Opponent Team';
+
+          const cancellingTeamMembersResult = await query(
+            `SELECT tp.user_id, ue.nickname
+             FROM tournament_participants tp
              LEFT JOIN users_extension ue ON tp.user_id = ue.id
              WHERE tp.tournament_id = ? AND tp.team_id = ?`,
-            [tournamentId, opponentId]
+            [tournamentId, cancellerTeamId]
           );
 
-          if (teamMembersResult.rows) {
-            opponentIds = teamMembersResult.rows.map((row: any) => row.user_id);
-            opponentDiscordIds = teamMembersResult.rows
+          if (cancellingTeamMembersResult.rows) {
+            cancellingTeamMembers = cancellingTeamMembersResult.rows.map(
+              (row: any) => row.nickname || row.user_id
+            );
+          }
+
+          const opponentTeamMembersResult = await query(
+            `SELECT tp.user_id, ue.nickname, ue.discord_id
+             FROM tournament_participants tp
+             LEFT JOIN users_extension ue ON tp.user_id = ue.id
+             WHERE tp.tournament_id = ? AND tp.team_id = ?`,
+            [tournamentId, opponentTeamId]
+          );
+
+          if (opponentTeamMembersResult.rows) {
+            opponentIds = opponentTeamMembersResult.rows.map((row: any) => row.user_id);
+            opponentTeamMembers = opponentTeamMembersResult.rows.map(
+              (row: any) => row.nickname || row.user_id
+            );
+            opponentDiscordIds = opponentTeamMembersResult.rows
               .map((row: any) => row.discord_id)
               .filter((id: string | null) => id !== null && id !== undefined);
           }
@@ -2330,8 +2431,8 @@ router.delete('/proposals/:proposalId', authMiddleware, async (req: AuthRequest,
         }
       }
 
-      // Build notification message (no ranges for cancellation)
-      const notificationMessage = buildNotificationMessage('cancelled', proposerName, []);
+      // Build notification message
+      const notificationMessage = buildNotificationMessage('cancelled', proposerName, cancelledRanges);
 
       // Send Discord notification
       await sendDiscordNotification(
@@ -2339,11 +2440,16 @@ router.delete('/proposals/:proposalId', authMiddleware, async (req: AuthRequest,
         'schedule_cancelled',
         {
           tournamentName,
+          actionByUserName: proposerName,
           fromUserName: tournamentMode === '1v1' ? proposerName : undefined,
-          fromTeamName: tournamentMode === 'team' ? proposerName : undefined,
+          fromTeamName: tournamentMode === 'team' ? cancellingTeamName : undefined,
+          cancelledByUserName: proposerName,
+          fromTeamMembers: tournamentMode === 'team' ? cancellingTeamMembers : undefined,
           toUserName: tournamentMode === '1v1' ? opponentName : undefined,
           toTeamName: tournamentMode === 'team' ? opponentName : undefined,
+          toTeamMembers: tournamentMode === 'team' ? opponentTeamMembers : undefined,
           toDiscordIds: opponentDiscordIds.length > 0 ? opponentDiscordIds : undefined,
+          proposedTimeRanges: formattedCancelledRanges,
         }
       ).catch(err => console.error('⚠️ Discord notification failed:', err));
 

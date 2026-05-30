@@ -15,13 +15,50 @@ interface DiscordScheduleNotificationData {
   tournamentName: string;
   fromUserName?: string;
   fromTeamName?: string;
+  actionByUserName?: string;
+  cancelledByUserName?: string;
+  fromTeamMembers?: string[];
   fromDiscordId?: string;
   toUserName?: string;
   toTeamName?: string;
+  toTeamMembers?: string[];
   toDiscordIds?: string[];
   proposedDateTime?: string; // Legacy: single datetime
   proposedTimeRanges?: string; // New: formatted time ranges (from formatTimeRangesForDiscord)
   messageExtra?: string;
+}
+
+function formatTeamWithMembers(teamName?: string, members?: string[]): string {
+  const name = teamName || 'Unknown team';
+  if (!members || members.length === 0) return `${name}\nMembers: Unknown`;
+  return `${name}\nMembers: ${members.join(', ')}`;
+}
+
+function appendActorAndTargetFields(
+  fields: Array<{ name: string; value: string; inline?: boolean }>,
+  data: DiscordScheduleNotificationData
+): void {
+  const actorUserName = data.actionByUserName || data.cancelledByUserName || data.fromUserName || 'Unknown';
+  fields.push({ name: '👤 Action by', value: actorUserName, inline: false });
+
+  if (data.fromTeamName || data.toTeamName) {
+    fields.push({
+      name: '🛡️ From Team',
+      value: formatTeamWithMembers(data.fromTeamName, data.fromTeamMembers),
+      inline: false,
+    });
+    fields.push({
+      name: '🎯 To Team',
+      value: formatTeamWithMembers(data.toTeamName, data.toTeamMembers),
+      inline: false,
+    });
+    return;
+  }
+
+  const fromName = data.fromUserName || 'Unknown';
+  const toName = data.toUserName || 'Unknown';
+  fields.push({ name: '📤 From', value: fromName, inline: true });
+  fields.push({ name: '📥 To', value: toName, inline: true });
 }
 
 /**
@@ -32,14 +69,10 @@ function buildScheduleProposalEmbed(
   tournamentName: string,
   data: DiscordScheduleNotificationData
 ): any {
-  const fromName = data.fromTeamName || data.fromUserName || 'Unknown';
-  const toName = data.toTeamName || data.toUserName || 'Unknown';
-  
   const fields: Array<{ name: string; value: string; inline?: boolean }> = [
     { name: '📋 Tournament', value: tournamentName, inline: false },
-    { name: '📤 From', value: fromName, inline: true },
-    { name: '📥 To', value: toName, inline: true },
   ];
+  appendActorAndTargetFields(fields, data);
 
   // Use new format with time ranges if available, otherwise fall back to single datetime
   if (data.proposedTimeRanges) {
@@ -72,14 +105,10 @@ function buildScheduleConfirmationEmbed(
   tournamentName: string,
   data: DiscordScheduleNotificationData
 ): any {
-  const confirmedByName = data.fromTeamName || data.fromUserName || 'Unknown';
-  const againstName = data.toTeamName || data.toUserName || 'Unknown';
-
   const fields: Array<{ name: string; value: string; inline?: boolean }> = [
     { name: '📋 Tournament', value: tournamentName, inline: false },
-    { name: '✅ Confirmed by', value: confirmedByName, inline: true },
-    { name: '🆚 Against', value: againstName, inline: true },
   ];
+  appendActorAndTargetFields(fields, data);
 
   // Use new format with time ranges if available, otherwise fall back to single datetime
   if (data.proposedTimeRanges) {
@@ -105,14 +134,10 @@ function buildScheduleChangedEmbed(
   tournamentName: string,
   data: DiscordScheduleNotificationData
 ): any {
-  const changedByName = data.fromTeamName || data.fromUserName || 'Unknown';
-  const againstName = data.toTeamName || data.toUserName || 'Unknown';
-
   const fields: Array<{ name: string; value: string; inline?: boolean }> = [
     { name: '📋 Tournament', value: tournamentName, inline: false },
-    { name: '✏️ Changed by', value: changedByName, inline: true },
-    { name: '🆚 Against', value: againstName, inline: true },
   ];
+  appendActorAndTargetFields(fields, data);
 
   if (data.proposedTimeRanges) {
     fields.push({ name: '📅 New Proposed Time Slots (UTC)', value: data.proposedTimeRanges, inline: false });
@@ -135,18 +160,19 @@ function buildScheduleCancelledEmbed(
   tournamentName: string,
   data: DiscordScheduleNotificationData
 ): any {
-  const cancelledByName = data.fromTeamName || data.fromUserName || 'Unknown';
-  const againstName = data.toTeamName || data.toUserName || 'Unknown';
-
   const fields: Array<{ name: string; value: string; inline?: boolean }> = [
     { name: '📋 Tournament', value: tournamentName, inline: false },
-    { name: '🚫 Cancelled by', value: cancelledByName, inline: true },
-    { name: '🆚 Against', value: againstName, inline: true },
+    { name: '🚫 Event', value: 'Proposal cancelled', inline: false },
   ];
+  appendActorAndTargetFields(fields, data);
+
+  if (data.proposedTimeRanges) {
+    fields.push({ name: '📅 Cancelled Proposal Time Slots (UTC)', value: data.proposedTimeRanges, inline: false });
+  }
 
   return {
     title: '🚫 Proposal Cancelled',
-    description: 'The proposed schedule has been withdrawn.',
+    description: 'A schedule proposal has been cancelled.',
     color: 0xff0000,
     fields,
     footer: { text: 'Proposal Cancelled' },
@@ -161,14 +187,14 @@ function buildScheduleRejectionEmbed(
   tournamentName: string,
   data: DiscordScheduleNotificationData
 ): any {
-  const rejectedByName = data.fromTeamName || data.fromUserName || 'Unknown';
-  const againstName = data.toTeamName || data.toUserName || 'Unknown';
-
   const fields: Array<{ name: string; value: string; inline?: boolean }> = [
     { name: '📋 Tournament', value: tournamentName, inline: false },
-    { name: '❌ Rejected by', value: rejectedByName, inline: true },
-    { name: '🆚 Against', value: againstName, inline: true },
   ];
+  appendActorAndTargetFields(fields, data);
+
+  if (data.proposedTimeRanges) {
+    fields.push({ name: '📅 Rejected Proposal Time Slots (UTC)', value: data.proposedTimeRanges, inline: false });
+  }
 
   return {
     title: '❌ Schedule Rejected',
