@@ -92,6 +92,31 @@ export class ParseNewReplaysRefactorized {
     this.parser = new ReplayParser();
   }
 
+  private normalizeNickname(nickname: string | null | undefined): string {
+    return (nickname || '').trim().toLowerCase();
+  }
+
+  private getWmlFactionForPlayer(
+    wmlPlayerFactions: Record<string, string>,
+    forumNickname: string
+  ): string | null {
+    if (!forumNickname) return null;
+
+    const directMatch = wmlPlayerFactions[forumNickname];
+    if (directMatch) return directMatch;
+
+    const normalizedTarget = this.normalizeNickname(forumNickname);
+    if (!normalizedTarget) return null;
+
+    for (const [wmlNickname, faction] of Object.entries(wmlPlayerFactions)) {
+      if (this.normalizeNickname(wmlNickname) === normalizedTarget) {
+        return faction;
+      }
+    }
+
+    return null;
+  }
+
   /**
    * Execute one cycle of the parse job - Forum-First Approach
    */
@@ -654,7 +679,7 @@ export class ParseNewReplaysRefactorized {
         const isCustom = forumFaction.toLowerCase().includes('custom');
 
         const factionRaw = isCustom
-          ? (parseSummary.wmlPlayerFactions[player.user_name] || 'Unknown')
+          ? (this.getWmlFactionForPlayer(parseSummary.wmlPlayerFactions, player.user_name) || 'Unknown')
           : forumFaction;
 
         const resolved = await this.resolveFaction(factionRaw);
@@ -807,8 +832,12 @@ export class ParseNewReplaysRefactorized {
     const winnerName = parseSummary.replayVictory.winner_name;
     const loserName  = parseSummary.replayVictory.loser_name;
 
-    const winnerForumData = parseSummary.forumPlayers.find(p => p.user_name === winnerName);
-    const loserForumData  = parseSummary.forumPlayers.find(p => p.user_name === loserName);
+    const winnerForumData = parseSummary.forumPlayers.find(
+      p => this.normalizeNickname(p.user_name) === this.normalizeNickname(winnerName)
+    );
+    const loserForumData  = parseSummary.forumPlayers.find(
+      p => this.normalizeNickname(p.user_name) === this.normalizeNickname(loserName)
+    );
 
     if (!winnerForumData || !loserForumData) {
       return {
