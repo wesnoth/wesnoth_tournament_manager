@@ -1,9 +1,57 @@
 import axios from 'axios';
 
 const DISCORD_API_URL = 'https://discord.com/api/v10';
+const DISCORD_EPOCH_MS = 1420070400000n; // 2015-01-01T00:00:00.000Z
+const DISCORD_SNOWFLAKE_REGEX = /^\d{17,20}$/;
+const DISCORD_USER_MENTION_REGEX = /^<@!?(\d{17,20})>$/;
 
 // Check if Discord is explicitly enabled via environment variable
 export const DISCORD_ENABLED = process.env.DISCORD_ENABLED === 'true';
+
+function normalizeDiscordInput(input: string): string {
+  return input.trim();
+}
+
+function extractDiscordIdCandidate(input: string): string | null {
+  const mentionMatch = input.match(DISCORD_USER_MENTION_REGEX);
+  if (mentionMatch) return mentionMatch[1];
+  return DISCORD_SNOWFLAKE_REGEX.test(input) ? input : null;
+}
+
+function isValidDiscordSnowflake(id: string): boolean {
+  if (!DISCORD_SNOWFLAKE_REGEX.test(id)) return false;
+
+  try {
+    const snowflake = BigInt(id);
+    if (snowflake <= 0n) return false;
+
+    const timestampMs = Number((snowflake >> 22n) + DISCORD_EPOCH_MS);
+    const maxFutureSkewMs = 365 * 24 * 60 * 60 * 1000;
+
+    return (
+      Number.isFinite(timestampMs) &&
+      timestampMs >= Number(DISCORD_EPOCH_MS) &&
+      timestampMs <= Date.now() + maxFutureSkewMs
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function checkGuildMembershipByDiscordId(
+  guildId: string,
+  discordId: string,
+  headers: Record<string, string>
+): Promise<'member' | 'not_member' | 'error'> {
+  try {
+    await axios.get(`${DISCORD_API_URL}/guilds/${guildId}/members/${discordId}`, { headers });
+    return 'member';
+  } catch (error: any) {
+    const status = error.response?.status;
+    if (status === 404) return 'not_member';
+    return 'error';
+  }
+}
 
 /**
  * Resolve Discord username (username#discriminator) to numeric Discord ID
@@ -11,33 +59,51 @@ export const DISCORD_ENABLED = process.env.DISCORD_ENABLED === 'true';
  */
 export async function resolveDiscordIdFromUsername(usernameInput: string): Promise<string | null> {
   console.log('[DISCORD-RESOLVE] Attempting to resolve username to ID:', usernameInput);
+  const normalizedInput = normalizeDiscordInput(usernameInput);
+
+  if (!normalizedInput) {
+    console.warn('[DISCORD-RESOLVE] Empty username input');
+    return null;
+  }
 
   if (!process.env.DISCORD_BOT_TOKEN || !process.env.DISCORD_GUILD_ID) {
     console.warn('[DISCORD-RESOLVE] Bot token or guild ID not configured');
     return null;
   }
 
-  // If input looks like numeric ID already, return it
-  if (/^\d+$/.test(usernameInput)) {
-    console.log('[DISCORD-RESOLVE] Input is already numeric ID:', usernameInput);
-    return usernameInput;
-  }
-
   try {
-    const DISCORD_API_URL = 'https://discord.com/api/v10';
     const guildId = process.env.DISCORD_GUILD_ID;
     const headers = {
       Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
       'Content-Type': 'application/json',
     };
 
+    const discordIdCandidate = extractDiscordIdCandidate(normalizedInput);
+    if (discordIdCandidate) {
+      if (isValidDiscordSnowflake(discordIdCandidate)) {
+        const memberStatus = await checkGuildMembershipByDiscordId(guildId, discordIdCandidate, headers);
+        if (memberStatus === 'member') {
+          console.log('[DISCORD-RESOLVE] Valid Discord ID and guild member:', discordIdCandidate);
+          return discordIdCandidate;
+        }
+        if (memberStatus === 'not_member') {
+          console.warn('[DISCORD-RESOLVE] Discord ID is valid but user is not in guild:', discordIdCandidate);
+          return null;
+        }
+        console.warn('[DISCORD-RESOLVE] Failed to verify guild membership for Discord ID:', discordIdCandidate);
+        return null;
+      }
+
+      console.warn('[DISCORD-RESOLVE] Input looks like Discord ID but is not a valid snowflake:', normalizedInput);
+    }
+
     // Extract username from "username#discriminator" or just "username"
-    const username = usernameInput.split('#')[0];
+    const username = normalizedInput.split('#')[0];
 
     console.log('[DISCORD-RESOLVE] Searching for username in guild:', {
       guildId,
       searchQuery: username,
-      originalInput: usernameInput
+      originalInput: normalizedInput
     });
 
     // Search for members in guild by username
@@ -66,9 +132,9 @@ export async function resolveDiscordIdFromUsername(usernameInput: string): Promi
     // Find exact match (considering both username and discriminator)
     let targetMember = null;
 
-    if (usernameInput.includes('#')) {
+    if (normalizedInput.includes('#')) {
       // Search for exact username#discriminator match
-      const [searchUsername, searchDiscriminator] = usernameInput.split('#');
+      const [searchUsername, searchDiscriminator] = normalizedInput.split('#');
       console.log('[DISCORD-RESOLVE] Looking for exact match:', {
         searchUsername: searchUsername.toLowerCase(),
         searchDiscriminator
@@ -91,7 +157,7 @@ export async function resolveDiscordIdFromUsername(usernameInput: string): Promi
         console.warn('[DISCORD-RESOLVE] Exact username#discriminator not found, trying username-only match');
         // Fall back to username-only match if discriminator doesn't match
         targetMember = members.find((m: any) =>
-          m.user.username.toLowerCase() === usernameInput.split('#')[0].toLowerCase()
+          m.user.username.toLowerCase() === normalizedInput.split('#')[0].toLowerCase()
         );
       }
     } else {
@@ -108,7 +174,7 @@ export async function resolveDiscordIdFromUsername(usernameInput: string): Promi
 
     const discordId = targetMember.user.id;
     console.log('[DISCORD-RESOLVE] Successfully resolved username to ID:', {
-      input: usernameInput,
+      input: normalizedInput,
       resolvedId: discordId,
       username: targetMember.user.username,
       discriminator: targetMember.user.discriminator
@@ -117,7 +183,7 @@ export async function resolveDiscordIdFromUsername(usernameInput: string): Promi
     return discordId;
   } catch (error: any) {
     console.error('[DISCORD-RESOLVE] Error resolving username:', {
-      input: usernameInput,
+      input: normalizedInput,
       httpStatus: error.response?.status,
       errorData: error.response?.data,
       errorMessage: error.message
