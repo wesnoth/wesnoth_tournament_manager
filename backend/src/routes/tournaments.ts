@@ -3673,9 +3673,9 @@ router.post('/leagues/:id/calculate-tiebreakers', authMiddleware, async (req: Au
       return res.status(403).json({ error: 'Only admins or tournament creators can calculate tiebreakers' });
     }
     
-    // Execute the stored procedure
+    // Execute the stored procedure (using update_tournament_tiebreakers which has identical logic)
     const result = await query(
-      'SELECT updated_count, error_message FROM update_league_tiebreakers(?)',
+      'SELECT updated_count, error_message FROM update_tournament_tiebreakers(?)',
       [id]
     );
     

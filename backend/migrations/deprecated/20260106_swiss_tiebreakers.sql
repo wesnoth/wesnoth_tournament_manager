@@ -122,7 +122,9 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ===== FUNCTION: Calculate League Tiebreakers =====
--- Same as Swiss but for league tournaments
+-- DEPRECATED: Duplicate of calculate_swiss_tiebreakers - DO NOT USE
+-- Same logic as Swiss but for league tournaments
+-- Use calculate_swiss_tiebreakers instead - to be removed in future migration
 CREATE OR REPLACE FUNCTION calculate_league_tiebreakers(
   p_tournament_id UUID
 )
@@ -264,6 +266,8 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ===== STORED PROCEDURE: Update League Participants with Tiebreakers =====
+-- DEPRECATED: Duplicate of update_tournament_tiebreakers - DO NOT USE
+-- Same logic as update_tournament_tiebreakers - to be removed in future migration
 CREATE OR REPLACE FUNCTION update_league_tiebreakers(
   p_tournament_id UUID
 )

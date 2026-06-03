@@ -248,6 +248,9 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$ LANGUAGE plpgsql;
 
+-- ===== STORED PROCEDURE: Update League Participants with Tiebreakers =====
+-- DEPRECATED: Duplicate of update_tournament_tiebreakers - DO NOT USE
+-- Same logic as update_tournament_tiebreakers - to be removed in future migration
 CREATE OR REPLACE FUNCTION update_league_tiebreakers(
   p_tournament_id UUID
 )

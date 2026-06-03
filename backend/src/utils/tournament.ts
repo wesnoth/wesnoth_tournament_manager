@@ -1789,9 +1789,11 @@ export async function checkAndCompleteRound(tournamentId: string, roundNumber: n
       );
       const totalRounds = parseInt(totalRoundsResult.rows[0].total_rounds);
 
+      // Get tournament type (used for both notification and finish logic)
+      const tournamentType = currentRoundInfo.rows[0]?.tournament_type;
+
       // For league tournaments: post round completion notification with standings
       // (skip if last round — postTournamentFinished handles that case)
-      const tournamentType = currentRoundInfo.rows[0]?.tournament_type;
       if (tournamentType === 'league' && roundNumber < totalRounds) {
         try {
           const leagueTournamentResult = await query(
@@ -1840,7 +1842,32 @@ export async function checkAndCompleteRound(tournamentId: string, roundNumber: n
         }
       }
 
-      if (roundNumber === totalRounds) {
+      // Check if this is the last round or if tournament should finish
+      // For league tournaments: only finish if there are NO open rounds remaining
+      // For other types: finish if this is the last round number
+      let shouldFinishTournament = false;
+      
+      if (tournamentType === 'league') {
+        // For league: check if there are any rounds still open
+        const openRoundsResult = await query(
+          `SELECT COUNT(*) as open_count FROM tournament_rounds 
+           WHERE tournament_id = ? AND round_status IN ('in_progress', 'not_started')`,
+          [tournamentId]
+        );
+        const openCount = parseInt(openRoundsResult.rows[0].open_count);
+        shouldFinishTournament = openCount === 0;
+        console.log(`\n📊 [LEAGUE_TOURNAMENT] Round ${roundNumber} completed. Open rounds remaining: ${openCount}`);
+        if (shouldFinishTournament) {
+          console.log(`✅ [LEAGUE_TOURNAMENT] No more open rounds - tournament will finish`);
+        } else {
+          console.log(`⏭️  [LEAGUE_TOURNAMENT] Other rounds still open - tournament continues`);
+        }
+      } else {
+        // For Swiss/Elimination/Mixed: finish if this is the last round
+        shouldFinishTournament = roundNumber === totalRounds;
+      }
+
+      if (shouldFinishTournament) {
         // This is the last round - tournament is about to finish
         
         // Get tournament mode
