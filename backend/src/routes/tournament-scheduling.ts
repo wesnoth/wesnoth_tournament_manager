@@ -505,7 +505,7 @@ router.post('/:tournamentRoundMatchId/propose-schedule', authMiddleware, async (
     let opponentTeamMembers: string[] = [];
 
     const actorResult = await query(
-      `SELECT COALESCE(nickname, username, id) AS display_name FROM users_extension WHERE id = ? LIMIT 1`,
+      `SELECT COALESCE(nickname, id) AS display_name FROM users_extension WHERE id = ? LIMIT 1`,
       [userId]
     );
     if (actorResult.rows && actorResult.rows.length > 0) {
@@ -796,7 +796,7 @@ router.post('/:tournamentRoundMatchId/confirm-schedule', authMiddleware, async (
     let confirmerDiscordIds: string[] = [];
 
     const confirmerUserResult = await query(
-      `SELECT COALESCE(nickname, username, id) AS display_name FROM users_extension WHERE id = ? LIMIT 1`,
+      `SELECT COALESCE(nickname, id) AS display_name FROM users_extension WHERE id = ? LIMIT 1`,
       [confirmerId]
     );
     if (confirmerUserResult.rows && confirmerUserResult.rows.length > 0) {
@@ -1074,7 +1074,7 @@ router.post(
       let opponentTeamMembers: string[] = [];
 
       const actorResult = await query(
-        `SELECT COALESCE(nickname, username, id) AS display_name FROM users_extension WHERE id = ? LIMIT 1`,
+        `SELECT COALESCE(nickname, id) AS display_name FROM users_extension WHERE id = ? LIMIT 1`,
         [userId]
       );
       if (actorResult.rows && actorResult.rows.length > 0) {
@@ -1253,7 +1253,7 @@ router.post(
       let opponentTeamMembers: string[] = [];
 
       const actorResult = await query(
-        `SELECT COALESCE(nickname, username, id) AS display_name FROM users_extension WHERE id = ? LIMIT 1`,
+        `SELECT COALESCE(nickname, id) AS display_name FROM users_extension WHERE id = ? LIMIT 1`,
         [userId]
       );
       if (actorResult.rows && actorResult.rows.length > 0) {
@@ -1487,7 +1487,7 @@ router.post(
            }
 
            const confirmerUserResult = await query(
-             `SELECT COALESCE(nickname, username, id) AS display_name FROM users_extension WHERE id = ? LIMIT 1`,
+             `SELECT COALESCE(nickname, id) AS display_name FROM users_extension WHERE id = ? LIMIT 1`,
              [userId]
            );
            if (confirmerUserResult.rows && confirmerUserResult.rows.length > 0) {
@@ -2000,7 +2000,7 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
           }
 
           const actorResult = await query(
-            `SELECT COALESCE(nickname, username, id) AS display_name FROM users_extension WHERE id = ? LIMIT 1`,
+            `SELECT COALESCE(nickname, id) AS display_name FROM users_extension WHERE id = ? LIMIT 1`,
             [userId]
           );
           if (actorResult.rows && actorResult.rows.length > 0) {
@@ -2131,7 +2131,7 @@ router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, re
       let proposerUserName = 'Player';
       let proposerTeamMembers: string[] = [];
       const proposerResult = await query(
-        `SELECT COALESCE(nickname, username, id) AS display_name, discord_id FROM users_extension WHERE id = ?`,
+        `SELECT COALESCE(nickname, id) AS display_name, discord_id FROM users_extension WHERE id = ?`,
         [userId]
       );
       if (proposerResult.rows && proposerResult.rows.length > 0) {
