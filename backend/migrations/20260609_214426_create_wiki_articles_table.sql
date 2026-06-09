@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS wiki_articles (
   title VARCHAR(255) NOT NULL COMMENT 'Article title, displayed in headers',
   content_markdown LONGTEXT NOT NULL COMMENT 'Article content in Markdown format (sanitized and rendered on frontend)',
   language VARCHAR(10) NOT NULL DEFAULT 'en' COMMENT 'Language code (en, es, fr, etc.) for i18n support',
-  author_id BIGINT COMMENT 'User ID of the article author (admin/moderator)',
+  author_id BIGINT COMMENT 'User ID of the article author (admin/moderator) - validated in backend, no FK constraint',
   is_published TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Publication status (1=published, 0=draft)',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT 'Article creation timestamp',
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Last modification timestamp',
@@ -15,10 +15,8 @@ CREATE TABLE IF NOT EXISTS wiki_articles (
   -- Indices for common queries
   INDEX idx_slug_language (slug, language) COMMENT 'Fast lookup by slug+language',
   INDEX idx_language_published (language, is_published) COMMENT 'Fast filtering for navigation',
-  INDEX idx_created_at (created_at) COMMENT 'Sort articles by date',
-  
-  CONSTRAINT fk_wiki_author FOREIGN KEY (author_id) 
-    REFERENCES users_extension(id) ON DELETE SET NULL ON UPDATE CASCADE
+  INDEX idx_author_id (author_id) COMMENT 'Find articles by author',
+  INDEX idx_created_at (created_at) COMMENT 'Sort articles by date'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci 
   COMMENT='Wiki articles for integrated help system - Wesnoth Tournament Manager';
 
