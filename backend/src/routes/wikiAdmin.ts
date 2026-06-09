@@ -89,6 +89,22 @@ router.delete('/images/:filename', moderatorOrAdminMiddleware, async (req: AuthR
  */
 
 /**
+ * GET /api/admin/wiki
+ * List all articles (for admin management)
+ */
+router.get('/', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await queryTournament(
+      'SELECT id, slug, title, language, is_published, created_at, updated_at FROM wiki_articles ORDER BY created_at DESC'
+    );
+    res.json(result as any[]);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
  * POST /api/admin/wiki
  * Create new article
  */
