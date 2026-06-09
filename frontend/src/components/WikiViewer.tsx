@@ -57,14 +57,14 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
 
         if (!response.ok) {
           if (response.status === 404) {
-            setError(`Article "${slug}" not found`);
-            onError?.(`Article "${slug}" not found`);
+            const msg = `Article "${slug}" not found`;
+            setError(msg);
+            onError?.(msg);
           } else {
-            setError('Failed to load article');
-            onError?.('Failed to load article');
+            const msg = 'Failed to load article';
+            setError(msg);
+            onError?.(msg);
           }
-          setLoading(false);
-          isLoading?.(false);
           return;
         }
 
@@ -73,8 +73,9 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
         setError(null);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error';
-        setError(`Error loading article: ${message}`);
-        onError?.(`Error loading article: ${message}`);
+        const errorMsg = `Error loading article: ${message}`;
+        setError(errorMsg);
+        onError?.(errorMsg);
       } finally {
         setLoading(false);
         isLoading?.(false);
@@ -82,40 +83,38 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
     };
 
     fetchArticle();
-  }, [slug, language, onError, isLoading]);
+  }, [slug, language]);
 
   // Configure marked for security and features
   useEffect(() => {
+    const renderer = {
+      link({ href, title, text }: { href: string; title?: string; text: string }) {
+        const isInternal = href.startsWith('/help/') || href.startsWith('#');
+        return `<a href="${DOMPurify.sanitize(href)}" ${title ? `title="${DOMPurify.sanitize(title)}"` : ''} ${isInternal ? '' : 'rel="noopener noreferrer" target="_blank"'}>${DOMPurify.sanitize(text)}</a>`;
+      },
+      codespan({ text }: { text: string }) {
+        return `<code class="bg-gray-900 text-gray-100 px-2 py-1 rounded font-mono text-sm">${DOMPurify.sanitize(text)}</code>`;
+      },
+      code({ text, lang }: { text: string; lang?: string }) {
+        const language = lang || 'plaintext';
+        let highlighted = text;
+        try {
+          if (hljs.getLanguage(language)) {
+            highlighted = hljs.highlight(text, { language, ignoreIllegals: true }).value;
+          } else {
+            highlighted = hljs.highlightAuto(text).value;
+          }
+        } catch (e) {
+          highlighted = DOMPurify.sanitize(text);
+        }
+        return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>`;
+      }
+    };
+
     marked.setOptions({
       breaks: true,
       gfm: true,
-      renderer: {
-        // Override link rendering to ensure proper href handling
-        link: (token) => {
-          const href = token.href || '';
-          // Allow both internal help links and external links
-          const isInternal = href.startsWith('/help/') || href.startsWith('#');
-          return `<a href="${DOMPurify.sanitize(href)}" ${isInternal ? '' : 'rel="noopener noreferrer" target="_blank"'}>${DOMPurify.sanitize(token.text)}</a>`;
-        },
-        // Code block with syntax highlighting
-        codespan: (token) => {
-          return `<code class="bg-gray-900 text-gray-100 px-2 py-1 rounded font-mono text-sm">${DOMPurify.sanitize(token.text)}</code>`;
-        },
-        code: (token) => {
-          const language = token.lang || 'plaintext';
-          let highlighted = token.text;
-          try {
-            if (hljs.getLanguage(language)) {
-              highlighted = hljs.highlight(token.text, { language, ignoreIllegals: true }).value;
-            } else {
-              highlighted = hljs.highlightAuto(token.text).value;
-            }
-          } catch (e) {
-            highlighted = DOMPurify.sanitize(token.text);
-          }
-          return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>`;
-        }
-      }
+      renderer
     });
   }, []);
 
