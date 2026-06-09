@@ -2,6 +2,10 @@
  * Wiki Admin Routes
  * Admin/moderator endpoints for managing wiki articles and images
  * Route: /api/admin/wiki
+ * 
+ * IMPORTANT: Route order is critical!
+ * Specific routes (with /images) MUST come before generic /:slug routes
+ * Otherwise GET /images will match /:slug with slug="images"
  */
 
 import { Router, Request, Response } from 'express';
@@ -12,6 +16,77 @@ import { queryTournament } from '../config/tournamentDatabase.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
+
+/**
+ * ==================== IMAGE ROUTES (specific - come first!) ====================
+ */
+
+/**
+ * POST /api/admin/wiki/upload-image
+ * Upload image file
+ * Returns: { id, filename, url }
+ */
+router.post('/upload-image', moderatorOrAdminMiddleware, upload.single('image'), async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file provided' });
+    }
+
+    const result = await wikiAdminService.uploadImage(req.file, parseInt(req.userId!));
+    res.status(201).json(result);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    res.status(400).json({ error: msg });
+  }
+});
+
+/**
+ * GET /api/admin/wiki/images
+ * List all uploaded images with usage count
+ */
+router.get('/images', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const images = await wikiAdminService.getAllImages();
+    res.json(images);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * GET /api/admin/wiki/images/:filename/usage
+ * Get articles that use this image
+ */
+router.get('/images/:filename/usage', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { filename } = req.params;
+    const usage = await wikiAdminService.getImageUsage(filename);
+    res.json(usage);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * DELETE /api/admin/wiki/images/:filename
+ * Delete image (after checking no refs)
+ */
+router.delete('/images/:filename', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { filename } = req.params;
+    await wikiAdminService.deleteImage(filename);
+    res.json({ filename, message: 'Image deleted successfully' });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    res.status(400).json({ error: msg });
+  }
+});
+
+/**
+ * ==================== ARTICLE ROUTES (generic - come last!) ====================
+ */
 
 /**
  * POST /api/admin/wiki
@@ -123,69 +198,6 @@ router.delete('/:slug', moderatorOrAdminMiddleware, async (req: AuthRequest, res
       await wikiAdminService.softDeleteArticle(slug);
       res.json({ slug, message: 'Article marked as deleted (draft mode)' });
     }
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    res.status(400).json({ error: msg });
-  }
-});
-
-/**
- * POST /api/admin/wiki/upload-image
- * Upload image file
- * Returns: { id, filename, url }
- */
-router.post('/upload-image', moderatorOrAdminMiddleware, upload.single('image'), async (req: AuthRequest, res: Response) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file provided' });
-    }
-
-    const result = await wikiAdminService.uploadImage(req.file, parseInt(req.userId!));
-    res.status(201).json(result);
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    res.status(400).json({ error: msg });
-  }
-});
-
-/**
- * GET /api/admin/wiki/images
- * List all uploaded images with usage count
- */
-router.get('/images', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const images = await wikiAdminService.getAllImages();
-    res.json(images);
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({ error: msg });
-  }
-});
-
-/**
- * GET /api/admin/wiki/images/:filename/usage
- * Get articles that use this image
- */
-router.get('/images/:filename/usage', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const { filename } = req.params;
-    const usage = await wikiAdminService.getImageUsage(filename);
-    res.json(usage);
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({ error: msg });
-  }
-});
-
-/**
- * DELETE /api/admin/wiki/images/:filename
- * Delete image (after checking no refs)
- */
-router.delete('/images/:filename', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const { filename } = req.params;
-    await wikiAdminService.deleteImage(filename);
-    res.json({ filename, message: 'Image deleted successfully' });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     res.status(400).json({ error: msg });
