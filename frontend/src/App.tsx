@@ -40,6 +40,7 @@ const FAQ = React.lazy(() => import('./pages/FAQ'));
 const Tournaments = React.lazy(() => import('./pages/Tournaments'));
 const TournamentDetail = React.lazy(() => import('./pages/TournamentDetail'));
 const Help = React.lazy(() => import('./pages/Help'));
+const AdminWiki = React.lazy(() => import('./pages/AdminWiki'));
 
 const App: React.FC = () => {
   const { isAdmin, token, validateToken, isValidating } = useAuthStore();
@@ -128,6 +129,7 @@ const App: React.FC = () => {
               <Route path="/admin/announcements" element={<AdminAnnouncements />} />
               <Route path="/admin/faq" element={<AdminFAQ />} />
               <Route path="/admin/tournaments" element={<AdminTournaments />} />
+              <Route path="/admin/wiki" element={<AdminWiki />} />
               <Route path="/admin/disputes" element={<AdminDisputes />} />
               <Route path="/admin/audit" element={<AdminAudit />} />
               <Route path="/admin/replays" element={<AdminReplays />} />

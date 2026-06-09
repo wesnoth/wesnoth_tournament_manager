@@ -14,6 +14,7 @@ import replaysRoutes from './routes/replays.js';
 import schedulingRoutes from './routes/tournament-scheduling.js';
 import notificationsRoutes from './routes/notifications.js';
 import wikiRoutes from './routes/wiki.js';
+import wikiAdminRoutes from './routes/wikiAdmin.js';
 import { generalLimiter } from './middleware/rateLimiter.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -70,6 +71,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/matches', matchRoutes);
 app.use('/api/tournaments', tournamentRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin/wiki', wikiAdminRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/public/wiki', wikiRoutes);
 app.use('/api/statistics', statisticsRoutes);
