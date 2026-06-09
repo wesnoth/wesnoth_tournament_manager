@@ -13,6 +13,7 @@ import playerStatisticsRoutes from './routes/player-statistics.js';
 import replaysRoutes from './routes/replays.js';
 import schedulingRoutes from './routes/tournament-scheduling.js';
 import notificationsRoutes from './routes/notifications.js';
+import wikiRoutes from './routes/wiki.js';
 import { generalLimiter } from './middleware/rateLimiter.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -70,6 +71,7 @@ app.use('/api/matches', matchRoutes);
 app.use('/api/tournaments', tournamentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/public', publicRoutes);
+app.use('/api/public/wiki', wikiRoutes);
 app.use('/api/statistics', statisticsRoutes);
 app.use('/api/player-statistics', playerStatisticsRoutes);
 app.use('/api/replays', replaysRoutes);
