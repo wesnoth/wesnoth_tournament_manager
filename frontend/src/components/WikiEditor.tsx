@@ -6,7 +6,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import WikiViewer from './WikiViewer';
+import { marked } from 'marked';
 
 interface WikiEditorProps {
   initialSlug?: string;
@@ -173,6 +173,20 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
     );
   }
 
+  const renderMarkdownPreview = (markdown: string) => {
+    try {
+      const html = marked(markdown);
+      return (
+        <div 
+          dangerouslySetInnerHTML={{ __html: html }}
+          className="prose prose-sm max-w-none"
+        />
+      );
+    } catch (err) {
+      return <p className="text-red-500 text-sm">Error rendering markdown</p>;
+    }
+  };
+
   return (
     <div className="wiki-editor grid grid-cols-2 gap-6 p-6">
       {/* Left Panel: Editor */}
@@ -266,7 +280,7 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="Write markdown here..."
-            className="flex-1 p-3 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
+            className="flex-1 p-3 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-primary focus:border-transparent resize-vertical min-h-[400px]"
           />
           <p className="text-xs text-gray-500 mt-2">
             Supports: **bold**, *italic*, `code`, # headers, - lists, [links](/help/article), ![images](/uploads/wiki/file.jpg)
@@ -299,9 +313,7 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
         <h3 className="text-lg font-semibold text-gray-900 mb-3">Preview</h3>
         <div className="flex-1 overflow-y-auto">
           {content.trim() ? (
-            <div className="prose prose-sm max-w-none">
-              <WikiViewer slug="preview" language={language} isLoading={() => {}} />
-            </div>
+            renderMarkdownPreview(content)
           ) : (
             <div className="text-center py-12">
               <p className="text-gray-500">Start writing to see preview here</p>
