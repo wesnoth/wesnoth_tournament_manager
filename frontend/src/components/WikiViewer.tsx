@@ -44,7 +44,7 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
       isLoading?.(true);
 
       try {
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:7100/api';
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
         const response = await fetch(
           `${apiUrl}/public/wiki/${encodeURIComponent(slug)}?lang=${encodeURIComponent(language)}`,
           {
