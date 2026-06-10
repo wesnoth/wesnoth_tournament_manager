@@ -932,7 +932,59 @@ User confirmations of proposed schedules. Records agreement to the schedule prop
 
 ---
 
-## General Notes
+### `wiki_articles`
+
+Help system articles with multi-language support (JSON translations model, aligned with FAQ/News).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | bigint PK | Auto-increment |
+| `slug` | varchar(255) UNIQUE | URL-friendly article identifier (e.g., `getting-started`, `ranking-elo`) |
+| `translations` | longtext JSON | Multi-language content: `{"en": {"title": "...", "content_markdown": "..."}, "es": {...}, "de": {...}, "fr": {...}, "zh": {...}}` |
+| `author_id` | char(36) FK→users_extension | Article author (NULL for seeded articles) |
+| `is_published` | tinyint(1) | 1 = visible to all users, 0 = draft (admin only) |
+| `created_at` | datetime | |
+| `updated_at` | datetime | |
+
+**Indexes**: `idx_slug (slug)`, `idx_published (is_published)`, `idx_author_id (author_id)`
+
+**Language fallback logic**: If requested language not translated, falls back to English (`en`).
+
+**Constraint**: One row per `slug` guarantees consistent translations across all languages for an article.
+
+---
+
+### `wiki_images`
+
+Uploaded images used in wiki articles.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | bigint PK | Auto-increment |
+| `filename` | varchar(255) UNIQUE | Generated filename (e.g., `1781121281123_cxozvs.png`) used in URLs |
+| `original_name` | varchar(255) | Original filename from upload |
+| `uploaded_by` | char(36) FK→users_extension | User who uploaded (NULL for admin uploads) |
+| `created_at` | datetime | |
+
+**Image storage**: Files stored in `backend/uploads/wiki/` directory. Served via API endpoint `/api/public/wiki/images/{filename}`.
+
+---
+
+### `wiki_article_images`
+
+Junction table linking wiki articles to images (N:M relationship).
+
+| Column | Type | Notes |
+|---|---|---|
+| `article_id` | bigint FK→wiki_articles | Article referencing the image |
+| `wiki_image_id` | bigint FK→wiki_images | Image used in the article |
+| `created_at` | datetime | When link was created |
+
+**Primary key**: `(article_id, wiki_image_id)` — ensures each image used only once per article.
+
+**Cascade delete**: If article or image deleted, link automatically removed.
+
+
 
 ### ID conventions
 - All primary keys use `char(36)` UUIDs generated in application code.
