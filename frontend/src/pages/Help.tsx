@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import MainLayout from '../components/MainLayout';
 import WikiViewer from '../components/WikiViewer';
@@ -19,8 +19,7 @@ interface WikiListItem {
 const HelpPage: React.FC = () => {
   const { t, i18n } = useTranslation();
   const { slug } = useParams<{ slug?: string }>();
-  const [searchParams] = useSearchParams();
-  const language = searchParams.get('lang') || i18n.language || 'en';
+  const language = i18n.language || 'en';
 
   const [articles, setArticles] = useState<WikiListItem[]>([]);
   const [loadingList, setLoadingList] = useState(true);
@@ -90,7 +89,7 @@ const HelpPage: React.FC = () => {
                     {articles.map((article) => (
                       <a
                         key={`${article.slug}-${article.language}`}
-                        href={`/help/${encodeURIComponent(article.slug)}?lang=${encodeURIComponent(article.language)}`}
+                        href={`/help/${encodeURIComponent(article.slug)}`}
                         className={`block px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                           displaySlug === article.slug
                             ? 'bg-primary text-white'
