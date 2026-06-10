@@ -1,7 +1,8 @@
 -- Migrate wiki_articles from separate language rows to JSON model
 -- Aligns with FAQ/News pattern in the project
 
--- Step 0: Disable foreign key checks temporarily
+-- Step 0: Cleanup and disable foreign key checks
+DROP TABLE IF EXISTS wiki_articles_new;
 SET FOREIGN_KEY_CHECKS=0;
 
 -- Step 1: Create new table with JSON structure
