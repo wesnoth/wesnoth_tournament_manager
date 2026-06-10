@@ -59,10 +59,6 @@ DROP TABLE wiki_articles;
 -- Step 4: Rename new table to original name
 ALTER TABLE wiki_articles_new RENAME TO wiki_articles;
 
--- Step 5: Recreate foreign key constraint for wiki_article_images
-ALTER TABLE wiki_article_images
-ADD CONSTRAINT fk_wiki_article_images_article
-  FOREIGN KEY (article_id) REFERENCES wiki_articles(id) ON DELETE CASCADE ON UPDATE CASCADE;
-
--- Step 6: Re-enable foreign key checks
+-- Step 5: Re-enable foreign key checks
+-- FK constraint remains from wiki_article_images creation migration
 SET FOREIGN_KEY_CHECKS=1;
