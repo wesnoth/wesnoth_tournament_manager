@@ -112,7 +112,7 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
     };
 
     marked.setOptions({
-      breaks: true,
+     breaks: false,
       gfm: true,
       renderer
     });

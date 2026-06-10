@@ -175,6 +175,7 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
 
   const renderMarkdownPreview = (markdown: string) => {
     try {
+      marked.setOptions({ breaks: false, gfm: true });
       const html = marked(markdown);
       return (
         <div 
