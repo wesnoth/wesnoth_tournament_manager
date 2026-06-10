@@ -87,36 +87,9 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
 
   // Configure marked for security and features
   useEffect(() => {
-    const defaultRenderer = new marked.Renderer();
-    
-    defaultRenderer.link = ({ href, title, text }: { href: string; title?: string; text: string }) => {
-     const isInternal = href.startsWith('/help/') || href.startsWith('#');
-     return `<a href="${DOMPurify.sanitize(href)}" ${title ? `title="${DOMPurify.sanitize(title)}"` : ''} ${isInternal ? '' : 'rel="noopener noreferrer" target="_blank"'}>${DOMPurify.sanitize(text)}</a>`;
-    };
-
-    defaultRenderer.codespan = ({ text }: { text: string }) => {
-     return `<code class="bg-gray-900 text-gray-100 px-2 py-1 rounded font-mono text-sm">${DOMPurify.sanitize(text)}</code>`;
-    };
-
-    defaultRenderer.code = ({ text, lang }: { text: string; lang?: string }) => {
-     const language = lang || 'plaintext';
-     let highlighted = text;
-     try {
-       if (hljs.getLanguage(language)) {
-         highlighted = hljs.highlight(text, { language, ignoreIllegals: true }).value;
-       } else {
-         highlighted = hljs.highlightAuto(text).value;
-        }
-     } catch (e) {
-       highlighted = DOMPurify.sanitize(text);
-     }
-     return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>`;
-    };
-
     marked.setOptions({
      breaks: false,
-     gfm: true,
-     renderer: defaultRenderer
+     gfm: true
     });
   }, []);
 
