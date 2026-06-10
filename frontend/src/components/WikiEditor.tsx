@@ -7,6 +7,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 
 type Language = 'en' | 'es' | 'de' | 'fr' | 'zh';
 
@@ -201,10 +202,40 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
   const renderMarkdownPreview = (markdown: string) => {
     try {
       marked.setOptions({ breaks: false, gfm: true });
-      const html = marked(markdown);
+      const rawHtml = marked(markdown) as string;
+      const htmlContent = DOMPurify.sanitize(rawHtml, {
+        ALLOWED_TAGS: [
+          'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+          'p', 'br', 'strong', 'em', 'u', 'del',
+          'ol', 'ul', 'li',
+          'table', 'thead', 'tbody', 'tr', 'th', 'td',
+          'blockquote', 'pre', 'code',
+          'a', 'img',
+          'div', 'span'
+        ],
+        ALLOWED_ATTR: [
+          'href', 'title', 'class', 'id',
+          'src', 'alt', 'width', 'height',
+          'target', 'rel',
+          'colspan', 'rowspan',
+          'data-language'
+        ],
+        KEEP_CONTENT: true
+      });
+
+      // Add Tailwind classes to list and image elements (matching WikiViewer)
+      const formattedHtml = htmlContent
+        .replace(/<ol>/g, '<ol class="list-decimal list-inside ml-4 my-2 space-y-1">')
+        .replace(/<ul>/g, '<ul class="list-disc list-inside ml-4 my-2 space-y-1">')
+        .replace(/<li>(\s*)<p>/g, '<li class="text-gray-700">$1')
+        .replace(/<\/p>(\s*)<\/li>/g, '$1</li>')
+        .replace(/<li>(?!.*class)/g, '<li class="text-gray-700">')
+        .replace(/<img src="\/uploads\/wiki\//g, '<img src="' + (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api') + '/public/wiki/images/')
+        .replace(/<img /g, '<img class="max-w-full h-auto rounded-lg my-2" ');
+
       return (
         <div
-          dangerouslySetInnerHTML={{ __html: html }}
+          dangerouslySetInnerHTML={{ __html: formattedHtml }}
           className="prose prose-sm max-w-none"
         />
       );
