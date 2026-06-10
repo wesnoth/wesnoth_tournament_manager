@@ -15,7 +15,7 @@ interface CreateArticleParams {
   title: string;
   content_markdown: string;
   language: string;
-  author_id: number;
+  author_id: string;
   is_published?: boolean;
 }
 
@@ -25,14 +25,14 @@ interface UpdateArticleParams {
   content_markdown?: string;
   language?: string;
   is_published?: boolean;
-  editor_id?: number;
+  editor_id?: string;
 }
 
 interface ImageMetadata {
   id: number;
   filename: string;
   original_name: string;
-  uploaded_by: number | null;
+  uploaded_by: string | null;
   created_at: string;
 }
 
@@ -217,7 +217,7 @@ export const hardDeleteArticle = async (slug: string): Promise<void> => {
  */
 export const uploadImage = async (
   file: Express.Multer.File,
-  userId: number | null
+  userId: string | null
 ): Promise<{ id: number; filename: string; url: string }> => {
   if (!file) {
     throw new Error('No file provided');
@@ -340,7 +340,7 @@ export const deleteImage = async (filename: string): Promise<void> => {
  * Get all images with usage count
  */
 export const getAllImages = async (): Promise<
-  Array<{ id: number; filename: string; original_name: string; uploaded_by: number | null; created_at: string; usage_count: number }>
+  Array<{ id: number; filename: string; original_name: string; uploaded_by: string | null; created_at: string; usage_count: number }>
 > => {
   const result = await queryTournament(
     `SELECT wi.id, wi.filename, wi.original_name, wi.uploaded_by, wi.created_at,

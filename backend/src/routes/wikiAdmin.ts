@@ -32,7 +32,7 @@ router.post('/upload-image', moderatorOrAdminMiddleware, upload.single('image'),
       return res.status(400).json({ error: 'No file provided' });
     }
 
-    const result = await wikiAdminService.uploadImage(req.file, parseInt(req.userId!));
+    const result = await wikiAdminService.uploadImage(req.file, req.userId || null);
     res.status(201).json(result);
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -121,7 +121,7 @@ router.post('/', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Respo
       title,
       content_markdown,
       language,
-      author_id: parseInt(req.userId!),
+      author_id: req.userId!,
       is_published: is_published ?? true
     });
 
@@ -183,7 +183,7 @@ router.put('/:slug', moderatorOrAdminMiddleware, async (req: AuthRequest, res: R
       content_markdown,
       language,
       is_published,
-      editor_id: parseInt(req.userId!)
+      editor_id: req.userId!
     });
 
     res.json({ slug, message: 'Article updated successfully' });
