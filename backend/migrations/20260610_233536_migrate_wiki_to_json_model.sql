@@ -7,9 +7,8 @@ CREATE TABLE wiki_articles_new (
   slug VARCHAR(255) NOT NULL UNIQUE COMMENT 'URL-friendly identifier',
   translations LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL 
     DEFAULT '{"en":{},"es":{},"de":{},"fr":{},"zh":{}}' 
-    CHECK (json_valid(`translations`))
-    COMMENT 'JSON object with translations: {"en":{"title":"...","content":"..."},"es":{...}}',
-  author_id CHAR(36) COMMENT 'UUID of article author',
+    COMMENT 'Multi-language translations stored as JSON object',
+  author_id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT 'UUID of article author',
   is_published TINYINT(1) NOT NULL DEFAULT 1 COMMENT '1=published, 0=draft',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -18,7 +17,7 @@ CREATE TABLE wiki_articles_new (
   INDEX idx_published (is_published),
   INDEX idx_author_id (author_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-COMMENT='Wiki articles with multi-language JSON support - aligned with FAQ/News pattern';
+COMMENT='Wiki articles with multi-language JSON support';
 
 -- Step 2: Migrate existing data from old table
 -- Group by slug, collect all language variants into JSON
