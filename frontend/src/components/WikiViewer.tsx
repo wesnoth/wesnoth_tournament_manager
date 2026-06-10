@@ -150,6 +150,9 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
       .replace(/<\/p><\/li>/g, '</li>')
       .replace(/<li>/g, '<li class="text-gray-700">')
       .replace(/<img /g, '<img class="max-w-full h-auto rounded-lg shadow-md my-2 block" ');
+    
+    console.log('FINAL HTML HAS IMAGES:', htmlContent.includes('<img'));
+    console.log('IMAGE COUNT:', (htmlContent.match(/<img/g) || []).length);
     console.log('SANITIZED HTML FULL:', htmlContent);
   } catch (e) {
     console.error('Error parsing markdown:', e);
