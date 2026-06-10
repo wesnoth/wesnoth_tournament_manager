@@ -143,12 +143,17 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
     });
     
     // Add Tailwind classes directly to list and image elements
+    // Fix malformed <li><p>...</p></li> structures
     htmlContent = htmlContent
       .replace(/<ol>/g, '<ol class="list-decimal list-inside ml-4 my-2 space-y-1">')
       .replace(/<ul>/g, '<ul class="list-disc list-inside ml-4 my-2 space-y-1">')
-      .replace(/<li><p>/g, '<li class="text-gray-700">')
-      .replace(/<\/p><\/li>/g, '</li>')
-      .replace(/<li>/g, '<li class="text-gray-700">')
+      // Remove opening <p> inside <li>
+      .replace(/<li>(\s*)<p>/g, '<li class="text-gray-700">$1')
+      // Remove closing </p> inside </li>
+      .replace(/<\/p>(\s*)<\/li>/g, '$1</li>')
+      // Handle remaining <li> without class (shouldn't happen but just in case)
+      .replace(/<li>(?!.*class)/g, '<li class="text-gray-700">')
+      // Add classes to images
       .replace(/<img /g, '<img class="max-w-full h-auto rounded-lg shadow-md my-2 block" ');
     
     console.log('FINAL HTML HAS IMAGES:', htmlContent.includes('<img'));
