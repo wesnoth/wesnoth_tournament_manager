@@ -28,14 +28,17 @@ interface WikiArticle {
 
 const WikiViewer: React.FC<WikiViewerProps> = ({
   slug,
-  language = 'en',
+  language: languageProp,
   onError,
   isLoading
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [article, setArticle] = useState<WikiArticle | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Use provided language, fallback to i18n language, then to 'en'
+  const language = languageProp || i18n.language || 'en';
 
   useEffect(() => {
     const fetchArticle = async () => {

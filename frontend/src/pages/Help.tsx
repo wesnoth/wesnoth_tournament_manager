@@ -17,10 +17,10 @@ interface WikiListItem {
 }
 
 const HelpPage: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { slug } = useParams<{ slug?: string }>();
   const [searchParams] = useSearchParams();
-  const language = searchParams.get('lang') || localStorage.getItem('language') || 'en';
+  const language = searchParams.get('lang') || i18n.language || 'en';
 
   const [articles, setArticles] = useState<WikiListItem[]>([]);
   const [loadingList, setLoadingList] = useState(true);
