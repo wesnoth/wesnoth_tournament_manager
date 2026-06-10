@@ -124,7 +124,7 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
     const rawHtml = marked(article.content_markdown) as string;
     console.log('RAW MARKDOWN LENGTH:', article.content_markdown.length);
     console.log('RAW HTML LENGTH:', rawHtml.length);
-    console.log('RAW HTML SNIPPET:', rawHtml.substring(0, 200));
+    console.log('RAW HTML FULL:', rawHtml);
     htmlContent = DOMPurify.sanitize(rawHtml, {
       ALLOWED_TAGS: [
         'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
@@ -144,8 +144,7 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
       ],
       KEEP_CONTENT: true
     });
-    console.log('SANITIZED HTML LENGTH:', htmlContent.length);
-    console.log('SANITIZED HTML SNIPPET:', htmlContent.substring(0, 300));
+    console.log('SANITIZED HTML FULL:', htmlContent);
   } catch (e) {
     console.error('Error parsing markdown:', e);
     htmlContent = `<p>${DOMPurify.sanitize(article.content_markdown)}</p>`;
