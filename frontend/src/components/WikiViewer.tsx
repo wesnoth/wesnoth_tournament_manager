@@ -146,8 +146,10 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
     htmlContent = htmlContent
       .replace(/<ol>/g, '<ol class="list-decimal list-inside ml-4 my-2 space-y-1">')
       .replace(/<ul>/g, '<ul class="list-disc list-inside ml-4 my-2 space-y-1">')
+      .replace(/<li><p>/g, '<li class="text-gray-700">')
+      .replace(/<\/p><\/li>/g, '</li>')
       .replace(/<li>/g, '<li class="text-gray-700">')
-      .replace(/<img /g, '<img class="max-w-full h-auto rounded-lg shadow-md my-2" ');
+      .replace(/<img /g, '<img class="max-w-full h-auto rounded-lg shadow-md my-2 inline-block" ');
     console.log('SANITIZED HTML FULL:', htmlContent);
   } catch (e) {
     console.error('Error parsing markdown:', e);
