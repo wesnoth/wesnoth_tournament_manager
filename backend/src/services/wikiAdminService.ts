@@ -168,7 +168,7 @@ export const updateArticle = async (slug: string, params: UpdateArticleParams): 
       if (!newImages.includes(filename)) {
         await queryTournament(
           `DELETE FROM wiki_article_images 
-           WHERE wiki_article_id = ? 
+           WHERE article_id = ? 
            AND wiki_image_id = (SELECT id FROM wiki_images WHERE filename = ?)`,
           [articleId, filename]
         );
@@ -287,7 +287,7 @@ export const linkImagesToArticle = async (articleId: number, imageFilenames: str
 
       // Insert junction record (ignore if already exists)
       await queryTournament(
-        `INSERT IGNORE INTO wiki_article_images (wiki_article_id, wiki_image_id) 
+        `INSERT IGNORE INTO wiki_article_images (article_id, wiki_image_id) 
          VALUES (?, ?)`,
         [articleId, imageId]
       );
@@ -302,7 +302,7 @@ export const getImageUsage = async (filename: string): Promise<Array<{ id: numbe
   const result = await queryTournament(
     `SELECT wa.id, wa.slug, wa.title 
      FROM wiki_articles wa
-     INNER JOIN wiki_article_images wai ON wa.id = wai.wiki_article_id
+     INNER JOIN wiki_article_images wai ON wa.id = wai.article_id
      INNER JOIN wiki_images wi ON wai.wiki_image_id = wi.id
      WHERE wi.filename = ?`,
     [filename]
@@ -344,7 +344,7 @@ export const getAllImages = async (): Promise<
 > => {
   const result = await queryTournament(
     `SELECT wi.id, wi.filename, wi.original_name, wi.uploaded_by, wi.created_at,
-            COUNT(wai.id) as usage_count
+            COUNT(wai.article_id) as usage_count
      FROM wiki_images wi
      LEFT JOIN wiki_article_images wai ON wi.id = wai.wiki_image_id
      GROUP BY wi.id
