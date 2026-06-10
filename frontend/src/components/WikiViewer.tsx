@@ -122,9 +122,6 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
   let htmlContent = '';
   try {
     const rawHtml = marked(article.content_markdown) as string;
-    console.log('RAW MARKDOWN LENGTH:', article.content_markdown.length);
-    console.log('RAW HTML LENGTH:', rawHtml.length);
-    console.log('RAW HTML FULL:', rawHtml);
     htmlContent = DOMPurify.sanitize(rawHtml, {
       ALLOWED_TAGS: [
         'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
@@ -212,7 +209,9 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
           prose-table:border-collapse prose-td:border prose-td:border-gray-300 prose-td:px-3 prose-td:py-2
           prose-th:bg-gray-100 prose-th:border prose-th:border-gray-300 prose-th:px-3 prose-th:py-2 prose-th:font-semibold
           prose-li:text-gray-700
-          prose-img:rounded-lg prose-img:shadow-md"
+          prose-ol:list-decimal prose-ol:ml-4 prose-ol:my-2
+          prose-ul:list-disc prose-ul:ml-4 prose-ul:my-2
+          prose-img:max-w-full prose-img:h-auto prose-img:rounded-lg prose-img:shadow-md"
         dangerouslySetInnerHTML={{ __html: htmlContent }}
       />
 
