@@ -3,9 +3,57 @@ import jwt from 'jsonwebtoken';
 import { query } from '../config/database.js';
 import { getWinnerAndRunnerUp } from '../utils/tournament.js';
 import { optionalAuthMiddleware } from '../middleware/auth.js';
-// NOTE: Supabase replay storage temporarily disabled - using /uploads/replays instead
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const router = Router();
+
+// Serve wiki images with proper content-type
+// This is a fallback in case /uploads/wiki is not served correctly by the reverse proxy
+router.get('/wiki/images/:filename', (req, res) => {
+  try {
+    const filename = req.params.filename;
+    
+    // Security: prevent directory traversal
+    if (filename.includes('..') || filename.includes('/')) {
+      return res.status(400).json({ error: 'Invalid filename' });
+    }
+    
+    const filePath = path.join(__dirname, '..', 'uploads', 'wiki', filename);
+    console.log(`[WIKI-IMAGE] Request: ${filename}, Full path: ${filePath}`);
+    
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      console.log(`[WIKI-IMAGE] File not found: ${filePath}`);
+      return res.status(404).json({ error: 'Image not found' });
+    }
+    
+    // Determine content type based on extension
+    const ext = path.extname(filename).toLowerCase();
+    let contentType = 'image/png';
+    if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+    else if (ext === '.gif') contentType = 'image/gif';
+    else if (ext === '.webp') contentType = 'image/webp';
+    
+    console.log(`[WIKI-IMAGE] Serving ${filename} with Content-Type: ${contentType}`);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    
+    const fileStream = fs.createReadStream(filePath);
+    fileStream.on('error', (err) => {
+      console.error(`[WIKI-IMAGE] Stream error for ${filename}:`, err);
+      res.status(500).json({ error: 'Error reading file' });
+    });
+    
+    fileStream.pipe(res);
+  } catch (error) {
+    console.error('[WIKI-IMAGE] Error:', error);
+    res.status(500).json({ error: 'Failed to serve image' });
+  }
+});
 
 // Get FAQ (public endpoint) - returns all language versions
 // Frontend will handle language selection with fallback to English

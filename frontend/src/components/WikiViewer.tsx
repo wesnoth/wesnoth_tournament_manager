@@ -153,7 +153,8 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
       .replace(/<\/p>(\s*)<\/li>/g, '$1</li>')
       // Handle remaining <li> without class (shouldn't happen but just in case)
       .replace(/<li>(?!.*class)/g, '<li class="text-gray-700">')
-      // Add classes to images
+      // Add classes to images and proxy through API for better reliability
+      .replace(/<img src="\/uploads\/wiki\//g, '<img src="' + (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api') + '/public/wiki/images/')
       .replace(/<img /g, '<img class="max-w-full h-auto rounded-lg shadow-md my-2 block" ');
     console.log('SANITIZED HTML FULL:', htmlContent);
   } catch (e) {
