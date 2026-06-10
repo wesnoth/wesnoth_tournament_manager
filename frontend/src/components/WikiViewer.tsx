@@ -141,6 +141,13 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
       ],
       KEEP_CONTENT: true
     });
+    
+    // Add Tailwind classes directly to list and image elements
+    htmlContent = htmlContent
+      .replace(/<ol>/g, '<ol class="list-decimal list-inside ml-4 my-2 space-y-1">')
+      .replace(/<ul>/g, '<ul class="list-disc list-inside ml-4 my-2 space-y-1">')
+      .replace(/<li>/g, '<li class="text-gray-700">')
+      .replace(/<img /g, '<img class="max-w-full h-auto rounded-lg shadow-md my-2" ');
     console.log('SANITIZED HTML FULL:', htmlContent);
   } catch (e) {
     console.error('Error parsing markdown:', e);
@@ -207,11 +214,7 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
           prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-pre:p-4 prose-pre:rounded-lg prose-pre:overflow-x-auto
           prose-blockquote:border-l-4 prose-blockquote:border-primary prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:text-gray-600
           prose-table:border-collapse prose-td:border prose-td:border-gray-300 prose-td:px-3 prose-td:py-2
-          prose-th:bg-gray-100 prose-th:border prose-th:border-gray-300 prose-th:px-3 prose-th:py-2 prose-th:font-semibold
-          prose-li:text-gray-700
-          prose-ol:list-decimal prose-ol:ml-4 prose-ol:my-2
-          prose-ul:list-disc prose-ul:ml-4 prose-ul:my-2
-          prose-img:max-w-full prose-img:h-auto prose-img:rounded-lg prose-img:shadow-md"
+          prose-th:bg-gray-100 prose-th:border prose-th:border-gray-300 prose-th:px-3 prose-th:py-2 prose-th:font-semibold"
         dangerouslySetInnerHTML={{ __html: htmlContent }}
       />
 
