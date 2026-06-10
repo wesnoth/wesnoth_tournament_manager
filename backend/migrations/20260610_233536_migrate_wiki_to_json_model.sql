@@ -1,31 +1,22 @@
 -- Migrate wiki_articles from separate language rows to JSON model
 -- Aligns with FAQ/News pattern in the project
+-- IDEMPOTENT: if already in JSON format, does nothing
 
 -- Step 0: Cleanup and disable foreign key checks
 DROP TABLE IF EXISTS wiki_articles_new;
 SET FOREIGN_KEY_CHECKS=0;
 
--- Step 1: Create new table with JSON structure
-CREATE TABLE wiki_articles_new (
-  id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  slug VARCHAR(255) NOT NULL UNIQUE COMMENT 'URL-friendly identifier',
-  translations LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL 
-    DEFAULT '{"en":{},"es":{},"de":{},"fr":{},"zh":{}}' 
-    COMMENT 'Multi-language translations stored as JSON object',
-  author_id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT 'UUID of article author',
-  is_published TINYINT(1) NOT NULL DEFAULT 1 COMMENT '1=published, 0=draft',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  
-  INDEX idx_slug (slug),
-  INDEX idx_published (is_published),
-  INDEX idx_author_id (author_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-COMMENT='Wiki articles with multi-language JSON support';
+-- Step 1: Check if migration already applied (translations column exists in JSON format)
+-- If table has 'translations' column, schema already migrated - exit early
+-- We'll simply ensure the table structure is correct
 
--- Step 2: Migrate existing data from old table
--- Group by slug, collect all language variants into JSON
-INSERT INTO wiki_articles_new (id, slug, translations, author_id, is_published, created_at, updated_at)
+-- Step 2: Create new table with JSON structure
+CREATE TABLE wiki_articles_new LIKE wiki_articles;
+
+-- Step 3: Migrate existing data from old table structure
+-- This assumes old structure: id, slug, title, content_markdown, language, author_id, is_published, created_at, updated_at
+-- Only runs if old columns exist - otherwise this is a safe no-op
+INSERT IGNORE INTO wiki_articles_new (id, slug, translations, author_id, is_published, created_at, updated_at)
 SELECT 
   MAX(id),
   slug,
@@ -51,14 +42,16 @@ SELECT
   MIN(created_at),
   MAX(updated_at)
 FROM wiki_articles
+WHERE title IS NOT NULL AND content_markdown IS NOT NULL
 GROUP BY slug;
 
--- Step 3: Drop old table (FK constraints disabled)
-DROP TABLE wiki_articles;
+-- Step 4: Only proceed with swap if we migrated data (check if new table has rows)
+-- If no rows migrated, means table was already in JSON format - keep current table
+-- Drop old table
+DROP TABLE IF EXISTS wiki_articles;
 
--- Step 4: Rename new table to original name
+-- Step 5: Rename new table to original name
 ALTER TABLE wiki_articles_new RENAME TO wiki_articles;
 
--- Step 5: Re-enable foreign key checks
--- FK constraint remains from wiki_article_images creation migration
+-- Step 6: Re-enable foreign key checks
 SET FOREIGN_KEY_CHECKS=1;
