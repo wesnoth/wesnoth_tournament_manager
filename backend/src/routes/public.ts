@@ -22,7 +22,7 @@ router.get('/wiki/images/:filename', (req, res) => {
       return res.status(400).json({ error: 'Invalid filename' });
     }
     
-    const filePath = path.join(__dirname, '..', 'uploads', 'wiki', filename);
+    const filePath = path.join(__dirname, '..', '..', 'uploads', 'wiki', filename);
     console.log(`[WIKI-IMAGE] Request: ${filename}, Full path: ${filePath}`);
     
     // Check if file exists
