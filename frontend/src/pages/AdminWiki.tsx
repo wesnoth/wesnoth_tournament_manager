@@ -8,11 +8,21 @@ import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../store/authStore';
 import WikiEditor from '../components/WikiEditor';
 
+interface WikiTranslation {
+  title: string;
+  content_markdown: string;
+}
+
 interface WikiArticle {
   id: number;
   slug: string;
-  title: string;
-  language: string;
+  translations: {
+    en?: WikiTranslation;
+    es?: WikiTranslation;
+    de?: WikiTranslation;
+    fr?: WikiTranslation;
+    zh?: WikiTranslation;
+  };
   is_published: number;
   created_at: string;
   updated_at: string;
@@ -116,9 +126,13 @@ const AdminWiki: React.FC = () => {
 
   const handleSaveArticle = async (data: {
     slug: string;
-    title: string;
-    content_markdown: string;
-    language: string;
+    translations: {
+      en?: { title: string; content_markdown: string };
+      es?: { title: string; content_markdown: string };
+      de?: { title: string; content_markdown: string };
+      fr?: { title: string; content_markdown: string };
+      zh?: { title: string; content_markdown: string };
+    };
     is_published: boolean;
   }) => {
     setError(null);
@@ -213,10 +227,7 @@ const AdminWiki: React.FC = () => {
   if (showEditor) {
     return (
       <WikiEditor
-        initialSlug={editingArticle?.slug || ''}
-        initialTitle={editingArticle?.title || ''}
-        initialContent={editingArticle?.slug ? '' : ''}
-        initialLanguage={editingArticle?.language || 'en'}
+        editingArticle={editingArticle || undefined}
         onSave={handleSaveArticle}
         onCancel={() => setShowEditor(false)}
         token={token}
@@ -283,8 +294,7 @@ const AdminWiki: React.FC = () => {
                 <thead>
                   <tr className="border-b-2 border-gray-300 bg-gray-50">
                     <th className="text-left px-4 py-3 font-semibold text-gray-900">Slug</th>
-                    <th className="text-left px-4 py-3 font-semibold text-gray-900">Title</th>
-                    <th className="text-center px-4 py-3 font-semibold text-gray-900">Language</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-900">Languages</th>
                     <th className="text-center px-4 py-3 font-semibold text-gray-900">Status</th>
                     <th className="text-left px-4 py-3 font-semibold text-gray-900">Updated</th>
                     <th className="text-center px-4 py-3 font-semibold text-gray-900">Actions</th>
@@ -294,8 +304,22 @@ const AdminWiki: React.FC = () => {
                   {articles.map((article) => (
                     <tr key={article.id} className="border-b border-gray-200 hover:bg-gray-50">
                       <td className="px-4 py-3 font-mono text-sm text-gray-600">{article.slug}</td>
-                      <td className="px-4 py-3 font-medium text-gray-900">{article.title}</td>
-                      <td className="px-4 py-3 text-center text-sm">{article.language.toUpperCase()}</td>
+                      <td className="px-4 py-3 text-sm">
+                        <div className="flex gap-2">
+                          {Object.keys(article.translations).map((lang) => (
+                            <span
+                              key={lang}
+                              className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
+                                article.translations[lang as keyof typeof article.translations]?.title
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}
+                            >
+                              {lang.toUpperCase()}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-center">
                         <span
                           className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
