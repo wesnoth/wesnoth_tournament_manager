@@ -87,34 +87,36 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
 
   // Configure marked for security and features
   useEffect(() => {
-    const renderer = {
-      link({ href, title, text }: { href: string; title?: string; text: string }) {
-        const isInternal = href.startsWith('/help/') || href.startsWith('#');
-        return `<a href="${DOMPurify.sanitize(href)}" ${title ? `title="${DOMPurify.sanitize(title)}"` : ''} ${isInternal ? '' : 'rel="noopener noreferrer" target="_blank"'}>${DOMPurify.sanitize(text)}</a>`;
-      },
-      codespan({ text }: { text: string }) {
-        return `<code class="bg-gray-900 text-gray-100 px-2 py-1 rounded font-mono text-sm">${DOMPurify.sanitize(text)}</code>`;
-      },
-      code({ text, lang }: { text: string; lang?: string }) {
-        const language = lang || 'plaintext';
-        let highlighted = text;
-        try {
-          if (hljs.getLanguage(language)) {
-            highlighted = hljs.highlight(text, { language, ignoreIllegals: true }).value;
-          } else {
-            highlighted = hljs.highlightAuto(text).value;
-          }
-        } catch (e) {
-          highlighted = DOMPurify.sanitize(text);
+    const defaultRenderer = new marked.Renderer();
+    
+    defaultRenderer.link = ({ href, title, text }: { href: string; title?: string; text: string }) => {
+     const isInternal = href.startsWith('/help/') || href.startsWith('#');
+     return `<a href="${DOMPurify.sanitize(href)}" ${title ? `title="${DOMPurify.sanitize(title)}"` : ''} ${isInternal ? '' : 'rel="noopener noreferrer" target="_blank"'}>${DOMPurify.sanitize(text)}</a>`;
+    };
+
+    defaultRenderer.codespan = ({ text }: { text: string }) => {
+     return `<code class="bg-gray-900 text-gray-100 px-2 py-1 rounded font-mono text-sm">${DOMPurify.sanitize(text)}</code>`;
+    };
+
+    defaultRenderer.code = ({ text, lang }: { text: string; lang?: string }) => {
+     const language = lang || 'plaintext';
+     let highlighted = text;
+     try {
+       if (hljs.getLanguage(language)) {
+         highlighted = hljs.highlight(text, { language, ignoreIllegals: true }).value;
+       } else {
+         highlighted = hljs.highlightAuto(text).value;
         }
-        return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>`;
-      }
+     } catch (e) {
+       highlighted = DOMPurify.sanitize(text);
+     }
+     return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>`;
     };
 
     marked.setOptions({
      breaks: false,
-      gfm: true,
-      renderer
+     gfm: true,
+     renderer: defaultRenderer
     });
   }, []);
 
@@ -147,6 +149,9 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
   let htmlContent = '';
   try {
     const rawHtml = marked(article.content_markdown) as string;
+    console.log('RAW MARKDOWN LENGTH:', article.content_markdown.length);
+    console.log('RAW HTML LENGTH:', rawHtml.length);
+    console.log('RAW HTML SNIPPET:', rawHtml.substring(0, 200));
     htmlContent = DOMPurify.sanitize(rawHtml, {
       ALLOWED_TAGS: [
         'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
@@ -166,6 +171,8 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
       ],
       KEEP_CONTENT: true
     });
+    console.log('SANITIZED HTML LENGTH:', htmlContent.length);
+    console.log('SANITIZED HTML SNIPPET:', htmlContent.substring(0, 300));
   } catch (e) {
     console.error('Error parsing markdown:', e);
     htmlContent = `<p>${DOMPurify.sanitize(article.content_markdown)}</p>`;
