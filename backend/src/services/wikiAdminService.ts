@@ -1,6 +1,6 @@
 /**
  * Wiki Admin Service
- * Business logic for admin/moderator wiki management: CRUD articles, image uploads, usage tracking
+ * Business logic for admin/moderator wiki management with JSON translations
  */
 
 import { queryTournament } from '../config/tournamentDatabase.js';
@@ -12,18 +12,24 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 interface CreateArticleParams {
   slug: string;
-  title: string;
-  content_markdown: string;
-  language: string;
+  translations: {
+    [language: string]: {
+      title: string;
+      content_markdown: string;
+    };
+  };
   author_id: string;
   is_published?: boolean;
 }
 
 interface UpdateArticleParams {
   slug: string;
-  title?: string;
-  content_markdown?: string;
-  language?: string;
+  translations?: {
+    [language: string]: {
+      title?: string;
+      content_markdown?: string;
+    };
+  };
   is_published?: boolean;
   editor_id?: string;
 }
@@ -35,6 +41,49 @@ interface ImageMetadata {
   uploaded_by: string | null;
   created_at: string;
 }
+
+interface WikiArticleRow {
+  id: number;
+  slug: string;
+  translations: string; // JSON string
+  author_id: string;
+  is_published: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface WikiTranslations {
+  [language: string]: {
+    title?: string;
+    content_markdown?: string;
+  };
+}
+
+/**
+ * Get all articles for admin listing
+ */
+export const getArticlesList = async (): Promise<any[]> => {
+  try {
+    const result = await queryTournament(
+      `SELECT id, slug, translations, author_id, is_published, created_at, updated_at
+       FROM wiki_articles
+       ORDER BY updated_at DESC`
+    );
+
+    return (result as WikiArticleRow[]).map(row => ({
+      id: row.id,
+      slug: row.slug,
+      translations: JSON.parse(row.translations),
+      author_id: row.author_id,
+      is_published: row.is_published === 1,
+      created_at: row.created_at,
+      updated_at: row.updated_at
+    }));
+  } catch (error) {
+    console.error('Error fetching articles list:', error);
+    throw error;
+  }
+};
 
 /**
  * Extract image URLs from markdown content
@@ -58,298 +107,376 @@ export const validateSlug = (slug: string): boolean => {
 };
 
 /**
- * Create new wiki article
+ * Create new wiki article with translations
  */
 export const createArticle = async (params: CreateArticleParams): Promise<number> => {
   if (!validateSlug(params.slug)) {
     throw new Error('Invalid slug format. Use only lowercase letters, numbers, hyphens, and underscores.');
   }
 
-  if (!params.title || params.title.trim().length === 0) {
-    throw new Error('Title cannot be empty');
+  // Validate translations
+  const { en, ...otherLangs } = params.translations;
+  if (!en || !en.title || !en.content_markdown) {
+    throw new Error('English (en) translation with title and content is required');
   }
 
-  if (!params.content_markdown || params.content_markdown.trim().length === 0) {
-    throw new Error('Content cannot be empty');
+  for (const lang in params.translations) {
+    const trans = params.translations[lang];
+    if (trans.title && trans.title.trim().length === 0) {
+      throw new Error(`Title for language "${lang}" cannot be empty`);
+    }
+    if (trans.content_markdown && trans.content_markdown.trim().length === 0) {
+      throw new Error(`Content for language "${lang}" cannot be empty`);
+    }
   }
 
-  // Check if slug already exists for this language
+  // Check if slug already exists
   const existing = await queryTournament(
-    'SELECT id FROM wiki_articles WHERE slug = ? AND language = ?',
-    [params.slug, params.language]
+    'SELECT id FROM wiki_articles WHERE slug = ?',
+    [params.slug]
   );
 
   if ((existing as any[]).length > 0) {
-    throw new Error(`Article with slug "${params.slug}" already exists for language "${params.language}"`);
+    throw new Error(`Article with slug "${params.slug}" already exists`);
   }
 
-  // Create article
+  // Create article with translations JSON
+  const translationsJson = JSON.stringify(params.translations);
   const result = await queryTournament(
     `INSERT INTO wiki_articles 
-      (slug, title, content_markdown, language, author_id, is_published, created_at, updated_at) 
-     VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-    [params.slug, params.title, params.content_markdown, params.language, params.author_id, params.is_published ? 1 : 0]
+      (slug, translations, author_id, is_published, created_at, updated_at) 
+     VALUES (?, ?, ?, ?, NOW(), NOW())`,
+    [params.slug, translationsJson, params.author_id, params.is_published ? 1 : 0]
   );
 
   const articleId = (result as any).insertId as number;
 
-  // Extract and link images
-  const imageFilenames = extractImageUrls(params.content_markdown);
-  await linkImagesToArticle(articleId, imageFilenames);
+  // Extract and link images from all language versions
+  const allImageFilenames = new Set<string>();
+  for (const lang in params.translations) {
+    const imageFilenames = extractImageUrls(params.translations[lang].content_markdown);
+    imageFilenames.forEach(f => allImageFilenames.add(f));
+  }
+
+  if (allImageFilenames.size > 0) {
+    await linkImagesToArticle(articleId, Array.from(allImageFilenames));
+  }
 
   return articleId;
 };
 
 /**
- * Update existing article
+ * Get article with all translations for editing
+ */
+export const getArticleForEditing = async (slug: string): Promise<any | null> => {
+  try {
+    const result = (await queryTournament(
+      `SELECT id, slug, translations, author_id, is_published, created_at, updated_at
+       FROM wiki_articles
+       WHERE slug = ?
+       LIMIT 1`,
+      [slug]
+    )) as WikiArticleRow[];
+
+    if (result.length === 0) {
+      return null;
+    }
+
+    const row = result[0];
+    return {
+      id: row.id,
+      slug: row.slug,
+      translations: JSON.parse(row.translations),
+      author_id: row.author_id,
+      is_published: row.is_published === 1,
+      created_at: row.created_at,
+      updated_at: row.updated_at
+    };
+  } catch (error) {
+    console.error('Error fetching article for editing:', error);
+    throw error;
+  }
+};
+
+/**
+ * Update wiki article translations
  */
 export const updateArticle = async (slug: string, params: UpdateArticleParams): Promise<void> => {
-  // Get current article
-  const existing = await queryTournament(
-    'SELECT id, content_markdown FROM wiki_articles WHERE slug = ?',
-    [slug]
-  );
+  try {
+    // Get existing article
+    const existing = (await queryTournament(
+      `SELECT id, translations FROM wiki_articles WHERE slug = ?`,
+      [slug]
+    )) as WikiArticleRow[];
 
-  if ((existing as any[]).length === 0) {
-    throw new Error(`Article "${slug}" not found`);
-  }
-
-  const articleId = (existing as any[])[0].id;
-  const oldContent = (existing as any[])[0].content_markdown;
-
-  const updates: string[] = [];
-  const values: (string | number | null)[] = [];
-
-  if (params.title !== undefined) {
-    updates.push('title = ?');
-    values.push(params.title);
-  }
-
-  if (params.content_markdown !== undefined) {
-    if (params.content_markdown.trim().length === 0) {
-      throw new Error('Content cannot be empty');
+    if (existing.length === 0) {
+      throw new Error(`Article with slug "${slug}" not found`);
     }
-    updates.push('content_markdown = ?');
-    values.push(params.content_markdown);
-  }
 
-  if (params.language !== undefined) {
-    updates.push('language = ?');
-    values.push(params.language);
-  }
+    const article = existing[0];
+    const currentTranslations: WikiTranslations = JSON.parse(article.translations);
 
-  if (params.is_published !== undefined) {
-    updates.push('is_published = ?');
-    values.push(params.is_published ? 1 : 0);
-  }
+    // Merge new translations with existing ones
+    let updatedTranslations = { ...currentTranslations };
+    if (params.translations) {
+      updatedTranslations = { ...updatedTranslations, ...params.translations };
+    }
 
-  if (updates.length === 0) {
-    return; // No updates
-  }
+    // Ensure English translation exists
+    if (!updatedTranslations.en || !updatedTranslations.en.title) {
+      throw new Error('English (en) translation with title is required');
+    }
 
-  // Always update timestamp
-  updates.push('updated_at = NOW()');
+    // Update article
+    const translationsJson = JSON.stringify(updatedTranslations);
+    await queryTournament(
+      `UPDATE wiki_articles 
+       SET translations = ?, is_published = COALESCE(?, is_published), updated_at = NOW()
+       WHERE slug = ?`,
+      [translationsJson, params.is_published !== undefined ? (params.is_published ? 1 : 0) : null, slug]
+    );
 
-  values.push(slug);
-
-  // Update article
-  await queryTournament(
-    `UPDATE wiki_articles SET ${updates.join(', ')} WHERE slug = ?`,
-    values
-  );
-
-  // Sync images if content changed
-  if (params.content_markdown !== undefined) {
-    const oldImages = extractImageUrls(oldContent);
-    const newImages = extractImageUrls(params.content_markdown);
-
-    // Remove old image links
-    for (const filename of oldImages) {
-      if (!newImages.includes(filename)) {
-        await queryTournament(
-          `DELETE FROM wiki_article_images 
-           WHERE article_id = ? 
-           AND wiki_image_id = (SELECT id FROM wiki_images WHERE filename = ?)`,
-          [articleId, filename]
-        );
+    // Extract and link images from all language versions
+    const allImageFilenames = new Set<string>();
+    for (const lang in updatedTranslations) {
+      const trans = updatedTranslations[lang];
+      if (trans && trans.content_markdown) {
+        const imageFilenames = extractImageUrls(trans.content_markdown);
+        imageFilenames.forEach(f => allImageFilenames.add(f));
       }
     }
 
-    // Add new image links
-    for (const filename of newImages) {
-      if (!oldImages.includes(filename)) {
-        await linkImagesToArticle(articleId, [filename]);
-      }
+    // Clear old image links and create new ones
+    await queryTournament(
+      `DELETE FROM wiki_article_images WHERE article_id = ?`,
+      [article.id]
+    );
+
+    if (allImageFilenames.size > 0) {
+      await linkImagesToArticle(article.id, Array.from(allImageFilenames));
     }
+  } catch (error) {
+    console.error('Error updating article:', error);
+    throw error;
   }
 };
 
 /**
- * Soft delete article (set is_published = 0)
+ * Delete wiki article and its image links
  */
-export const softDeleteArticle = async (slug: string): Promise<void> => {
-  const result = await queryTournament(
-    'UPDATE wiki_articles SET is_published = 0, updated_at = NOW() WHERE slug = ?',
-    [slug]
-  );
+export const deleteArticle = async (slug: string): Promise<void> => {
+  try {
+    const result = (await queryTournament(
+      `SELECT id FROM wiki_articles WHERE slug = ?`,
+      [slug]
+    )) as any[];
 
-  if ((result as any).affectedRows === 0) {
-    throw new Error(`Article "${slug}" not found`);
+    if (result.length === 0) {
+      throw new Error(`Article with slug "${slug}" not found`);
+    }
+
+    const articleId = result[0].id;
+
+    // Delete image links first
+    await queryTournament(
+      `DELETE FROM wiki_article_images WHERE article_id = ?`,
+      [articleId]
+    );
+
+    // Delete article
+    await queryTournament(
+      `DELETE FROM wiki_articles WHERE id = ?`,
+      [articleId]
+    );
+  } catch (error) {
+    console.error('Error deleting article:', error);
+    throw error;
   }
 };
 
 /**
- * Hard delete article (permanent removal)
- */
-export const hardDeleteArticle = async (slug: string): Promise<void> => {
-  const result = await queryTournament(
-    'DELETE FROM wiki_articles WHERE slug = ?',
-    [slug]
-  );
-
-  if ((result as any).affectedRows === 0) {
-    throw new Error(`Article "${slug}" not found`);
-  }
-};
-
-/**
- * Upload image file and create metadata record
+ * Upload image for wiki articles
  */
 export const uploadImage = async (
   file: Express.Multer.File,
-  userId: string | null
+  uploader_id: string | null
 ): Promise<{ id: number; filename: string; url: string }> => {
   if (!file) {
     throw new Error('No file provided');
   }
 
-  // Validate file type (images only)
-  const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
-  if (!allowedMimes.includes(file.mimetype)) {
-    throw new Error(`Invalid file type. Allowed: ${allowedMimes.join(', ')}`);
-  }
-
-  // Max 5MB
-  if (file.size > 5 * 1024 * 1024) {
-    throw new Error('File size exceeds 5MB limit');
-  }
-
-  // Generate unique filename: timestamp + random + extension
   const timestamp = Date.now();
-  const random = Math.random().toString(36).substring(2, 8);
-  const ext = path.extname(file.originalname).toLowerCase();
-  const filename = `${timestamp}_${random}${ext}`;
+  const filename = `${timestamp}_${Math.random().toString(36).substring(7)}.${file.originalname.split('.').pop()}`;
+  const uploadDir = path.join(__dirname, '../../uploads/wiki');
 
-  // Ensure uploads/wiki directory exists
-  const uploadDir = path.join(__dirname, '..', '..', 'uploads', 'wiki');
+  // Ensure directory exists
   try {
     await fs.mkdir(uploadDir, { recursive: true });
-  } catch (e) {
-    console.error('Failed to create upload directory:', e);
-    throw new Error('Failed to create upload directory');
+  } catch (error) {
+    console.error('Error creating upload directory:', error);
   }
 
-  // Save file
   const filepath = path.join(uploadDir, filename);
+
+  // Write file to disk
   try {
     await fs.writeFile(filepath, file.buffer);
-  } catch (e) {
-    console.error('Failed to save file:', e);
-    throw new Error('Failed to save file');
+  } catch (error) {
+    console.error('Error writing file to disk:', error);
+    throw new Error('Failed to save image file');
   }
 
-  // Create metadata record
-  const result = await queryTournament(
-    'INSERT INTO wiki_images (filename, original_name, uploaded_by) VALUES (?, ?, ?)',
-    [filename, file.originalname, userId]
-  );
-
-  return {
-    id: (result as any).insertId as number,
-    filename,
-    url: `/uploads/wiki/${filename}`
-  };
-};
-
-/**
- * Link images to an article
- */
-export const linkImagesToArticle = async (articleId: number, imageFilenames: string[]): Promise<void> => {
-  for (const filename of imageFilenames) {
-    // Get image ID (or skip if doesn't exist)
-    const image = await queryTournament(
-      'SELECT id FROM wiki_images WHERE filename = ?',
-      [filename]
+  // Store metadata in database
+  try {
+    const result = await queryTournament(
+      `INSERT INTO wiki_images (filename, original_name, uploaded_by, created_at)
+       VALUES (?, ?, ?, NOW())`,
+      [filename, file.originalname, uploader_id]
     );
 
-    if ((image as any[]).length > 0) {
-      const imageId = (image as any[])[0].id;
-
-      // Insert junction record (ignore if already exists)
-      await queryTournament(
-        `INSERT IGNORE INTO wiki_article_images (article_id, wiki_image_id) 
-         VALUES (?, ?)`,
-        [articleId, imageId]
-      );
+    const imageId = (result as any).insertId as number;
+    return {
+      id: imageId,
+      filename,
+      url: `/api/public/wiki/images/${filename}`
+    };
+  } catch (error) {
+    console.error('Error storing image metadata:', error);
+    // Clean up file if database insert fails
+    try {
+      await fs.unlink(filepath);
+    } catch (e) {
+      console.error('Error cleaning up file:', e);
     }
+    throw error;
   }
 };
 
 /**
- * Get image usage (how many articles reference it)
+ * Get all uploaded images
  */
-export const getImageUsage = async (filename: string): Promise<Array<{ id: number; slug: string; title: string }>> => {
-  const result = await queryTournament(
-    `SELECT wa.id, wa.slug, wa.title 
-     FROM wiki_articles wa
-     INNER JOIN wiki_article_images wai ON wa.id = wai.article_id
-     INNER JOIN wiki_images wi ON wai.wiki_image_id = wi.id
-     WHERE wi.filename = ?`,
-    [filename]
-  );
+export const getAllImages = async (): Promise<ImageMetadata[]> => {
+  try {
+    const result = await queryTournament(
+      `SELECT id, filename, original_name, uploaded_by, created_at
+       FROM wiki_images
+       ORDER BY created_at DESC`
+    );
 
-  return result as any[];
+    return result as ImageMetadata[];
+  } catch (error) {
+    console.error('Error fetching images:', error);
+    throw error;
+  }
 };
 
 /**
- * Delete image file and metadata (after checking no refs)
+ * Get usage of an image (which articles use it)
+ */
+export const getImageUsage = async (filename: string): Promise<any[]> => {
+  try {
+    const result = (await queryTournament(
+      `SELECT DISTINCT wa.id, wa.slug, wa.translations, wa.is_published
+       FROM wiki_article_images wai
+       JOIN wiki_images wi ON wai.wiki_image_id = wi.id
+       JOIN wiki_articles wa ON wai.article_id = wa.id
+       WHERE wi.filename = ?`,
+      [filename]
+    )) as any[];
+
+    return result.map(row => ({
+      article_id: row.id,
+      slug: row.slug,
+      is_published: row.is_published === 1,
+      // Parse translations to get titles
+      titles: (() => {
+        try {
+          const trans: WikiTranslations = JSON.parse(row.translations);
+          return Object.keys(trans).reduce((acc, lang) => {
+            if (trans[lang]?.title) {
+              acc[lang] = trans[lang].title;
+            }
+            return acc;
+          }, {} as any);
+        } catch {
+          return {};
+        }
+      })()
+    }));
+  } catch (error) {
+    console.error('Error fetching image usage:', error);
+    throw error;
+  }
+};
+
+/**
+ * Delete image file and metadata
  */
 export const deleteImage = async (filename: string): Promise<void> => {
-  // Check if image is referenced in any article
-  const usage = await getImageUsage(filename);
-  if (usage.length > 0) {
-    throw new Error(
-      `Cannot delete image. It is referenced in ${usage.length} article(s): ${usage.map(u => u.slug).join(', ')}`
-    );
-  }
-
-  // Delete from disk
-  const filepath = path.join(__dirname, '..', '..', 'uploads', 'wiki', filename);
   try {
-    await fs.unlink(filepath);
-  } catch (e) {
-    console.error(`Failed to delete file ${filename}:`, e);
-    throw new Error('Failed to delete image file');
-  }
+    // Find image id
+    const result = (await queryTournament(
+      `SELECT id FROM wiki_images WHERE filename = ?`,
+      [filename]
+    )) as any[];
 
-  // Delete metadata record
-  await queryTournament('DELETE FROM wiki_images WHERE filename = ?', [filename]);
+    if (result.length === 0) {
+      throw new Error(`Image with filename "${filename}" not found`);
+    }
+
+    const imageId = result[0].id;
+
+    // Delete image links
+    await queryTournament(
+      `DELETE FROM wiki_article_images WHERE wiki_image_id = ?`,
+      [imageId]
+    );
+
+    // Delete metadata
+    await queryTournament(
+      `DELETE FROM wiki_images WHERE id = ?`,
+      [imageId]
+    );
+
+    // Delete file from disk
+    const filepath = path.join(__dirname, '../../uploads/wiki', filename);
+    try {
+      await fs.unlink(filepath);
+    } catch (error) {
+      console.warn(`Warning: Could not delete file "${filename}" from disk:`, error);
+      // Don't throw - file might already be gone
+    }
+  } catch (error) {
+    console.error('Error deleting image:', error);
+    throw error;
+  }
 };
 
 /**
- * Get all images with usage count
+ * Link images to article
  */
-export const getAllImages = async (): Promise<
-  Array<{ id: number; filename: string; original_name: string; uploaded_by: string | null; created_at: string; usage_count: number }>
-> => {
-  const result = await queryTournament(
-    `SELECT wi.id, wi.filename, wi.original_name, wi.uploaded_by, wi.created_at,
-            COUNT(wai.article_id) as usage_count
-     FROM wiki_images wi
-     LEFT JOIN wiki_article_images wai ON wi.id = wai.wiki_image_id
-     GROUP BY wi.id
-     ORDER BY wi.created_at DESC`
-  );
+const linkImagesToArticle = async (articleId: number, imageFilenames: string[]): Promise<void> => {
+  try {
+    for (const filename of imageFilenames) {
+      // Get image id by filename
+      const imageResult = (await queryTournament(
+        `SELECT id FROM wiki_images WHERE filename = ?`,
+        [filename]
+      )) as any[];
 
-  return result as any[];
+      if (imageResult.length > 0) {
+        const imageId = imageResult[0].id;
+
+        // Insert link (ignore duplicates)
+        await queryTournament(
+          `INSERT IGNORE INTO wiki_article_images (article_id, wiki_image_id, created_at)
+           VALUES (?, ?, NOW())`,
+          [articleId, imageId]
+        );
+      }
+    }
+  } catch (error) {
+    console.error('Error linking images to article:', error);
+    throw error;
+  }
 };

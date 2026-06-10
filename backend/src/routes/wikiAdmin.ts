@@ -1,6 +1,6 @@
 /**
  * Wiki Admin Routes
- * Admin/moderator endpoints for managing wiki articles and images
+ * Admin/moderator endpoints for managing wiki articles with JSON translations
  * Route: /api/admin/wiki
  * 
  * IMPORTANT: Route order is critical!
@@ -12,7 +12,6 @@ import { Router, Request, Response } from 'express';
 import { AuthRequest, moderatorOrAdminMiddleware } from '../middleware/auth.js';
 import multer from 'multer';
 import * as wikiAdminService from '../services/wikiAdminService.js';
-import { queryTournament } from '../config/tournamentDatabase.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -94,10 +93,8 @@ router.delete('/images/:filename', moderatorOrAdminMiddleware, async (req: AuthR
  */
 router.get('/', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const result = await queryTournament(
-      'SELECT id, slug, title, language, is_published, created_at, updated_at FROM wiki_articles ORDER BY created_at DESC'
-    );
-    res.json(result as any[]);
+    const result = await wikiAdminService.getArticlesList?.() || [];
+    res.json(result);
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     res.status(500).json({ error: msg });
@@ -106,21 +103,27 @@ router.get('/', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Respon
 
 /**
  * POST /api/admin/wiki
- * Create new article
+ * Create new article with translations
+ * Body: {
+ *   slug: "article-slug",
+ *   translations: {
+ *     en: { title: "Title", content_markdown: "..." },
+ *     es: { title: "Título", content_markdown: "..." }
+ *   },
+ *   is_published: true
+ * }
  */
 router.post('/', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const { slug, title, content_markdown, language, is_published } = req.body;
+    const { slug, translations, is_published } = req.body;
 
-    if (!slug || !title || !content_markdown || !language) {
-      return res.status(400).json({ error: 'Missing required fields: slug, title, content_markdown, language' });
+    if (!slug || !translations || typeof translations !== 'object') {
+      return res.status(400).json({ error: 'Missing required fields: slug, translations' });
     }
 
     const articleId = await wikiAdminService.createArticle({
       slug,
-      title,
-      content_markdown,
-      language,
+      translations,
       author_id: req.userId!,
       is_published: is_published ?? true
     });
@@ -134,7 +137,7 @@ router.post('/', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Respo
 
 /**
  * GET /api/admin/wiki/:slug
- * Get article for editing
+ * Get article for editing (with all translations)
  */
 router.get('/:slug', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
@@ -144,16 +147,13 @@ router.get('/:slug', moderatorOrAdminMiddleware, async (req: AuthRequest, res: R
       return res.status(400).json({ error: 'Invalid slug format' });
     }
 
-    const result = await queryTournament(
-      'SELECT id, slug, title, content_markdown, language, is_published, created_at, updated_at FROM wiki_articles WHERE slug = ?',
-      [slug]
-    );
+    const article = await wikiAdminService.getArticleForEditing(slug);
 
-    if ((result as any[]).length === 0) {
+    if (!article) {
       return res.status(404).json({ error: 'Article not found' });
     }
 
-    res.json((result as any[])[0]);
+    res.json(article);
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     res.status(500).json({ error: msg });
@@ -162,26 +162,31 @@ router.get('/:slug', moderatorOrAdminMiddleware, async (req: AuthRequest, res: R
 
 /**
  * PUT /api/admin/wiki/:slug
- * Update article
+ * Update article translations
+ * Body: {
+ *   translations: {
+ *     en: { title: "...", content_markdown: "..." },
+ *     es: { ... }
+ *   },
+ *   is_published: true
+ * }
  */
 router.put('/:slug', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { slug } = req.params;
-    const { title, content_markdown, language, is_published } = req.body;
+    const { translations, is_published } = req.body;
 
     if (!wikiAdminService.validateSlug(slug)) {
       return res.status(400).json({ error: 'Invalid slug format' });
     }
 
-    if (!title && !content_markdown && language === undefined && is_published === undefined) {
+    if (!translations && is_published === undefined) {
       return res.status(400).json({ error: 'No updates provided' });
     }
 
     await wikiAdminService.updateArticle(slug, {
       slug,
-      title,
-      content_markdown,
-      language,
+      translations,
       is_published,
       editor_id: req.userId!
     });
@@ -195,25 +200,18 @@ router.put('/:slug', moderatorOrAdminMiddleware, async (req: AuthRequest, res: R
 
 /**
  * DELETE /api/admin/wiki/:slug
- * Delete article (soft or hard)
- * Query param: ?hard=true for hard delete, else soft delete
+ * Delete article permanently
  */
 router.delete('/:slug', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { slug } = req.params;
-    const { hard } = req.query;
 
     if (!wikiAdminService.validateSlug(slug)) {
       return res.status(400).json({ error: 'Invalid slug format' });
     }
 
-    if (hard === 'true') {
-      await wikiAdminService.hardDeleteArticle(slug);
-      res.json({ slug, message: 'Article permanently deleted' });
-    } else {
-      await wikiAdminService.softDeleteArticle(slug);
-      res.json({ slug, message: 'Article marked as deleted (draft mode)' });
-    }
+    await wikiAdminService.deleteArticle(slug);
+    res.json({ slug, message: 'Article deleted successfully' });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     res.status(400).json({ error: msg });
