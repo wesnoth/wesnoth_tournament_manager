@@ -198,14 +198,6 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
     }
   };
 
-  if (loadingArticle) {
-    return (
-      <div className="flex justify-center items-center py-12 min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
-
   const renderMarkdownPreview = (markdown: string) => {
     try {
       marked.setOptions({ breaks: false, gfm: true });
