@@ -144,8 +144,8 @@ export const createArticle = async (params: CreateArticleParams): Promise<number
   const translationsJson = JSON.stringify(params.translations);
   const result = await queryTournament(
     `INSERT INTO wiki_articles 
-      (slug, translations, author_id, is_published, created_at, updated_at) 
-     VALUES (?, ?, ?, ?, NOW(), NOW())`,
+      (id, slug, translations, author_id, is_published, created_at, updated_at) 
+     VALUES (UUID(), ?, ?, ?, ?, NOW(), NOW())`,
     [params.slug, translationsJson, params.author_id, params.is_published ? 1 : 0]
   );
 
