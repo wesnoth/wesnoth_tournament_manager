@@ -26,10 +26,12 @@ interface WikiEditorProps {
     slug: string;
     translations: Translations;
     is_published: boolean;
+    author_id?: string;
   }) => Promise<void>;
   onCancel?: () => void;
   isLoading?: boolean;
   token?: string;
+  userId?: string;
 }
 
 interface WikiArticle {
@@ -60,7 +62,8 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
   onSave,
   onCancel,
   isLoading = false,
-  token
+  token,
+  userId
 }) => {
   const { t } = useTranslation();
   const [slug, setSlug] = useState(editingArticle?.slug || '');
@@ -188,7 +191,8 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
       await onSave({
         slug: slug.trim(),
         translations,
-        is_published: isPublished
+        is_published: isPublished,
+        author_id: userId
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Save failed';

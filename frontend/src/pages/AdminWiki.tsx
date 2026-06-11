@@ -45,7 +45,7 @@ interface ImageUsage {
 
 const AdminWiki: React.FC = () => {
   const { t } = useTranslation();
-  const { token } = useAuthStore();
+  const { token, userId } = useAuthStore();
 
   const [activeTab, setActiveTab] = useState<'articles' | 'images'>('articles');
   const [articles, setArticles] = useState<WikiArticle[]>([]);
@@ -134,6 +134,7 @@ const AdminWiki: React.FC = () => {
       zh?: { title: string; content_markdown: string };
     };
     is_published: boolean;
+    author_id?: string;
   }) => {
     setError(null);
 
@@ -231,6 +232,7 @@ const AdminWiki: React.FC = () => {
         onSave={handleSaveArticle}
         onCancel={() => setShowEditor(false)}
         token={token}
+        userId={userId || ''}
       />
     );
   }
