@@ -3,6 +3,9 @@
 -- New structure: one row per article with translations as JSON object
 -- This migration is idempotent and handles partial execution
 
+-- Disable foreign key constraints temporarily
+SET FOREIGN_KEY_CHECKS=0;
+
 -- Step 1: Backup the old table structure (if not already done)
 CREATE TABLE IF NOT EXISTS wiki_articles_backup_old_structure AS SELECT * FROM wiki_articles;
 
@@ -47,3 +50,6 @@ GROUP BY slug;
 -- Step 5: Drop old table and rename new table
 DROP TABLE wiki_articles;
 RENAME TABLE wiki_articles_new TO wiki_articles;
+
+-- Re-enable foreign key constraints
+SET FOREIGN_KEY_CHECKS=1;
