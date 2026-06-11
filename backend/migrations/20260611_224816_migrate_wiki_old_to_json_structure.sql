@@ -1,11 +1,15 @@
 -- Migration: Migrate wiki_articles from old single-language structure to new JSON multi-language structure
 -- Old structure: one row per article per language
 -- New structure: one row per article with translations as JSON object
+-- This migration is idempotent and handles partial execution
 
--- Step 1: Backup the old table structure
-CREATE TABLE wiki_articles_backup_old_structure AS SELECT * FROM wiki_articles;
+-- Step 1: Backup the old table structure (if not already done)
+CREATE TABLE IF NOT EXISTS wiki_articles_backup_old_structure AS SELECT * FROM wiki_articles;
 
--- Step 2: Create new wiki_articles table with JSON structure
+-- Step 2: Drop intermediate tables if they exist from a failed migration
+DROP TABLE IF EXISTS wiki_articles_new;
+
+-- Step 3: Create new wiki_articles table with JSON structure
 CREATE TABLE wiki_articles_new (
   id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   slug VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL UNIQUE,
@@ -19,7 +23,7 @@ CREATE TABLE wiki_articles_new (
   KEY idx_created_at (created_at)
 );
 
--- Step 3: Migrate data from old table to new table
+-- Step 4: Migrate data from old table to new table
 -- Group by slug and build JSON object with all language translations
 INSERT INTO wiki_articles_new (id, slug, translations, author_id, is_published, created_at, updated_at)
 SELECT
@@ -37,9 +41,9 @@ SELECT
   MAX(is_published),
   MIN(created_at),
   MAX(updated_at)
-FROM wiki_articles
+FROM wiki_articles_backup_old_structure
 GROUP BY slug;
 
--- Step 4: Drop old table and rename new table
+-- Step 5: Drop old table and rename new table
 DROP TABLE wiki_articles;
 RENAME TABLE wiki_articles_new TO wiki_articles;
