@@ -243,6 +243,9 @@ const Navbar: React.FC = () => {
           <Link to="/faq" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm">
             {t('navbar_faq')}
           </Link>
+          <Link to="/help" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm">
+            {t('help')}
+          </Link>
 
           {/* Notifications Bell - Only for Authenticated Users */}
           {isAuthenticated && (
