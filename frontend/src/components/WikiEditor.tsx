@@ -238,6 +238,8 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
         .replace(/<li>(\s*)<p>/g, '<li class="text-gray-700">$1')
         .replace(/<\/p>(\s*)<\/li>/g, '$1</li>')
         .replace(/<li>(?!.*class)/g, '<li class="text-gray-700">')
+        // Links with blue color and underline
+        .replace(/<a /g, '<a class="text-blue-600 underline hover:text-blue-800 hover:no-underline transition-colors" ')
         // Images
         .replace(/<img src="\/uploads\/wiki\//g, '<img src="' + (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api') + '/public/wiki/images/')
         .replace(/<img /g, '<img class="max-w-full h-auto rounded-lg my-2" ');
