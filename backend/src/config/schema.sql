@@ -965,6 +965,66 @@ CREATE TABLE `user_notifications` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `wiki_articles`
+--
+
+DROP TABLE IF EXISTS `wiki_articles`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `wiki_articles` (
+  `id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `slug` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `translations` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'JSON object with language keys: {"en": {"title": "...", "content_markdown": "..."}, "es": {...}, ...}',
+  `author_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'FK→users_extension.id',
+  `is_published` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_slug` (`slug`),
+  KEY `idx_slug` (`slug`),
+  KEY `idx_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Wiki articles with multi-language translations in JSON format';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `wiki_article_images`
+--
+
+DROP TABLE IF EXISTS `wiki_article_images`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `wiki_article_images` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `article_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT 'FK→wiki_articles.id',
+  `image_id` int(11) NOT NULL COMMENT 'FK→wiki_images.id',
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_article_id` (`article_id`),
+  KEY `idx_image_id` (`image_id`),
+  CONSTRAINT `fk_wiki_article_images_article` FOREIGN KEY (`article_id`) REFERENCES `wiki_articles` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `wiki_images`
+--
+
+DROP TABLE IF EXISTS `wiki_images`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `wiki_images` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `filename` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `original_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `uploaded_by` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'FK→users_extension.id',
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_filename` (`filename`),
+  KEY `idx_uploaded_by` (`uploaded_by`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `users_extension`
 --
 
