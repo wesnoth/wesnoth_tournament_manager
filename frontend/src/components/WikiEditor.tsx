@@ -232,6 +232,8 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
         .replace(/<h4>/g, '<h4 class="text-xl font-bold mt-4 mb-2 text-gray-700">')
         .replace(/<h5>/g, '<h5 class="text-lg font-bold mt-3 mb-2 text-gray-700">')
         .replace(/<h6>/g, '<h6 class="text-base font-bold mt-2 mb-2 text-gray-600">')
+        // Paragraphs with proper spacing
+        .replace(/<p>/g, '<p class="my-4 text-gray-800 leading-relaxed">')
         // Lists
         .replace(/<ol>/g, '<ol class="list-decimal list-inside ml-4 my-2 space-y-1">')
         .replace(/<ul>/g, '<ul class="list-disc list-inside ml-4 my-2 space-y-1">')
