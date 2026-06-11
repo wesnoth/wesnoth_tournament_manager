@@ -1,13 +1,15 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../store/authStore';
 import { userService } from '../services/api';
+import { getHelpSlugFromPath } from '../utils/helpNavigation';
 
 const Navbar: React.FC = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const { isAuthenticated, isAdmin, logout } = useAuthStore();
   const [userNickname, setUserNickname] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -243,6 +245,16 @@ const Navbar: React.FC = () => {
           <Link to="/faq" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm">
             {t('navbar_faq')}
           </Link>
+          <button 
+            onClick={() => {
+              const helpSlug = getHelpSlugFromPath(location.pathname);
+              navigate(`/help/${helpSlug}`);
+            }}
+            className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm"
+            title={`Help for ${getHelpSlugFromPath(location.pathname)}`}
+          >
+            {t('help')}
+          </button>
 
           {/* Notifications Bell - Only for Authenticated Users */}
           {isAuthenticated && (

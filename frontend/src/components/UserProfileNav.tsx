@@ -48,6 +48,16 @@ const UserProfileNav: React.FC = () => {
             <span className="hidden md:inline">{t('sidebar.my_notifications')}</span>
           </button>
 
+          {/* Help */}
+          <button 
+            className="flex items-center gap-2 px-3 py-2 bg-white/10 border border-white/20 text-white text-sm font-medium rounded hover:bg-white/20 hover:border-white/40 active:bg-white/25 transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-md:px-2.5"
+            onClick={() => handleNavigate('/help')}
+            title={t('help')}
+          >
+            <span className="text-lg flex items-center justify-center min-w-5 max-sm:text-base">❓</span>
+            <span className="hidden md:inline">{t('help')}</span>
+          </button>
+
           {/* Admin/Moderator Separator */}
           {(isAdmin || isTournamentModerator) && (
             <div className="w-px h-6 bg-white/30 mx-2 max-sm:hidden"></div>
@@ -139,6 +149,16 @@ const UserProfileNav: React.FC = () => {
               >
                 <span className="text-lg flex items-center justify-center min-w-5 max-sm:text-base">❓</span>
                 <span className="hidden md:inline">{t('navbar_faq') || 'FAQ'}</span>
+              </button>
+
+              {/* Wiki */}
+              <button 
+                className="flex items-center gap-2 px-3 py-2 bg-orange-500/10 border border-orange-500/30 text-white text-sm font-medium rounded hover:bg-orange-500/20 hover:border-orange-500/50 active:bg-orange-500/25 transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-md:px-2.5"
+                onClick={() => handleNavigate('/admin/wiki')}
+                title="Manage Wiki Articles"
+              >
+                <span className="text-lg flex items-center justify-center min-w-5 max-sm:text-base">📖</span>
+                <span className="hidden md:inline">Wiki</span>
               </button>
 
               {/* Maps & Factions */}

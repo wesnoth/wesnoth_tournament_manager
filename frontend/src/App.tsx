@@ -39,6 +39,8 @@ const AdminBalanceEvents = React.lazy(() => import('./pages/AdminBalanceEvents')
 const FAQ = React.lazy(() => import('./pages/FAQ'));
 const Tournaments = React.lazy(() => import('./pages/Tournaments'));
 const TournamentDetail = React.lazy(() => import('./pages/TournamentDetail'));
+const Help = React.lazy(() => import('./pages/Help'));
+const AdminWiki = React.lazy(() => import('./pages/AdminWiki'));
 
 const App: React.FC = () => {
   const { isAdmin, token, validateToken, isValidating } = useAuthStore();
@@ -117,6 +119,8 @@ const App: React.FC = () => {
               <Route path="/rankings" element={<Rankings />} />
               <Route path="/statistics" element={<Statistics />} />
               <Route path="/faq" element={<FAQ />} />
+              <Route path="/help" element={<Help />} />
+              <Route path="/help/:slug" element={<Help />} />
               <Route path="/tournaments" element={<Tournaments />} />
               <Route path="/tournament/:id" element={<TournamentDetail />} />
               <Route path="/my-stats" element={<MyStats />} />
@@ -125,6 +129,7 @@ const App: React.FC = () => {
               <Route path="/admin/announcements" element={<AdminAnnouncements />} />
               <Route path="/admin/faq" element={<AdminFAQ />} />
               <Route path="/admin/tournaments" element={<AdminTournaments />} />
+              <Route path="/admin/wiki" element={<AdminWiki />} />
               <Route path="/admin/disputes" element={<AdminDisputes />} />
               <Route path="/admin/audit" element={<AdminAudit />} />
               <Route path="/admin/replays" element={<AdminReplays />} />

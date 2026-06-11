@@ -48,7 +48,40 @@ The application uses **two MariaDB schemas** on the same server:
 | `forum` | phpBB forum users + Wesnoth game server data | **READ-ONLY** — managed by the wesnoth.org team. Never create migrations for these tables. |
 | `tournament` | All tournament application data | **Full control** — migrations are applied automatically on backend startup. |
 
-### Authentication flow
+---
+
+## Migration Standards
+
+All database schema changes are managed through **SQL migration files** in `backend/migrations/`.
+
+### Naming Convention
+
+**Format**: `YYYYMMDD_HHMMSS_description.sql`
+
+**Examples:**
+- ✅ `20260609_214426_create_wiki_articles_table.sql`
+- ✅ `20260514_220858_add_last_match_date.sql`
+- ✅ `20260512_143000_fix_collation_consistency.sql`
+- ❌ `migration_wiki_articles.sql` (missing timestamp)
+- ❌ `2026-06-09_add_wiki.sql` (wrong date format)
+- ❌ `create_wiki_articles_table.sql` (no timestamp)
+
+**Why `YYYYMMDD_HHMMSS`?** This format allows multiple migrations to be created on the same day without filename collisions. The timestamp ensures proper execution order.
+
+### Best Practices
+
+1. **Always use `IF NOT EXISTS` / `IF EXISTS`** for idempotency
+2. **Target only `tournament` schema** — never modify `forum.*` tables
+3. **Use `utf8mb4_general_ci` collation** for user_id and other cross-table foreign keys
+4. **Update `DB_SCHEMA.md`** immediately after adding a migration
+5. **Keep migrations simple** — one logical change per migration file
+6. **Add comments** explaining the purpose of structural changes
+
+### Execution
+
+Migrations run automatically on backend startup via `migrationRunner.ts`. Check `backend/migrations/migrations` table to see execution history.
+
+---
 
 - User identity is sourced from `forum.phpbb3_users` (username, password hash, email).
 - On first successful login, a record is automatically created in `tournament.users_extension`.
@@ -152,7 +185,7 @@ Supplementary per-user data from the game server.
 ## Tournament Schema
 
 > Full control. Migrations in `backend/migrations/` are applied automatically on server startup by `migrationRunner.ts`.
-> Migration file naming: `YYYYMMDD_HHMMSS_short_description.sql`. All DDL must be idempotent (`IF NOT EXISTS` / `IF EXISTS`).
+> **Migration file format**: `YYYYMMDD_HHMMSS_description.sql` (e.g., `20260609_214426_create_wiki_articles_table.sql`). This format prevents naming collisions when creating multiple migrations on the same day. All DDL must be idempotent using `IF NOT EXISTS` / `IF EXISTS` clauses.
 
 ---
 
@@ -899,7 +932,59 @@ User confirmations of proposed schedules. Records agreement to the schedule prop
 
 ---
 
-## General Notes
+### `wiki_articles`
+
+Help system articles with multi-language support (JSON translations model, aligned with FAQ/News).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | bigint PK | Auto-increment |
+| `slug` | varchar(255) UNIQUE | URL-friendly article identifier (e.g., `getting-started`, `ranking-elo`) |
+| `translations` | longtext JSON | Multi-language content: `{"en": {"title": "...", "content_markdown": "..."}, "es": {...}, "de": {...}, "fr": {...}, "zh": {...}}` |
+| `author_id` | char(36) FK→users_extension | Article author (NULL for seeded articles) |
+| `is_published` | tinyint(1) | 1 = visible to all users, 0 = draft (admin only) |
+| `created_at` | datetime | |
+| `updated_at` | datetime | |
+
+**Indexes**: `idx_slug (slug)`, `idx_published (is_published)`, `idx_author_id (author_id)`
+
+**Language fallback logic**: If requested language not translated, falls back to English (`en`).
+
+**Constraint**: One row per `slug` guarantees consistent translations across all languages for an article.
+
+---
+
+### `wiki_images`
+
+Uploaded images used in wiki articles.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | bigint PK | Auto-increment |
+| `filename` | varchar(255) UNIQUE | Generated filename (e.g., `1781121281123_cxozvs.png`) used in URLs |
+| `original_name` | varchar(255) | Original filename from upload |
+| `uploaded_by` | char(36) FK→users_extension | User who uploaded (NULL for admin uploads) |
+| `created_at` | datetime | |
+
+**Image storage**: Files stored in `backend/uploads/wiki/` directory. Served via API endpoint `/api/public/wiki/images/{filename}`.
+
+---
+
+### `wiki_article_images`
+
+Junction table linking wiki articles to images (N:M relationship).
+
+| Column | Type | Notes |
+|---|---|---|
+| `article_id` | bigint FK→wiki_articles | Article referencing the image |
+| `wiki_image_id` | bigint FK→wiki_images | Image used in the article |
+| `created_at` | datetime | When link was created |
+
+**Primary key**: `(article_id, wiki_image_id)` — ensures each image used only once per article.
+
+**Cascade delete**: If article or image deleted, link automatically removed.
+
+
 
 ### ID conventions
 - All primary keys use `char(36)` UUIDs generated in application code.
