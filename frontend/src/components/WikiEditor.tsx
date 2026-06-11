@@ -223,13 +223,22 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
         KEEP_CONTENT: true
       });
 
-      // Add Tailwind classes to list and image elements (matching WikiViewer)
+      // Add Tailwind classes to all elements (matching WikiViewer)
       const formattedHtml = htmlContent
+        // Headers with proper sizing and spacing
+        .replace(/<h1>/g, '<h1 class="text-4xl font-bold mt-8 mb-4 text-gray-900">')
+        .replace(/<h2>/g, '<h2 class="text-3xl font-bold mt-6 mb-3 text-gray-800 border-b-2 border-blue-500 pb-2">')
+        .replace(/<h3>/g, '<h3 class="text-2xl font-bold mt-5 mb-2 text-gray-800">')
+        .replace(/<h4>/g, '<h4 class="text-xl font-bold mt-4 mb-2 text-gray-700">')
+        .replace(/<h5>/g, '<h5 class="text-lg font-bold mt-3 mb-2 text-gray-700">')
+        .replace(/<h6>/g, '<h6 class="text-base font-bold mt-2 mb-2 text-gray-600">')
+        // Lists
         .replace(/<ol>/g, '<ol class="list-decimal list-inside ml-4 my-2 space-y-1">')
         .replace(/<ul>/g, '<ul class="list-disc list-inside ml-4 my-2 space-y-1">')
         .replace(/<li>(\s*)<p>/g, '<li class="text-gray-700">$1')
         .replace(/<\/p>(\s*)<\/li>/g, '$1</li>')
         .replace(/<li>(?!.*class)/g, '<li class="text-gray-700">')
+        // Images
         .replace(/<img src="\/uploads\/wiki\//g, '<img src="' + (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api') + '/public/wiki/images/')
         .replace(/<img /g, '<img class="max-w-full h-auto rounded-lg my-2" ');
 
