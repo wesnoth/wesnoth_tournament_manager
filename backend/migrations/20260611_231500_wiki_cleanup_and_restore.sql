@@ -31,7 +31,7 @@ CREATE TABLE wiki_articles (
 -- Group by slug and build JSON object with all languages
 INSERT INTO wiki_articles (id, slug, translations, author_id, is_published, created_at, updated_at)
 SELECT
-  UNHEX(REPLACE(UUID(), '-', '')) as id,
+  UUID() as id,
   slug,
   JSON_OBJECT(
     'en', IF(COUNT(IF(language = 'en', 1, NULL)) > 0, JSON_OBJECT('title', MAX(IF(language = 'en', title, NULL)), 'content_markdown', MAX(IF(language = 'en', content_markdown, NULL))), NULL),
