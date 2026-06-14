@@ -1531,15 +1531,13 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                 >
                   {t('tournaments.btn_recalculate_tiebreakers')}
                 </button>
-                {tournament.status === 'in_progress' && (
-                  <button 
-                    onClick={handleNotifyResults}
-                    className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-                    title={t('tournaments.btn_notify_results_tooltip', 'Send current standings to Discord')}
-                  >
-                    {t('tournaments.btn_notify_results')}
-                  </button>
-                )}
+                <button 
+                  onClick={handleNotifyResults}
+                  className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                  title={t('tournaments.btn_notify_results_tooltip', 'Send standings or results to Discord')}
+                >
+                  {t('tournaments.btn_notify_results')}
+                </button>
               </div>
             )}
 
