@@ -3786,7 +3786,48 @@ router.post('/:id/notify-results', authMiddleware, async (req: AuthRequest, res)
       );
       console.log(`✅ [NOTIFY RESULTS] Posted standings for round ${currentRound}/${totalRounds}`);
     } else if (tournament.status === 'finished') {
-      // Get winner and runner-up
+      // Get final standings
+      let standingsRows: any[] = [];
+      if (tournament.tournament_mode === 'team') {
+        const result = await query(
+          `SELECT tt.name as nickname, tt.tournament_points as points,
+                  tt.tournament_wins as wins, tt.tournament_losses as losses
+           FROM tournament_teams tt
+           WHERE tt.tournament_id = ?
+           ORDER BY tt.tournament_points DESC, tt.tournament_wins DESC`,
+          [id]
+        );
+        standingsRows = result.rows;
+      } else {
+        const result = await query(
+          `SELECT u.nickname, tp.tournament_points as points,
+                  tp.tournament_wins as wins, tp.tournament_losses as losses
+           FROM tournament_participants tp
+           JOIN users_extension u ON tp.user_id = u.id
+           WHERE tp.tournament_id = ?
+           ORDER BY tp.tournament_points DESC, tp.tournament_wins DESC`,
+          [id]
+        );
+        standingsRows = result.rows;
+      }
+
+      // Get total rounds for context in standings notification
+      const totalRoundsResult = await query(
+        `SELECT COUNT(*) as total_rounds FROM tournament_rounds WHERE tournament_id = ?`,
+        [id]
+      );
+      const totalRounds = parseInt(totalRoundsResult.rows[0]?.total_rounds || 0);
+
+      // Post final standings notification
+      await discordService.postLeagueRoundCompleted(
+        tournament.discord_thread_id,
+        totalRounds,
+        totalRounds,
+        standingsRows
+      );
+      console.log(`✅ [NOTIFY RESULTS] Posted final standings`);
+
+      // Then get winner and runner-up and post tournament finished notification
       const { winner, runnerUp } = await getWinnerAndRunnerUp(id);
 
       if (winner) {
