@@ -8,6 +8,10 @@
 import { randomUUID } from 'crypto';
 import { query } from '../config/database.js';
 import discordService from '../services/discordService.js';
+import {
+  calculateTeamSwissTiebreakers,
+  calculateLeagueTiebreakers,
+} from '../services/statisticsCalculator.js';
 
 interface Participant {
   id: string;
@@ -51,20 +55,27 @@ export async function selectPlayersForEliminationPhase(
     // Calculate tiebreakers FIRST before selecting players
     console.log(`\n🎲 [TIEBREAKERS] Calculating Swiss tiebreakers (OMP, GWP, OGP)...`);
     try {
-      const functionName = tournamentMode === 'team' ? 'update_team_tiebreakers' : 'update_tournament_tiebreakers';
-      console.log(`[DEBUG] Using tiebreaker function: ${functionName}`);
-      const tiebreakersResult = await query(
-        `SELECT updated_count, error_message FROM ${functionName}(?)`,
-        [tournamentId]
-      );
-      
-      if (tiebreakersResult.rows.length > 0) {
-        const { updated_count, error_message } = tiebreakersResult.rows[0];
-        console.log(`[DEBUG] Tiebreaker result - updated: ${updated_count}, error: ${error_message}`);
-        if (error_message) {
-          console.error(`❌ [TIEBREAKERS] Error: ${error_message}`);
-        } else {
-          console.log(`✅ [TIEBREAKERS] Calculated tiebreakers for ${updated_count} ${tournamentMode === 'team' ? 'teams' : 'participants'}`);
+      if (tournamentMode === 'team') {
+        const tiebreakersResult = await calculateTeamSwissTiebreakers(tournamentId);
+        console.log(`✅ [TIEBREAKERS] Calculated tiebreakers for ${tiebreakersResult.length} teams`);
+        
+        // Update database with calculated tiebreakers
+        for (const tb of tiebreakersResult) {
+          await query(
+            `UPDATE tournament_teams SET omp = ?, gwp = ?, ogp = ? WHERE tournament_id = ? AND id = ?`,
+            [tb.omp, tb.gwp, tb.ogp, tournamentId, tb.team_id]
+          );
+        }
+      } else {
+        const tiebreakersResult = await calculateLeagueTiebreakers(tournamentId);
+        console.log(`✅ [TIEBREAKERS] Calculated tiebreakers for ${tiebreakersResult.length} participants`);
+        
+        // Update database with calculated tiebreakers
+        for (const tb of tiebreakersResult) {
+          await query(
+            `UPDATE tournament_participants SET omp = ?, gwp = ?, ogp = ? WHERE tournament_id = ? AND user_id = ?`,
+            [tb.omp, tb.gwp, tb.ogp, tournamentId, tb.user_id]
+          );
         }
       }
     } catch (tiebreakersErr) {
@@ -1881,18 +1892,27 @@ export async function checkAndCompleteRound(tournamentId: string, roundNumber: n
         // This ensures rankings are properly ordered by OMP/GWP/OGP for correct winner selection
         console.log(`\n🎲 [TIEBREAKERS] Calculating tournament tiebreakers (OMP, GWP, OGP) BEFORE finishing...`);
         try {
-          const functionName = tournMode === 'team' ? 'update_team_tiebreakers' : 'update_tournament_tiebreakers';
-          const tiebreakersResult = await query(
-            `SELECT updated_count, error_message FROM ${functionName}(?)`,
-            [tournamentId]
-          );
-          
-          if (tiebreakersResult.rows.length > 0) {
-            const { updated_count, error_message } = tiebreakersResult.rows[0];
-            if (error_message) {
-              console.error(`❌ [TIEBREAKERS] Error: ${error_message}`);
-            } else {
-              console.log(`✅ [TIEBREAKERS] Calculated tiebreakers for ${updated_count} ${tournMode === 'team' ? 'teams' : 'participants'}`);
+          if (tournMode === 'team') {
+            const tiebreakersResult = await calculateTeamSwissTiebreakers(tournamentId);
+            console.log(`✅ [TIEBREAKERS] Calculated tiebreakers for ${tiebreakersResult.length} teams`);
+            
+            // Update database with calculated tiebreakers
+            for (const tb of tiebreakersResult) {
+              await query(
+                `UPDATE tournament_teams SET omp = ?, gwp = ?, ogp = ? WHERE tournament_id = ? AND id = ?`,
+                [tb.omp, tb.gwp, tb.ogp, tournamentId, tb.team_id]
+              );
+            }
+          } else {
+            const tiebreakersResult = await calculateLeagueTiebreakers(tournamentId);
+            console.log(`✅ [TIEBREAKERS] Calculated tiebreakers for ${tiebreakersResult.length} participants`);
+            
+            // Update database with calculated tiebreakers
+            for (const tb of tiebreakersResult) {
+              await query(
+                `UPDATE tournament_participants SET omp = ?, gwp = ?, ogp = ? WHERE tournament_id = ? AND user_id = ?`,
+                [tb.omp, tb.gwp, tb.ogp, tournamentId, tb.user_id]
+              );
             }
           }
         } catch (tiebreakersErr) {
