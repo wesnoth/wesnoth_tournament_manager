@@ -711,6 +711,9 @@
     "btn_close_registration": "关闭报名",
     "btn_prepare": "准备锦标赛",
     "btn_start": "开始锦标赛",
+    "btn_recalculate_tiebreakers": "重新计算排名",
+    "btn_recalculate_tiebreakers_tooltip": "重新计算所有参赛者的 OMP、GWP、OGP",
+    "tiebreakers_recalculated": "排名已成功重新计算",
     "request_join": "申请加入"
   },
   "tournaments.abandonment_note": "选择获胜者。如果玩家弃权，其对手自动赢得所有剩余比赛（不影响ELO，分配赛事积分）。",

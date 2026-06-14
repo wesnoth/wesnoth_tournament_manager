@@ -1003,6 +1003,19 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
     }
   };
 
+  const handleRecalculateTiebreakers = async () => {
+    try {
+      setError('');
+      console.log('🎲 Recalculating tiebreakers...');
+      await api.post(`/admin/tournaments/${id}/calculate-tiebreakers`);
+      setSuccess(t('tournaments.tiebreakers_recalculated', 'Tiebreakers recalculated successfully'));
+      fetchTournamentData();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || t('error_recalculate_tiebreakers', 'Failed to recalculate tiebreakers'));
+    }
+  };
+
   const openDetermineWinnerModal = (match: any) => {
     setDetermineWinnerData(match);
     setDetermineWinnerStep(1);
@@ -1495,7 +1508,16 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
             )}
 
             {tournament.status === 'in_progress' && (
-              <p className="text-green-600">✓ {t('tournaments.started_locked')}</p>
+              <div className="flex items-center gap-3">
+                <p className="text-green-600">✓ {t('tournaments.started_locked')}</p>
+                <button 
+                  onClick={handleRecalculateTiebreakers}
+                  className="px-6 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition-colors"
+                  title={t('tournaments.btn_recalculate_tiebreakers_tooltip', 'Recalculate OMP, GWP, OGP for all participants')}
+                >
+                  {t('tournaments.btn_recalculate_tiebreakers')}
+                </button>
+              </div>
             )}
 
             {(tournament.status !== 'in_progress' && tournament.status !== 'finished') && (
