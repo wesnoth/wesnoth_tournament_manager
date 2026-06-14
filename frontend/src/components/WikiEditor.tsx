@@ -1,7 +1,7 @@
 /**
  * WikiEditor Component (Refactored for JSON translations)
  * Multi-language markdown editor with tabs
- * Supports: EN | ES | DE | FR | ZH with copy-from-English feature
+ * Supports: EN | ES | DE | RU | ZH with copy-from-English feature
  */
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 
-type Language = 'en' | 'es' | 'de' | 'fr' | 'zh';
+type Language = 'en' | 'es' | 'de' | 'ru' | 'zh';
 
 interface Translation {
   title?: string;
@@ -41,7 +41,7 @@ interface WikiArticle {
     en?: { title: string; content_markdown: string };
     es?: { title: string; content_markdown: string };
     de?: { title: string; content_markdown: string };
-    fr?: { title: string; content_markdown: string };
+    ru?: { title: string; content_markdown: string };
     zh?: { title: string; content_markdown: string };
   };
   is_published: number;
@@ -53,7 +53,7 @@ const AVAILABLE_LANGUAGES: { code: Language; label: string }[] = [
   { code: 'en', label: 'English' },
   { code: 'es', label: 'Español' },
   { code: 'de', label: 'Deutsch' },
-  { code: 'fr', label: 'Français' },
+  { code: 'ru', label: 'Русский' },
   { code: 'zh', label: '中文' }
 ];
 
@@ -73,7 +73,7 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
       en: { title: '', content_markdown: '' },
       es: { title: '', content_markdown: '' },
       de: { title: '', content_markdown: '' },
-      fr: { title: '', content_markdown: '' },
+      ru: { title: '', content_markdown: '' },
       zh: { title: '', content_markdown: '' }
     }
   );
