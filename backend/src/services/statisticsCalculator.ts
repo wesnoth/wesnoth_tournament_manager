@@ -241,7 +241,7 @@ export async function calculateTeamSwissTiebreakers(
          ) opponents
          LEFT JOIN tournament_teams tt ON tt.tournament_id = ? 
            AND tt.id = opponents.opponent_id`,
-        [teamId, tournamentId]
+        [teamId, tournamentId, teamId, teamId, tournamentId]
       );
       const omp = parseFloat(ompResult.rows[0]?.omp || 0);
 
@@ -254,7 +254,7 @@ export async function calculateTeamSwissTiebreakers(
          WHERE tm.tournament_id = ?
            AND (tm.player1_id = ? OR tm.player2_id = ?)
            AND tm.series_status = 'completed'`,
-        [teamId, tournamentId]
+        [teamId, teamId, tournamentId, teamId, teamId]
       );
       
       const gamesWon = gwpResult.rows[0]?.games_won || 0;
@@ -290,7 +290,7 @@ export async function calculateTeamSwissTiebreakers(
              AND (tm.player1_id = ? OR tm.player2_id = ?)
              AND tm.series_status = 'completed'
          ) opponent_data`,
-        [teamId, tournamentId]
+        [teamId, teamId, teamId, tournamentId, teamId, teamId]
       );
       const ogp = parseFloat(ogpResult.rows[0]?.ogp || 0);
 

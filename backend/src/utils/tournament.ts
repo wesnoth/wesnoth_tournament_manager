@@ -45,17 +45,20 @@ export async function selectPlayersForEliminationPhase(
     
     // Get tournament mode to determine which table to use
     const tournResultFirst = await query(
-      'SELECT tournament_mode FROM tournaments WHERE id = ?',
+      'SELECT tournament_mode, tournament_type FROM tournaments WHERE id = ?',
       [tournamentId]
     );
     const tournamentMode = tournResultFirst.rows[0]?.tournament_mode || 'ranked';
+    const tournamentType = tournResultFirst.rows[0]?.tournament_type || 'swiss';
     console.log(`Tournament Mode: ${tournamentMode}`);
+    console.log(`Tournament Type: ${tournamentType}`);
     console.log(`[DEBUG] selectPlayersForEliminationPhase() - Starting with tourney mode: ${tournamentMode}`);
     
     // Calculate tiebreakers FIRST before selecting players
-    console.log(`\n🎲 [TIEBREAKERS] Calculating Swiss tiebreakers (OMP, GWP, OGP)...`);
+    console.log(`\n🎲 [TIEBREAKERS] Calculating tiebreakers (OMP, GWP, OGP)...`);
     try {
       if (tournamentMode === 'team') {
+        console.log(`🎲 [TIEBREAKERS] Calculating team tournament tiebreakers`);
         const tiebreakersResult = await calculateTeamSwissTiebreakers(tournamentId);
         console.log(`✅ [TIEBREAKERS] Calculated tiebreakers for ${tiebreakersResult.length} teams`);
         

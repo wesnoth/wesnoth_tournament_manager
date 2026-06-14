@@ -2248,7 +2248,7 @@ router.post('/tournaments/:id/calculate-tiebreakers', authMiddleware, async (req
 
     // Check if user is tournament organizer
     const tournamentResult = await query(
-      'SELECT id, creator_id, tournament_mode FROM tournaments WHERE id = ?',
+      'SELECT id, creator_id, tournament_mode, tournament_type FROM tournaments WHERE id = ?',
       [id]
     );
 
@@ -2264,7 +2264,8 @@ router.post('/tournaments/:id/calculate-tiebreakers', authMiddleware, async (req
     // Calculate tiebreakers using TypeScript functions
     let updated_count = 0;
     if (tournament.tournament_mode === 'team') {
-      // For team tournaments, update team tiebreakers
+      // For team tournaments, tiebreaker logic is same for league and swiss
+      console.log(`🎲 [CALCULATE TIEBREAKERS] Calculating team tournament tiebreakers`);
       const tiebreakersResult = await calculateTeamSwissTiebreakers(id);
       console.log(`✅ [CALCULATE TIEBREAKERS] Calculated tiebreakers for ${tiebreakersResult.length} teams`);
       
