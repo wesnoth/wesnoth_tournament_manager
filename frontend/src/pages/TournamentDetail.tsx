@@ -1016,6 +1016,18 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
     }
   };
 
+  const handleNotifyResults = async () => {
+    try {
+      setError('');
+      console.log('📢 Notifying tournament results...');
+      await api.post(`/tournaments/${id}/notify-results`);
+      setSuccess(t('tournaments.results_notified', 'Results notified successfully'));
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || t('error_notify_results', 'Failed to notify results'));
+    }
+  };
+
   const openDetermineWinnerModal = (match: any) => {
     setDetermineWinnerData(match);
     setDetermineWinnerStep(1);
@@ -1507,9 +1519,11 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
               <button onClick={handleStartTournament} className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors">{t('tournaments.btn_start')}</button>
             )}
 
-            {tournament.status === 'in_progress' && (
+            {(tournament.status === 'in_progress' || tournament.status === 'finished') && isCreator && (
               <div className="flex items-center gap-3">
-                <p className="text-green-600">✓ {t('tournaments.started_locked')}</p>
+                {tournament.status === 'in_progress' && (
+                  <p className="text-green-600">✓ {t('tournaments.started_locked')}</p>
+                )}
                 <button 
                   onClick={handleRecalculateTiebreakers}
                   className="px-6 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition-colors"
@@ -1517,6 +1531,15 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                 >
                   {t('tournaments.btn_recalculate_tiebreakers')}
                 </button>
+                {tournament.status === 'in_progress' && (
+                  <button 
+                    onClick={handleNotifyResults}
+                    className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                    title={t('tournaments.btn_notify_results_tooltip', 'Send current standings to Discord')}
+                  >
+                    {t('tournaments.btn_notify_results')}
+                  </button>
+                )}
               </div>
             )}
 

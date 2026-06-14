@@ -714,6 +714,10 @@
     "btn_recalculate_tiebreakers": "Tiebreaker neu berechnen",
     "btn_recalculate_tiebreakers_tooltip": "OMP, GWP, OGP für alle Teilnehmer neu berechnen",
     "tiebreakers_recalculated": "Tiebreaker erfolgreich neu berechnet",
+    "btn_notify_results": "Ergebnisse benachrichtigen",
+    "btn_notify_results_tooltip": "Aktuelle Tabelle an Discord senden",
+    "results_notified": "Ergebnisse erfolgreich benachrichtigt",
+    "error_notify_results": "Fehler beim Benachrichtigen der Ergebnisse",
     "request_join": "Beitreten anfragen"
   },
   "tournaments.abandonment_note": "Wählen Sie den Gewinner. Wenn ein Spieler aufgegeben hat, gewinnt sein Gegner automatisch alle verbleibenden Spiele (keine ELO-Auswirkung, Turnierpunkte vergeben).",

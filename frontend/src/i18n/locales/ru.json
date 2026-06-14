@@ -714,6 +714,10 @@
     "btn_recalculate_tiebreakers": "Пересчитать тайбрейки",
     "btn_recalculate_tiebreakers_tooltip": "Пересчитать OMP, GWP, OGP для всех участников",
     "tiebreakers_recalculated": "Тайбрейки успешно пересчитаны",
+    "btn_notify_results": "Уведомить о результатах",
+    "btn_notify_results_tooltip": "Отправить текущую таблицу в Discord",
+    "results_notified": "Результаты успешно отправлены",
+    "error_notify_results": "Ошибка при отправке результатов",
     "request_join": "Запрос на участие"
   },
   "tournaments.abandonment_note": "Выберите победителя. Если игрок отказался, его противник автоматически выигрывает все оставшиеся матчи (без влияния на ELO, присуждаются очки турнира).",

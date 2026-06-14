@@ -3708,6 +3708,109 @@ router.post('/leagues/:id/calculate-tiebreakers', authMiddleware, async (req: Au
   }
 });
 
+// POST notify tournament results to Discord
+router.post('/:id/notify-results', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`\n📢 [NOTIFY RESULTS] Starting notification for tournament ${id}`);
+
+    // Get tournament
+    const tournamentResult = await query(
+      'SELECT id, creator_id, name, discord_thread_id, status, tournament_mode FROM tournaments WHERE id = ?',
+      [id]
+    );
+
+    if (tournamentResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Tournament not found' });
+    }
+
+    const tournament = tournamentResult.rows[0];
+    
+    // Only tournament organizer can notify results
+    if (tournament.creator_id !== req.userId) {
+      return res.status(403).json({ success: false, error: 'Only tournament organizer can notify results' });
+    }
+
+    if (!tournament.discord_thread_id) {
+      return res.status(400).json({ success: false, error: 'Tournament has no Discord thread configured' });
+    }
+
+    if (tournament.status === 'in_progress') {
+      // Get current standings
+      let standingsRows: any[] = [];
+      if (tournament.tournament_mode === 'team') {
+        const result = await query(
+          `SELECT tt.name as nickname, tt.tournament_points as points,
+                  tt.tournament_wins as wins, tt.tournament_losses as losses
+           FROM tournament_teams tt
+           WHERE tt.tournament_id = ?
+           ORDER BY tt.tournament_points DESC, tt.tournament_wins DESC`,
+          [id]
+        );
+        standingsRows = result.rows;
+      } else {
+        const result = await query(
+          `SELECT u.nickname, tp.tournament_points as points,
+                  tp.tournament_wins as wins, tp.tournament_losses as losses
+           FROM tournament_participants tp
+           JOIN users_extension u ON tp.user_id = u.id
+           WHERE tp.tournament_id = ?
+           ORDER BY tp.tournament_points DESC, tp.tournament_wins DESC`,
+          [id]
+        );
+        standingsRows = result.rows;
+      }
+
+      // Get current round number
+      const currentRoundResult = await query(
+        `SELECT round_number FROM tournament_rounds 
+         WHERE tournament_id = ? AND round_status = 'in_progress'
+         LIMIT 1`,
+        [id]
+      );
+      const currentRound = currentRoundResult.rows[0]?.round_number || 1;
+
+      // Get total rounds
+      const totalRoundsResult = await query(
+        `SELECT COUNT(*) as total_rounds FROM tournament_rounds WHERE tournament_id = ?`,
+        [id]
+      );
+      const totalRounds = parseInt(totalRoundsResult.rows[0]?.total_rounds || 0);
+
+      // Post standings notification
+      await discordService.postLeagueRoundCompleted(
+        tournament.discord_thread_id,
+        currentRound,
+        totalRounds,
+        standingsRows
+      );
+      console.log(`✅ [NOTIFY RESULTS] Posted standings for round ${currentRound}/${totalRounds}`);
+    } else if (tournament.status === 'finished') {
+      // Get winner and runner-up
+      const { winner, runnerUp } = await getWinnerAndRunnerUp(id);
+
+      if (winner) {
+        await discordService.postTournamentFinished(
+          tournament.discord_thread_id,
+          tournament.name,
+          winner.nickname || 'Unknown',
+          runnerUp?.nickname || 'N/A'
+        );
+        console.log(`✅ [NOTIFY RESULTS] Posted tournament finished notification - Winner: ${winner.nickname}`);
+      } else {
+        return res.status(400).json({ success: false, error: 'Could not determine tournament winner' });
+      }
+    } else {
+      return res.status(400).json({ success: false, error: 'Tournament must be in progress or finished to notify results' });
+    }
+
+    res.json({ success: true, message: 'Results notified successfully' });
+  } catch (error) {
+    console.error('Error notifying results:', error);
+    res.status(500).json({ success: false, error: 'Failed to notify results' });
+  }
+});
+
 export default router;
 
 
