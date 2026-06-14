@@ -7,6 +7,10 @@ import { calculateNewRating, calculateTrend } from '../utils/elo.js';
 import { unlockAccount } from '../services/accountLockout.js';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
 import { performGlobalStatsRecalculation } from './matches.js';
+import {
+  calculateTeamSwissTiebreakers,
+  calculateLeagueTiebreakers,
+} from '../services/statisticsCalculator.js';
 
 const router = Router();
 
@@ -2257,34 +2261,37 @@ router.post('/tournaments/:id/calculate-tiebreakers', authMiddleware, async (req
       return res.status(403).json({ success: false, error: 'Only tournament organizer can calculate tiebreakers' });
     }
 
-    // Calculate tiebreakers - use appropriate function based on tournament mode
-    let tiebreakersResult;
+    // Calculate tiebreakers using TypeScript functions
+    let updated_count = 0;
     if (tournament.tournament_mode === 'team') {
       // For team tournaments, update team tiebreakers
-      tiebreakersResult = await query(
-        'SELECT updated_count, error_message FROM update_team_tiebreakers(?)',
-        [id]
-      );
+      const tiebreakersResult = await calculateTeamSwissTiebreakers(id);
+      console.log(`✅ [CALCULATE TIEBREAKERS] Calculated tiebreakers for ${tiebreakersResult.length} teams`);
+      
+      // Update database with calculated tiebreakers
+      for (const tb of tiebreakersResult) {
+        await query(
+          `UPDATE tournament_teams SET omp = ?, gwp = ?, ogp = ? WHERE tournament_id = ? AND id = ?`,
+          [tb.omp, tb.gwp, tb.ogp, id, tb.team_id]
+        );
+        updated_count++;
+      }
     } else {
       // For individual tournaments, update participant tiebreakers
-      tiebreakersResult = await query(
-        'SELECT updated_count, error_message FROM update_tournament_tiebreakers(?)',
-        [id]
-      );
+      const tiebreakersResult = await calculateLeagueTiebreakers(id);
+      console.log(`✅ [CALCULATE TIEBREAKERS] Calculated tiebreakers for ${tiebreakersResult.length} participants`);
+      
+      // Update database with calculated tiebreakers
+      for (const tb of tiebreakersResult) {
+        await query(
+          `UPDATE tournament_participants SET omp = ?, gwp = ?, ogp = ? WHERE tournament_id = ? AND user_id = ?`,
+          [tb.omp, tb.gwp, tb.ogp, id, tb.user_id]
+        );
+        updated_count++;
+      }
     }
 
-    if (tiebreakersResult.rows.length === 0) {
-      return res.status(500).json({ success: false, error: 'Failed to calculate tiebreakers' });
-    }
-
-    const { updated_count, error_message } = tiebreakersResult.rows[0];
-    
-    if (error_message) {
-      console.error(`❌ [CALCULATE TIEBREAKERS] Error: ${error_message}`);
-      return res.status(500).json({ success: false, error: error_message });
-    }
-
-    console.log(`✅ [CALCULATE TIEBREAKERS] Calculated tiebreakers for ${updated_count} ${tournament.tournament_mode === 'team' ? 'teams' : 'participants'}`);
+    console.log(`✅ [CALCULATE TIEBREAKERS] Updated ${updated_count} ${tournament.tournament_mode === 'team' ? 'teams' : 'participants'}`);
     
     res.json({
       success: true,
