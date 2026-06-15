@@ -283,14 +283,21 @@ const Home: React.FC = () => {
                   <tbody>
                     {recentMatches.map((match) => {
                       const isConfidence1 = match.source_type === 'replay_confidence_1';
+                      const isDueReplay = match.source_type === 'replay_confidence_1_due';
 
-                      if (isConfidence1) {
+                      if (isConfidence1 || isDueReplay) {
                         const map = match.map || 'Unknown Map';
                         const player1Name = match.winner_nickname || 'Player 1';
                         const player2Name = match.loser_nickname || 'Player 2';
+                        const bgColor = isDueReplay ? 'bg-red-50' : 'bg-yellow-50';
+                        const borderColor = isDueReplay ? 'border-red-200' : 'border-yellow-200';
+                        const textColor = isDueReplay ? 'text-red-800' : 'text-yellow-800';
+                        const badgeBg = isDueReplay ? 'bg-red-100' : 'bg-yellow-100';
+                        const badgeText = isDueReplay ? 'text-red-700' : 'text-yellow-700';
+                        const statusLabel = isDueReplay ? t('replay_due') : t('replay_need_confirmation');
 
                         return (
-                          <tr key={match.id} className="border-b border-yellow-200 hover:bg-yellow-50 bg-yellow-50">
+                          <tr key={match.id} className={`border-b ${borderColor} hover:${isDueReplay ? 'bg-red-100' : 'bg-yellow-50'} ${bgColor}`}>
                             <td className="px-4 py-3 text-sm text-gray-700">
                               {new Date(match.created_at).toLocaleDateString()}
                             </td>
@@ -299,10 +306,10 @@ const Home: React.FC = () => {
                               <div className="space-y-2">
                                 <div className="flex gap-2 items-center">
                                   <div className="flex-1 min-w-0">
-                                    <span className="font-semibold text-yellow-800">{player1Name}</span>
+                                    <span className={`font-semibold ${textColor}`}>{player1Name}</span>
                                   </div>
                                   {match.winner_faction && (
-                                    <span className="inline-block px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded font-semibold">{match.winner_faction}</span>
+                                    <span className={`inline-block px-2 py-1 ${badgeBg} ${badgeText} text-xs rounded font-semibold`}>{match.winner_faction}</span>
                                   )}
                                   {match.winner_side && (
                                     <span className={`inline-block px-1.5 py-0.5 text-xs rounded font-semibold ${match.winner_side === 1 ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>S{match.winner_side}</span>
@@ -315,10 +322,10 @@ const Home: React.FC = () => {
                               <div className="space-y-2">
                                 <div className="flex gap-2 items-center">
                                   <div className="flex-1 min-w-0">
-                                    <span className="font-semibold text-yellow-800">{player2Name}</span>
+                                    <span className={`font-semibold ${textColor}`}>{player2Name}</span>
                                   </div>
                                   {match.loser_faction && (
-                                    <span className="inline-block px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded font-semibold">{match.loser_faction}</span>
+                                    <span className={`inline-block px-2 py-1 ${badgeBg} ${badgeText} text-xs rounded font-semibold`}>{match.loser_faction}</span>
                                   )}
                                   {match.winner_side && (
                                     <span className={`inline-block px-1.5 py-0.5 text-xs rounded font-semibold ${match.winner_side === 1 ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}`}>S{match.winner_side === 1 ? 2 : 1}</span>
@@ -329,15 +336,15 @@ const Home: React.FC = () => {
 
                             <td className="px-4 py-3 text-sm">
                               <div className="space-y-2">
-                                <div className="font-semibold text-yellow-900">{map}</div>
+                                <div className={`font-semibold ${isDueReplay ? 'text-red-900' : 'text-yellow-900'}`}>{map}</div>
                                 {(match.replay_filename || match.game_name) && (
-                                  <div className="text-xs text-yellow-700 font-mono bg-yellow-100 px-2 py-1 rounded truncate max-w-[200px]" title={match.replay_filename || match.game_name}>
+                                  <div className={`text-xs ${badgeText} font-mono ${badgeBg} px-2 py-1 rounded truncate max-w-[200px]`} title={match.replay_filename || match.game_name}>
                                     📄 {match.replay_filename || match.game_name}
                                   </div>
                                 )}
                                 <div>
-                                  <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">
-                                    {t('replay_need_confirmation')}
+                                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${badgeBg} ${badgeText}`}>
+                                    {statusLabel}
                                   </span>
                                 </div>
                                 {(match.replay_url || match.replay_file_path) && (

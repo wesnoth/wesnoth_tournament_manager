@@ -291,7 +291,14 @@ Registry of discovered replay files from the Wesnoth game server.
 | `replay_path` | varchar(1000) | Full path on replay server filesystem |
 | `file_size_bytes` | bigint | File size |
 | `parsed` | tinyint(1) | Legacy parsed flag |
-| `parse_status` | varchar(50) | `new` / `processing` / `completed` / `failed` / `skipped` |
+| `parse_status` | varchar(50) | `new` / `parsing` / `parsed` / `completed` / `rejected` / `due` / `error` |
+| | | • `new` — Detected but not yet parsed |
+| | | • `parsing` — Currently parsing the replay file |
+| | | • `parsed` — Successfully parsed, awaiting player confirmation (confidence level 1) |
+| | | • `completed` — Parsed and auto-confirmed (confidence level 2 or confirmed by players) |
+| | | • `rejected` — Rejected by admin or due to errors |
+| | | • `due` — Confirmation period expired; replay available for download only, no actions possible |
+| | | • `error` — Error occurred during parsing |
 | `parse_error_message` | text | Error message if parsing failed |
 | `parse_stage` | varchar(20) | Stage at which parsing stopped |
 | `parse_summary` | text | Summary of parse result |

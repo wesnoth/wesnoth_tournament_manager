@@ -477,11 +477,11 @@ router.get('/matches/recent', async (req, res) => {
          LIMIT 20`
       ),
       query(
-        `SELECT r.id, r.replay_filename, r.game_name, r.replay_url, r.parse_summary, r.created_at
+        `SELECT r.id, r.replay_filename, r.game_name, r.replay_url, r.parse_summary, r.created_at, r.parse_status
          FROM replays r
          WHERE r.integration_confidence = 1
            AND r.parsed = 1
-           AND r.parse_status != 'rejected'
+           AND r.parse_status NOT IN ('rejected', 'error')
            AND r.match_id IS NULL
            AND r.tournament_id IS NULL
          ORDER BY r.created_at DESC
@@ -525,7 +525,7 @@ router.get('/matches/recent', async (req, res) => {
           replay_file_path: r.replay_url,
           replay_downloads: 0,
           created_at: r.created_at,
-          source_type: 'replay_confidence_1',
+          source_type: r.parse_status === 'due' ? 'replay_confidence_1_due' : 'replay_confidence_1',
           confidence_level: 1,
           game_name: r.game_name,
           replay_filename: r.replay_filename
@@ -765,11 +765,12 @@ router.get('/matches', async (req, res) => {
           r.parse_summary,
           r.created_at,
           r.wesnoth_version,
-          r.cancel_requested_by
+          r.cancel_requested_by,
+          r.parse_status
          FROM replays r
          WHERE r.integration_confidence = 1 
            AND r.parsed = 1
-           AND r.parse_status != 'rejected'
+           AND r.parse_status NOT IN ('rejected', 'error')
            AND r.match_id IS NULL
            AND r.tournament_id IS NULL
          ORDER BY r.created_at DESC
@@ -845,7 +846,7 @@ router.get('/matches', async (req, res) => {
             played_at: null,
             admin_reviewed: false,
             tournament_id: null,
-            source_type: 'replay_confidence_1',
+            source_type: r.parse_status === 'due' ? 'replay_confidence_1_due' : 'replay_confidence_1',
             replay_id: r.id,
             confidence_level: 1,
             parse_summary: parseSummary,

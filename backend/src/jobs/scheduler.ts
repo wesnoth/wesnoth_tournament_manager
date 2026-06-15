@@ -9,9 +9,10 @@ import { createFactionMapStatisticsSnapshot, recalculatePlayerMatchStatistics } 
 import { logAuditEvent } from '../middleware/audit.js';
 
 /**
- * Auto-discard unconfirmed replays that exceed the age threshold
+ * Mark unconfirmed replays as 'due' when they exceed the age threshold
  * Replays with parse_status='parsed' and integration_confidence=1 (unconfirmed)
- * are marked as 'rejected' after REPLAY_AUTO_DISCARD_TIME days
+ * are marked as 'due' after REPLAY_AUTO_DISCARD_TIME days
+ * Due replays can still be downloaded but cannot be confirmed or used in matches
  */
 export async function autoDiscardUnconfirmedReplays(): Promise<void> {
   const thresholdDays = parseInt(process.env.REPLAY_AUTO_DISCARD_TIME || '30', 10);
@@ -35,7 +36,7 @@ export async function autoDiscardUnconfirmedReplays(): Promise<void> {
     for (const replay of replays) {
       try {
         await query(
-          `UPDATE replays SET parse_status = 'rejected', updated_at = NOW() WHERE id = ?`,
+          `UPDATE replays SET parse_status = 'due', updated_at = NOW() WHERE id = ?`,
           [replay.id]
         );
         
@@ -61,7 +62,7 @@ export async function autoDiscardUnconfirmedReplays(): Promise<void> {
     }
     
     if (replays.length > 0) {
-      console.log(`✅ [CRON] Auto-discard completed: ${discardedCount} discarded, ${failedCount} failed out of ${replays.length}`);
+      console.log(`✅ [CRON] Auto-discard completed: ${discardedCount} marked as due, ${failedCount} failed out of ${replays.length}`);
     }
   } catch (error) {
     console.error('❌ [CRON] Auto-discard job failed:', error);

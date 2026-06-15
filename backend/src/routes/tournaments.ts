@@ -3051,6 +3051,7 @@ router.get('/:tournamentId/matches', async (req, res) => {
           pr.replay_filename as pending_replay_filename,
           pr.game_name as pending_replay_game_name,
           pr.cancel_requested_by as pending_replay_cancel_requested_by,
+          pr.parse_status as pending_replay_parse_status,
           pr.created_at,
           pr.updated_at,
           'unconfirmed' as match_status,
@@ -3065,7 +3066,7 @@ router.get('/:tournamentId/matches', async (req, res) => {
         LEFT JOIN tournament_participants tp ON (tp.team_id = trm.player1_id OR tp.team_id = trm.player2_id) AND tp.participation_status = 'accepted'
         LEFT JOIN users_extension ue ON tp.user_id = ue.id
         WHERE pr.tournament_id = ?
-          AND pr.parse_status = 'parsed'
+          AND pr.parse_status IN ('parsed', 'due')
           AND pr.integration_confidence = 1
           AND pr.match_id IS NULL
         GROUP BY pr.id
@@ -3091,6 +3092,7 @@ router.get('/:tournamentId/matches', async (req, res) => {
           pr.replay_filename as pending_replay_filename,
           pr.game_name as pending_replay_game_name,
           pr.cancel_requested_by as pending_replay_cancel_requested_by,
+          pr.parse_status as pending_replay_parse_status,
           pr.created_at,
           pr.updated_at,
           'unconfirmed' as match_status,
@@ -3101,7 +3103,7 @@ router.get('/:tournamentId/matches', async (req, res) => {
         LEFT JOIN users_extension u1 ON trm.player1_id = u1.id
         LEFT JOIN users_extension u2 ON trm.player2_id = u2.id
         WHERE pr.tournament_id = ?
-          AND pr.parse_status = 'parsed'
+          AND pr.parse_status IN ('parsed', 'due')
           AND pr.integration_confidence = 1
           AND pr.match_id IS NULL
         ORDER BY tr.round_number ASC, pr.created_at ASC

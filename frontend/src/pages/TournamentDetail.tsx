@@ -2150,6 +2150,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                         .map((match) => {
                            // Check if this is a pending replay (not yet confirmed)
                             const isPendingReplay = match.match_status === 'unconfirmed';
+                            const isDueReplay = isPendingReplay && match.pending_replay_parse_status === 'due';
                            
                             // Extract replay data if pending
                             let replayData = { winnerName: null, loserName: null, map: null, winnerFaction: null, loserFaction: null, winnerSide: null, winnerTeamName: null, loserTeamName: null, winnerTeamFactions: null, loserTeamFactions: null, wmlTeams: null, detectedTeams: null };
@@ -2248,12 +2249,12 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                            const nextRoundStarted = nextRound && nextRound.round_status !== 'pending';
 
                            return (
-                             <tr key={match.id} className={`border-b border-gray-200 transition-colors ${isPendingReplay ? 'bg-yellow-50 hover:bg-yellow-100' : 'hover:bg-gray-50'}`}>
+                             <tr key={match.id} className={`border-b border-gray-200 transition-colors ${isDueReplay ? 'bg-red-100 hover:bg-red-50' : isPendingReplay ? 'bg-yellow-50 hover:bg-yellow-100' : 'hover:bg-gray-50'}`}>
                                <td className="px-4 py-3 text-gray-700">{t('label_round')} {match.round_number}</td>
                                <td className="px-4 py-3 text-gray-700">
                                  <div className="flex flex-col gap-1">
                                    <div className="flex items-center gap-2">
-                                     <strong className={isPendingReplay ? 'text-amber-600' : 'text-green-600'}>{match.is_team_mode ? winnerNickname : <PlayerLink nickname={winnerNickname || '-'} userId={winnerId} />}</strong>
+                                     <strong className={isDueReplay ? 'text-red-700' : isPendingReplay ? 'text-amber-600' : 'text-green-600'}>{match.is_team_mode ? winnerNickname : <PlayerLink nickname={winnerNickname || '-'} userId={winnerId} />}</strong>
                                      {!isPendingReplay && <StarDisplay rating={match.loser_rating} size="sm" />}
                                    </div>
                                    {match.is_team_mode === 1 && (
@@ -2269,7 +2270,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                <td className="px-4 py-3 text-gray-700">
                                  <div className="flex flex-col gap-1">
                                    <div className="flex items-center gap-2">
-                                     <strong className={isPendingReplay ? 'text-amber-600' : 'text-red-600'}>{match.is_team_mode ? loserNickname : <PlayerLink nickname={loserNickname} userId={loserId} />}</strong>
+                                     <strong className={isDueReplay ? 'text-red-700' : isPendingReplay ? 'text-amber-600' : 'text-red-600'}>{match.is_team_mode ? loserNickname : <PlayerLink nickname={loserNickname} userId={loserId} />}</strong>
                                      {!isPendingReplay && <StarDisplay rating={match.winner_rating} size="sm" />}
                                    </div>
                                    {match.is_team_mode === 1 && (
@@ -2367,7 +2368,12 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                      )}
                                    </div>
                                    <div className="flex flex-wrap gap-2">
-                                     {isPendingReplay && (userId === winnerId || (match.is_team_mode && userTeamId === winnerId)) ? (
+                                     {isDueReplay ? (
+                                       // Due replay: read-only mode
+                                       <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 italic">
+                                         {t('replay_due') || 'Due Replay - Download only'}
+                                       </div>
+                                     ) : isPendingReplay && (userId === winnerId || (match.is_team_mode && userTeamId === winnerId)) ? (
                                        <>
                                          <button
                                            className="px-2 py-1 text-xs bg-green-500 hover:bg-green-600 text-white rounded transition-colors"
@@ -2402,6 +2408,11 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                               ⬇️
                                             </a>
                                           )}</>
+                                     ) : isDueReplay ? (
+                                       // Due replay: read-only mode
+                                       <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 italic">
+                                         {t('replay_due') || 'Due Replay - Download only'}
+                                       </div>
                                      ) : isPendingReplay && (userId === loserId || (match.is_team_mode && userTeamId === loserId)) ? (
                                        <>
                                          <button

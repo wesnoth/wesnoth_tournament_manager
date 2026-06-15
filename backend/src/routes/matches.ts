@@ -1510,7 +1510,7 @@ router.post('/report-confidence-1-replay', authMiddleware, async (req: AuthReque
       `SELECT id, parse_summary, integration_confidence, parsed,
               game_id, wesnoth_version, instance_uuid, tournament_round_match_id,
               replay_url, tournament_id
-       FROM replays WHERE id = ? AND integration_confidence = 1 AND parsed = 1 AND parse_status != 'rejected'`,
+       FROM replays WHERE id = ? AND integration_confidence = 1 AND parsed = 1 AND parse_status NOT IN ('rejected', 'due')`,
       [replayId]
     );
 
@@ -2390,7 +2390,7 @@ router.post('/cancel-confidence-1-replay', authMiddleware, async (req: AuthReque
     // Fetch the replay
     const replayResult = await query(
       `SELECT id, parse_summary, integration_confidence, parsed, cancel_requested_by
-       FROM replays WHERE id = ? AND integration_confidence = 1 AND parsed = 1 AND parse_status != 'rejected'`,
+       FROM replays WHERE id = ? AND integration_confidence = 1 AND parsed = 1 AND parse_status NOT IN ('rejected', 'due')`,
       [replayId]
     );
 
@@ -2569,11 +2569,12 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
         r.parse_summary,
         r.created_at,
         r.wesnoth_version,
-        r.cancel_requested_by
+        r.cancel_requested_by,
+        r.parse_status
        FROM replays r
        WHERE r.integration_confidence = 1 
          AND r.parsed = 1
-         AND r.parse_status != 'rejected'
+         AND r.parse_status NOT IN ('rejected')
          AND r.match_id IS NULL
          AND (r.tournament_round_match_id IS NULL AND (r.parse_summary IS NULL OR JSON_UNQUOTE(JSON_EXTRACT(r.parse_summary, '$.linkedTournamentRoundMatchId')) IS NULL OR JSON_UNQUOTE(JSON_EXTRACT(r.parse_summary, '$.linkedTournamentRoundMatchId')) = 'null'))
        ORDER BY r.created_at DESC
@@ -2589,7 +2590,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
         `SELECT r.id, r.tournament_round_match_id, r.integration_confidence, r.parsed, r.match_id, r.parse_status,
                 JSON_UNQUOTE(JSON_EXTRACT(r.parse_summary, '$.linkedTournamentRoundMatchId')) as json_linked
          FROM replays r
-         WHERE r.integration_confidence = 1 AND r.parsed = 1 AND r.parse_status != 'rejected' AND r.match_id IS NULL
+         WHERE r.integration_confidence = 1 AND r.parsed = 1 AND r.parse_status NOT IN ('rejected') AND r.match_id IS NULL
          ORDER BY r.created_at DESC LIMIT 10`,
         []
       );
@@ -2670,7 +2671,8 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
           played_at: null,
           admin_reviewed: false,
           tournament_id: null,
-          source_type: 'replay_confidence_1',
+          parse_status: r.parse_status,
+          source_type: r.parse_status === 'due' ? 'replay_confidence_1_due' : 'replay_confidence_1',
           replay_id: r.id,
           confidence_level: 1,
           parse_summary: parseSummary,

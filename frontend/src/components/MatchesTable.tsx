@@ -210,8 +210,8 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
         </thead>
         <tbody>
           {sortedMatches.map((match) => {
-            // Special rendering for confidence=1 replays
-            if (match.source_type === 'replay_confidence_1') {
+            // Special rendering for confidence=1 replays (including 'due' replays)
+            if (match.source_type === 'replay_confidence_1' || match.source_type === 'replay_confidence_1_due') {
               const map = match.map || 'Unknown Map';
               const faction1 = match.winner_faction || 'Unknown';
               const faction2 = match.loser_faction || 'Unknown';
@@ -220,23 +220,28 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
               const side1 = match.winner_side || 1;
               const side2 = match.loser_side || 2;
               const date = new Date(match.created_at).toLocaleDateString();
-              
+              const isDueReplay = match.source_type === 'replay_confidence_1_due';
+               
               // Determine opponent for logged-in user (for correct tooltip display)
               const opponent = currentUserNickname.toLowerCase() === player1Name.toLowerCase() 
                 ? player2Name 
                 : player1Name;
 
+              const rowBgColor = isDueReplay ? 'bg-red-100' : 'bg-yellow-50';
+              const rowBorderColor = isDueReplay ? 'border-red-200' : 'border-yellow-200';
+              const rowHoverColor = isDueReplay ? 'hover:bg-red-50' : 'hover:bg-yellow-50';
+
               return (
-                <tr key={match.id} className="border-b border-yellow-200 hover:bg-yellow-50 bg-yellow-50">
+                <tr key={match.id} className={`border-b ${rowBorderColor} ${rowHoverColor} ${rowBgColor}`}>
                   <td className="px-4 py-3 text-sm text-gray-700">{date}</td>
 
                   <td className="px-4 py-3 text-sm">
                     <div className="space-y-2">
                       <div className="flex gap-2 items-center">
                         <div className="flex-1 min-w-0">
-                          <span className="font-semibold text-yellow-800">{player1Name}</span>
+                          <span className={`font-semibold ${isDueReplay ? 'text-red-800' : 'text-yellow-800'}`}>{player1Name}</span>
                         </div>
-                        <span className="inline-block px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded font-semibold">{faction1}</span>
+                        <span className={`inline-block px-2 py-1 ${isDueReplay ? 'bg-red-200 text-red-700' : 'bg-yellow-100 text-yellow-700'} text-xs rounded font-semibold`}>{faction1}</span>
                         <span className={`inline-block px-1.5 py-0.5 text-xs rounded font-semibold ${side1 === 1 ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>S{side1}</span>
                       </div>
                     </div>
@@ -246,18 +251,18 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                     <div className="space-y-2">
                       <div className="flex gap-2 items-center">
                         <div className="flex-1 min-w-0">
-                          <span className="font-semibold text-yellow-800">{player2Name}</span>
+                          <span className={`font-semibold ${isDueReplay ? 'text-red-800' : 'text-yellow-800'}`}>{player2Name}</span>
                         </div>
-                        <span className="inline-block px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded font-semibold">{faction2}</span>
+                        <span className={`inline-block px-2 py-1 ${isDueReplay ? 'bg-red-200 text-red-700' : 'bg-yellow-100 text-yellow-700'} text-xs rounded font-semibold`}>{faction2}</span>
                         <span className={`inline-block px-1.5 py-0.5 text-xs rounded font-semibold ${side2 === 1 ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>S{side2}</span>
                       </div>
                     </div>
                   </td>
 
                   <td className="px-4 py-3 text-sm">
-                    <div className="font-semibold text-yellow-900">{map}</div>
+                    <div className={`font-semibold ${isDueReplay ? 'text-red-900' : 'text-yellow-900'}`}>{map}</div>
                     {(match.replay_filename || match.game_name) && (
-                      <div className="text-xs text-yellow-700 mt-1 font-mono bg-yellow-100 px-2 py-1 rounded truncate max-w-[200px]" title={match.replay_filename || match.game_name}>
+                      <div className={`text-xs ${isDueReplay ? 'text-red-700 bg-red-100' : 'text-yellow-700 bg-yellow-100'} mt-1 font-mono px-2 py-1 rounded truncate max-w-[200px]`} title={match.replay_filename || match.game_name}>
                         📄 {match.replay_filename || match.game_name}
                       </div>
                     )}
@@ -266,16 +271,21 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                   <td className="px-4 py-3 text-sm">
                     <div className="space-y-2">
                       <div>
-                        <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">
-                          {t('replay_need_confirmation')}
+                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${isDueReplay ? 'bg-red-200 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                          {isDueReplay ? t('replay_due') || 'Due Replay' : t('replay_need_confirmation')}
                         </span>
                       </div>
-                      {match.cancel_requested_by && (
+                      {!isDueReplay && match.cancel_requested_by && (
                         <div className="text-xs text-gray-600 bg-gray-100 border border-gray-300 rounded px-2 py-1">
                           🚫 {t('label_cancel_requested')} — {t('label_waiting_other_player')}
                         </div>
                       )}
-                      {match.is_admin_view ? (
+                      {isDueReplay ? (
+                        // Due replay: read-only mode
+                        <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 italic">
+                          {t('replay_due_expired') || 'Confirmation period expired. Download only.'}
+                        </div>
+                      ) : match.is_admin_view ? (
                         // Admin view: only discard
                         <div className="space-y-1">
                           <div className="text-xs text-orange-700 font-semibold">{t('replay_admin_view')}</div>
@@ -333,7 +343,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                           </div>
                         </>
                       ) : null}
-                      <div className="mt-2 pt-2 border-t border-yellow-200">
+                      <div className={`mt-2 pt-2 ${isDueReplay ? 'border-t border-red-200' : 'border-t border-yellow-200'}`}>
                         <a
                           href={match.replay_url || match.replay_file_path || '#'}
                           target="_blank"

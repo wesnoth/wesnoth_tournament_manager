@@ -1230,10 +1230,18 @@ new  ──► [syncGamesFromForum inserts row]
              ├── confidence = 1           → parsed      (awaiting player/organizer confirmation)
              ├── confidence = 2           → completed   (match auto-created)
              └── unexpected exception     → error
+
+CONFIRMATION TIMEOUT (via scheduler):
+             
+parsed  ──► (after REPLAY_AUTO_DISCARD_TIME days) ──► due   (confirmation period expired; download only, no actions)
+              [scheduler.autoDiscardUnconfirmedReplays() runs daily]
 ```
 
-File not found: row stays as `new` and is retried every 30 s.
-After 12 hours without the file appearing → `rejected`.
+**State Transitions:**
+- `new` → stays `new` if file not found (retried every 30s for 12 hours)
+- `parsed` → `due` after confirmation period expires (typically 30 days, configurable via `REPLAY_AUTO_DISCARD_TIME`)
+- `due` replays: Players can download the replay file for offline review, but cannot confirm match or take other actions
+- Admins can delete `due` replays through the admin replay management UI
 
 ---
 
@@ -1243,7 +1251,7 @@ After 12 hours without the file appearing → `rejected`.
 
 | Column | Values | Description |
 |--------|--------|-------------|
-| `parse_status` | `new` / `parsed` / `completed` / `rejected` / `error` | Current processing state |
+| `parse_status` | `new` / `parsed` / `completed` / `rejected` / `due` / `error` | Current processing state |
 | `integration_confidence` | `0` / `1` / `2` | 0=unconfirmed, 1=needs player confirmation, 2=auto-confirmed |
 | `parse_summary` | JSON | Full `ParseSummary` blob for debugging and confidence=1 display |
 | `match_id` | UUID / NULL | Set when a match record is successfully created (confidence=2 only) |
