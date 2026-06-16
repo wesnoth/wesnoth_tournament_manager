@@ -72,10 +72,10 @@ const Matches: React.FC = () => {
         const matchesData = res.data?.data || [];
         console.log('Matches data:', matchesData);
         
-        // Check for replays
-        const replays = matchesData.filter((m: any) => m.source_type === 'replay_confidence_1');
+        // Check for replays (both active and due)
+        const replays = matchesData.filter((m: any) => m.source_type === 'replay_confidence_1' || m.source_type === 'replay_confidence_1_due');
         if (replays.length > 0) {
-          console.log(`📋 Found ${replays.length} confidence=1 replays:`, replays);
+          console.log(`📋 Found ${replays.length} confidence=1 replays (including due):`, replays);
         } else {
           console.log('📋 No confidence=1 replays found');
         }

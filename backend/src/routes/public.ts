@@ -708,7 +708,7 @@ router.get('/matches', async (req, res) => {
     const total = parseInt(countResult.rows[0].count);
     const totalPages = Math.ceil(total / pageSize);
 
-    // Get paginated data
+    // Get ALL data for combining and paginating together
     const dataQuery = `
       SELECT m.*, 
               w.nickname as winner_nickname,
@@ -718,11 +718,7 @@ router.get('/matches', async (req, res) => {
        JOIN users_extension l ON m.loser_id = l.id
        ${whereClause}
        ORDER BY m.created_at DESC
-       LIMIT ? OFFSET ?
     `;
-
-    params.push(pageSize);
-    params.push(offset);
 
     const result = await query(dataQuery, params);
 
@@ -753,29 +749,27 @@ router.get('/matches', async (req, res) => {
       }
     }
 
-    // Get replays with confidence=1 (visible to everyone, action buttons controlled in frontend)
+    // Get ALL replays with confidence=1 (visible to everyone, action buttons controlled in frontend)
     let formattedReplays = [];
     try {
       const replayResult = await query(
         `SELECT 
-          r.id, 
-          r.replay_filename,
-          r.game_name,
-          r.replay_url,
-          r.parse_summary,
-          r.created_at,
-          r.wesnoth_version,
-          r.cancel_requested_by,
-          r.parse_status
-         FROM replays r
-         WHERE r.integration_confidence = 1 
-           AND r.parsed = 1
-           AND r.parse_status NOT IN ('rejected', 'error')
-           AND r.match_id IS NULL
-           AND r.tournament_id IS NULL
-         ORDER BY r.created_at DESC
-         LIMIT ? OFFSET ?`,
-        [pageSize, offset]
+         r.id, 
+         r.replay_filename,
+         r.game_name,
+         r.replay_url,
+         r.parse_summary,
+         r.created_at,
+         r.wesnoth_version,
+         r.cancel_requested_by,
+         r.parse_status
+        FROM replays r
+        WHERE r.integration_confidence = 1 
+          AND r.parsed = 1
+          AND r.parse_status NOT IN ('rejected', 'error')
+          AND r.match_id IS NULL
+          AND r.tournament_id IS NULL
+        ORDER BY r.created_at DESC`
       );
 
       console.log(`📋 [PUBLIC/MATCHES] Found ${replayResult.rows?.length || 0} confidence=1 replays`);
@@ -878,7 +872,7 @@ router.get('/matches', async (req, res) => {
     });
 
     // Paginate combined results
-    const paginatedResults = allResults.slice(0, pageSize);
+    const paginatedResults = allResults.slice(offset, offset + pageSize);
     const combinedTotal = total + (formattedReplays.length > 0 ? formattedReplays.length : 0);
     const combinedTotalPages = Math.ceil(combinedTotal / pageSize);
 
