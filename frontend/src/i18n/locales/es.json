@@ -571,6 +571,7 @@
   "replay_discard": "🗑️ Descartar",
   "replay_discard_confirm": "⚠️ Descartar como admin: este replay será rechazado permanentemente. NO se pedirá confirmación a los jugadores. ¿Continuar?",
   "replay_download": "⬇️ Descargar Repetición",
+  "replay_due": "📅 Repetición Expirada",
   "replay_i_lost": "✗ Yo perdí",
   "replay_i_won": "✓ Yo gané",
   "replay_need_confirmation": "🔍 Necesita confirmación",

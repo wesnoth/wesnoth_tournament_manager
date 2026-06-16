@@ -581,6 +581,7 @@
   "replay_discard": "🗑️ Discard",
   "replay_discard_confirm": "⚠️ Admin discard: this replay will be permanently rejected. Players will NOT be asked for confirmation. Continue?",
   "replay_download": "⬇️ Download Replay",
+  "replay_due": "📅 Due Replay",
   "replay_i_lost": "✗ I lost",
   "replay_i_won": "✓ I won",
   "replay_need_confirmation": "🔍 Need Confirmation",

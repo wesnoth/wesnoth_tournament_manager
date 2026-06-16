@@ -324,6 +324,7 @@ const AdminReplays: React.FC = () => {
                 <option value="error">Error</option>
                 <option value="failed">Failed</option>
                 <option value="rejected">Rejected</option>
+                <option value="due">Due</option>
                 <option value="skipped">Skipped</option>
                 <option value="discarded">Discarded</option>
                 <option value="reported">Reported (has match)</option>

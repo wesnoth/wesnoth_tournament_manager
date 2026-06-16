@@ -564,6 +564,7 @@
   "replay_discard": "🗑️ Verwerfen",
   "replay_discard_confirm": "⚠️ Admin-Verwerfung: Dieser Replay wird dauerhaft abgelehnt. Spieler werden NICHT um Bestätigung gebeten. Fortfahren?",
   "replay_download": "⬇️ Replay herunterladen",
+  "replay_due": "📅 Abgelaufener Replay",
   "replay_i_lost": "✗ Ich habe verloren",
   "replay_i_won": "✓ Ich habe gewonnen",
   "replay_need_confirmation": "🔍 Bestätigung erforderlich",

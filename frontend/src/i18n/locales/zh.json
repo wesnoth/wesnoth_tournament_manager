@@ -564,6 +564,7 @@
   "replay_discard": "🗑️ 丢弃",
   "replay_discard_confirm": "⚠️ 管理员丢弃：此回放将被永久拒绝，不会要求玩家确认。是否继续？",
   "replay_download": "⬇️ 下载回放",
+  "replay_due": "📅 已过期回放",
   "replay_i_lost": "✗ 我输了",
   "replay_i_won": "✓ 我赢了",
   "replay_need_confirmation": "🔍 需要确认",
