@@ -123,6 +123,7 @@ async function performGlobalStatsRecalculation() {
     // STEP 3: Initialize all users with baseline ELO and zero stats
     const userStates = new Map<string, {
       elo_rating: number;
+      ranking_pos: number;
       matches_played: number;
       total_wins: number;
       total_losses: number;
@@ -134,6 +135,7 @@ async function performGlobalStatsRecalculation() {
     for (const userRow of allUsersResult.rows) {
       userStates.set(userRow.id, {
         elo_rating: defaultElo,
+        ranking_pos: 1,
         matches_played: 0,
         total_wins: 0,
         total_losses: 0,
@@ -152,18 +154,20 @@ async function performGlobalStatsRecalculation() {
 
       // Ensure both users exist in state map
       if (!userStates.has(winnerId)) {
-        userStates.set(winnerId, { elo_rating: defaultElo, matches_played: 0, total_wins: 0, total_losses: 0, trend: '-', level: 'Novato' });
+        userStates.set(winnerId, { elo_rating: defaultElo, ranking_pos: 1, matches_played: 0, total_wins: 0, total_losses: 0, trend: '-', level: 'Novato' });
       }
       if (!userStates.has(loserId)) {
-        userStates.set(loserId, { elo_rating: defaultElo, matches_played: 0, total_wins: 0, total_losses: 0, trend: '-', level: 'Novato' });
+        userStates.set(loserId, { elo_rating: defaultElo, ranking_pos: 1, matches_played: 0, total_wins: 0, total_losses: 0, trend: '-', level: 'Novato' });
       }
 
       const winner = userStates.get(winnerId)!;
       const loser = userStates.get(loserId)!;
 
-      // Store before values
+      // Store before values (including ranking position)
       const winnerEloBefore = winner.elo_rating;
       const loserEloBefore = loser.elo_rating;
+      const winnerRankingPosBefore = winner.ranking_pos;
+      const loserRankingPosBefore = loser.ranking_pos;
       const winnerMatchesBeforeCalc = winner.matches_played;
       const loserMatchesBeforeCalc = loser.matches_played;
 
@@ -194,6 +198,19 @@ async function performGlobalStatsRecalculation() {
       // Update levels in state for next iteration
       winner.level = winnerLevelAfter;
       loser.level = loserLevelAfter;
+
+      // Calculate ranking positions AFTER the match based on current state
+      // Count how many players have higher ELO than this player
+      const winnerRankingPosAfter = 1 + Array.from(userStates.values()).filter(u => u.elo_rating > winnerNewRating).length;
+      const loserRankingPosAfter = 1 + Array.from(userStates.values()).filter(u => u.elo_rating > loserNewRating).length;
+
+      // Calculate ranking changes
+      const winnerRankingChange = winnerRankingPosBefore - winnerRankingPosAfter;
+      const loserRankingChange = loserRankingPosBefore - loserRankingPosAfter;
+
+      // Update ranking positions in state
+      winner.ranking_pos = winnerRankingPosAfter;
+      loser.ranking_pos = loserRankingPosAfter;
 
       // Calculate ELO changes for both players
       const winnerEloChange = winnerNewRating - winnerEloBefore;
@@ -226,9 +243,11 @@ async function performGlobalStatsRecalculation() {
              loser_elo_before = ?, loser_elo_after = ?,
              winner_level_before = ?, winner_level_after = ?,
              loser_level_before = ?, loser_level_after = ?,
+             winner_ranking_pos = ?, winner_ranking_change = ?,
+             loser_ranking_pos = ?, loser_ranking_change = ?,
              elo_change = ?
          WHERE id = ?`,
-        [winnerEloBefore, winnerNewRating, loserEloBefore, loserNewRating, winnerLevelBefore, winnerLevelAfter, loserLevelBefore, loserLevelAfter, winnerEloChange, matchRow.id]
+        [winnerEloBefore, winnerNewRating, loserEloBefore, loserNewRating, winnerLevelBefore, winnerLevelAfter, loserLevelBefore, loserLevelAfter, winnerRankingPosAfter, winnerRankingChange, loserRankingPosAfter, loserRankingChange, winnerEloChange, matchRow.id]
       );
 
       matchProcessedCount++;
@@ -277,55 +296,6 @@ async function performGlobalStatsRecalculation() {
         [stats.elo_rating, stats.matches_played, stats.total_wins, stats.total_losses, stats.trend, stats.level, isCurrentlyRated, userId]
       );
       usersUpdatedCount++;
-    }
-
-    // STEP 5.5: Recalculate ranking positions and changes for all matches
-    try {
-      let rankingsUpdatedCount = 0;
-      for (const matchRow of allNonCancelledMatches.rows) {
-        const winnerId = matchRow.winner_id;
-        const loserId = matchRow.loser_id;
-
-        // Get current ELO for both players
-        const winnerResult = await query(
-          `SELECT elo_rating FROM users_extension WHERE id = ?`,
-          [winnerId]
-        );
-        const loserResult = await query(
-          `SELECT elo_rating FROM users_extension WHERE id = ?`,
-          [loserId]
-        );
-
-        const winnerElo = winnerResult.rows[0]?.elo_rating || 1400;
-        const loserElo = loserResult.rows[0]?.elo_rating || 1400;
-
-        // Calculate final ranking positions (these should already account for all other matches)
-        const winnerPos = await getPlayerRankingPosition(query, winnerId, winnerElo);
-        const loserPos = await getPlayerRankingPosition(query, loserId, loserElo);
-
-        // For ranking change: We don't have the "before" positions here, so we use 0
-        // This will be recalculated more accurately if needed
-        // Actually, let me use a simpler approach: use 0 for now, or we could do it differently
-
-        // Update the match with final ranking positions
-        // Note: ranking_change would ideally be calculated from before/after, but we only have after state
-        // So we'll set ranking_pos to the final position and ranking_change to NULL or 0
-        await query(
-          `UPDATE matches
-           SET winner_ranking_pos = ?, winner_ranking_change = 0,
-               loser_ranking_pos = ?, loser_ranking_change = 0
-           WHERE id = ?`,
-          [winnerPos, loserPos, matchRow.id]
-        );
-        rankingsUpdatedCount++;
-      }
-      const rankingMsg = `✓ Recalculated rankings for ${rankingsUpdatedCount} matches`;
-      if (isDebugEnabled) {
-        logs.push(rankingMsg);
-        console.log(rankingMsg);
-      }
-    } catch (rankingErr) {
-      if (isDebugEnabled) console.error('Warning: Failed to recalculate rankings:', rankingErr);
     }
 
     // STEP 6: Re-enable both triggers
