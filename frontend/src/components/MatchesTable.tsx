@@ -392,13 +392,15 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                         </span>
                       )}
                     </div>
-                    {!isCancelled && match.winner_ranking_pos && (
+                    {match.winner_ranking_pos && (
                       <div>
                         <span className="font-semibold text-gray-700">Rank: </span>
                         <span>{match.winner_ranking_pos}</span>
-                        <span className={`ml-1 font-semibold ${(match.winner_ranking_change || 0) > 0 ? 'text-green-600' : (match.winner_ranking_change || 0) < 0 ? 'text-red-600' : ''}`}>
-                          {(match.winner_ranking_change || 0) > 0 ? '↑' : (match.winner_ranking_change || 0) < 0 ? '↓' : ''}{Math.abs(match.winner_ranking_change || 0)}
-                        </span>
+                        {!isCancelled && (
+                          <span className={`ml-1 font-semibold ${(match.winner_ranking_change || 0) > 0 ? 'text-green-600' : (match.winner_ranking_change || 0) < 0 ? 'text-red-600' : ''}`}>
+                            {(match.winner_ranking_change || 0) > 0 ? '↑' : (match.winner_ranking_change || 0) < 0 ? '↓' : ''}{Math.abs(match.winner_ranking_change || 0)}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -430,13 +432,15 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                         </span>
                       )}
                     </div>
-                    {!isCancelled && match.loser_ranking_pos && (
+                    {match.loser_ranking_pos && (
                       <div>
                         <span className="font-semibold text-gray-700">Rank: </span>
                         <span>{match.loser_ranking_pos}</span>
-                        <span className={`ml-1 font-semibold ${(match.loser_ranking_change || 0) > 0 ? 'text-green-600' : (match.loser_ranking_change || 0) < 0 ? 'text-red-600' : ''}`}>
-                          {(match.loser_ranking_change || 0) > 0 ? '↑' : (match.loser_ranking_change || 0) < 0 ? '↓' : ''}{Math.abs(match.loser_ranking_change || 0)}
-                        </span>
+                        {!isCancelled && (
+                          <span className={`ml-1 font-semibold ${(match.loser_ranking_change || 0) > 0 ? 'text-green-600' : (match.loser_ranking_change || 0) < 0 ? 'text-red-600' : ''}`}>
+                            {(match.loser_ranking_change || 0) > 0 ? '↑' : (match.loser_ranking_change || 0) < 0 ? '↓' : ''}{Math.abs(match.loser_ranking_change || 0)}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
