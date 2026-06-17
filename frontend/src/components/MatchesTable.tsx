@@ -392,7 +392,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                         </span>
                       )}
                     </div>
-                    {match.winner_ranking_pos && (
+                    {!isCancelled && match.winner_ranking_pos && (
                       <div>
                         <span className="font-semibold text-gray-700">Rank: </span>
                         <span>{match.winner_ranking_pos}</span>
@@ -430,7 +430,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                         </span>
                       )}
                     </div>
-                    {match.loser_ranking_pos && (
+                    {!isCancelled && match.loser_ranking_pos && (
                       <div>
                         <span className="font-semibold text-gray-700">Rank: </span>
                         <span>{match.loser_ranking_pos}</span>
