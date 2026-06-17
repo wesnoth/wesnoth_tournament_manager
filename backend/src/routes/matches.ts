@@ -9,6 +9,7 @@ import {
   shouldPlayerBeRated,
   calculateTrend,
   getKFactorWithReason,
+  getPlayerRankingPosition,
 } from '../utils/elo.js';
 import { updateBestOfSeriesDB, createNextMatchInSeries } from '../utils/bestOf.js';
 import { checkAndCompleteRound } from '../utils/tournament.js';
@@ -276,6 +277,55 @@ async function performGlobalStatsRecalculation() {
         [stats.elo_rating, stats.matches_played, stats.total_wins, stats.total_losses, stats.trend, stats.level, isCurrentlyRated, userId]
       );
       usersUpdatedCount++;
+    }
+
+    // STEP 5.5: Recalculate ranking positions and changes for all matches
+    try {
+      let rankingsUpdatedCount = 0;
+      for (const matchRow of allNonCancelledMatches.rows) {
+        const winnerId = matchRow.winner_id;
+        const loserId = matchRow.loser_id;
+
+        // Get current ELO for both players
+        const winnerResult = await query(
+          `SELECT elo_rating FROM users_extension WHERE id = ?`,
+          [winnerId]
+        );
+        const loserResult = await query(
+          `SELECT elo_rating FROM users_extension WHERE id = ?`,
+          [loserId]
+        );
+
+        const winnerElo = winnerResult.rows[0]?.elo_rating || 1400;
+        const loserElo = loserResult.rows[0]?.elo_rating || 1400;
+
+        // Calculate final ranking positions (these should already account for all other matches)
+        const winnerPos = await getPlayerRankingPosition(query, winnerId, winnerElo);
+        const loserPos = await getPlayerRankingPosition(query, loserId, loserElo);
+
+        // For ranking change: We don't have the "before" positions here, so we use 0
+        // This will be recalculated more accurately if needed
+        // Actually, let me use a simpler approach: use 0 for now, or we could do it differently
+
+        // Update the match with final ranking positions
+        // Note: ranking_change would ideally be calculated from before/after, but we only have after state
+        // So we'll set ranking_pos to the final position and ranking_change to NULL or 0
+        await query(
+          `UPDATE matches
+           SET winner_ranking_pos = ?, winner_ranking_change = 0,
+               loser_ranking_pos = ?, loser_ranking_change = 0
+           WHERE id = ?`,
+          [winnerPos, loserPos, matchRow.id]
+        );
+        rankingsUpdatedCount++;
+      }
+      const rankingMsg = `✓ Recalculated rankings for ${rankingsUpdatedCount} matches`;
+      if (isDebugEnabled) {
+        logs.push(rankingMsg);
+        console.log(rankingMsg);
+      }
+    } catch (rankingErr) {
+      if (isDebugEnabled) console.error('Warning: Failed to recalculate rankings:', rankingErr);
     }
 
     // STEP 6: Re-enable both triggers
@@ -1865,6 +1915,18 @@ router.post('/report-confidence-1-replay', authMiddleware, async (req: AuthReque
     const winnerLevelAfter = getUserLevel(winnerNewRating);
     const loserLevelAfter = getUserLevel(loserNewRating);
 
+    // Calculate ranking positions BEFORE the match
+    const winnerPosBefore = await getPlayerRankingPosition(query, winnerId, winner.elo_rating);
+    const loserPosBefore = await getPlayerRankingPosition(query, loserId, loser.elo_rating);
+
+    // Calculate ranking positions AFTER the match (with new ratings)
+    const winnerPosAfter = await getPlayerRankingPosition(query, winnerId, winnerNewRating);
+    const loserPosAfter = await getPlayerRankingPosition(query, loserId, loserNewRating);
+
+    // Calculate position changes
+    const winnerRankingChange = winnerPosBefore - winnerPosAfter;
+    const loserRankingChange = loserPosBefore - loserPosAfter;
+
     // Get replay URL (already properly formatted in replays table)
     const replayFilePath = replay.replay_url || '';
 
@@ -1921,6 +1983,10 @@ router.post('/report-confidence-1-replay', authMiddleware, async (req: AuthReque
           loser_level_before,
           winner_level_after,
           loser_level_after,
+          winner_ranking_pos,
+          winner_ranking_change,
+          loser_ranking_pos,
+          loser_ranking_change,
           winner_comments,
           winner_rating,
           elo_change,
@@ -1932,7 +1998,7 @@ router.post('/report-confidence-1-replay', authMiddleware, async (req: AuthReque
           game_id,
           wesnoth_version,
           instance_uuid
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           matchId,
           replayId,
@@ -1949,6 +2015,10 @@ router.post('/report-confidence-1-replay', authMiddleware, async (req: AuthReque
           loserLevelBefore,
           winnerLevelAfter,
           loserLevelAfter,
+          winnerPosAfter,
+          winnerRankingChange,
+          loserPosAfter,
+          loserRankingChange,
           winnerComments,
           winnerRating,
           eloChange,

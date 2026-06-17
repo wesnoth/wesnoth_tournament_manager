@@ -234,3 +234,32 @@ export const recalculateUserStatsInCascade = (
     trend
   };
 };
+
+/**
+ * Calculate a player's ranking position based on their ELO rating.
+ * Position = 1 + (count of players with higher ELO)
+ * Only counts active players with is_rated = true
+ */
+export const getPlayerRankingPosition = async (
+  query: any,
+  playerId: string,
+  playerElo: number
+): Promise<number> => {
+  try {
+    const result = await query(
+      `SELECT COUNT(*) as higher_count 
+       FROM users_extension 
+       WHERE is_rated = true 
+       AND is_active = true
+       AND elo_rating > ?
+       AND id != ?`,
+      [playerElo, playerId]
+    );
+    
+    const higherCount = result.rows?.[0]?.higher_count || 0;
+    return higherCount + 1;
+  } catch (err) {
+    console.error('Error calculating ranking position:', err);
+    return 1; // Default to rank 1 on error
+  }
+};

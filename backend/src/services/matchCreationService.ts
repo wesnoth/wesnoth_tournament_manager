@@ -6,7 +6,7 @@
  */
 
 import { query } from '../config/database.js';
-import { calculateNewRating, calculateTrend } from '../utils/elo.js';
+import { calculateNewRating, calculateTrend, getPlayerRankingPosition } from '../utils/elo.js';
 import { getUserLevel } from '../utils/auth.js';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -79,8 +79,20 @@ export async function createMatch(input: CreateMatchInput): Promise<CreateMatchR
       return { success: false, error: 'Could not fetch winner/loser from users_extension' };
     }
 
+    // Calculate positions BEFORE the match
+    const winnerPosBefore = await getPlayerRankingPosition(query, input.winnerId, winner.elo_rating);
+    const loserPosBefore = await getPlayerRankingPosition(query, input.loserId, loser.elo_rating);
+
     const winnerNewRating = calculateNewRating(winner.elo_rating, loser.elo_rating, 'win',  winner.matches_played);
     const loserNewRating  = calculateNewRating(loser.elo_rating,  winner.elo_rating, 'loss', loser.matches_played);
+
+    // Calculate positions AFTER the match (with new ratings)
+    const winnerPosAfter = await getPlayerRankingPosition(query, input.winnerId, winnerNewRating);
+    const loserPosAfter = await getPlayerRankingPosition(query, input.loserId, loserNewRating);
+
+    // Calculate position changes (negative means gained positions/improved rank, positive means lost positions)
+    const winnerRankingChange = winnerPosBefore - winnerPosAfter;
+    const loserRankingChange = loserPosBefore - loserPosAfter;
 
     const winnerTrend = calculateTrend(winner.trend || '-', true);
     const loserTrend  = calculateTrend(loser.trend  || '-', false);
@@ -94,9 +106,10 @@ export async function createMatch(input: CreateMatchInput): Promise<CreateMatchR
          tournament_type, tournament_mode, tournament_id,
          winner_elo_before, loser_elo_before, winner_level_before, loser_level_before,
          winner_elo_after,  loser_elo_after,  winner_level_after,  loser_level_after,
+         winner_ranking_pos, winner_ranking_change, loser_ranking_pos, loser_ranking_change,
          winner_side, game_id, wesnoth_version, instance_uuid,
          created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'reported', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'reported', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         matchId,
         winner.id, loser.id,
@@ -110,6 +123,7 @@ export async function createMatch(input: CreateMatchInput): Promise<CreateMatchR
         getUserLevel(winner.elo_rating), getUserLevel(loser.elo_rating),
         winnerNewRating,               loserNewRating,
         getUserLevel(winnerNewRating),  getUserLevel(loserNewRating),
+        winnerPosAfter, winnerRankingChange, loserPosAfter, loserRankingChange,
         input.winnerSide,
         input.gameId, input.wesnothVersion, input.instanceUuid,
       ]
