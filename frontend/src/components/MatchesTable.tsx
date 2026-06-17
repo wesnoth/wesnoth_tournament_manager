@@ -386,9 +386,11 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                     <div>
                       <span className="font-semibold text-gray-700">ELO: </span>
                       <span>{match.winner_elo_before || 'N/A'}</span>
-                      <span className={`ml-1 font-semibold ${winnerEloChange(match) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        ({winnerEloChange(match) >= 0 ? '+' : ''}{winnerEloChange(match)})
-                      </span>
+                      {!isCancelled && (
+                        <span className={`ml-1 font-semibold ${winnerEloChange(match) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          ({winnerEloChange(match) >= 0 ? '+' : ''}{winnerEloChange(match)})
+                        </span>
+                      )}
                     </div>
                     {match.winner_ranking_pos && (
                       <div>
@@ -422,9 +424,11 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                     <div>
                       <span className="font-semibold text-gray-700">ELO: </span>
                       <span>{match.loser_elo_before || 'N/A'}</span>
-                      <span className={`ml-1 font-semibold ${loserEloChange(match) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        ({loserEloChange(match) >= 0 ? '+' : ''}{loserEloChange(match)})
-                      </span>
+                      {!isCancelled && (
+                        <span className={`ml-1 font-semibold ${loserEloChange(match) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          ({loserEloChange(match) >= 0 ? '+' : ''}{loserEloChange(match)})
+                        </span>
+                      )}
                     </div>
                     {match.loser_ranking_pos && (
                       <div>
