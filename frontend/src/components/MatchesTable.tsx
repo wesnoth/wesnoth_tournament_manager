@@ -361,8 +361,13 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
             }
 
             // Regular match rendering
+            const isCancelled = match.status === 'cancelled';
+            const matchRowBgColor = isCancelled ? 'bg-red-100' : '';
+            const matchRowBorderColor = isCancelled ? 'border-red-200' : 'border-gray-200';
+            const matchRowHoverColor = isCancelled ? 'hover:bg-red-50' : 'hover:bg-gray-50';
+
             return (
-              <tr key={match.id} className="border-b border-gray-200 hover:bg-gray-50">
+              <tr key={match.id} className={`border-b ${matchRowBorderColor} ${matchRowHoverColor} ${matchRowBgColor}`}>
               <td className="px-4 py-3 text-sm text-gray-700">{new Date(match.created_at).toLocaleDateString()}</td>
 
               <td className="px-4 py-3 text-sm">
@@ -446,7 +451,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                       match.status === 'confirmed' ? 'bg-green-100 text-green-700' :
                       match.status === 'reported' ? 'bg-orange-100 text-orange-700' :
                       match.status === 'disputed' ? 'bg-red-100 text-red-700' :
-                      match.status === 'cancelled' ? 'bg-gray-100 text-gray-700' :
+                      match.status === 'cancelled' ? 'bg-red-100 text-red-700' :
                       'bg-blue-100 text-blue-700'
                     }`}>
                       {match.status === 'confirmed' && t('match_status_confirmed')}
