@@ -9,7 +9,8 @@ const DISCORD_USER_MENTION_REGEX = /^<@!?(\d{17,20})>$/;
 export const DISCORD_ENABLED = process.env.DISCORD_ENABLED === 'true';
 
 function normalizeDiscordInput(input: string): string {
-  return input.trim();
+  // Remove leading/trailing whitespace and control characters (0x00-0x1F, 0x7F)
+  return input.trim().replace(/[\x00-\x1F\x7F]/g, '');
 }
 
 function extractDiscordIdCandidate(input: string): string | null {
@@ -44,7 +45,7 @@ async function checkGuildMembershipByDiscordId(
   headers: Record<string, string>
 ): Promise<'member' | 'not_member' | 'error'> {
   try {
-    await axios.get(`${DISCORD_API_URL}/guilds/${guildId}/members/${discordId}`, { headers });
+    await axios.head(`${DISCORD_API_URL}/guilds/${guildId}/members/${discordId}`, { headers });
     return 'member';
   } catch (error: any) {
     const status = error.response?.status;
@@ -54,20 +55,34 @@ async function checkGuildMembershipByDiscordId(
 }
 
 /**
- * Resolve Discord username (username#discriminator) to numeric Discord ID
- * Searches in the guild to find the user by username
+ * Resolve Discord ID or mention to numeric Discord ID
+ * Strategy: Try by ID first (preferred), fallback to legacy username search
+ * 
+ * 1. If input is valid Discord ID (17-20 digits) or mention format (<@123456789>):
+ *    → Extract ID and check guild membership
+ *    → Return ID if member, null if not
+ * 
+ * 2. If ID validation fails or input is username:
+ *    → Fall back to username search (DEPRECATED)
+ *    → Log deprecation warning for tracking
+ *    → Return first match (legacy behavior)
  */
 export async function resolveDiscordIdFromUsername(usernameInput: string): Promise<string | null> {
-  console.log('[DISCORD-RESOLVE] Attempting to resolve username to ID:', usernameInput);
+  console.log('[DISCORD-RESOLVE] Attempting to resolve to ID:', usernameInput);
   const normalizedInput = normalizeDiscordInput(usernameInput);
 
   if (!normalizedInput) {
-    console.warn('[DISCORD-RESOLVE] Empty username input');
+    console.warn('[DISCORD-RESOLVE] Empty input');
     return null;
   }
 
-  if (!process.env.DISCORD_BOT_TOKEN || !process.env.DISCORD_GUILD_ID) {
-    console.warn('[DISCORD-RESOLVE] Bot token or guild ID not configured');
+  if (!process.env.DISCORD_BOT_TOKEN) {
+    console.warn('[DISCORD-RESOLVE] Bot token not configured');
+    return null;
+  }
+
+  if (!process.env.DISCORD_GUILD_ID) {
+    console.warn('[DISCORD-RESOLVE] Guild ID not configured');
     return null;
   }
 
@@ -78,35 +93,37 @@ export async function resolveDiscordIdFromUsername(usernameInput: string): Promi
       'Content-Type': 'application/json',
     };
 
+    // ===== PHASE 1: Try direct ID lookup (preferred, secure) =====
     const discordIdCandidate = extractDiscordIdCandidate(normalizedInput);
     if (discordIdCandidate) {
       if (isValidDiscordSnowflake(discordIdCandidate)) {
+        console.log('[DISCORD-RESOLVE] Valid snowflake detected, checking guild membership:', discordIdCandidate);
         const memberStatus = await checkGuildMembershipByDiscordId(guildId, discordIdCandidate, headers);
         if (memberStatus === 'member') {
-          console.log('[DISCORD-RESOLVE] Valid Discord ID and guild member:', discordIdCandidate);
+          console.log('[DISCORD-RESOLVE] Resolved via Discord ID:', discordIdCandidate);
           return discordIdCandidate;
         }
         if (memberStatus === 'not_member') {
-          console.warn('[DISCORD-RESOLVE] Discord ID is valid but user is not in guild:', discordIdCandidate);
+          console.warn('[DISCORD-RESOLVE] Discord ID valid but not in guild:', discordIdCandidate);
           return null;
         }
-        console.warn('[DISCORD-RESOLVE] Failed to verify guild membership for Discord ID:', discordIdCandidate);
+        console.warn('[DISCORD-RESOLVE] Failed to verify guild membership:', discordIdCandidate);
         return null;
       }
 
-      console.warn('[DISCORD-RESOLVE] Input looks like Discord ID but is not a valid snowflake:', normalizedInput);
+      console.warn('[DISCORD-RESOLVE] Input looks like Discord ID but is not valid snowflake:', normalizedInput);
     }
 
-    // Extract username from "username#discriminator" or just "username"
-    const username = normalizedInput.split('#')[0];
+    // ===== PHASE 2: Fallback to username search (deprecated) =====
+    console.warn('[DISCORD-RESOLVE] DEPRECATED: Falling back to username search. Users should provide Discord ID or mention instead.');
+    
+    const username = normalizedInput;
 
     console.log('[DISCORD-RESOLVE] Searching for username in guild:', {
       guildId,
-      searchQuery: username,
-      originalInput: normalizedInput
+      searchQuery: username
     });
 
-    // Search for members in guild by username
     const response = await axios.get(
       `${DISCORD_API_URL}/guilds/${guildId}/members/search`,
       {
@@ -124,65 +141,29 @@ export async function resolveDiscordIdFromUsername(usernameInput: string): Promi
 
     console.log('[DISCORD-RESOLVE] Members found:', members.map((m: any) => ({
       id: m.user.id,
-      username: m.user.username,
-      discriminator: m.user.discriminator,
-      fullTag: `${m.user.username}#${m.user.discriminator}`
+      username: m.user.username
     })));
 
-    // Find exact match (considering both username and discriminator)
-    let targetMember = null;
+    // Username search can return multiple results with no guaranteed order
+    // Taking first match and logging for audit trail
+    console.warn('[DISCORD-RESOLVE] Username search returned multiple potential matches. Using first result.');
+    console.warn('[DISCORD-RESOLVE] Matched members:', members.map((m: any) => ({
+      id: m.user.id,
+      username: m.user.username
+    })));
 
-    if (normalizedInput.includes('#')) {
-      // Search for exact username#discriminator match
-      const [searchUsername, searchDiscriminator] = normalizedInput.split('#');
-      console.log('[DISCORD-RESOLVE] Looking for exact match:', {
-        searchUsername: searchUsername.toLowerCase(),
-        searchDiscriminator
-      });
-      
-      targetMember = members.find((m: any) => {
-        const match = m.user.username.toLowerCase() === searchUsername.toLowerCase() &&
-                      m.user.discriminator === searchDiscriminator;
-        if (!match) {
-          console.log('[DISCORD-RESOLVE] Checked member:', {
-            username: m.user.username,
-            discriminator: m.user.discriminator,
-            matched: match
-          });
-        }
-        return match;
-      });
-      
-      if (!targetMember) {
-        console.warn('[DISCORD-RESOLVE] Exact username#discriminator not found, trying username-only match');
-        // Fall back to username-only match if discriminator doesn't match
-        targetMember = members.find((m: any) =>
-          m.user.username.toLowerCase() === normalizedInput.split('#')[0].toLowerCase()
-        );
-      }
-    } else {
-      // Just username, take first match
-      console.log('[DISCORD-RESOLVE] Accepting first match for username (no discriminator specified)');
-      targetMember = members[0];
-    }
-
-    if (!targetMember) {
-      console.warn('[DISCORD-RESOLVE] No suitable member found for:', usernameInput);
-      console.warn('[DISCORD-RESOLVE] Available members:', members.map((m: any) => `${m.user.username}#${m.user.discriminator}`));
-      return null;
-    }
-
+    const targetMember = members[0];
     const discordId = targetMember.user.id;
-    console.log('[DISCORD-RESOLVE] Successfully resolved username to ID:', {
+
+    console.log('[DISCORD-RESOLVE] Resolved via username search (DEPRECATED):', {
       input: normalizedInput,
       resolvedId: discordId,
-      username: targetMember.user.username,
-      discriminator: targetMember.user.discriminator
+      username: targetMember.user.username
     });
 
     return discordId;
   } catch (error: any) {
-    console.error('[DISCORD-RESOLVE] Error resolving username:', {
+    console.error('[DISCORD-RESOLVE] Error resolving Discord ID:', {
       input: normalizedInput,
       httpStatus: error.response?.status,
       errorData: error.response?.data,
