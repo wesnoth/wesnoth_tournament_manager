@@ -24,6 +24,8 @@ const Profile: React.FC = () => {
   const [discordMessage, setDiscordMessage] = useState('');
   const [discordError, setDiscordError] = useState('');
   const [updatingDiscord, setUpdatingDiscord] = useState(false);
+  const [validatingDiscordId, setValidatingDiscordId] = useState(false);
+  const [discordValidationMessage, setDiscordValidationMessage] = useState('');
   const [languageDropdownOpen, setLanguageDropdownOpen] = useState(false);
   const [preferencesCollapsed, setPreferencesCollapsed] = useState(false);
   const [avatarSectionCollapsed, setAvatarSectionCollapsed] = useState(true);
@@ -168,6 +170,57 @@ const Profile: React.FC = () => {
     }
   }, [discordId, t]);
 
+  const isValidDiscordIdFormat = useCallback((id: string): boolean => {
+    const normalized = id.trim();
+    // Accept Discord ID (17-20 digits) or mention format (<@ID>)
+    const mentionRegex = /^<@!?(\d{17,20})>$/;
+    const idRegex = /^\d{17,20}$/;
+    return mentionRegex.test(normalized) || idRegex.test(normalized);
+  }, []);
+
+  const handleValidateDiscordId = useCallback(async () => {
+    if (!discordId.trim()) {
+      setDiscordError(t('profile.error_discord_empty'));
+      return;
+    }
+
+    if (!isValidDiscordIdFormat(discordId)) {
+      setDiscordError(t('profile.error_discord_invalid'));
+      return;
+    }
+
+    setValidatingDiscordId(true);
+    setDiscordError('');
+    setDiscordValidationMessage('');
+
+    try {
+      // Call backend validation endpoint
+      const response = await fetch('/api/discord/validate-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ discordId })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setDiscordError(data.message || t('profile.discord_validation_failed'));
+        return;
+      }
+
+      setDiscordValidationMessage(t('profile.discord_validation_sent'));
+      setTimeout(() => setDiscordValidationMessage(''), 5000);
+    } catch (err: any) {
+      console.error('Error validating Discord ID:', err);
+      setDiscordError(err.message || t('profile.discord_validation_failed'));
+    } finally {
+      setValidatingDiscordId(false);
+    }
+  }, [discordId, isValidDiscordIdFormat, t]);
+
    const handleRankedToggle = useCallback(async (newValue: boolean) => {
     // Prevent disabling if already enabled
     if (!newValue && enableRanked) {
@@ -228,22 +281,33 @@ const Profile: React.FC = () => {
 
               <section className="bg-white rounded-lg shadow-md p-8 mb-8">
                 <h2 className="text-2xl font-semibold text-gray-800 mb-6 pb-4 border-b-2 border-gray-200">{t('profile.discord_title')}</h2>
+                <p className="text-gray-600 text-sm mb-4">{t('profile.discord_description')}</p>
                 {discordMessage && <p className="bg-green-100 text-green-800 px-4 py-3 rounded-lg mb-4 border-l-4 border-green-600">{discordMessage}</p>}
                 {discordError && <p className="bg-red-100 text-red-800 px-4 py-3 rounded-lg mb-4 border-l-4 border-red-600">{discordError}</p>}
-                <div className="flex gap-3 max-md:flex-col">
-                  <input
-                    type="text"
-                    placeholder={t('profile.discord_placeholder')}
-                    value={discordId}
-                    onChange={(e) => setDiscordId(e.target.value)}
-                    className="flex-1 px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-                  />
+                {discordValidationMessage && <p className="bg-blue-100 text-blue-800 px-4 py-3 rounded-lg mb-4 border-l-4 border-blue-600">{discordValidationMessage}</p>}
+                <div className="space-y-3">
+                  <div className="flex gap-3 max-md:flex-col">
+                    <input
+                      type="text"
+                      placeholder={t('profile.discord_placeholder')}
+                      value={discordId}
+                      onChange={(e) => setDiscordId(e.target.value)}
+                      className="flex-1 px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+                    />
+                    <button 
+                      onClick={handleDiscordUpdate} 
+                      disabled={updatingDiscord}
+                      className="px-6 py-3 max-md:w-full bg-gradient-to-r from-purple-500 to-purple-700 text-white rounded-lg font-semibold hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap"
+                    >
+                      {updatingDiscord ? t('profile.updating') : t('profile.update_discord_button')}
+                    </button>
+                  </div>
                   <button 
-                    onClick={handleDiscordUpdate} 
-                    disabled={updatingDiscord}
-                    className="px-6 py-3 max-md:w-full bg-gradient-to-r from-purple-500 to-purple-700 text-white rounded-lg font-semibold hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap"
+                    onClick={handleValidateDiscordId} 
+                    disabled={validatingDiscordId || !isValidDiscordIdFormat(discordId)}
+                    className="w-full px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-700 text-white rounded-lg font-semibold hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    {updatingDiscord ? t('profile.updating') : t('profile.update_discord_button')}
+                    {validatingDiscordId ? t('profile.updating_discord_validation') : t('profile.validate_discord_button')}
                   </button>
                 </div>
               </section>
