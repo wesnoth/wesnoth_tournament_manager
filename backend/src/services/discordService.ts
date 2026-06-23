@@ -581,6 +581,48 @@ class DiscordService {
 
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
+
+  /**
+   * Send user validation notification to ID validation channel
+   * Simple format: "Discord user validation - username"
+   */
+  async sendDiscordIdValidationNotification(userNickname: string): Promise<boolean> {
+    if (!DISCORD_ENABLED) {
+      console.log(`⏭️  Discord disabled. Skipping ID validation notification.`);
+      return false;
+    }
+
+    const validationChannelId = process.env.DISCORD_ID_VALIDATION_CHANNEL;
+    if (!BOT_TOKEN || !validationChannelId) {
+      console.warn('Discord bot token or ID validation channel not configured');
+      return false;
+    }
+
+    try {
+      const message: DiscordMessage = {
+        content: `Discord user validation - ${userNickname}`
+      };
+
+      console.log(`📤 Sending ID validation notification to channel ${validationChannelId}:`, message.content);
+
+      await axios.post(
+        `${DISCORD_API_URL}/channels/${validationChannelId}/messages`,
+        message,
+        { headers: { Authorization: `Bot ${BOT_TOKEN}`, 'Content-Type': 'application/json' } }
+      );
+
+      console.log(`✅ ID validation notification sent for: ${userNickname}`);
+      return true;
+    } catch (error: any) {
+      console.error('❌ Error sending ID validation notification:', {
+        userNickname,
+        httpStatus: error.response?.status,
+        errorData: error.response?.data,
+        errorMessage: error.message
+      });
+      return false;
+    }
+  }
 }
 
 export default new DiscordService();

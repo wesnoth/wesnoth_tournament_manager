@@ -15,6 +15,7 @@ import schedulingRoutes from './routes/tournament-scheduling.js';
 import notificationsRoutes from './routes/notifications.js';
 import wikiRoutes from './routes/wiki.js';
 import wikiAdminRoutes from './routes/wikiAdmin.js';
+import discordRoutes from './routes/discord.js';
 import { generalLimiter } from './middleware/rateLimiter.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -82,6 +83,7 @@ app.use('/api/player-statistics', playerStatisticsRoutes);
 app.use('/api/replays', replaysRoutes);
 app.use('/api/tournament-scheduling', schedulingRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/discord', discordRoutes);
 
 // Health check endpoints
 app.get('/health', (req, res) => {

@@ -172,3 +172,77 @@ export async function resolveDiscordIdFromUsername(usernameInput: string): Promi
     return null;
   }
 }
+
+/**
+ * Validate Discord ID and retrieve user info
+ * Returns user nickname if valid and in guild, null otherwise
+ */
+export async function validateDiscordId(discordId: string): Promise<string | null> {
+  console.log('[DISCORD-VALIDATE] Validating Discord ID:', discordId);
+  const normalizedInput = normalizeDiscordInput(discordId);
+
+  if (!normalizedInput) {
+    console.warn('[DISCORD-VALIDATE] Empty input');
+    return null;
+  }
+
+  if (!process.env.DISCORD_BOT_TOKEN) {
+    console.warn('[DISCORD-VALIDATE] Bot token not configured');
+    return null;
+  }
+
+  if (!process.env.DISCORD_GUILD_ID) {
+    console.warn('[DISCORD-VALIDATE] Guild ID not configured');
+    return null;
+  }
+
+  try {
+    const guildId = process.env.DISCORD_GUILD_ID;
+    const headers = {
+      Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+      'Content-Type': 'application/json',
+    };
+
+    // Extract ID from mention or use as-is
+    const candidateId = extractDiscordIdCandidate(normalizedInput);
+    if (!candidateId) {
+      console.warn('[DISCORD-VALIDATE] Input is not a valid Discord ID or mention format');
+      return null;
+    }
+
+    // Validate snowflake format
+    if (!isValidDiscordSnowflake(candidateId)) {
+      console.warn('[DISCORD-VALIDATE] Invalid snowflake:', candidateId);
+      return null;
+    }
+
+    // Fetch member info to get nickname
+    const response = await axios.get(
+      `${DISCORD_API_URL}/guilds/${guildId}/members/${candidateId}`,
+      { headers }
+    );
+
+    const member = response.data;
+    const userNickname = member.nick || member.user.username;
+
+    console.log('[DISCORD-VALIDATE] Valid Discord user:', {
+      discordId: candidateId,
+      username: member.user.username,
+      nickname: userNickname
+    });
+
+    return userNickname;
+  } catch (error: any) {
+    const status = error.response?.status;
+    if (status === 404) {
+      console.warn('[DISCORD-VALIDATE] Discord ID not found in guild:', discordId);
+    } else {
+      console.error('[DISCORD-VALIDATE] Error validating Discord ID:', {
+        discordId,
+        httpStatus: status,
+        errorMessage: error.message
+      });
+    }
+    return null;
+  }
+}
