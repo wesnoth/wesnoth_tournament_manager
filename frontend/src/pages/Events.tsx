@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { tournamentService, userService } from '../services/api';
+import { tournamentService, publicService } from '../services/api';
 import { challengeSchedulingService } from '../services/challengeSchedulingService';
 import P2PChallengeModal from '../components/P2PChallengeModal';
 import { useAuthStore } from '../store/authStore';
@@ -42,7 +42,7 @@ const Events: React.FC = () => {
       setError('');
 
       const [userResponse, myTournamentsResponse, p2pResponse] = await Promise.all([
-        userId ? userService.getUserById(userId) : Promise.resolve(null),
+        userId ? publicService.getPlayerProfile(userId) : Promise.resolve(null),
         tournamentService.getMyTournaments(),
         challengeSchedulingService.listProposals('all'),
       ]);

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import SchedulingFreeBusyGrid from './SchedulingFreeBusyGrid';
 import { challengeSchedulingService } from '../services/challengeSchedulingService';
-import { userService } from '../services/api';
+import { publicService } from '../services/api';
 import { groupSlotsIntoRanges } from '../utils/slotGrouping';
 import { useAuthStore } from '../store/authStore';
 
@@ -51,8 +51,8 @@ const PlayerChallengeModal: React.FC<PlayerChallengeModalProps> = ({
 
         // Load current user and opponent
         const [userResponse, opponentResponse] = await Promise.all([
-          userService.getUserById(userId!),
-          userService.getUserById(opponentId),
+          publicService.getPlayerProfile(userId!),
+          publicService.getPlayerProfile(opponentId),
         ]);
 
         const user = userResponse.data;
