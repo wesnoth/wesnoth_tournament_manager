@@ -159,7 +159,7 @@ const PlayerChallengeModal: React.FC<PlayerChallengeModalProps> = ({
 
           {!loading && participants.length > 0 && (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-800 mb-2">
                     {t('events_modal_timezone_viewing') || 'Viewing timezone'}
@@ -188,20 +188,20 @@ const PlayerChallengeModal: React.FC<PlayerChallengeModalProps> = ({
                     onChange={(e) => setDateStart(new Date(e.target.value))}
                   />
                 </div>
+              </div>
 
-                <div>
+              <div>
                   <label className="block text-sm font-semibold text-gray-800 mb-2">
                     {t('events_modal_notes') || 'Notes'} {t('common.optional') || '(Optional)'}
                   </label>
-                  <input
-                    type="text"
-                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  <textarea
+                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm resize-none"
                     placeholder={t('events_notes_placeholder') || 'Optional notes...'}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
+                    rows={6}
                   />
                 </div>
-              </div>
 
               <div>
                 <label className="block text-sm font-semibold text-gray-800 mb-2">

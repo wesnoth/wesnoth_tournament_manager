@@ -129,7 +129,11 @@
     "updated": "Updated",
     "last_updated": "Last updated",
     "error": "Error",
-    "no_data": "No data available"
+    "no_data": "No data available",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "submitting": "Submitting...",
+    "optional": "(Optional)"
   },
   "confirm_delete_tournament": "Are you sure you want to delete this tournament? Associated matches will be desvinculated but not deleted.",
   "confirm_dispute": "Confirm/Dispute",
@@ -203,6 +207,8 @@
   "events_notes": "Notes",
   "events_notes_placeholder": "Optional notes...",
   "events_modal_title": "Challenge Player",
+  "events_modal_date_range": "Start date",
+  "events_modal_notes": "Notes",
   "events_modal_search_opponent": "Search opponent...",
   "events_modal_timezone_viewing": "Viewing timezone",
   "events_modal_availability_grid": "Availability Grid",

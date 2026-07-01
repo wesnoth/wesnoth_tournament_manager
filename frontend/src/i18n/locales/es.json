@@ -130,7 +130,11 @@
     "updated": "Actualizado",
     "last_updated": "Última actualización",
     "error": "Error",
-    "no_data": "No hay datos disponibles"
+    "no_data": "No hay datos disponibles",
+    "submit": "Enviar",
+    "cancel": "Cancelar",
+    "submitting": "Enviando...",
+    "optional": "(Opcional)"
   },
   "confirm_delete_tournament": "¿Estás seguro de que quieres eliminar este torneo? Los matches asociados se desvincularcán pero no se eliminarán.",
   "confirm_dispute": "Confirmar/Disputar",
@@ -199,6 +203,8 @@
   "events_notes": "Notas",
   "events_notes_placeholder": "Notas opcionales...",
   "events_modal_title": "Retar jugador",
+  "events_modal_date_range": "Fecha de inicio",
+  "events_modal_notes": "Notas",
   "events_modal_search_opponent": "Buscar oponente...",
   "events_modal_timezone_viewing": "Zona horaria de visualización",
   "events_modal_availability_grid": "Grilla de disponibilidad",

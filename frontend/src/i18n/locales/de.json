@@ -117,7 +117,11 @@
     "clear_all": "Alles löschen",
     "remove": "Entfernen",
     "timezone": "Zeitzone",
-    "save": "Speichern"
+    "save": "Speichern",
+    "submit": "Senden",
+    "cancel": "Abbrechen",
+    "submitting": "Wird gesendet...",
+    "optional": "(Optional)"
   },
   "confirm_dispute": "Bestätigen/Bestreiten",
   "create_balance_event": "Balance-Event erstellen",
@@ -189,7 +193,9 @@
   "events_p2p_challenge": "P2P Challenge",
   "events_notes": "Notes",
   "events_notes_placeholder": "Optional notes...",
-  "events_modal_title": "Challenge Player",
+  "events_modal_title": "Spieler herausfordern",
+  "events_modal_date_range": "Startdatum",
+  "events_modal_notes": "Notizen",
   "events_modal_search_opponent": "Search opponent...",
   "events_modal_timezone_viewing": "Viewing timezone",
   "events_modal_availability_grid": "Availability Grid",

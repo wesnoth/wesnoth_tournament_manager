@@ -117,7 +117,11 @@
     "clear_all": "全部清除",
     "remove": "删除",
     "timezone": "时区",
-    "save": "保存"
+    "save": "保存",
+    "submit": "提交",
+    "cancel": "取消",
+    "submitting": "提交中...",
+    "optional": "(可选)"
   },
   "confirm_dispute": "确认/争议",
   "create_balance_event": "创建平衡事件",
@@ -189,7 +193,9 @@
   "events_p2p_challenge": "P2P Challenge",
   "events_notes": "Notes",
   "events_notes_placeholder": "Optional notes...",
-  "events_modal_title": "Challenge Player",
+  "events_modal_title": "挑战玩家",
+  "events_modal_date_range": "开始日期",
+  "events_modal_notes": "备注",
   "events_modal_search_opponent": "Search opponent...",
   "events_modal_timezone_viewing": "Viewing timezone",
   "events_modal_availability_grid": "Availability Grid",

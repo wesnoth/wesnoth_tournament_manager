@@ -117,7 +117,11 @@
     "clear_all": "Очистить все",
     "remove": "Удалить",
     "timezone": "Часовой пояс",
-    "save": "Сохранить"
+    "save": "Сохранить",
+    "submit": "Отправить",
+    "cancel": "Отмена",
+    "submitting": "Отправка...",
+    "optional": "(Необязательно)"
   },
   "confirm_dispute": "Подтвердить/оспорить",
   "create_balance_event": "Создать событие баланса",
@@ -189,7 +193,9 @@
   "events_p2p_challenge": "P2P Challenge",
   "events_notes": "Notes",
   "events_notes_placeholder": "Optional notes...",
-  "events_modal_title": "Challenge Player",
+  "events_modal_title": "Вызвать игрока",
+  "events_modal_date_range": "Дата начала",
+  "events_modal_notes": "Примечания",
   "events_modal_search_opponent": "Search opponent...",
   "events_modal_timezone_viewing": "Viewing timezone",
   "events_modal_availability_grid": "Availability Grid",
