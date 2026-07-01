@@ -39,6 +39,7 @@ const AdminBalanceEvents = React.lazy(() => import('./pages/AdminBalanceEvents')
 const FAQ = React.lazy(() => import('./pages/FAQ'));
 const Tournaments = React.lazy(() => import('./pages/Tournaments'));
 const TournamentDetail = React.lazy(() => import('./pages/TournamentDetail'));
+const Events = React.lazy(() => import('./pages/Events'));
 const Help = React.lazy(() => import('./pages/Help'));
 const AdminWiki = React.lazy(() => import('./pages/AdminWiki'));
 
@@ -123,6 +124,7 @@ const App: React.FC = () => {
               <Route path="/help/:slug" element={<Help />} />
               <Route path="/tournaments" element={<Tournaments />} />
               <Route path="/tournament/:id" element={<TournamentDetail />} />
+              <Route path="/events" element={<Events />} />
               <Route path="/my-stats" element={<MyStats />} />
               <Route path="/my-tournaments" element={<MyTournaments />} />
               <Route path="/admin" element={<Admin />} />

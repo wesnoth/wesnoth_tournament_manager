@@ -239,6 +239,9 @@ const Navbar: React.FC = () => {
           <Link to="/tournaments" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm">
             {t('navbar_tournaments')}
           </Link>
+          <Link to="/events" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm">
+            {t('navbar_events')}
+          </Link>
           <Link to="/matches" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm">
             {t('navbar_matches')}
           </Link>
@@ -295,7 +298,9 @@ const Navbar: React.FC = () => {
                         <div
                           key={notif.id}
                           onClick={() => {
-                            if (notif.tournament_id && notif.match_id) {
+                            if (typeof notif.type === 'string' && notif.type.startsWith('challenge_')) {
+                              navigate('/events');
+                            } else if (notif.tournament_id && notif.match_id) {
                               navigate(`/tournament/${notif.tournament_id}?tab=roundMatches&matchId=${notif.match_id}`);
                             }
                             setNotificationsDropdownOpen(false);
@@ -322,11 +327,15 @@ const Navbar: React.FC = () => {
                               <p className="text-xs text-gray-400 mt-1">
                                 {new Date(notif.created_at).toLocaleDateString()}
                               </p>
-                              {notif.tournament_id && notif.match_id && (
+                              {notif.type?.startsWith?.('challenge_') ? (
+                                <p className="text-xs text-blue-600 font-semibold mt-1">
+                                  → {t('navbar_events') || 'Events'}
+                                </p>
+                              ) : notif.tournament_id && notif.match_id ? (
                                 <p className="text-xs text-green-600 font-semibold mt-1">
                                   → {t('label_go_tournament') || 'Go to Tournament'}
                                 </p>
-                              )}
+                              ) : null}
                             </div>
                             {!notif.is_read && (
                               <span className="bg-blue-500 rounded-full w-2 h-2 flex-shrink-0 mt-1"></span>

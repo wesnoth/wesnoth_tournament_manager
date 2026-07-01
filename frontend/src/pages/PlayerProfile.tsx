@@ -9,6 +9,7 @@ import MatchDetailsModal from '../components/MatchDetailsModal';
 import PlayerLink from '../components/PlayerLink';
 import RouteLoader from '../components/RouteLoader';
 import ScheduleDisplay from '../components/ScheduleDisplay';
+import P2PChallengeModal from '../components/P2PChallengeModal';
 
 // Lazy-load heavy chart and statistics components
 const EloChart = lazy(() => import('../components/EloChart'));
@@ -52,6 +53,7 @@ const PlayerProfile: React.FC = () => {
     status: '',
     faction: '',
   });
+  const [showChallengeModal, setShowChallengeModal] = useState(false);
 
   useEffect(() => {
     if (!id) {
@@ -270,6 +272,14 @@ const PlayerProfile: React.FC = () => {
             <ProfileStats player={profile} />
             
             <div className="mb-8">
+              <div className="mb-3 flex justify-end">
+                <button
+                  onClick={() => setShowChallengeModal(true)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors font-semibold"
+                >
+                  {t('events_button_challenge') || 'Challenge'}
+                </button>
+              </div>
               <ScheduleDisplay 
                 timezone={profile.timezone}
                 availabilitySchedule={profile.availability_schedule}
@@ -667,6 +677,12 @@ const PlayerProfile: React.FC = () => {
         isOpen={!!matchDetailsModal}
         onClose={closeMatchDetails}
         onDownloadReplay={handleDownloadReplay}
+      />
+      <P2PChallengeModal
+        isOpen={showChallengeModal}
+        onClose={() => setShowChallengeModal(false)}
+        onSuccess={() => setShowChallengeModal(false)}
+        preselectedOpponentId={id}
       />
       </div>
     </div>
