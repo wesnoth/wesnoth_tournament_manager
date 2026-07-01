@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { tournamentService } from '../services/api';
+import { tournamentService, userService } from '../services/api';
 import { challengeSchedulingService } from '../services/challengeSchedulingService';
 import P2PChallengeModal from '../components/P2PChallengeModal';
 import { useAuthStore } from '../store/authStore';
@@ -21,12 +21,13 @@ interface EventItem {
 
 const Events: React.FC = () => {
   const { t } = useTranslation();
-  const { userTimezone } = useAuthStore();
+  const { userId } = useAuthStore();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [events, setEvents] = useState<EventItem[]>([]);
   const [showChallengeModal, setShowChallengeModal] = useState(false);
+  const [userTimezone, setUserTimezone] = useState('UTC');
 
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
   const [typeFilter, setTypeFilter] = useState<'all' | EventSourceType>('all');
@@ -40,10 +41,15 @@ const Events: React.FC = () => {
       setLoading(true);
       setError('');
 
-      const [myTournamentsResponse, p2pResponse] = await Promise.all([
+      const [userResponse, myTournamentsResponse, p2pResponse] = await Promise.all([
+        userId ? userService.getUserById(userId) : Promise.resolve(null),
         tournamentService.getMyTournaments(),
         challengeSchedulingService.listProposals('all'),
       ]);
+
+      if (userResponse?.data?.timezone) {
+        setUserTimezone(userResponse.data.timezone);
+      }
 
       const tournaments = myTournamentsResponse.data || [];
       const tournamentRoundMatchesResponses = await Promise.all(

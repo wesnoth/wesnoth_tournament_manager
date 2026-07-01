@@ -45,7 +45,6 @@ const P2PChallengeModal: React.FC<P2PChallengeModalProps> = ({
   const [dateStart, setDateStart] = useState<Date>(new Date());
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState('');
-  const [visibility, setVisibility] = useState<'private' | 'public'>('private');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -164,7 +163,7 @@ const P2PChallengeModal: React.FC<P2PChallengeModalProps> = ({
         challenged_user_id: selectedOpponentId,
         slot_datetimes: Array.from(selectedSlots),
         notes: notes || undefined,
-        visibility,
+        visibility: 'public',
       });
       onSuccess?.();
       onClose();
@@ -239,18 +238,6 @@ const P2PChallengeModal: React.FC<P2PChallengeModalProps> = ({
 
             <div>
               <label className="block text-sm font-semibold text-gray-800 mb-1">
-                {t('events_filter_visibility') || 'Visibility'}
-              </label>
-              <select
-                className="w-full px-3 py-2 border border-gray-300 rounded"
-                value={visibility}
-                onChange={(e) => setVisibility(e.target.value as 'private' | 'public')}
-              >
-                <option value="private">{t('events_visibility_private') || 'Private'}</option>
-                <option value="public">{t('events_visibility_public') || 'Public'}</option>
-              </select>
-
-              <label className="block text-sm font-semibold text-gray-800 mb-1 mt-3">
                 {t('events_notes') || 'Notes'}
               </label>
               <textarea

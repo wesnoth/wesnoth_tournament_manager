@@ -9,7 +9,7 @@ import MatchDetailsModal from '../components/MatchDetailsModal';
 import PlayerLink from '../components/PlayerLink';
 import RouteLoader from '../components/RouteLoader';
 import ScheduleDisplay from '../components/ScheduleDisplay';
-import P2PChallengeModal from '../components/P2PChallengeModal';
+import PlayerChallengeModal from '../components/PlayerChallengeModal';
 
 // Lazy-load heavy chart and statistics components
 const EloChart = lazy(() => import('../components/EloChart'));
@@ -54,7 +54,6 @@ const PlayerProfile: React.FC = () => {
     faction: '',
   });
   const [showChallengeModal, setShowChallengeModal] = useState(false);
-  const [challengeOpponentId, setChallengeOpponentId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) {
@@ -274,11 +273,8 @@ const PlayerProfile: React.FC = () => {
             
             <div className="mb-8">
               <div className="mb-3 flex justify-end">
-                <button
-                  onClick={() => {
-                    setChallengeOpponentId(id || null);
-                    setShowChallengeModal(true);
-                  }}
+               <button
+                  onClick={() => setShowChallengeModal(true)}
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors font-semibold"
                 >
                   {t('events_button_challenge') || 'Challenge'}
@@ -682,17 +678,12 @@ const PlayerProfile: React.FC = () => {
         onClose={closeMatchDetails}
         onDownloadReplay={handleDownloadReplay}
       />
-      <P2PChallengeModal
+      <PlayerChallengeModal
         isOpen={showChallengeModal}
-        onClose={() => {
-          setShowChallengeModal(false);
-          setChallengeOpponentId(null);
-        }}
-        onSuccess={() => {
-          setShowChallengeModal(false);
-          setChallengeOpponentId(null);
-        }}
-        preselectedOpponentId={challengeOpponentId}
+        onClose={() => setShowChallengeModal(false)}
+        onSuccess={() => setShowChallengeModal(false)}
+        opponentId={id || ''}
+        opponentNickname={profile?.nickname || 'Player'}
       />
       </div>
     </div>
