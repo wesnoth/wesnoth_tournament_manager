@@ -151,8 +151,8 @@ export const listP2PProposalsForUser = async (
             MIN(s.slot_datetime) AS first_slot_datetime,
             MAX(s.slot_datetime) AS last_slot_datetime
      FROM match_schedule_proposals p
-     LEFT JOIN users_extension proposer ON proposer.id = p.proposed_by_user_id
-     LEFT JOIN users_extension challenged ON challenged.id = p.challenged_user_id
+     LEFT JOIN users_extension proposer ON proposer.id = p.proposed_by_user_id COLLATE utf8mb4_general_ci
+     LEFT JOIN users_extension challenged ON challenged.id = p.challenged_user_id COLLATE utf8mb4_general_ci
      LEFT JOIN match_schedule_slots s ON s.proposal_id = p.id
      WHERE p.challenge_mode = 'p2p'
        AND ${whereClause}
