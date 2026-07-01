@@ -15,7 +15,7 @@
 | `tournament_matches` | Matches within tournaments | `id` | `player1_id`, `player2_id`, `winner_id`, `match_id`, `status`, `match_status` |
 | `tournament_teams` | Team records (2v2) | `id` | `name`, `tournament_id`, `status` |
 | `tournament_round_matches` | Round-level match aggregates | `id` | `player1_id`, `player2_id`, `winner_id` |
-| `match_schedule_proposals` | Schedule proposals (Phase 2) | `id` | `tournament_round_match_id`, `tournament_match_id`, `proposed_by_user_id`, `status` |
+| `match_schedule_proposals` | Schedule proposals (Phase 2) | `id` | `tournament_round_match_id`, `proposed_by_user_id`, `challenge_mode`, `challenged_user_id`, `status` |
 | `match_schedule_slots` | Time slots within a proposal | `id` | `proposal_id`, `slot_datetime`, `status` |
 | `match_schedule_confirmations` | User confirmations of proposals | `id` | `proposal_id`, `user_id`, `confirmed_at` |
 | `replays` | Discovered replays | `id` | `replay_file_path`, `parse_status`, `parsed_data` |
@@ -882,7 +882,7 @@ Tracks which SQL migrations have been executed.
 
 ### `match_schedule_proposals`
 
-Schedule proposals for tournament round matches. Phase 2 of tournament scheduling system.
+Schedule proposals for tournament scheduling and P2P challenges. In tournament flows, `tournament_round_match_id` is the canonical reference and `challenged_user_id` remains NULL. In P2P flows, `challenge_mode='p2p'` and `challenged_user_id` identifies the target player.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -895,6 +895,10 @@ Schedule proposals for tournament round matches. Phase 2 of tournament schedulin
 | `expires_at` | datetime | Optional: automatic expiration timestamp |
 | `cancelled_at` | datetime | When cancelled (NULL if active/confirmed) |
 | `user_id` | char(36) FK→users_extension | Legacy field (deprecated) |
+| `challenge_mode` | varchar(20) | Context discriminator: `tournament` \| `p2p` |
+| `challenged_user_id` | char(36) FK→users_extension | Target user for P2P challenges (NULL for tournament schedules) |
+| `discord_thread_id` | varchar(255) | Optional Discord thread/message identifier |
+| `visibility` | varchar(20) | Display scope for events feed (`private` \| `public`) |
 | `notes` | text | Optional notes from proposer |
 | `created_at` | datetime | |
 | `updated_at` | datetime | |

@@ -294,6 +294,10 @@ CREATE TABLE `match_schedule_proposals` (
   `expires_at` datetime DEFAULT NULL COMMENT 'Calculated when proposal created: max(slot_datetime) + 7 days. Used to auto-expire stale proposals',
   `cancelled_at` datetime DEFAULT NULL COMMENT 'Timestamp when proposal was cancelled or expired. After 7 days in cancelled state, proposal is purged',
   `user_id` char(36) DEFAULT NULL COMMENT 'FK→users_extension.id. For future P2P proposals without tournament context. NULL if tournament-based.',
+  `challenge_mode` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'tournament' COMMENT 'Proposal context: tournament | p2p',
+  `challenged_user_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'Target user for P2P challenges. NULL for tournament proposals',
+  `discord_thread_id` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Optional Discord thread/message id for challenge conversations',
+  `visibility` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'private' COMMENT 'Visibility for events feed: private | public',
   `notes` text DEFAULT NULL COMMENT 'Player notes (max 500 chars)',
   `created_at` datetime DEFAULT current_timestamp(),
   `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
@@ -304,7 +308,9 @@ CREATE TABLE `match_schedule_proposals` (
   KEY `idx_status` (`status`),
   KEY `idx_expires_at` (`expires_at`),
   KEY `idx_cancelled_at` (`cancelled_at`),
-  KEY `idx_user_id` (`user_id`)
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_challenge_mode` (`challenge_mode`),
+  KEY `idx_challenged_user_id` (`challenged_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Scheduling proposals at round or individual match level';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
