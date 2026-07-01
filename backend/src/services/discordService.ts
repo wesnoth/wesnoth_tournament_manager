@@ -114,6 +114,17 @@ class DiscordService {
   }
 
   /**
+   * Publish a message to a plain Discord channel (non-thread).
+   * Used for global channels like P2P challenges.
+   */
+  async publishChannelMessage(
+    channelId: string,
+    message: DiscordMessage
+  ): Promise<boolean> {
+    return this.publishTournamentMessage(channelId, message);
+  }
+
+  /**
    * Torneo Creado
    */
   async postTournamentCreated(

@@ -15,16 +15,16 @@ import {
 import { buildNotificationMessage, formatTimeRangesForDiscord, groupSlotsIntoRanges } from '../utils/slotGrouping.js';
 
 const router = Router();
-const DISCORD_CHALLENGES_CHANNEL_ID = process.env.DISCORD_CHALLENGES_CHANNEL_ID || '';
+const DISCORD_P2P_CHALLENGE_CHANNEL_ID = process.env.DISCORD_P2P_CHALLENGE_CHANNEL_ID || '';
 
 const sendChallengeDiscord = async (
   title: string,
   color: number,
   fields: Array<{ name: string; value: string; inline?: boolean }>
 ) => {
-  if (!DISCORD_CHALLENGES_CHANNEL_ID) return;
+  if (!DISCORD_P2P_CHALLENGE_CHANNEL_ID) return;
 
-  await discordService.publishTournamentMessage(DISCORD_CHALLENGES_CHANNEL_ID, {
+  await discordService.publishChannelMessage(DISCORD_P2P_CHALLENGE_CHANNEL_ID, {
     embeds: [
       {
         title,
