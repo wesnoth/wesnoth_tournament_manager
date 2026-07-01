@@ -13,6 +13,7 @@ import playerStatisticsRoutes from './routes/player-statistics.js';
 import replaysRoutes from './routes/replays.js';
 import schedulingRoutes from './routes/tournament-scheduling.js';
 import notificationsRoutes from './routes/notifications.js';
+import challengesRoutes from './routes/challenges.js';
 import wikiRoutes from './routes/wiki.js';
 import wikiAdminRoutes from './routes/wikiAdmin.js';
 import { generalLimiter } from './middleware/rateLimiter.js';
@@ -81,6 +82,7 @@ app.use('/api/statistics', statisticsRoutes);
 app.use('/api/player-statistics', playerStatisticsRoutes);
 app.use('/api/replays', replaysRoutes);
 app.use('/api/tournament-scheduling', schedulingRoutes);
+app.use('/api/challenges', challengesRoutes);
 app.use('/api/notifications', notificationsRoutes);
 
 // Health check endpoints

@@ -312,7 +312,17 @@ export async function storeNotificationForUsers(
   userIds: string[],
   tournamentId: string,
   matchId: string,
-  type: 'schedule_proposal' | 'schedule_confirmed' | 'schedule_rejected' | 'schedule_changed' | 'schedule_cancelled',
+  type:
+    | 'schedule_proposal'
+    | 'schedule_confirmed'
+    | 'schedule_rejected'
+    | 'schedule_changed'
+    | 'schedule_cancelled'
+    | 'challenge_proposal'
+    | 'challenge_confirmed'
+    | 'challenge_rejected'
+    | 'challenge_counter_proposal'
+    | 'challenge_cancelled',
   title: string,
   message: string,
   messageExtra?: string | null

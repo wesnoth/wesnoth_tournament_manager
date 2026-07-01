@@ -329,7 +329,7 @@ export const createRoundMatchProposal = async (
   await query(
     `UPDATE match_schedule_proposals 
      SET status = 'superseded' 
-     WHERE tournament_round_match_id = ? AND status = 'active' AND proposed_by_user_id = ?`,
+     WHERE tournament_round_match_id = ? AND status = 'active' AND proposed_by_user_id = ? AND challenge_mode = 'tournament'`,
     [tournamentRoundMatchId, proposedByUserId]
   );
 
@@ -340,8 +340,8 @@ export const createRoundMatchProposal = async (
   // 3. Create new proposal
   const result = await query(
     `INSERT INTO match_schedule_proposals 
-      (id, tournament_round_match_id, proposed_by_user_id, proposed_at, status, notes, expires_at, user_id)
-     VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)`,
+      (id, tournament_round_match_id, proposed_by_user_id, proposed_at, status, notes, expires_at, user_id, challenge_mode, challenged_user_id)
+     VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, 'tournament', NULL)`,
     [proposalId, tournamentRoundMatchId, proposedByUserId, now, notes || null, expiresAt, proposedByUserId]
   );
 
@@ -456,7 +456,7 @@ export const createMatchProposal = async (
   await query(
     `UPDATE match_schedule_proposals 
      SET status = 'superseded' 
-     WHERE tournament_match_id = ? AND status = 'active' AND proposed_by_user_id = ?`,
+     WHERE tournament_match_id = ? AND status = 'active' AND proposed_by_user_id = ? AND challenge_mode = 'tournament'`,
     [tournamentMatchId, proposedByUserId]
   );
 
@@ -467,8 +467,8 @@ export const createMatchProposal = async (
   // 3. Create proposal (proponent doesn't auto-confirm, just creates it)
   const result = await query(
     `INSERT INTO match_schedule_proposals 
-      (id, tournament_match_id, proposed_by_user_id, proposed_at, status, notes, expires_at, user_id)
-     VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)`,
+      (id, tournament_match_id, proposed_by_user_id, proposed_at, status, notes, expires_at, user_id, challenge_mode, challenged_user_id)
+     VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, 'tournament', NULL)`,
     [proposalId, tournamentMatchId, proposedByUserId, now, notes || null, expiresAt, proposedByUserId]
   );
 
@@ -624,7 +624,7 @@ export const getRoundMatchProposal = async (roundMatchId: string) => {
     const proposalResult = await query(
       `SELECT id, proposed_by_user_id, proposed_at, status, notes
        FROM match_schedule_proposals
-       WHERE tournament_round_match_id = ? AND status IN ('pending', 'confirmed')
+       WHERE tournament_round_match_id = ? AND status IN ('pending', 'confirmed') AND challenge_mode = 'tournament'
        LIMIT 1`,
       [roundMatchId]
     );
@@ -683,7 +683,7 @@ export const getMatchProposal = async (matchId: string) => {
     const proposalResult = await query(
       `SELECT id, proposed_by_user_id, proposed_at, status, notes
        FROM match_schedule_proposals
-       WHERE tournament_match_id = ? AND status IN ('pending', 'confirmed')
+       WHERE tournament_match_id = ? AND status IN ('pending', 'confirmed') AND challenge_mode = 'tournament'
        LIMIT 1`,
       [matchId]
     );
@@ -915,13 +915,17 @@ export const confirmProposal = async (proposalId: string, userId: string) => {
     
     // 3. Get proposal details
     const proposal = await query(
-      `SELECT tournament_round_match_id, proposed_by_user_id, status 
+     `SELECT tournament_round_match_id, proposed_by_user_id, status, challenge_mode
        FROM match_schedule_proposals WHERE id = ?`,
       [proposalId]
     );
     
     if (!proposal.rows || !proposal.rows.length) {
       throw new Error('Proposal not found');
+    }
+
+    if (proposal.rows[0].challenge_mode !== 'tournament') {
+      throw new Error('This endpoint only supports tournament proposals');
     }
     
     // 4. Check if proposal is now fully confirmed
@@ -1054,12 +1058,16 @@ export const confirmPartialSlots = async (
     
     // 8. Update proposal status
     const proposal = await query(
-      `SELECT status, tournament_round_match_id FROM match_schedule_proposals WHERE id = ?`,
+      `SELECT status, tournament_round_match_id, challenge_mode FROM match_schedule_proposals WHERE id = ?`,
       [proposalId]
     );
     
     if (!proposal.rows || !proposal.rows.length) {
       throw new Error('Proposal not found');
+    }
+
+    if (proposal.rows[0].challenge_mode !== 'tournament') {
+      throw new Error('This endpoint only supports tournament proposals');
     }
     
     const oldProposalStatus = proposal.rows[0].status;
@@ -1135,11 +1143,11 @@ export const cancelConfirmation = async (proposalId: string, userId: string) => 
     
     // 3. Get proposal status
     const proposal = await query(
-      `SELECT status, tournament_round_match_id FROM match_schedule_proposals WHERE id = ?`,
+      `SELECT status, tournament_round_match_id, challenge_mode FROM match_schedule_proposals WHERE id = ?`,
       [proposalId]
     );
     
-    if (proposal.rows && proposal.rows.length > 0 && proposal.rows[0].status === 'confirmed') {
+    if (proposal.rows && proposal.rows.length > 0 && proposal.rows[0].challenge_mode === 'tournament' && proposal.rows[0].status === 'confirmed') {
       // 4. Reset to pending if was confirmed
       await query(
         `UPDATE match_schedule_proposals SET status = 'pending' WHERE id = ?`,
@@ -1190,13 +1198,17 @@ export const rejectAndCounterPropose = async (
     
     // 2. Get original proposal
     const original = await query(
-      `SELECT tournament_round_match_id, proposed_by_user_id, tournament_id 
+      `SELECT tournament_round_match_id, proposed_by_user_id, challenge_mode
        FROM match_schedule_proposals WHERE id = ?`,
       [proposalId]
     );
     
     if (!original.rows || !original.rows.length) {
       throw new Error('Proposal not found');
+    }
+
+    if (original.rows[0].challenge_mode !== 'tournament') {
+      throw new Error('This endpoint only supports tournament proposals');
     }
     
     if (original.rows[0].proposed_by_user_id === userId) {
@@ -1216,8 +1228,8 @@ export const rejectAndCounterPropose = async (
     
     await query(
       `INSERT INTO match_schedule_proposals 
-       (id, tournament_round_match_id, proposed_by_user_id, proposed_at, status, notes, expires_at, user_id)
-       VALUES (?, ?, ?, NOW(), 'pending', ?, ?, ?)`,
+       (id, tournament_round_match_id, proposed_by_user_id, proposed_at, status, notes, expires_at, user_id, challenge_mode, challenged_user_id)
+       VALUES (?, ?, ?, NOW(), 'pending', ?, ?, ?, 'tournament', NULL)`,
       [
         counterProposalId,
         original.rows[0].tournament_round_match_id,
@@ -1276,13 +1288,17 @@ export const modifyProposal = async (
     
     // 2. Get proposal
     const proposal = await query(
-      `SELECT proposed_by_user_id, tournament_round_match_id, status 
+      `SELECT proposed_by_user_id, tournament_round_match_id, status, challenge_mode
        FROM match_schedule_proposals WHERE id = ?`,
       [proposalId]
     );
     
     if (!proposal.rows || !proposal.rows.length) {
       throw new Error('Proposal not found');
+    }
+
+    if (proposal.rows[0].challenge_mode !== 'tournament') {
+      throw new Error('This endpoint only supports tournament proposals');
     }
     
     if (proposal.rows[0].proposed_by_user_id !== userId) {
@@ -1346,13 +1362,17 @@ export const cancelProposal = async (proposalId: string, userId: string) => {
   try {
     // 1. Get proposal
     const proposal = await query(
-      `SELECT proposed_by_user_id, tournament_round_match_id 
+      `SELECT proposed_by_user_id, tournament_round_match_id, challenge_mode
        FROM match_schedule_proposals WHERE id = ?`,
       [proposalId]
     );
     
     if (!proposal.rows || !proposal.rows.length) {
       throw new Error('Proposal not found');
+    }
+
+    if (proposal.rows[0].challenge_mode !== 'tournament') {
+      throw new Error('This endpoint only supports tournament proposals');
     }
     
     if (proposal.rows[0].proposed_by_user_id !== userId) {
@@ -1420,11 +1440,15 @@ export const checkProposalFullyConfirmed = async (
     
     // 2. Get proposal proposer
     const proposal = await query(
-      `SELECT proposed_by_user_id FROM match_schedule_proposals WHERE id = ?`,
+      `SELECT proposed_by_user_id, challenge_mode FROM match_schedule_proposals WHERE id = ?`,
       [proposalId]
     );
     
     if (!proposal.rows || !proposal.rows.length) {
+      return false;
+    }
+
+    if (proposal.rows[0].challenge_mode !== 'tournament') {
       return false;
     }
     
