@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { tournamentService } from '../services/api';
 import { challengeSchedulingService } from '../services/challengeSchedulingService';
 import P2PChallengeModal from '../components/P2PChallengeModal';
+import { useAuthStore } from '../store/authStore';
 
 type EventSourceType = 'tournament' | 'p2p';
 
@@ -20,6 +21,7 @@ interface EventItem {
 
 const Events: React.FC = () => {
   const { t } = useTranslation();
+  const { userTimezone } = useAuthStore();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -153,6 +155,13 @@ const Events: React.FC = () => {
           >
             {t('events_button_challenge') || 'Challenge'}
           </button>
+        </div>
+
+        <div className="bg-blue-50 border-l-4 border-blue-500 p-3 rounded text-sm text-blue-800">
+          <span className="font-semibold">{t('events_viewing_as') || 'Viewing as'}:</span> {userTimezone || 'UTC'}{' '}
+          <span className="text-xs text-blue-600">
+            ({t('events_viewing_note') || 'All times converted to your timezone'})
+          </span>
         </div>
 
         <div className="bg-white rounded-lg shadow p-4 grid grid-cols-1 md:grid-cols-6 gap-3">

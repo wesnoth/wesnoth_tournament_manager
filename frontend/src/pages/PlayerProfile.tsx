@@ -54,6 +54,7 @@ const PlayerProfile: React.FC = () => {
     faction: '',
   });
   const [showChallengeModal, setShowChallengeModal] = useState(false);
+  const [challengeOpponentId, setChallengeOpponentId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) {
@@ -274,7 +275,10 @@ const PlayerProfile: React.FC = () => {
             <div className="mb-8">
               <div className="mb-3 flex justify-end">
                 <button
-                  onClick={() => setShowChallengeModal(true)}
+                  onClick={() => {
+                    setChallengeOpponentId(id || null);
+                    setShowChallengeModal(true);
+                  }}
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors font-semibold"
                 >
                   {t('events_button_challenge') || 'Challenge'}
@@ -680,9 +684,15 @@ const PlayerProfile: React.FC = () => {
       />
       <P2PChallengeModal
         isOpen={showChallengeModal}
-        onClose={() => setShowChallengeModal(false)}
-        onSuccess={() => setShowChallengeModal(false)}
-        preselectedOpponentId={id}
+        onClose={() => {
+          setShowChallengeModal(false);
+          setChallengeOpponentId(null);
+        }}
+        onSuccess={() => {
+          setShowChallengeModal(false);
+          setChallengeOpponentId(null);
+        }}
+        preselectedOpponentId={challengeOpponentId}
       />
       </div>
     </div>

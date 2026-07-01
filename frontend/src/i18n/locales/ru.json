@@ -165,6 +165,8 @@
   "event_type": "Тип события",
   "events_title": "Events",
   "events_button_challenge": "Challenge",
+  "events_viewing_as": "Viewing as",
+  "events_viewing_note": "All times converted to your timezone",
   "events_view_calendar": "Calendar view",
   "events_view_list": "List view",
   "events_filter_type_all": "All",

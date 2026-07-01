@@ -194,10 +194,13 @@ const P2PChallengeModal: React.FC<P2PChallengeModalProps> = ({
                 {t('events_filter_players') || 'Players'}
               </label>
               <input
-                className="w-full px-3 py-2 border border-gray-300 rounded"
+                className={`w-full px-3 py-2 border border-gray-300 rounded ${
+                  preselectedOpponentId ? 'bg-gray-100 cursor-not-allowed' : ''
+                }`}
                 placeholder={t('events_modal_search_opponent') || 'Search opponent...'}
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => !preselectedOpponentId && setSearch(e.target.value)}
+                disabled={!!preselectedOpponentId}
               />
               <div className="mt-2 border rounded max-h-40 overflow-y-auto">
                 {filteredUsers.map((u) => (
@@ -206,8 +209,9 @@ const P2PChallengeModal: React.FC<P2PChallengeModalProps> = ({
                     type="button"
                     className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
                       selectedOpponentId === u.id ? 'bg-blue-50 text-blue-700 font-semibold' : ''
-                    }`}
-                    onClick={() => setSelectedOpponentId(u.id)}
+                    } ${preselectedOpponentId ? 'cursor-not-allowed' : ''}`}
+                    onClick={() => !preselectedOpponentId && setSelectedOpponentId(u.id)}
+                    disabled={!!preselectedOpponentId}
                   >
                     {u.nickname}
                   </button>
