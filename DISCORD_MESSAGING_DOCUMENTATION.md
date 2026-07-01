@@ -1353,7 +1353,11 @@ DISCORD_ENABLED=true
 DISCORD_BOT_TOKEN=your_bot_token_here
 DISCORD_GUILD_ID=your_guild_id_here
 DISCORD_FORUM_CHANNEL_ID=your_forum_channel_id_here
+DISCORD_P2P_CHALLENGE_CHANNEL_ID=your_p2p_challenges_channel_id_here
 ```
+
+- `DISCORD_FORUM_CHANNEL_ID`: tournament notifications using forum-thread flow.
+- `DISCORD_P2P_CHALLENGE_CHANNEL_ID`: P2P challenge notifications using flat channel messages (no thread creation).
 
 **Deprecated webhook URLs** (no longer in use):
 - `DISCORD_WEBHOOK_URL_ADMIN` - Previously used for admin notifications
@@ -1382,4 +1386,3 @@ All Discord functions include error handling with:
 - Graceful fallback when Discord is disabled
 - Specific error logging for API failures
 - Retry-safe design (idempotent operations)
-

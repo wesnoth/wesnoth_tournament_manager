@@ -116,6 +116,34 @@
 
 ---
 
+## Tournament Scheduling Routes
+
+- `[GET] /api/tournament-scheduling/pending-confirmations` — Private — Proposal confirmations pending for current user.
+- `[GET] /api/tournament-scheduling/:tournamentRoundMatchId/schedule` — Public — Active schedule context for a tournament round match.
+- `[GET] /api/tournament-scheduling/:tournamentId/matches-pending-schedule` — Private — Round matches waiting for schedule proposal.
+- `[POST] /api/tournament-scheduling/:tournamentRoundMatchId/propose-schedule` — Private — body: `{ slot_datetimes[], message?, user_timezone? }` — Create tournament proposal (`challenge_mode='tournament'`).
+- `[POST] /api/tournament-scheduling/:tournamentRoundMatchId/confirm-schedule` — Private — body: `{ proposal_id, confirmed_slot_ids[] }` — Confirm one or more proposed slots.
+- `[POST] /api/tournament-scheduling/:tournamentRoundMatchId/cancel-schedule` — Private — Cancel active schedule proposal flow for that round match.
+- `[POST] /api/tournament-scheduling/proposals/:proposalId/confirm` — Private — Confirm proposal participation.
+- `[POST] /api/tournament-scheduling/proposals/:proposalId/cancel-confirmation` — Private — Remove own confirmation.
+- `[POST] /api/tournament-scheduling/proposals/:proposalId/counter-propose` — Private — body: `{ slot_datetimes[], message?, user_timezone? }` — Create counter-proposal for tournament schedule.
+- `[PUT] /api/tournament-scheduling/proposals/:proposalId` — Private — Update proposal metadata/slots.
+- `[DELETE] /api/tournament-scheduling/proposals/:proposalId` — Private — Delete/cancel proposal.
+
+---
+
+## P2P Challenges Routes
+
+- `[GET] /api/challenges/proposals` — Private — query: `mode=incoming|outgoing|all` — List P2P proposals for current user.
+- `[GET] /api/challenges/proposals/:proposalId` — Private — Full P2P proposal detail (proposal, slots, participants).
+- `[GET] /api/challenges/proposals/:proposalId/participants-availability` — Private — Availability + timezone context for proposer/challenged users.
+- `[POST] /api/challenges/proposals` — Private — body: `{ challenged_user_id, slot_datetimes[], notes?, visibility? }` — Create new P2P challenge proposal (`challenge_mode='p2p'`).
+- `[POST] /api/challenges/proposals/:proposalId/confirm-slots` — Private — body: `{ confirmed_slot_ids[] }` — Confirm selected slots or reject if none confirmed.
+- `[POST] /api/challenges/proposals/:proposalId/counter-propose` — Private — body: `{ slot_datetimes[], notes?, visibility? }` — Create P2P counter-proposal.
+- `[POST] /api/challenges/proposals/:proposalId/cancel` — Private — Cancel P2P proposal.
+
+---
+
 ## Statistics Routes
 
 - `[GET] /api/statistics/config` — Public — Faction/map configuration (active items, min games).

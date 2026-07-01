@@ -25,6 +25,8 @@ A comprehensive tournament management system for **Wesnoth**, featuring automate
 - ✅ **Player Statistics**: Win/loss records, faction preferences, map mastery
 - ✅ **Audit Logging**: Full action history with user tracking and IP logging
 - ✅ **Profile Management**: Discord integration, country selection, avatar system
+- ✅ **P2P Challenges**: Player-to-player challenge proposals with slot negotiation and notifications
+- ✅ **Events Page**: Calendar/list view for upcoming tournament schedules and P2P challenges, with filters by type, tournament, players, and dates
 
 ### Replay & Match Processing
 - ✅ **Fully Automated**: Background jobs sync and process replays without manual uploads
@@ -512,6 +514,11 @@ NODE_ENV=development
 # Frontend URL (for CORS)
 FRONTEND_URL=http://localhost:5173
 
+# Discord routing for schedules/challenges
+# Tournament schedule notifications continue using tournament forum thread/channel flow.
+# P2P challenge notifications are posted in a flat channel (no thread creation).
+DISCORD_P2P_CHALLENGE_CHANNEL_ID=
+
 
 ### Frontend Configuration
 
@@ -902,4 +909,3 @@ If you need to use this software without AGPL requirements (for example, for a p
 ## Contact
 
 For questions or suggestions, use github issue tracker
-

@@ -9,11 +9,13 @@ Para habilitar la integración y control de notificaciones de Discord, añade la
 ```
 DISCORD_BOT_TOKEN=your_bot_token_here
 DISCORD_FORUM_CHANNEL_ID=your_forum_channel_id_here
+DISCORD_P2P_CHALLENGE_CHANNEL_ID=your_p2p_challenges_channel_id_here
 DISCORD_ENABLED=true
 ```
 
 - **DISCORD_BOT_TOKEN:** Token de tu bot de Discord
-- **DISCORD_FORUM_CHANNEL_ID:** ID del canal de foro donde se crearán los hilos
+- **DISCORD_FORUM_CHANNEL_ID:** ID del canal de foro donde se crearán los hilos de torneos
+- **DISCORD_P2P_CHALLENGE_CHANNEL_ID:** ID del canal plano donde se publican los retos P2P (sin threads)
 - **DISCORD_ENABLED:** `true` para habilitar notificaciones, cualquier otro valor (o no definido) las desactiva
 
 ## Cómo obtener los valores
@@ -28,7 +30,12 @@ DISCORD_ENABLED=true
 2. Haz clic derecho y selecciona "Copy Channel ID"
 3. Pega ese valor como `DISCORD_FORUM_CHANNEL_ID` en Railway
 
-### 3. Permisos del bot
+### 3. DISCORD_P2P_CHALLENGE_CHANNEL_ID
+1. Crea un canal de texto normal en tu servidor Discord (ej: "challenges")
+2. Haz clic derecho y selecciona "Copy Channel ID"
+3. Pega ese valor como `DISCORD_P2P_CHALLENGE_CHANNEL_ID` en Railway
+
+### 4. Permisos del bot
 1. En OAuth2 > URL Generator, selecciona el scope `bot` y los permisos:
    - Send Messages
    - Create Public Threads
@@ -100,4 +107,3 @@ Una vez configurado:
 ## Soporte
 
 Para problemas con la API de Discord, consulta la [documentación oficial](https://discord.com/developers/docs/intro)
-
