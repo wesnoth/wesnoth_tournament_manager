@@ -1,9 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { challengeSchedulingService } from '../services/challengeSchedulingService';
+import { publicService } from '../services/api';
 import { useAuthStore } from '../store/authStore';
-import ConfirmChallengeModal from './ConfirmChallengeModal';
-import CounterProposeModal from './CounterProposeModal';
+import ScheduleProposalModal from './ScheduleProposalModal';
+
+interface Participant {
+  id: string;
+  nickname: string;
+  timezone: string;
+  availability_schedule?: Record<string, Array<{ start: string; end: string }>>;
+}
+
+interface ProposalData {
+  id: string;
+  proposed_by_user_id: string;
+  proposed_at: string;
+  status: string;
+  notes?: string;
+  slots: Array<{
+    id: string;
+    slot_datetime: string;
+    status: string;
+  }>;
+  confirmations: Array<{ user_id: string; confirmed_at: string }>;
+}
 
 interface ChallengeActionButtonsProps {
   proposalId: string;
@@ -12,7 +33,6 @@ interface ChallengeActionButtonsProps {
   status: string;
   onActionComplete?: () => void;
   layout?: 'inline' | 'stacked';
-  otherPlayerTimezone?: string;
 }
 
 const ChallengeActionButtons: React.FC<ChallengeActionButtonsProps> = ({
@@ -22,7 +42,6 @@ const ChallengeActionButtons: React.FC<ChallengeActionButtonsProps> = ({
   status,
   onActionComplete,
   layout = 'inline',
-  otherPlayerTimezone,
 }) => {
   const { t } = useTranslation();
   const { userId } = useAuthStore();
@@ -30,13 +49,59 @@ const ChallengeActionButtons: React.FC<ChallengeActionButtonsProps> = ({
   const [error, setError] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showCounterModal, setShowCounterModal] = useState(false);
+  const [proposal, setProposal] = useState<ProposalData | null>(null);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [viewingTimezone, setViewingTimezone] = useState('UTC');
+  const [loadingData, setLoadingData] = useState(false);
 
   // Only show actions if user is the challenged player and proposal is pending
   const isIncoming = userId === challengedUserId;
   const isPending = status === 'pending';
   const showActions = isIncoming && isPending;
 
-  if (!showActions) return null;
+  useEffect(() => {
+    if ((showConfirmModal || showCounterModal) && !proposal) {
+      loadProposalData();
+    }
+  }, [showConfirmModal, showCounterModal]);
+
+  const loadProposalData = async () => {
+    try {
+      setLoadingData(true);
+      
+      const response = await challengeSchedulingService.getProposal(proposalId);
+      const proposalData = response.proposal || response;
+      setProposal(proposalData);
+
+      // Load both players' data
+      const [proposedByUser, challengedUser] = await Promise.all([
+        publicService.getPlayerProfile(proposalData.proposed_by_user_id),
+        publicService.getPlayerProfile(proposalData.challenged_user_id),
+      ]);
+
+      const participants: Participant[] = [
+        {
+          id: proposedByUser.data.id,
+          nickname: proposedByUser.data.nickname,
+          timezone: proposedByUser.data.timezone,
+          availability_schedule: proposedByUser.data.availability_schedule,
+        },
+        {
+          id: challengedUser.data.id,
+          nickname: challengedUser.data.nickname,
+          timezone: challengedUser.data.timezone,
+          availability_schedule: challengedUser.data.availability_schedule,
+        },
+      ];
+
+      setParticipants(participants);
+      setViewingTimezone(proposedByUser.data.timezone || 'UTC');
+    } catch (err: any) {
+      console.error('Error loading proposal:', err);
+    } finally {
+      setLoadingData(false);
+    }
+  };
 
   const handleReject = async () => {
     setLoading(true);
@@ -60,6 +125,8 @@ const ChallengeActionButtons: React.FC<ChallengeActionButtonsProps> = ({
     setShowCounterModal(false);
     onActionComplete?.();
   };
+
+  if (!showActions) return null;
 
   const containerClass = layout === 'inline' ? 'flex gap-2' : 'flex flex-col gap-2';
   const buttonClass = 'px-3 py-1 text-sm rounded font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
@@ -98,20 +165,40 @@ const ChallengeActionButtons: React.FC<ChallengeActionButtonsProps> = ({
         </button>
       </div>
 
-      <ConfirmChallengeModal
-        proposalId={proposalId}
-        isOpen={showConfirmModal}
-        onClose={() => setShowConfirmModal(false)}
-        onConfirm={handleConfirmComplete}
-      />
-
-      <CounterProposeModal
-        proposalId={proposalId}
-        isOpen={showCounterModal}
-        onClose={() => setShowCounterModal(false)}
-        onCounterPropose={handleCounterComplete}
-        otherPlayerTimezone={otherPlayerTimezone}
-      />
+      {proposal && participants.length > 0 && (
+        <>
+          <ScheduleProposalModal
+            isOpen={showConfirmModal}
+            onClose={() => setShowConfirmModal(false)}
+            onSuccess={handleConfirmComplete}
+            tournamentId="" // Not used for P2P
+            roundMatchId="" // Not used for P2P
+            initialProposal={proposal}
+            initialParticipants={participants}
+            initialViewingTimezone={viewingTimezone}
+            initialDisplayDateStart={
+              proposal.slots && proposal.slots.length > 0
+                ? new Date(proposal.slots[0].slot_datetime)
+                : new Date()
+            }
+          />
+          <ScheduleProposalModal
+            isOpen={showCounterModal}
+            onClose={() => setShowCounterModal(false)}
+            onSuccess={handleCounterComplete}
+            tournamentId="" // Not used for P2P
+            roundMatchId="" // Not used for P2P
+            initialProposal={proposal}
+            initialParticipants={participants}
+            initialViewingTimezone={viewingTimezone}
+            initialDisplayDateStart={
+              proposal.slots && proposal.slots.length > 0
+                ? new Date(proposal.slots[0].slot_datetime)
+                : new Date()
+            }
+          />
+        </>
+      )}
     </>
   );
 };

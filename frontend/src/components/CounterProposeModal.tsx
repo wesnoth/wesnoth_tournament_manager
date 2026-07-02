@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { challengeSchedulingService } from '../services/challengeSchedulingService';
 import { publicService } from '../services/api';
 import SchedulingFreeBusyGrid from './SchedulingFreeBusyGrid';
+import { groupSlotsIntoRanges } from '../utils/slotGrouping';
 import { useAuthStore } from '../store/authStore';
 
 interface Participant {
@@ -17,7 +18,6 @@ interface CounterProposeModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCounterPropose: () => void;
-  otherPlayerTimezone?: string;
 }
 
 const CounterProposeModal: React.FC<CounterProposeModalProps> = ({
@@ -25,17 +25,16 @@ const CounterProposeModal: React.FC<CounterProposeModalProps> = ({
   isOpen,
   onClose,
   onCounterPropose,
-  otherPlayerTimezone,
 }) => {
   const { t } = useTranslation();
   const { userId } = useAuthStore();
+  const [proposal, setProposal] = useState<any>(null);
+  const [participants, setParticipants] = useState<Participant[]>([]);
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [participants, setParticipants] = useState<Participant[]>([]);
-  const [proposal, setProposal] = useState<any>(null);
   const [loadingData, setLoadingData] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (isOpen && proposalId) {
@@ -113,17 +112,31 @@ const CounterProposeModal: React.FC<CounterProposeModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
-
   // Get the user's timezone for viewing
   const userParticipant = participants.find(p => p.id === userId);
   const viewingTimezone = userParticipant?.timezone || 'UTC';
 
-  // Default to a 2-week range
-  const today = new Date();
-  const dateStart = new Date(today);
-  const dateEnd = new Date(today);
+  // Position grid at first proposed slot
+  let dateStart = new Date();
+  let dateEnd = new Date();
   dateEnd.setDate(dateEnd.getDate() + 14);
+
+  if (proposal?.slots && proposal.slots.length > 0) {
+    const firstSlotDate = new Date(proposal.slots[0].slot_datetime);
+    dateStart = new Date(firstSlotDate);
+    dateStart.setHours(0, 0, 0, 0);
+    
+    const lastSlotDate = new Date(proposal.slots[proposal.slots.length - 1].slot_datetime);
+    dateEnd = new Date(lastSlotDate);
+    dateEnd.setDate(dateEnd.getDate() + 7);
+  }
+
+  const proposalRanges = useMemo(
+    () => (proposal?.slots?.length ? groupSlotsIntoRanges(proposal.slots.map(s => s.slot_datetime)) : []),
+    [proposal]
+  );
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -150,7 +163,7 @@ const CounterProposeModal: React.FC<CounterProposeModalProps> = ({
             <div className="text-center py-8 text-gray-600">
               {t('common.loading') || 'Loading...'}
             </div>
-          ) : participants.length > 0 ? (
+          ) : participants.length > 0 && proposal?.slots?.length > 0 ? (
             <>
               <div className="bg-blue-50 border-l-4 border-blue-500 p-3 rounded text-sm text-blue-800">
                 <span className="font-semibold">{t('events_viewing_as') || 'Viewing as'}:</span> {viewingTimezone}{' '}
@@ -161,7 +174,22 @@ const CounterProposeModal: React.FC<CounterProposeModalProps> = ({
 
               <div>
                 <label className="block text-sm font-semibold mb-2">
-                  {t('events_modal_date_range') || 'Proposed Slots'}
+                  {t('events_modal_title') || 'Proposed Slots'} (Currently proposed):
+                </label>
+                {proposalRanges.length > 0 && (
+                  <div className="mb-3 p-2 bg-gray-50 rounded border border-gray-200">
+                    {proposalRanges.map((range, i) => (
+                      <div key={i} className="text-sm text-gray-700">
+                        {new Date(range.start).toLocaleString()} – {new Date(range.end).toLocaleTimeString()}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold mb-2">
+                  {t('events_modal_availability_grid') || 'Select alternative slots'}
                 </label>
                 <SchedulingFreeBusyGrid
                   dateStart={dateStart}
@@ -170,6 +198,7 @@ const CounterProposeModal: React.FC<CounterProposeModalProps> = ({
                   viewingTimezone={viewingTimezone}
                   selectedSlots={selectedSlots}
                   onSlotToggle={handleSlotToggle}
+                  proposedSlots={proposal.slots.map((s: any) => s.slot_datetime)}
                 />
               </div>
 
