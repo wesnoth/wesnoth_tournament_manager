@@ -64,7 +64,7 @@ export const p2pChallengesService = {
   ) => {
     const response = await api.put(`/challenges/proposals/${proposalId}`, {
       slot_datetimes: slotDatetimes,
-      ...(notes && { notes }),
+      ...(notes ? { notes } : {}),
     });
     return response.data;
   },
