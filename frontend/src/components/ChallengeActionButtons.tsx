@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { challengeSchedulingService } from '../services/challengeSchedulingService';
 import { publicService } from '../services/api';
 import { useAuthStore } from '../store/authStore';
-import ScheduleProposalModal from './ScheduleProposalModal';
+import ScheduleProposalModalP2P from './ScheduleProposalModalP2P';
 
 interface Participant {
   id: string;
@@ -167,12 +167,12 @@ const ChallengeActionButtons: React.FC<ChallengeActionButtonsProps> = ({
 
       {proposal && participants.length > 0 && (
         <>
-          <ScheduleProposalModal
+          <ScheduleProposalModalP2P
             isOpen={showConfirmModal}
             onClose={() => setShowConfirmModal(false)}
             onSuccess={handleConfirmComplete}
-            tournamentId="" // Not used for P2P
-            roundMatchId="" // Not used for P2P
+            opponentId={proposedByUserId} // The proposer is the opponent
+            proposalId={proposalId}
             initialProposal={proposal}
             initialParticipants={participants}
             initialViewingTimezone={viewingTimezone}
@@ -182,12 +182,12 @@ const ChallengeActionButtons: React.FC<ChallengeActionButtonsProps> = ({
                 : new Date()
             }
           />
-          <ScheduleProposalModal
+          <ScheduleProposalModalP2P
             isOpen={showCounterModal}
             onClose={() => setShowCounterModal(false)}
             onSuccess={handleCounterComplete}
-            tournamentId="" // Not used for P2P
-            roundMatchId="" // Not used for P2P
+            opponentId={proposedByUserId} // The proposer is the opponent
+            proposalId={proposalId}
             initialProposal={proposal}
             initialParticipants={participants}
             initialViewingTimezone={viewingTimezone}
