@@ -4,6 +4,8 @@ import { tournamentService, publicService } from '../services/api';
 import { challengeSchedulingService } from '../services/challengeSchedulingService';
 import P2PChallengeModal from '../components/P2PChallengeModal';
 import ChallengeActionButtons from '../components/ChallengeActionButtons';
+import ScheduleProposalModal from '../components/ScheduleProposalModal';
+import { groupSlotsIntoRanges } from '../utils/slotGrouping';
 import { useAuthStore } from '../store/authStore';
 
 type EventSourceType = 'tournament' | 'p2p';
@@ -39,6 +41,19 @@ const Events: React.FC = () => {
   const [fromDateFilter, setFromDateFilter] = useState('');
   const [toDateFilter, setToDateFilter] = useState('');
   const [myEventsOnly, setMyEventsOnly] = useState(false);
+
+  // ScheduleProposalModal state for P2P challenges
+  const [scheduleProposalModal, setScheduleProposalModal] = useState<{
+    isOpen: boolean;
+    proposalId?: string;
+    initialParticipants?: any[];
+    initialProposal?: any;
+    initialViewingTimezone?: string;
+    initialDisplayDateStart?: Date;
+    initialScrollToHour?: number | null;
+  }>({ isOpen: false });
+  const [isLoadingScheduling, setIsLoadingScheduling] = useState(false);
+  const [proposalCache, setProposalCache] = useState<Record<string, any>>({});
 
   const loadEvents = useCallback(async () => {
     try {
@@ -172,6 +187,156 @@ const Events: React.FC = () => {
   useEffect(() => {
     loadEvents();
   }, [loadEvents]);
+
+  const handlePreloadSchedulingData = useCallback(async (proposalId: string) => {
+    try {
+      setIsLoadingScheduling(true);
+      const cacheKey = proposalId;
+
+      // Check cache first
+      if (proposalCache[cacheKey]) {
+        const cached = proposalCache[cacheKey];
+        setScheduleProposalModal({
+          isOpen: true,
+          proposalId,
+          initialProposal: cached.proposal,
+          initialParticipants: cached.participants,
+          initialViewingTimezone: cached.viewingTimezone,
+          initialDisplayDateStart: cached.displayDateStart,
+          initialScrollToHour: cached.scrollToHour,
+        });
+        setIsLoadingScheduling(false);
+        return;
+      }
+
+      // Load proposal and participants
+      const [proposalRes, participantsRes] = await Promise.all([
+        challengeSchedulingService.getProposal(proposalId),
+        challengeSchedulingService.getParticipantsAvailability(proposalId),
+      ]);
+
+      const proposal = proposalRes.proposal || proposalRes;
+      const participants = participantsRes.participants || [];
+      const viewingTimezone = participantsRes.viewing_timezone || userTimezone || 'UTC';
+
+      // Calculate displayDateStart and scrollToHour
+      let displayDateStart = new Date();
+      let scrollToHour: number | null = null;
+
+      if (proposal && proposal.slots && proposal.slots.length > 0) {
+        // Convert UTC slots to viewing timezone to get correct date and time
+        const sortedSlots = proposal.slots
+          .map((s: any) => new Date(s.slot_datetime))
+          .sort((a: any, b: any) => a.getTime() - b.getTime());
+
+        const earliestSlot = sortedSlots[0];
+
+        // Convert UTC time to viewing timezone
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: viewingTimezone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          hour12: false
+        });
+
+        const parts = formatter.formatToParts(earliestSlot);
+        const year = parseInt(parts.find(p => p.type === 'year')?.value || '2025');
+        const month = parseInt(parts.find(p => p.type === 'month')?.value || '1') - 1;
+        const day = parseInt(parts.find(p => p.type === 'day')?.value || '1');
+        const hour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
+
+        displayDateStart = new Date(Date.UTC(year, month, day));
+        scrollToHour = hour;
+      } else {
+        const now = new Date();
+        displayDateStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+        scrollToHour = now.getHours();
+      }
+
+      // Cache the data
+      const cacheData = {
+        proposal,
+        participants,
+        viewingTimezone,
+        displayDateStart,
+        scrollToHour,
+      };
+      setProposalCache(prev => ({ ...prev, [cacheKey]: cacheData }));
+
+      setScheduleProposalModal({
+        isOpen: true,
+        proposalId,
+        initialProposal: proposal,
+        initialParticipants: participants,
+        initialViewingTimezone: viewingTimezone,
+        initialDisplayDateStart: displayDateStart,
+        initialScrollToHour: scrollToHour,
+      });
+    } catch (err) {
+      console.error('Error loading scheduling data:', err);
+    } finally {
+      setIsLoadingScheduling(false);
+    }
+  }, [userTimezone, proposalCache]);
+
+  const renderScheduleSlots = useCallback((proposal: any, timezone: string) => {
+    if (!proposal || !proposal.slots || proposal.slots.length === 0) {
+      return null;
+    }
+
+    const slots = proposal.slots;
+
+    // Sort and group confirmed slots into ranges
+    const sortedSlots = slots
+      .map((s: any) => ({ ...s, dateObj: new Date(s.slot_datetime) }))
+      .sort((a: any, b: any) => a.dateObj.getTime() - b.dateObj.getTime());
+
+    // Group contiguous slots (30-min intervals)
+    const ranges: Array<{ start: Date; end: Date }> = [];
+    if (sortedSlots.length > 0) {
+      let currentStart = sortedSlots[0].dateObj;
+      let currentEnd = sortedSlots[0].dateObj;
+
+      for (let i = 1; i < sortedSlots.length; i++) {
+        const current = sortedSlots[i].dateObj;
+        const prevEnd = new Date(currentEnd.getTime() + 30 * 60 * 1000); // Add 30 min
+
+        if (current.getTime() === prevEnd.getTime()) {
+          // Contiguous - extend current range
+          currentEnd = current;
+        } else {
+          // Gap found - save range and start new one
+          const endTime = new Date(currentEnd.getTime() + 30 * 60 * 1000);
+          ranges.push({ start: currentStart, end: endTime });
+          currentStart = current;
+          currentEnd = current;
+        }
+      }
+      // Add last range
+      const endTime = new Date(currentEnd.getTime() + 30 * 60 * 1000);
+      ranges.push({ start: currentStart, end: endTime });
+    }
+
+    return (
+      <div className="mt-2 text-xs text-gray-600 space-y-1">
+        {ranges.map((range, idx) => (
+          <div key={idx}>
+            {range.start.toLocaleTimeString('es-ES', {
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+            {' – '}
+            {range.end.toLocaleTimeString('es-ES', {
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+          </div>
+        ))}
+      </div>
+    );
+  }, []);
 
   const filteredEvents = useMemo(() => {
     return events.filter((event) => {
@@ -352,8 +517,26 @@ const Events: React.FC = () => {
                       </td>
                       <td className="px-4 py-3">{event.title}</td>
                       <td className="px-4 py-3">{event.players.join(' vs ')}</td>
-                      <td className="px-4 py-3">{new Date(event.datetime).toLocaleString()}</td>
-                      <td className="px-4 py-3">{event.status}</td>
+                      <td className="px-4 py-3">
+                        {new Date(event.datetime).toLocaleString()}
+                        {event.type === 'p2p' && event.raw?.slots && (
+                          renderScheduleSlots(event.raw, userTimezone)
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span>{event.status}</span>
+                          {event.type === 'p2p' && event.raw?.status === 'pending' && (
+                            <button
+                              onClick={() => handlePreloadSchedulingData(event.raw.id)}
+                              disabled={isLoadingScheduling}
+                              className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+                            >
+                              {isLoadingScheduling ? '...' : 'Schedule'}
+                            </button>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                     {event.type === 'p2p' && event.raw && (
                       <tr className="bg-gray-50 border-t border-gray-100">
@@ -399,25 +582,37 @@ const Events: React.FC = () => {
                       <p className="text-sm text-gray-600 mt-1">
                         {new Date(event.datetime).toLocaleString()}
                       </p>
-                      <p className="text-xs text-gray-500 mt-2">
-                        {t('events_table_status') || 'Status'}: {event.status}
-                        {event.type === 'p2p' && event.visibility ? ` • ${event.visibility}` : ''}
-                      </p>
-                      {event.type === 'p2p' && event.raw && (
-                        <div className="mt-3 pt-3 border-t border-gray-300">
-                          <ChallengeActionButtons
-                            proposalId={event.raw.id}
-                            proposedByUserId={event.raw.proposed_by_user_id}
-                            challengedUserId={event.raw.challenged_user_id}
-                            status={event.raw.status}
-                            layout="stacked"
-                            onActionComplete={() => {
-                              loadEvents();
-                            }}
-                          />
-                        </div>
-                      )}
-                    </article>
+                     {event.type === 'p2p' && event.raw?.slots && (
+                       renderScheduleSlots(event.raw, userTimezone)
+                     )}
+                     <p className="text-xs text-gray-500 mt-2">
+                       {t('events_table_status') || 'Status'}: {event.status}
+                       {event.type === 'p2p' && event.visibility ? ` • ${event.visibility}` : ''}
+                     </p>
+                     <div className="mt-3 pt-3 border-t border-gray-300 space-y-2">
+                       {event.type === 'p2p' && event.raw?.status === 'pending' && (
+                         <button
+                           onClick={() => handlePreloadSchedulingData(event.raw.id)}
+                           disabled={isLoadingScheduling}
+                           className="w-full px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 font-semibold"
+                         >
+                           {isLoadingScheduling ? '...' : 'Schedule'}
+                         </button>
+                       )}
+                       {event.type === 'p2p' && event.raw && (
+                         <ChallengeActionButtons
+                           proposalId={event.raw.id}
+                           proposedByUserId={event.raw.proposed_by_user_id}
+                           challengedUserId={event.raw.challenged_user_id}
+                           status={event.raw.status}
+                           layout="stacked"
+                           onActionComplete={() => {
+                             loadEvents();
+                           }}
+                         />
+                       )}
+                     </div>
+                   </article>
                   ))}
                 </div>
               </section>
@@ -430,6 +625,20 @@ const Events: React.FC = () => {
         isOpen={showChallengeModal}
         onClose={() => setShowChallengeModal(false)}
         onSuccess={loadEvents}
+      />
+
+      <ScheduleProposalModal
+        isOpen={scheduleProposalModal.isOpen}
+        initialProposal={scheduleProposalModal.initialProposal}
+        initialParticipants={scheduleProposalModal.initialParticipants}
+        initialViewingTimezone={scheduleProposalModal.initialViewingTimezone}
+        initialDisplayDateStart={scheduleProposalModal.initialDisplayDateStart}
+        initialScrollToHour={scheduleProposalModal.initialScrollToHour}
+        onClose={() => setScheduleProposalModal({ isOpen: false })}
+        onSuccess={() => {
+          setScheduleProposalModal({ isOpen: false });
+          loadEvents();
+        }}
       />
     </div>
   );
