@@ -18,6 +18,8 @@ interface EventItem {
   status: string;
   visibility?: string | null;
   raw: any;
+  isTeamMode?: boolean;
+  userTeamParticipates?: boolean;
 }
 
 const Events: React.FC = () => {
@@ -92,40 +94,51 @@ const Events: React.FC = () => {
           .filter((m: any) => !!m?.scheduled_datetime)
           .map((m: any) => {
             let playerNames = [m.player1_nickname, m.player2_nickname].filter(Boolean);
+           let userTeamParticipates = false;
             
-            // If team mode, enhance with participant names
-            if (isTeamMode && participants.length > 0) {
-              const getTeamParticipantNames = (teamId: string | null) => {
-                if (!teamId) return [];
-                const teamParticipants = participants.filter((p: any) => p.team_id === teamId);
-                return teamParticipants.map((p: any) => p.user_nickname || p.nickname).filter(Boolean);
-              };
+           // If team mode, enhance with participant names and check if user participates
+           if (isTeamMode && participants.length > 0) {
+             const getTeamParticipantNames = (teamId: string | null) => {
+               if (!teamId) return [];
+               const teamParticipants = participants.filter((p: any) => p.team_id === teamId);
+               return teamParticipants.map((p: any) => p.user_nickname || p.nickname).filter(Boolean);
+             };
 
-              const team1Names = getTeamParticipantNames(m.player1_id);
-              const team2Names = getTeamParticipantNames(m.player2_id);
+             const team1Participants = participants.filter((p: any) => p.team_id === m.player1_id);
+             const team2Participants = participants.filter((p: any) => p.team_id === m.player2_id);
               
-              // Format: "TeamName (player1, player2)" vs "TeamName (player1, player2)"
-              playerNames = [
-                team1Names.length > 0 
-                  ? `${m.player1_nickname} (${team1Names.join(', ')})`
-                  : m.player1_nickname,
-                team2Names.length > 0
-                  ? `${m.player2_nickname} (${team2Names.join(', ')})`
-                  : m.player2_nickname
-              ].filter(Boolean);
-            }
+             // Check if user is in either team
+             const userInTeam1 = team1Participants.some((p: any) => p.user_id === userId);
+             const userInTeam2 = team2Participants.some((p: any) => p.user_id === userId);
+             userTeamParticipates = userInTeam1 || userInTeam2;
 
-            return {
-              id: `tournament-${m.id}`,
-              type: 'tournament',
-              title: `${t('events_tournament_schedule') || 'Tournament Schedule'}: ${tournament?.name || ''}`,
-              tournamentName: tournament?.name || '',
-              players: playerNames,
-              datetime: m.scheduled_datetime,
-              status: m.scheduled_status || 'pending',
-              raw: m,
-            };
-          });
+             const team1Names = getTeamParticipantNames(m.player1_id);
+             const team2Names = getTeamParticipantNames(m.player2_id);
+              
+             // Format: "TeamName (player1, player2)" vs "TeamName (player1, player2)"
+             playerNames = [
+               team1Names.length > 0 
+                 ? `${m.player1_nickname} (${team1Names.join(', ')})`
+                 : m.player1_nickname,
+               team2Names.length > 0
+                 ? `${m.player2_nickname} (${team2Names.join(', ')})`
+                 : m.player2_nickname
+             ].filter(Boolean);
+           }
+
+           return {
+             id: `tournament-${m.id}`,
+             type: 'tournament',
+             title: `${t('events_tournament_schedule') || 'Tournament Schedule'}: ${tournament?.name || ''}`,
+             tournamentName: tournament?.name || '',
+             players: playerNames,
+             datetime: m.scheduled_datetime,
+             status: m.scheduled_status || 'pending',
+             raw: m,
+             isTeamMode,
+             userTeamParticipates,
+           };
+         });
       });
 
       const p2pRows = p2pResponse?.proposals || [];
@@ -168,9 +181,16 @@ const Events: React.FC = () => {
           (event.type === 'p2p' && 
             (event.raw?.proposed_by_user_id === userId || event.raw?.challenged_user_id === userId))
           || (event.type === 'tournament' && 
-            (event.raw?.player1_id === userId || event.raw?.player2_id === userId));
+            (event.isTeamMode ? event.userTeamParticipates : (event.raw?.player1_id === userId || event.raw?.player2_id === userId)));
         
         if (!isUserInvolved) return false;
+      } else {
+        // Hide pending_confirmation tournament events where user is not involved (unless "My Events" filter is on)
+        if (event.type === 'tournament' && event.status === 'pending_confirmation') {
+          const isUserInvolved = 
+            event.isTeamMode ? event.userTeamParticipates : (event.raw?.player1_id === userId || event.raw?.player2_id === userId);
+          if (!isUserInvolved) return false;
+        }
       }
 
       if (typeFilter !== 'all' && event.type !== typeFilter) return false;
