@@ -182,6 +182,7 @@
   "event_type": "Event Type",
   "events_title": "Events",
   "events_button_challenge": "Challenge",
+  "events_manage_challenge": "Manage Challenge",
   "events_viewing_as": "Viewing as",
   "events_viewing_note": "All times converted to your timezone",
   "events_view_calendar": "Calendar view",
