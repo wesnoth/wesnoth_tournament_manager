@@ -180,6 +180,7 @@
   "events_filter_players": "Players",
   "events_filter_start_date": "From date",
   "events_filter_visibility": "Visibility",
+  "events_filter_my_events": "Meine Events",
   "events_visibility_private": "Private",
   "events_visibility_public": "Public",
   "events_table_type": "Type",

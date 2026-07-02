@@ -36,6 +36,7 @@ const Events: React.FC = () => {
   const [playerFilter, setPlayerFilter] = useState('');
   const [fromDateFilter, setFromDateFilter] = useState('');
   const [toDateFilter, setToDateFilter] = useState('');
+  const [myEventsOnly, setMyEventsOnly] = useState(false);
 
   const loadEvents = useCallback(async () => {
     try {
@@ -161,6 +162,17 @@ const Events: React.FC = () => {
 
   const filteredEvents = useMemo(() => {
     return events.filter((event) => {
+      // Apply "My Events" filter
+      if (myEventsOnly) {
+        const isUserInvolved = 
+          (event.type === 'p2p' && 
+            (event.raw?.proposed_by_user_id === userId || event.raw?.challenged_user_id === userId))
+          || (event.type === 'tournament' && 
+            (event.raw?.player1_id === userId || event.raw?.player2_id === userId));
+        
+        if (!isUserInvolved) return false;
+      }
+
       if (typeFilter !== 'all' && event.type !== typeFilter) return false;
 
       if (tournamentNameFilter.trim() && event.type === 'tournament') {
@@ -190,7 +202,7 @@ const Events: React.FC = () => {
 
       return true;
     });
-  }, [events, typeFilter, tournamentNameFilter, playerFilter, fromDateFilter, toDateFilter]);
+  }, [events, typeFilter, tournamentNameFilter, playerFilter, fromDateFilter, toDateFilter, myEventsOnly, userId]);
 
   const groupedByDay = useMemo(() => {
     const grouped: Record<string, EventItem[]> = {};
@@ -271,6 +283,16 @@ const Events: React.FC = () => {
             value={toDateFilter}
             onChange={(e) => setToDateFilter(e.target.value)}
           />
+
+          <label className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded bg-white hover:bg-gray-50 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={myEventsOnly}
+              onChange={(e) => setMyEventsOnly(e.target.checked)}
+              className="w-4 h-4"
+            />
+            <span className="text-sm font-medium">{t('events_filter_my_events') || 'My Events'}</span>
+          </label>
         </div>
 
         {loading && (

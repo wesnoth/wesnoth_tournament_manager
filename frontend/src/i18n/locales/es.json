@@ -189,6 +189,7 @@
   "events_filter_players": "Jugadores",
   "events_filter_start_date": "Desde fecha",
   "events_filter_visibility": "Visibilidad",
+  "events_filter_my_events": "Mis Eventos",
   "events_visibility_private": "Privado",
   "events_visibility_public": "Público",
   "events_table_type": "Tipo",
