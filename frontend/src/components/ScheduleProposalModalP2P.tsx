@@ -104,6 +104,9 @@ export default function ScheduleProposalModalP2P({
   const [confirmedSlotIds, setConfirmedSlotIds] = useState<Set<string>>(new Set());
   const [hasStartedConfirmationSelection, setHasStartedConfirmationSelection] = useState(false);
   const hasStartedConfirmationSelectionRef = useRef(false);
+  // For edit_proposal mode: track if user has clicked any slot yet
+  const [hasStartedEditSelection, setHasStartedEditSelection] = useState(false);
+  const hasStartedEditSelectionRef = useRef(false);
 
   // Update state when preloaded data props change
   useEffect(() => {
@@ -153,6 +156,9 @@ export default function ScheduleProposalModalP2P({
         if (proposal.notes) {
           setNotes(proposal.notes);
         }
+        // Reset edit selection flag - show original slots in blue
+        hasStartedEditSelectionRef.current = false;
+        setHasStartedEditSelection(false);
       } else {
         setMode('confirm');
         // Pre-select proposed slots for opponent to confirm or modify
@@ -173,6 +179,12 @@ export default function ScheduleProposalModalP2P({
   }, [isOpen, proposal, userId]);
 
   const handleSlotToggle = (slotDatetime: string, selected: boolean) => {
+    // In edit_proposal mode, first click triggers showing only selected slots
+    if (mode === 'edit_proposal' && !hasStartedEditSelectionRef.current) {
+      hasStartedEditSelectionRef.current = true;
+      setHasStartedEditSelection(true);
+    }
+    
     setSelectedSlots((prevSelected) => {
       const nextSelected = new Set(prevSelected);
       if (selected) {
@@ -434,7 +446,7 @@ export default function ScheduleProposalModalP2P({
                   selectedSlots={mode === 'confirm' ? confirmedSlotIds : selectedSlots}
                   onSlotToggle={mode === 'confirm' ? handleConfirmSlotToggle : handleSlotToggle}
                   readOnly={false}
-                  proposedSlots={mode === 'edit_proposal' ? [] : proposedSlotDatetimes}
+                  proposedSlots={mode === 'edit_proposal' && !hasStartedEditSelection ? proposedSlotDatetimes : []}
                   confirmedSlots={confirmedSlotsMap}
                   viewingTimezone={viewingTimezone}
                   scrollToHour={scrollToHour}
