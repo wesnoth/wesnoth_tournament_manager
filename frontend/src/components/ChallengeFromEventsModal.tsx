@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import ScheduleProposalModal from './ScheduleProposalModal';
+import ScheduleProposalModalP2P from './ScheduleProposalModalP2P';
 import { publicService, userService } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 
@@ -225,12 +225,11 @@ const ChallengeFromEventsModal: React.FC<ChallengeFromEventsModalProps> = ({
 
   // Schedule modal will render separately
   return (
-    <ScheduleProposalModal
+    <ScheduleProposalModalP2P
       isOpen={showScheduleModal}
       onClose={handleScheduleClose}
       onSuccess={handleScheduleSuccess}
-      tournamentId=""
-      roundMatchId=""
+      opponentId={selectedOpponentId || ''}
       initialParticipants={participants}
       initialViewingTimezone={viewingTimezone}
       initialDisplayDateStart={new Date()}
