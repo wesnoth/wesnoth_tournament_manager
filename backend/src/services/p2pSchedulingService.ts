@@ -346,11 +346,12 @@ export const updateP2PProposal = async (
   const slotIds: string[] = [];
   for (const slotDatetime of slotDatetimes) {
     const slotId = uuidv4();
+    const roundedDt = roundToNearest30Min(new Date(slotDatetime));
     await query(
       `INSERT INTO match_schedule_slots
-       (id, proposal_id, slot_datetime, status)
-       VALUES (?, ?, ?, 'pending')`,
-      [slotId, proposalId, slotDatetime]
+       (id, proposal_id, slot_datetime, slot_duration_minutes, status)
+       VALUES (?, ?, ?, 30, 'pending')`,
+      [slotId, proposalId, roundedDt]
     );
     slotIds.push(slotId);
   }
