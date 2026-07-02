@@ -48,7 +48,8 @@ const CounterProposeModal: React.FC<CounterProposeModalProps> = ({
       setLoadingData(true);
       setError('');
       
-      const proposalData = await challengeSchedulingService.getProposal(proposalId);
+      const response = await challengeSchedulingService.getProposal(proposalId);
+      const proposalData = response.proposal || response;
       setProposal(proposalData);
 
       // Load both players' data

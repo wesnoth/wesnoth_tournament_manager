@@ -37,11 +37,15 @@ const ConfirmChallengeModal: React.FC<ConfirmChallengeModalProps> = ({
   const loadSlots = async () => {
     try {
       setLoading(true);
-      const proposal = await challengeSchedulingService.getProposal(proposalId);
-      if (proposal.slots) {
+      const response = await challengeSchedulingService.getProposal(proposalId);
+      const proposal = response.proposal || response;
+      
+      if (proposal.slots && proposal.slots.length > 0) {
         setSlots(proposal.slots);
         // Pre-select all available slots
         setSelectedSlotIds(new Set(proposal.slots.map(s => s.id)));
+      } else {
+        setError(t('events_no_slots') || 'No slots available');
       }
     } catch (err: any) {
       setError(err?.response?.data?.error || 'Failed to load slots');
