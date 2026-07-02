@@ -532,6 +532,13 @@ export default function ScheduleProposalModalP2P({
             ) : (
               <>
                 <button
+                  onClick={handleCancelProposal}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-medium"
+                  disabled={loading}
+                >
+                  {loading ? 'Rejecting...' : '❌ Reject'}
+                </button>
+                <button
                   onClick={() => {
                     setMode('counter');
                     setSelectedSlots(new Set());
@@ -539,14 +546,14 @@ export default function ScheduleProposalModalP2P({
                   className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 text-gray-700 font-medium"
                   disabled={loading}
                 >
-                  Counter-propose
+                  🔄 Counter-propose
                 </button>
                 <button
                   onClick={handleConfirmSlots}
                   className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium disabled:opacity-50"
                   disabled={loading || confirmedSlotIds.size === 0}
                 >
-                  {loading ? 'Confirming...' : `Confirm ${confirmedSlotIds.size} Slot${confirmedSlotIds.size !== 1 ? 's' : ''}`}
+                  {loading ? 'Confirming...' : `✅ Confirm ${confirmedSlotIds.size} Slot${confirmedSlotIds.size !== 1 ? 's' : ''}`}
                 </button>
               </>
             )}

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { challengeSchedulingService } from '../services/challengeSchedulingService';
 import { publicService } from '../services/api';
 import { useAuthStore } from '../store/authStore';
-import ManageChallengeModal from './ManageChallengeModal';
+import ScheduleProposalModalP2P from './ScheduleProposalModalP2P';
 
 interface Participant {
   id: string;
@@ -100,6 +100,13 @@ const ChallengeActionButtons: React.FC<ChallengeActionButtonsProps> = ({
     }
   };
 
+  const handleScheduleSuccess = () => {
+    setShowManageModal(false);
+    setProposal(null);
+    setParticipants([]);
+    onActionComplete?.();
+  };
+
   if (!showActions) return null;
 
   return (
@@ -113,18 +120,24 @@ const ChallengeActionButtons: React.FC<ChallengeActionButtonsProps> = ({
       </button>
 
       {proposal && participants.length > 0 && (
-        <ManageChallengeModal
+        <ScheduleProposalModalP2P
           isOpen={showManageModal}
-          onClose={() => setShowManageModal(false)}
-          onActionComplete={() => {
+          onClose={() => {
             setShowManageModal(false);
-            onActionComplete?.();
+            setProposal(null);
+            setParticipants([]);
           }}
+          onSuccess={handleScheduleSuccess}
+          opponentId={proposedByUserId}
           proposalId={proposalId}
-          proposedByUserId={proposedByUserId}
           initialProposal={proposal}
           initialParticipants={participants}
           initialViewingTimezone={viewingTimezone}
+          initialDisplayDateStart={
+            proposal.slots && proposal.slots.length > 0
+              ? new Date(proposal.slots[0].slot_datetime)
+              : new Date()
+          }
         />
       )}
     </>
