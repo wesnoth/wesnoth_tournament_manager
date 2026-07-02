@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useRef, useState } from 'react';
+import React, { useMemo, useEffect, useRef, useState, memo } from 'react';
 
 interface Participant {
   id: string;
@@ -161,7 +161,7 @@ const normalizeAvailabilitySchedule = (
   return normalized;
 };
 
-export default function SchedulingFreeBusyGrid({
+function SchedulingFreeBusyGrid({
   participants,
   dateStart,
   dateEnd,
@@ -668,3 +668,5 @@ export default function SchedulingFreeBusyGrid({
     </div>
   );
 }
+
+export default memo(SchedulingFreeBusyGrid);
