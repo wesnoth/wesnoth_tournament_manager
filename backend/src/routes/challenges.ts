@@ -322,6 +322,17 @@ router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, re
       return res.status(400).json({ error: 'slot_datetimes must be a non-empty array' });
     }
 
+    // Get old slots before updating
+    const oldSlotsResult = await query(
+      `SELECT slot_datetime FROM match_schedule_slots
+       WHERE proposal_id = ? AND status = 'pending'
+       ORDER BY slot_datetime ASC`,
+      [proposalId]
+    );
+    
+    const oldSlots = (oldSlotsResult.rows || []).map((s: any) => s.slot_datetime);
+    const oldRanges = groupSlotsIntoRanges(oldSlots);
+
     await updateP2PProposal(proposalId, userId, slot_datetimes, notes);
     const proposal = await getP2PProposalForUser(proposalId, userId);
     
@@ -333,23 +344,22 @@ router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, re
     const updater = await getUserSummary(userId);
     const challenged = await getUserSummary(challengedUserId);
 
-    const ranges = groupSlotsIntoRanges(slot_datetimes);
-    const message = buildNotificationMessage('changed', updater.nickname, ranges, notes);
+    const newRanges = groupSlotsIntoRanges(slot_datetimes);
+    const message = buildNotificationMessage('changed', updater.nickname, newRanges, notes);
 
     const title = '🔄 Challenge Schedule Updated';
     const type = 'challenge_updated';
 
     await storeNotificationForUsers([challengedUserId], proposalId, proposalId, type, title, message, null);
 
-    const discordTitle = `🔄 ${updater.nickname} has updated the challenge proposal`;
+    const discordTitle = `🔄 ${updater.nickname} has updated the challenge to ${challenged.nickname}`;
 
     await sendChallengeDiscord(
       discordTitle,
       0xffc107,
       [
-        ...(ranges.length > 0
-          ? [{ name: 'Updated Slots (UTC)', value: formatTimeRangesForDiscord(ranges), inline: false }]
-          : []),
+        { name: 'Previous Slots (UTC)', value: formatTimeRangesForDiscord(oldRanges), inline: false },
+        { name: 'New Slots (UTC)', value: formatTimeRangesForDiscord(newRanges), inline: false },
         ...(notes ? [{ name: 'Notes', value: notes, inline: false }] : []),
       ]
     );

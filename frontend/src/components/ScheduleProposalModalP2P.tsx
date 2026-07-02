@@ -434,7 +434,7 @@ export default function ScheduleProposalModalP2P({
                   selectedSlots={mode === 'confirm' ? confirmedSlotIds : selectedSlots}
                   onSlotToggle={mode === 'confirm' ? handleConfirmSlotToggle : handleSlotToggle}
                   readOnly={false}
-                  proposedSlots={proposedSlotDatetimes}
+                  proposedSlots={mode === 'edit_proposal' ? [] : proposedSlotDatetimes}
                   confirmedSlots={confirmedSlotsMap}
                   viewingTimezone={viewingTimezone}
                   scrollToHour={scrollToHour}
