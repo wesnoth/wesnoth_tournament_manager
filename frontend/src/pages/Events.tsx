@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { tournamentService, publicService } from '../services/api';
 import { challengeSchedulingService } from '../services/challengeSchedulingService';
 import P2PChallengeModal from '../components/P2PChallengeModal';
+import ChallengeActionButtons from '../components/ChallengeActionButtons';
 import { useAuthStore } from '../store/authStore';
 
 type EventSourceType = 'tournament' | 'p2p';
@@ -249,17 +250,36 @@ const Events: React.FC = () => {
               </thead>
               <tbody>
                 {filteredEvents.map((event) => (
-                  <tr key={event.id} className="border-t border-gray-100">
-                    <td className="px-4 py-3">
-                      {event.type === 'tournament'
-                        ? (t('events_filter_type_tournament') || 'Tournament')
-                        : (t('events_filter_type_p2p') || 'P2P')}
-                    </td>
-                    <td className="px-4 py-3">{event.title}</td>
-                    <td className="px-4 py-3">{event.players.join(' vs ')}</td>
-                    <td className="px-4 py-3">{new Date(event.datetime).toLocaleString()}</td>
-                    <td className="px-4 py-3">{event.status}</td>
-                  </tr>
+                  <React.Fragment key={event.id}>
+                    <tr className="border-t border-gray-100">
+                      <td className="px-4 py-3">
+                        {event.type === 'tournament'
+                          ? (t('events_filter_type_tournament') || 'Tournament')
+                          : (t('events_filter_type_p2p') || 'P2P')}
+                      </td>
+                      <td className="px-4 py-3">{event.title}</td>
+                      <td className="px-4 py-3">{event.players.join(' vs ')}</td>
+                      <td className="px-4 py-3">{new Date(event.datetime).toLocaleString()}</td>
+                      <td className="px-4 py-3">{event.status}</td>
+                    </tr>
+                    {event.type === 'p2p' && event.raw && (
+                      <tr className="bg-gray-50 border-t border-gray-100">
+                        <td colSpan={5} className="px-4 py-3">
+                          <ChallengeActionButtons
+                            proposalId={event.raw.id}
+                            proposedByUserId={event.raw.proposed_by_user_id}
+                            challengedUserId={event.raw.challenged_user_id}
+                            status={event.raw.status}
+                            layout="inline"
+                            onActionComplete={() => {
+                              // Reload events after action
+                              loadEvents();
+                            }}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
@@ -290,6 +310,20 @@ const Events: React.FC = () => {
                         {t('events_table_status') || 'Status'}: {event.status}
                         {event.type === 'p2p' && event.visibility ? ` • ${event.visibility}` : ''}
                       </p>
+                      {event.type === 'p2p' && event.raw && (
+                        <div className="mt-3 pt-3 border-t border-gray-300">
+                          <ChallengeActionButtons
+                            proposalId={event.raw.id}
+                            proposedByUserId={event.raw.proposed_by_user_id}
+                            challengedUserId={event.raw.challenged_user_id}
+                            status={event.raw.status}
+                            layout="stacked"
+                            onActionComplete={() => {
+                              loadEvents();
+                            }}
+                          />
+                        </div>
+                      )}
                     </article>
                   ))}
                 </div>

@@ -514,7 +514,15 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
                   🗑️
                 </button>
               </div>
-              {notification.tournament_id && notification.match_id && (
+              {notification.type?.startsWith('challenge_') ? (
+                <button
+                  onClick={() => navigate(`/events`)}
+                  className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors font-semibold"
+                  title="Go to events"
+                >
+                  → {t('label_go_events') || 'Go to Events'}
+                </button>
+              ) : notification.tournament_id && notification.match_id ? (
                 <button
                   onClick={() => navigate(`/tournament/${notification.tournament_id}?tab=roundMatches&matchId=${notification.match_id}`)}
                   className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors font-semibold"
@@ -522,7 +530,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
                 >
                   → {t('label_go_tournament') || 'Go to Tournament'}
                 </button>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
