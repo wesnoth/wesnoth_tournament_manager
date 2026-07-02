@@ -51,10 +51,11 @@ const ChallengeActionButtons: React.FC<ChallengeActionButtonsProps> = ({
   const [viewingTimezone, setViewingTimezone] = useState('UTC');
   const [loadingData, setLoadingData] = useState(false);
 
-  // Only show actions if user is the challenged player and proposal is pending
+  // Show actions if user is the challenged player OR the proposer, and proposal is pending
   const isIncoming = userId === challengedUserId;
+  const isProposer = userId === proposedByUserId;
   const isPending = status === 'pending';
-  const showActions = isIncoming && isPending;
+  const showActions = (isIncoming || isProposer) && isPending;
 
   useEffect(() => {
     if (showManageModal && !proposal) {
@@ -128,7 +129,7 @@ const ChallengeActionButtons: React.FC<ChallengeActionButtonsProps> = ({
             setParticipants([]);
           }}
           onSuccess={handleScheduleSuccess}
-          opponentId={proposedByUserId}
+          opponentId={isProposer ? challengedUserId : proposedByUserId}
           proposalId={proposalId}
           initialProposal={proposal}
           initialParticipants={participants}

@@ -322,6 +322,7 @@ export async function storeNotificationForUsers(
     | 'challenge_confirmed'
     | 'challenge_rejected'
     | 'challenge_counter_proposal'
+    | 'challenge_updated'
     | 'challenge_cancelled',
   title: string,
   message: string,

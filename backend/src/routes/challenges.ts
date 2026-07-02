@@ -11,6 +11,7 @@ import {
   getP2PParticipantsAvailability,
   getP2PProposalForUser,
   listP2PProposalsForUser,
+  updateP2PProposal,
 } from '../services/p2pSchedulingService.js';
 import { buildNotificationMessage, formatTimeRangesForDiscord, groupSlotsIntoRanges } from '../utils/slotGrouping.js';
 
@@ -293,6 +294,55 @@ router.post('/proposals/:proposalId/cancel', authMiddleware, async (req: AuthReq
   } catch (error) {
     console.error('❌ [CHALLENGES] Error cancelling proposal:', error);
     return res.status(400).json({ error: (error as Error).message || 'Failed to cancel proposal' });
+  }
+});
+
+router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const { proposalId } = req.params;
+    const { slot_datetimes, notes } = req.body;
+
+    if (!Array.isArray(slot_datetimes) || slot_datetimes.length === 0) {
+      return res.status(400).json({ error: 'slot_datetimes must be a non-empty array' });
+    }
+
+    await updateP2PProposal(proposalId, userId, slot_datetimes, notes);
+    const proposal = await getP2PProposalForUser(proposalId, userId);
+    
+    if (!proposal) {
+      return res.status(404).json({ error: 'Proposal not found after update' });
+    }
+
+    const challengedUserId = proposal.challenged_user_id;
+    const updater = await getUserSummary(userId);
+    const challenged = await getUserSummary(challengedUserId);
+
+    const ranges = groupSlotsIntoRanges(slot_datetimes);
+    const message = buildNotificationMessage('changed', updater.nickname, ranges, notes);
+
+    const title = '🔄 Challenge Schedule Updated';
+    const type = 'challenge_updated';
+
+    await storeNotificationForUsers([challengedUserId], proposalId, proposalId, type, title, message, null);
+
+    const discordTitle = `🔄 ${updater.nickname} has updated the challenge proposal`;
+
+    await sendChallengeDiscord(
+      discordTitle,
+      0xffc107,
+      [
+        ...(ranges.length > 0
+          ? [{ name: 'Updated Slots (UTC)', value: formatTimeRangesForDiscord(ranges), inline: false }]
+          : []),
+        ...(notes ? [{ name: 'Notes', value: notes, inline: false }] : []),
+      ]
+    );
+
+    return res.json({ success: true, proposalId });
+  } catch (error) {
+    console.error('❌ [CHALLENGES] Error updating proposal:', error);
+    return res.status(400).json({ error: (error as Error).message || 'Failed to update proposal' });
   }
 });
 

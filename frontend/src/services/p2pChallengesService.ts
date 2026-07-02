@@ -55,6 +55,21 @@ export const p2pChallengesService = {
   },
 
   /**
+   * Update an existing challenge proposal (only proposer can do this)
+   */
+  updateProposal: async (
+    proposalId: string,
+    slotDatetimes: string[],
+    notes?: string
+  ) => {
+    const response = await api.put(`/challenges/proposals/${proposalId}`, {
+      slot_datetimes: slotDatetimes,
+      ...(notes && { notes }),
+    });
+    return response.data;
+  },
+
+  /**
    * Get a specific P2P proposal
    */
   getProposal: async (proposalId: string) => {

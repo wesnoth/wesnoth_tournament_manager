@@ -142,7 +142,17 @@ export default function ScheduleProposalModalP2P({
       // Check if current user is the proposer
       if (userId && proposal.proposed_by_user_id === userId) {
         setMode('edit_proposal');
-        setSelectedSlots(new Set());
+        // Pre-fill with current slots so proposer can modify them
+        if (proposal.slots) {
+          const proposedSlotDatetimes = proposal.slots.map(s => s.slot_datetime);
+          setSelectedSlots(new Set(proposedSlotDatetimes));
+        } else {
+          setSelectedSlots(new Set());
+        }
+        // Load existing notes for editing
+        if (proposal.notes) {
+          setNotes(proposal.notes);
+        }
       } else {
         setMode('confirm');
         // Pre-select proposed slots for opponent to confirm or modify
@@ -223,6 +233,21 @@ export default function ScheduleProposalModalP2P({
           'private'
         );
         if (response.success || response.proposalId) {
+          onSuccess?.();
+          onClose();
+        }
+      } else if (mode === 'edit_proposal') {
+        // Update existing proposal (proposer editing their own proposal)
+        if (!proposal) {
+          setError('No proposal to update');
+          return;
+        }
+        const response = await p2pChallengesService.updateProposal(
+          proposal.id,
+          slotArray,
+          notes || undefined
+        );
+        if (response.success) {
           onSuccess?.();
           onClose();
         }
@@ -475,20 +500,31 @@ export default function ScheduleProposalModalP2P({
               )}
 
               {/* Notes textarea */}
-              <div className="space-y-2">
-                <label className="block text-sm font-semibold text-gray-800">
-                  Notes (optional, max 500 characters)
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={handleNotesChange}
-                  placeholder="Add any notes about your availability or preferences..."
-                  className="w-full p-3 border border-gray-300 rounded text-sm font-mono"
-                  rows={3}
-                  disabled={loading}
-                />
-                <p className="text-xs text-gray-500">{notes.length}/500</p>
-              </div>
+              {mode === 'confirm' ? (
+                // In confirm mode, show the proposer's notes as read-only
+                proposal?.notes && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded">
+                    <p className="text-sm font-semibold text-blue-900">Proposer's Notes</p>
+                    <p className="text-sm text-blue-800 mt-2 whitespace-pre-wrap">{proposal.notes}</p>
+                  </div>
+                )
+              ) : (
+                // In propose/edit mode, show textarea for editing notes
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-gray-800">
+                    Notes (optional, max 500 characters)
+                  </label>
+                  <textarea
+                    value={notes}
+                    onChange={handleNotesChange}
+                    placeholder="Add any notes about your availability or preferences..."
+                    className="w-full p-3 border border-gray-300 rounded text-sm font-mono"
+                    rows={3}
+                    disabled={loading}
+                  />
+                  <p className="text-xs text-gray-500">{notes.length}/500</p>
+                </div>
+              )}
             </>
           )}
         </div>

@@ -300,6 +300,78 @@ export const counterProposeP2P = async (
   );
 };
 
+export const updateP2PProposal = async (
+  proposalId: string,
+  userId: string,
+  slotDatetimes: string[],
+  notes?: string
+) => {
+  const validation = validateSlotDatetimes(slotDatetimes);
+  if (!validation.valid) {
+    throw new Error(validation.error);
+  }
+
+  if (notes && notes.length > 500) {
+    throw new Error('Notes cannot exceed 500 characters');
+  }
+
+  const proposalResult = await query(
+    `SELECT id, proposed_by_user_id, status
+     FROM match_schedule_proposals
+     WHERE id = ? AND challenge_mode = 'p2p'`,
+    [proposalId]
+  );
+
+  if (!proposalResult.rows || proposalResult.rows.length === 0) {
+    throw new Error('Proposal not found');
+  }
+
+  const proposal = proposalResult.rows[0];
+  if (proposal.proposed_by_user_id !== userId) {
+    throw new Error('Only proposer can update proposal');
+  }
+
+  if (proposal.status !== 'pending') {
+    throw new Error('Can only update pending proposals');
+  }
+
+  // Delete old slots
+  await query(
+    `DELETE FROM match_schedule_slots
+     WHERE proposal_id = ?`,
+    [proposalId]
+  );
+
+  // Create new slots
+  const slotIds: string[] = [];
+  for (const slotDatetime of slotDatetimes) {
+    const slotId = uuidv4();
+    await query(
+      `INSERT INTO match_schedule_slots
+       (id, proposal_id, slot_datetime, status)
+       VALUES (?, ?, ?, 'pending')`,
+      [slotId, proposalId, slotDatetime]
+    );
+    slotIds.push(slotId);
+  }
+
+  // Update notes if provided
+  if (notes !== undefined) {
+    await query(
+      `UPDATE match_schedule_proposals
+       SET notes = ?, proposed_at = NOW()
+       WHERE id = ?`,
+      [notes || null, proposalId]
+    );
+  }
+
+  return {
+    success: true,
+    proposalId,
+    slotsCreated: slotIds.length,
+  };
+};
+
 export const cancelP2PProposal = async (proposalId: string, userId: string) => {
   const proposalResult = await query(
     `SELECT id, proposed_by_user_id
