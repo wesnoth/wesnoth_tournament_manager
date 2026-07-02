@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useDeferredValue, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useDeferredValue, useRef, useCallback } from 'react';
 import SchedulingFreeBusyGrid from './SchedulingFreeBusyGrid';
 import { useAuthStore } from '../store/authStore';
 import { p2pChallengesService } from '../services/p2pChallengesService';
@@ -313,6 +313,10 @@ export default function ScheduleProposalModalP2P({
     }
   };
 
+  const handleNotesChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setNotes(e.target.value.slice(0, 500));
+  }, []);
+
   const selectedRangeDatetimes = useMemo(
     () => (mode === 'confirm' ? Array.from(confirmedSlotIds) : Array.from(selectedSlots)),
     [mode, confirmedSlotIds, selectedSlots]
@@ -477,7 +481,7 @@ export default function ScheduleProposalModalP2P({
                 </label>
                 <textarea
                   value={notes}
-                  onChange={e => setNotes(e.target.value.slice(0, 500))}
+                  onChange={handleNotesChange}
                   placeholder="Add any notes about your availability or preferences..."
                   className="w-full p-3 border border-gray-300 rounded text-sm font-mono"
                   rows={3}
