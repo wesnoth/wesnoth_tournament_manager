@@ -9,7 +9,8 @@ import MatchDetailsModal from '../components/MatchDetailsModal';
 import PlayerLink from '../components/PlayerLink';
 import RouteLoader from '../components/RouteLoader';
 import ScheduleDisplay from '../components/ScheduleDisplay';
-import PlayerChallengeModal from '../components/PlayerChallengeModal';
+import ChallengeFromPlayerModal from '../components/ChallengeFromPlayerModal';
+import { useAuthStore } from '../store/authStore';
 
 // Lazy-load heavy chart and statistics components
 const EloChart = lazy(() => import('../components/EloChart'));
@@ -31,6 +32,7 @@ const PlayerProfile: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const { user: currentUser } = useAuthStore();
   
   const [profile, setProfile] = useState<any>(null);
   const [matches, setMatches] = useState<any[]>([]);
@@ -273,12 +275,14 @@ const PlayerProfile: React.FC = () => {
             
             <div className="mb-8">
               <div className="mb-3 flex justify-end">
-               <button
-                  onClick={() => setShowChallengeModal(true)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors font-semibold"
-                >
-                  {t('events_button_challenge') || 'Challenge'}
-                </button>
+                {currentUser?.id !== id && (
+                  <button
+                    onClick={() => setShowChallengeModal(true)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors font-semibold"
+                  >
+                    {t('events_button_challenge') || 'Challenge'}
+                  </button>
+                )}
               </div>
               <ScheduleDisplay 
                 timezone={profile.timezone}
@@ -678,7 +682,7 @@ const PlayerProfile: React.FC = () => {
         onClose={closeMatchDetails}
         onDownloadReplay={handleDownloadReplay}
       />
-      <PlayerChallengeModal
+      <ChallengeFromPlayerModal
         isOpen={showChallengeModal}
         onClose={() => setShowChallengeModal(false)}
         onSuccess={() => setShowChallengeModal(false)}
