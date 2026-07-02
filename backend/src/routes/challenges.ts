@@ -270,10 +270,22 @@ router.post('/proposals/:proposalId/cancel', authMiddleware, async (req: AuthReq
       return res.status(404).json({ error: 'Proposal not found' });
     }
 
+    // Get cancelled slots before cancelling
+    const slotsResult = await query(
+      `SELECT slot_datetime FROM match_schedule_slots
+       WHERE proposal_id = ? AND status = 'pending'
+       ORDER BY slot_datetime ASC`,
+      [proposalId]
+    );
+    
+    const cancelledSlots = (slotsResult.rows || []).map((s: any) => s.slot_datetime);
+    const ranges = groupSlotsIntoRanges(cancelledSlots);
+
     await cancelP2PProposal(proposalId, userId);
 
     const targetUserId = proposal.challenged_user_id;
     const actor = await getUserSummary(userId);
+    const target = await getUserSummary(targetUserId);
 
     await storeNotificationForUsers(
       [targetUserId],
@@ -285,9 +297,12 @@ router.post('/proposals/:proposalId/cancel', authMiddleware, async (req: AuthReq
       null
     );
 
-    await sendChallengeDiscord('🚫 P2P Challenge Cancelled', 0xff0000, [
-      { name: 'Action by', value: actor.nickname, inline: false },
-      { name: 'Proposal ID', value: proposalId, inline: false },
+    const discordTitle = `🚫 ${actor.nickname} has cancelled the challenge to ${target.nickname}`;
+
+    await sendChallengeDiscord(discordTitle, 0xff0000, [
+      ...(ranges.length > 0
+        ? [{ name: 'Cancelled Slots (UTC)', value: formatTimeRangesForDiscord(ranges), inline: false }]
+        : []),
     ]);
 
     return res.json({ success: true });
