@@ -166,6 +166,7 @@ router.post('/proposals/:proposalId/confirm-slots', authMiddleware, async (req: 
 
     const proposerId = proposal.proposed_by_user_id;
     const confirmer = await getUserSummary(userId);
+    const proposer = await getUserSummary(proposerId);
 
     const confirmedSlots = (result.slots || [])
       .filter((slot: any) => slot.status === 'confirmed')
@@ -186,12 +187,14 @@ router.post('/proposals/:proposalId/confirm-slots', authMiddleware, async (req: 
 
     await storeNotificationForUsers([proposerId], proposalId, proposalId, type, title, message, null);
 
+    const discordTitle = result.status === 'confirmed'
+      ? `⚔️ ${confirmer.nickname} has accepted ${proposer.nickname}'s challenge`
+      : `❌ ${confirmer.nickname} has rejected ${proposer.nickname}'s challenge`;
+
     await sendChallengeDiscord(
-      result.status === 'confirmed' ? '✅ P2P Challenge Confirmed' : '❌ P2P Challenge Rejected',
+      discordTitle,
       result.status === 'confirmed' ? 0x2ecc71 : 0xff0000,
       [
-        { name: 'Action by', value: confirmer.nickname, inline: false },
-        { name: 'Proposal ID', value: proposalId, inline: false },
         ...(ranges.length > 0
           ? [{ name: 'Confirmed Slots (UTC)', value: formatTimeRangesForDiscord(ranges), inline: false }]
           : []),
