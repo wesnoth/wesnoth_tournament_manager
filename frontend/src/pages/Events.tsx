@@ -59,21 +59,72 @@ const Events: React.FC = () => {
           .map((t: any) => tournamentService.getTournamentRoundMatches(t.id))
       );
 
+      // Load participants for team mode tournaments
+      const tournamentParticipantsMap: Record<string, any[]> = {};
+      const participantsResponses = await Promise.all(
+        tournaments
+          .filter((t: any) => t?.id && t?.tournament_mode === 'team')
+          .map((t: any) => 
+            publicService.getTournamentParticipants(t.id)
+              .then((response: any) => ({
+                tournamentId: t.id,
+                participants: response.data || []
+              }))
+              .catch((err: any) => ({
+                tournamentId: t.id,
+                participants: []
+              }))
+          )
+      );
+
+      participantsResponses.forEach(({ tournamentId, participants }: any) => {
+        tournamentParticipantsMap[tournamentId] = participants;
+      });
+
       const tournamentEvents: EventItem[] = tournamentRoundMatchesResponses.flatMap((response: any, index: number) => {
         const tournament = tournaments[index];
         const matches = response.data || [];
+        const isTeamMode = tournament?.tournament_mode === 'team';
+        const participants = tournamentParticipantsMap[tournament?.id] || [];
+
         return matches
           .filter((m: any) => !!m?.scheduled_datetime)
-          .map((m: any) => ({
-            id: `tournament-${m.id}`,
-            type: 'tournament',
-            title: `${t('events_tournament_schedule') || 'Tournament Schedule'}: ${tournament?.name || ''}`,
-            tournamentName: tournament?.name || '',
-            players: [m.player1_nickname, m.player2_nickname].filter(Boolean),
-            datetime: m.scheduled_datetime,
-            status: m.scheduled_status || 'pending',
-            raw: m,
-          }));
+          .map((m: any) => {
+            let playerNames = [m.player1_nickname, m.player2_nickname].filter(Boolean);
+            
+            // If team mode, enhance with participant names
+            if (isTeamMode && participants.length > 0) {
+              const getTeamParticipantNames = (teamId: string | null) => {
+                if (!teamId) return [];
+                const teamParticipants = participants.filter((p: any) => p.team_id === teamId);
+                return teamParticipants.map((p: any) => p.user_nickname || p.nickname).filter(Boolean);
+              };
+
+              const team1Names = getTeamParticipantNames(m.player1_id);
+              const team2Names = getTeamParticipantNames(m.player2_id);
+              
+              // Format: "TeamName (player1, player2)" vs "TeamName (player1, player2)"
+              playerNames = [
+                team1Names.length > 0 
+                  ? `${m.player1_nickname} (${team1Names.join(', ')})`
+                  : m.player1_nickname,
+                team2Names.length > 0
+                  ? `${m.player2_nickname} (${team2Names.join(', ')})`
+                  : m.player2_nickname
+              ].filter(Boolean);
+            }
+
+            return {
+              id: `tournament-${m.id}`,
+              type: 'tournament',
+              title: `${t('events_tournament_schedule') || 'Tournament Schedule'}: ${tournament?.name || ''}`,
+              tournamentName: tournament?.name || '',
+              players: playerNames,
+              datetime: m.scheduled_datetime,
+              status: m.scheduled_status || 'pending',
+              raw: m,
+            };
+          });
       });
 
       const p2pRows = p2pResponse?.proposals || [];
