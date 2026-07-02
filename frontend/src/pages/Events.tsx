@@ -2,10 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { tournamentService, publicService } from '../services/api';
 import { challengeSchedulingService } from '../services/challengeSchedulingService';
-import P2PChallengeModal from '../components/P2PChallengeModal';
+import ChallengeFromEventsModal from '../components/ChallengeFromEventsModal';
 import ChallengeActionButtons from '../components/ChallengeActionButtons';
-import ScheduleProposalModal from '../components/ScheduleProposalModal';
-import { groupSlotsIntoRanges } from '../utils/slotGrouping';
 import { useAuthStore } from '../store/authStore';
 
 type EventSourceType = 'tournament' | 'p2p';
@@ -621,24 +619,10 @@ const Events: React.FC = () => {
         )}
       </div>
 
-      <P2PChallengeModal
+      <ChallengeFromEventsModal
         isOpen={showChallengeModal}
         onClose={() => setShowChallengeModal(false)}
         onSuccess={loadEvents}
-      />
-
-      <ScheduleProposalModal
-        isOpen={scheduleProposalModal.isOpen}
-        initialProposal={scheduleProposalModal.initialProposal}
-        initialParticipants={scheduleProposalModal.initialParticipants}
-        initialViewingTimezone={scheduleProposalModal.initialViewingTimezone}
-        initialDisplayDateStart={scheduleProposalModal.initialDisplayDateStart}
-        initialScrollToHour={scheduleProposalModal.initialScrollToHour}
-        onClose={() => setScheduleProposalModal({ isOpen: false })}
-        onSuccess={() => {
-          setScheduleProposalModal({ isOpen: false });
-          loadEvents();
-        }}
       />
     </div>
   );

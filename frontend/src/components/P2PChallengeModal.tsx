@@ -1,9 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import SchedulingFreeBusyGrid from './SchedulingFreeBusyGrid';
+import ScheduleProposalModal from './ScheduleProposalModal';
 import { challengeSchedulingService } from '../services/challengeSchedulingService';
 import { publicService, userService } from '../services/api';
-import { groupSlotsIntoRanges } from '../utils/slotGrouping';
 import { useAuthStore } from '../store/authStore';
 
 interface UserOption {
