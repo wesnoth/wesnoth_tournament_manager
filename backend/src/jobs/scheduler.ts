@@ -5,6 +5,7 @@ import { calculateGlobalStatisticsJob } from './globalStatisticsJob.js';
 import { SyncGamesFromForumJob } from './syncGamesFromForum.js';
 import ParseNewReplaysRefactored from './parseNewReplaysRefactored.js';
 import { cleanupExpiredSchedules } from './cleanupExpiredSchedulesJob.js';
+import { cleanupOldNotifications } from './cleanupOldNotificationsJob.js';
 import { v4 as uuidv4 } from 'uuid';
 import { createFactionMapStatisticsSnapshot, recalculatePlayerMatchStatistics } from '../services/statisticsCalculator.js';
 import { logAuditEvent } from '../middleware/audit.js';
@@ -171,6 +172,7 @@ export async function expireAndPurgeProposals(): Promise<void> {
  * - 02:00 UTC: Auto-discard old unconfirmed replays
  * - 02:30 UTC: Expire and purge scheduling proposals (tournament schedules with expires_at)
  * - 02:45 UTC: Cleanup expired P2P and tournament schedules (by slot expiration)
+ * - 03:00 UTC: Cleanup old user notifications
  * - Every 30 minutes: Calculate global site statistics
  * - Every 60s: Sync new games from forum database
  * - Every 30s: Parse unparsed replays and create matches
@@ -293,6 +295,17 @@ export const initializeScheduledJobs = (): void => {
       }
     });
 
+    // Schedule old notifications cleanup at 03:00 UTC daily
+    // Removes user_notifications older than OLD_NOTIFICATIONS_CLEANUP_DAYS
+    cron.schedule('0 3 * * *', async () => {
+      try {
+        console.log('⏰ [CRON] Running cleanup of old notifications...');
+        await cleanupOldNotifications();
+      } catch (error) {
+        console.error('❌ [CRON] Old notifications cleanup failed:', error);
+      }
+    });
+
     // Schedule global statistics calculation every 30 minutes
     cron.schedule('*/30 * * * *', async () => {
       try {
@@ -310,6 +323,7 @@ export const initializeScheduledJobs = (): void => {
     console.log('   - Auto-discard unconfirmed replays: Daily at 02:00 UTC');
     console.log('   - Proposal expiration & purge: Daily at 02:30 UTC');
     console.log('   - Expired schedules cleanup: Daily at 02:45 UTC');
+    console.log('   - Old notifications cleanup: Daily at 03:00 UTC');
     console.log('   - Global statistics calculation: Every 30 minutes');
     console.log('   - Forum database sync: Every 60 seconds');
     console.log('   - Replay parsing & match creation: Every 30 seconds');
