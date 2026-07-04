@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { challengeSchedulingService } from '../services/challengeSchedulingService';
+import { p2pChallengesService } from '../services/p2pChallengesService';
 import { publicService } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import ScheduleProposalModalP2P from './ScheduleProposalModalP2P';
@@ -67,7 +67,7 @@ const ChallengeActionButtons: React.FC<ChallengeActionButtonsProps> = ({
     try {
       setLoadingData(true);
       
-      const response = await challengeSchedulingService.getProposal(proposalId);
+      const response = await p2pChallengesService.getProposal(proposalId);
       const proposalData = response.proposal || response;
       setProposal(proposalData);
 

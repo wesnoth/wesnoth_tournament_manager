@@ -101,6 +101,7 @@ export const authService = {
 export const userService = {
   getProfile: () => api.get('/users/profile'),
   updateDiscordId: (discordId: string) => api.put('/users/profile/discord', { discord_id: discordId }),
+  validateDiscordId: (discordId: string) => api.post('/users/profile/discord/validate', { discord_id: discordId }),
   updateRankedStatus: (enable_ranked: boolean) => api.put('/users/profile/ranked', { enable_ranked }),
   updateProfile: (data: { country?: string; avatar?: string; timezone?: string; availability_schedule?: any }) => 
     api.put('/users/profile/update', data),

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { tournamentService, publicService } from '../services/api';
-import { challengeSchedulingService } from '../services/challengeSchedulingService';
+import { p2pChallengesService } from '../services/p2pChallengesService';
 import ChallengeFromEventsModal from '../components/ChallengeFromEventsModal';
 import ChallengeActionButtons from '../components/ChallengeActionButtons';
 import { useAuthStore } from '../store/authStore';
@@ -40,17 +40,6 @@ const Events: React.FC = () => {
   const [toDateFilter, setToDateFilter] = useState('');
   const [myEventsOnly, setMyEventsOnly] = useState(false);
 
-  // ScheduleProposalModal state for P2P challenges
-  const [scheduleProposalModal, setScheduleProposalModal] = useState<{
-    isOpen: boolean;
-    proposalId?: string;
-    initialParticipants?: any[];
-    initialProposal?: any;
-    initialViewingTimezone?: string;
-    initialDisplayDateStart?: Date;
-    initialScrollToHour?: number | null;
-  }>({ isOpen: false });
-
   const loadEvents = useCallback(async () => {
     try {
       setLoading(true);
@@ -59,7 +48,7 @@ const Events: React.FC = () => {
       const [userResponse, myTournamentsResponse, p2pResponse] = await Promise.all([
         userId ? publicService.getPlayerProfile(userId) : Promise.resolve(null),
         tournamentService.getMyTournaments(),
-        challengeSchedulingService.listProposals('all'),
+        p2pChallengesService.listProposals('all'),
       ]);
 
       if (userResponse?.data?.timezone) {
@@ -514,4 +503,3 @@ const Events: React.FC = () => {
 };
 
 export default Events;
-

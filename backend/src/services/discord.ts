@@ -5,9 +5,6 @@ const DISCORD_EPOCH_MS = 1420070400000n; // 2015-01-01T00:00:00.000Z
 const DISCORD_SNOWFLAKE_REGEX = /^\d{17,20}$/;
 const DISCORD_USER_MENTION_REGEX = /^<@!?(\d{17,20})>$/;
 
-// Check if Discord is explicitly enabled via environment variable
-export const DISCORD_ENABLED = process.env.DISCORD_ENABLED === 'true';
-
 function normalizeDiscordInput(input: string): string {
   return input.trim();
 }
@@ -191,5 +188,46 @@ export async function resolveDiscordIdFromUsername(usernameInput: string): Promi
       errorMessage: error.message
     });
     return null;
+  }
+}
+
+export async function validateDiscordId(
+  discordInput: string
+): Promise<{ discordId: string; nickname: string } | null> {
+  const normalizedInput = normalizeDiscordInput(discordInput);
+  if (!normalizedInput) {
+    return null;
+  }
+
+  if (!process.env.DISCORD_BOT_TOKEN || !process.env.DISCORD_GUILD_ID) {
+    return null;
+  }
+
+  const candidateId = extractDiscordIdCandidate(normalizedInput);
+  if (!candidateId || !isValidDiscordSnowflake(candidateId)) {
+    return null;
+  }
+
+  try {
+    const response = await axios.get(
+      `${DISCORD_API_URL}/guilds/${process.env.DISCORD_GUILD_ID}/members/${candidateId}`,
+      {
+        headers: {
+          Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    const member = response.data;
+    return {
+      discordId: candidateId,
+      nickname: member?.nick || member?.user?.username || candidateId,
+    };
+  } catch (error: any) {
+    if (error.response?.status === 404) {
+      return null;
+    }
+    throw error;
   }
 }

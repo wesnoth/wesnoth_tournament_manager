@@ -5,7 +5,7 @@ import { searchLimiter } from '../middleware/rateLimiter.js';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
 import { avatarManifestService } from '../services/avatarManifestService.js';
 import { validateTimezone, validateAvailabilitySchedule } from '../utils/timezoneUtils.js';
-import { isValidDiscordSnowflake } from '../services/discord.js';
+import { isValidDiscordSnowflake, validateDiscordId } from '../services/discord.js';
 
 const router = Router();
 
@@ -489,6 +489,33 @@ router.put('/profile/discord', authMiddleware, async (req: AuthRequest, res) => 
   } catch (error) {
     console.error('Error updating Discord ID:', error);
     res.status(500).json({ error: 'Failed to update Discord ID' });
+  }
+});
+
+// Validate Discord ID against guild membership
+router.post('/profile/discord/validate', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const { discord_id } = req.body;
+
+    if (!discord_id || discord_id.trim() === '') {
+      return res.status(400).json({ error: 'Discord ID cannot be empty' });
+    }
+
+    const validationResult = await validateDiscordId(discord_id);
+    if (!validationResult) {
+      return res.status(400).json({
+        error: 'Invalid Discord ID or user not found in the Discord guild',
+      });
+    }
+
+    return res.json({
+      success: true,
+      discord_id: validationResult.discordId,
+      nickname: validationResult.nickname,
+    });
+  } catch (error) {
+    console.error('Error validating Discord ID:', error);
+    return res.status(500).json({ error: 'Failed to validate Discord ID' });
   }
 });
 
