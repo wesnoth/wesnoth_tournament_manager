@@ -4,6 +4,7 @@ import { calculatePlayerOfMonth } from './playerOfMonthJob.js';
 import { calculateGlobalStatisticsJob } from './globalStatisticsJob.js';
 import { SyncGamesFromForumJob } from './syncGamesFromForum.js';
 import ParseNewReplaysRefactored from './parseNewReplaysRefactored.js';
+import { cleanupExpiredSchedules } from './cleanupExpiredSchedulesJob.js';
 import { v4 as uuidv4 } from 'uuid';
 import { createFactionMapStatisticsSnapshot, recalculatePlayerMatchStatistics } from '../services/statisticsCalculator.js';
 import { logAuditEvent } from '../middleware/audit.js';
@@ -168,7 +169,8 @@ export async function expireAndPurgeProposals(): Promise<void> {
  * - 01:00 UTC: Check and mark inactive players
  * - 01:30 UTC on 1st: Calculate player of the month
  * - 02:00 UTC: Auto-discard old unconfirmed replays
- * - 02:30 UTC: Expire and purge scheduling proposals
+ * - 02:30 UTC: Expire and purge scheduling proposals (tournament schedules with expires_at)
+ * - 02:45 UTC: Cleanup expired P2P and tournament schedules (by slot expiration)
  * - Every 30 minutes: Calculate global site statistics
  * - Every 60s: Sync new games from forum database
  * - Every 30s: Parse unparsed replays and create matches
@@ -280,6 +282,17 @@ export const initializeScheduledJobs = (): void => {
       }
     });
 
+    // Schedule expired schedules cleanup at 02:45 UTC daily
+    // Removes P2P and tournament schedules where the latest slot is older than EXPIRED_SCHEDULE_CLEANUP_DAYS
+    cron.schedule('45 2 * * *', async () => {
+      try {
+        console.log('⏰ [CRON] Running cleanup of expired schedules...');
+        await cleanupExpiredSchedules();
+      } catch (error) {
+        console.error('❌ [CRON] Expired schedules cleanup failed:', error);
+      }
+    });
+
     // Schedule global statistics calculation every 30 minutes
     cron.schedule('*/30 * * * *', async () => {
       try {
@@ -296,6 +309,7 @@ export const initializeScheduledJobs = (): void => {
     console.log('   - Player of month: 1st of month at 01:30 UTC');
     console.log('   - Auto-discard unconfirmed replays: Daily at 02:00 UTC');
     console.log('   - Proposal expiration & purge: Daily at 02:30 UTC');
+    console.log('   - Expired schedules cleanup: Daily at 02:45 UTC');
     console.log('   - Global statistics calculation: Every 30 minutes');
     console.log('   - Forum database sync: Every 60 seconds');
     console.log('   - Replay parsing & match creation: Every 30 seconds');
