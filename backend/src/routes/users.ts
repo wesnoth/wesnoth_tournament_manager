@@ -5,6 +5,7 @@ import { searchLimiter } from '../middleware/rateLimiter.js';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
 import { avatarManifestService } from '../services/avatarManifestService.js';
 import { validateTimezone, validateAvailabilitySchedule } from '../utils/timezoneUtils.js';
+import { isValidDiscordSnowflake } from '../services/discord.js';
 
 const router = Router();
 
@@ -460,9 +461,18 @@ router.put('/profile/discord', authMiddleware, async (req: AuthRequest, res) => 
       return res.status(400).json({ error: 'Discord ID cannot be empty' });
     }
 
+    const trimmedDiscordId = discord_id.trim();
+
+    // Validate Discord Snowflake format and validity
+    if (!isValidDiscordSnowflake(trimmedDiscordId)) {
+      return res.status(400).json({ 
+        error: 'Invalid Discord ID. Must be a valid Discord user ID (17-20 digits).' 
+      });
+    }
+
     await query(
       `UPDATE users_extension SET discord_id = ? WHERE id = ?`,
-      [discord_id, req.userId]
+      [trimmedDiscordId, req.userId]
     );
 
     const result = await query(

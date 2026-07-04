@@ -38,6 +38,8 @@ function isValidDiscordSnowflake(id: string): boolean {
   }
 }
 
+export { isValidDiscordSnowflake };
+
 async function checkGuildMembershipByDiscordId(
   guildId: string,
   discordId: string,
