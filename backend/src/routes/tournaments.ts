@@ -277,15 +277,31 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       }
     }
 
-    // Get organizer nickname
-    let organizerNickname = 'Unknown';
+    // Get organizer list (creator + co-organizers)
+    let organizersDisplay = 'Unknown';
     try {
-      const userResult = await query('SELECT nickname FROM users_extension WHERE id = ?', [req.userId]);
-      if (userResult.rows.length > 0) {
-        organizerNickname = userResult.rows[0].nickname;
+      const organizersResult = await query(
+        `SELECT ue.nickname, MIN(orgs.sort_order) AS sort_order
+         FROM (
+           SELECT creator_id AS user_id, 0 AS sort_order
+           FROM tournaments
+           WHERE id = ?
+           UNION ALL
+           SELECT user_id, 1 AS sort_order
+           FROM tournament_organizers
+           WHERE tournament_id = ?
+         ) orgs
+         JOIN users_extension ue ON ue.id = orgs.user_id
+         GROUP BY ue.id, ue.nickname
+         ORDER BY sort_order ASC, ue.nickname ASC`,
+        [tournamentId, tournamentId]
+      );
+
+      if (organizersResult.rows.length > 0) {
+        organizersDisplay = organizersResult.rows.map((row: any) => row.nickname).join(', ');
       }
     } catch (userError) {
-      console.warn('Could not fetch organizer nickname:', userError);
+      console.warn('Could not fetch organizers list:', userError);
     }
 
     // Create Discord forum thread for the tournament
@@ -294,7 +310,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
         tournamentId.toString(),
         name,
         tournament_type,
-        organizerNickname,
+        organizersDisplay,
         description,
         resolvedRulesContent
       );
@@ -312,7 +328,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
           name,
           tournament_type,
           description,
-          organizerNickname,
+          organizersDisplay,
           max_participants,
           resolvedRulesContent
         );
@@ -681,13 +697,16 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
   }
 });
 
-// Delete tournament (only creator, not in progress or finished)
+// Delete tournament (organizer only, not in progress or finished)
 router.delete('/:id', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
 
-    // Verify tournament exists and user is creator
-    const tournamentCheck = await query('SELECT id, creator_id, status FROM tournaments WHERE id = ?', [id]);
+    // Verify tournament exists and user is organizer
+    const tournamentCheck = await query(
+      'SELECT id, creator_id, status, name, discord_thread_id FROM tournaments WHERE id = ?',
+      [id]
+    );
     if (tournamentCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Tournament not found' });
     }
@@ -702,6 +721,16 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res) => {
     // Verify tournament is not in progress or finished
     if (tournament.status === 'in_progress' || tournament.status === 'finished') {
       return res.status(400).json({ error: 'Cannot cancel tournament that is in progress or finished' });
+    }
+
+    let cancelledByNickname = 'Unknown';
+    try {
+      const userResult = await query('SELECT nickname FROM users_extension WHERE id = ?', [req.userId]);
+      if (userResult.rows.length > 0) {
+        cancelledByNickname = userResult.rows[0].nickname;
+      }
+    } catch (userError) {
+      console.warn('Could not fetch canceller nickname:', userError);
     }
 
     // Start transaction
@@ -738,6 +767,18 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res) => {
 
       // Commit transaction
       await query('COMMIT');
+
+      if (tournament.discord_thread_id) {
+        try {
+          await discordService.postTournamentCancelled(
+            tournament.discord_thread_id,
+            tournament.name,
+            cancelledByNickname
+          );
+        } catch (discordError) {
+          console.error('Discord tournament cancel notification error:', discordError);
+        }
+      }
 
       res.json({ 
         message: 'Tournament cancelled successfully',

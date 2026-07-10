@@ -78,7 +78,7 @@ class DiscordService {
     tournamentId: string,
     tournamentName: string,
     tournamentType: string,
-    organizerNickname?: string,
+    organizersDisplay?: string,
     description?: string,
     rulesMarkdown?: string
   ): Promise<string> {
@@ -93,10 +93,10 @@ class DiscordService {
 
     try {
       const threadName = `${tournamentName} [${tournamentType}]`.substring(0, 100);
-      const organizer = organizerNickname || 'Unknown';
+      const organizers = organizersDisplay || 'Unknown';
       const combinedTournamentText = this.buildCombinedTournamentText(description, rulesMarkdown, 1150);
       const combinedLine = combinedTournamentText ? `\n\n${combinedTournamentText}` : '';
-      const content = `**🎮 ${threadName}**\n\nOrganizado por: **${organizer}**${combinedLine}\n\nDiscussions and updates will be posted here.`;
+      const content = `**🎮 ${threadName}**\n\nOrganizers: **${organizers}**${combinedLine}\n\nDiscussions and updates will be posted here.`;
       const payload = {
         name: threadName,
         auto_archive_duration: 10080, // 7 días
@@ -172,7 +172,7 @@ class DiscordService {
     tournamentName: string,
     tournamentType: string,
     description: string,
-    organizer: string,
+    organizers: string,
     maxParticipants: number | null,
     rulesMarkdown?: string
   ): Promise<boolean> {
@@ -188,8 +188,8 @@ class DiscordService {
           inline: true,
         },
         {
-          name: 'Organizer',
-          value: organizer,
+          name: 'Organizers',
+          value: organizers,
           inline: true,
         },
         {
@@ -628,6 +628,34 @@ class DiscordService {
       ],
       footer: {
         text: 'Tournament finished',
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    return this.publishTournamentMessage(threadId, { embeds: [embed] });
+  }
+
+  /**
+   * Torneo Cancelado
+   */
+  async postTournamentCancelled(
+    threadId: string,
+    tournamentName: string,
+    cancelledBy: string
+  ): Promise<boolean> {
+    const embed: DiscordEmbed = {
+      title: `🛑 Tournament Cancelled`,
+      description: `**${tournamentName}** has been cancelled.`,
+      color: 0xe74c3c, // Red
+      fields: [
+        {
+          name: 'Cancelled by',
+          value: cancelledBy || 'Unknown',
+          inline: true,
+        },
+      ],
+      footer: {
+        text: 'Tournament cancelled',
       },
       timestamp: new Date().toISOString(),
     };
