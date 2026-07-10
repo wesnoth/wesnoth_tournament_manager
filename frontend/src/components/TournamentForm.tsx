@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import UnrankedFactionSelect from './UnrankedFactionSelect';
 import UnrankedMapSelect from './UnrankedMapSelect';
 import MarkdownPreview from './MarkdownPreview';
-import { tournamentService } from '../services/api';
+import { tournamentService, userService } from '../services/api';
+import { useAuthStore } from '../store/authStore';
 
 interface TournamentFormData {
   name: string;
@@ -19,6 +20,7 @@ interface TournamentFormData {
   final_rounds_format: 'bo1' | 'bo3' | 'bo5';
   rules_template_id?: string | null;
   rules_content?: string;
+  organizer_ids?: string[];
   started_at?: string;
 }
 
@@ -26,6 +28,11 @@ interface RuleTemplate {
   id: string;
   title: string;
   content_markdown: string;
+}
+
+interface UserOption {
+  id: string;
+  nickname: string;
 }
 
 interface TournamentFormProps {
@@ -54,8 +61,11 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
   onCancel,
 }) => {
   const { t } = useTranslation();
+  const { userId } = useAuthStore();
   const [ruleTemplates, setRuleTemplates] = useState<RuleTemplate[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [allUsers, setAllUsers] = useState<UserOption[]>([]);
+  const [organizerCandidateId, setOrganizerCandidateId] = useState('');
 
   // Determine tournament type options based on mode and status
   const canConfigureRounds = () => {
@@ -92,20 +102,50 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
   };
 
   useEffect(() => {
-    const loadRuleTemplates = async () => {
+    const loadRuleTemplatesAndUsers = async () => {
       try {
         setTemplatesLoading(true);
-        const res = await tournamentService.getRuleTemplates();
-        setRuleTemplates(res.data || []);
+        const [templatesRes, usersRes] = await Promise.all([
+          tournamentService.getRuleTemplates(),
+          userService.getAllUsers(),
+        ]);
+        setRuleTemplates(templatesRes.data || []);
+        setAllUsers(usersRes.data || []);
       } catch (error) {
-        console.error('Failed to load tournament rule templates:', error);
+        console.error('Failed to load tournament form data:', error);
       } finally {
         setTemplatesLoading(false);
       }
     };
 
-    loadRuleTemplates();
+    loadRuleTemplatesAndUsers();
   }, []);
+
+  const selectedOrganizerIds = formData.organizer_ids || [];
+  const coOrganizerOptions = allUsers.filter(
+    (user) => user.id !== userId && !selectedOrganizerIds.includes(user.id)
+  );
+  const creatorUser = allUsers.find((user) => user.id === userId);
+  const selectedCoOrganizers = allUsers.filter((user) => selectedOrganizerIds.includes(user.id));
+
+  const handleAddCoOrganizer = () => {
+    if (!organizerCandidateId) return;
+    const alreadyAdded = selectedOrganizerIds.includes(organizerCandidateId);
+    if (alreadyAdded) return;
+
+    onFormDataChange({
+      ...formData,
+      organizer_ids: [...selectedOrganizerIds, organizerCandidateId],
+    });
+    setOrganizerCandidateId('');
+  };
+
+  const handleRemoveCoOrganizer = (targetId: string) => {
+    onFormDataChange({
+      ...formData,
+      organizer_ids: selectedOrganizerIds.filter((id) => id !== targetId),
+    });
+  };
 
   const handleRuleTemplateChange = (templateId: string) => {
     if (!templateId) {
@@ -130,18 +170,73 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
       <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-white">
         <h3 className="mb-4 font-semibold text-gray-800">{t('tournament.basic_info', 'Basic Information')}</h3>
         
-        {/* Tournament Name - Full width */}
-        <div className="mb-4 flex flex-col gap-2">
-          <label className="font-medium text-gray-700">{t('tournament_name', 'Tournament Name')}</label>
-          <input
-            type="text"
-            placeholder={t('tournament_name', 'Tournament Name')}
-            value={formData.name}
-            onChange={(e) => onFormDataChange({ ...formData, name: e.target.value })}
-            required
-            disabled={isLoading || (mode === 'edit')}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-          />
+        <div className={`mb-4 grid grid-cols-1 ${mode === 'create' ? 'xl:grid-cols-2' : ''} gap-4`}>
+          {/* Tournament Name */}
+          <div className="flex flex-col gap-2">
+            <label className="font-medium text-gray-700">{t('tournament_name', 'Tournament Name')}</label>
+            <input
+              type="text"
+              placeholder={t('tournament_name', 'Tournament Name')}
+              value={formData.name}
+              onChange={(e) => onFormDataChange({ ...formData, name: e.target.value })}
+              required
+              disabled={isLoading || (mode === 'edit')}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+            />
+          </div>
+
+          {mode === 'create' && (
+            <div className="flex flex-col gap-2">
+              <label className="font-medium text-gray-700">{t('tournament.organizers', 'Organizers')}</label>
+              <div className="flex gap-2">
+                <select
+                  value={organizerCandidateId}
+                  onChange={(e) => setOrganizerCandidateId(e.target.value)}
+                  disabled={isLoading || templatesLoading}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                >
+                  <option value="">{t('tournament.select_co_organizer', 'Select co-organizer')}</option>
+                  {coOrganizerOptions.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.nickname}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleAddCoOrganizer}
+                  disabled={isLoading || !organizerCandidateId}
+                  className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50"
+                >
+                  +
+                </button>
+              </div>
+              <div className="text-sm text-gray-700">
+                <span className="font-medium">{t('tournament.organizers_list', 'Organizers list')}:</span>{' '}
+                <span className="font-semibold">{creatorUser?.nickname || t('you', 'You')}</span>
+                {selectedCoOrganizers.length > 0 && (
+                  <>
+                    {', '}
+                    {selectedCoOrganizers.map((user, index) => (
+                      <React.Fragment key={user.id}>
+                        <span>{user.nickname}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCoOrganizer(user.id)}
+                          disabled={isLoading}
+                          className="ml-1 mr-2 text-red-600 hover:text-red-800 disabled:opacity-50"
+                          aria-label={`Remove ${user.nickname}`}
+                        >
+                          ×
+                        </button>
+                        {index < selectedCoOrganizers.length - 1 && ', '}
+                      </React.Fragment>
+                    ))}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Tournament Description - Wiki editor */}

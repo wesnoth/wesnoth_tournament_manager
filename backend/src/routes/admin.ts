@@ -11,6 +11,7 @@ import {
   calculateTeamSwissTiebreakers,
   calculateLeagueTiebreakers,
 } from '../services/statisticsCalculator.js';
+import { isTournamentOrganizer } from '../services/tournamentAuthorizationService.js';
 
 const router = Router();
 
@@ -1784,7 +1785,7 @@ router.put('/tournaments/:id/unranked-assets', authMiddleware, async (req: AuthR
     const tournament = tournamentResult.rows[0];
 
     // Check authorization (must be organizer)
-    if (tournament.creator_id !== req.userId) {
+    if (!(await isTournamentOrganizer(id, req.userId!))) {
       const userResult = await query(
         'SELECT is_admin FROM users_extension WHERE id = ?',
         [req.userId]
@@ -1903,8 +1904,8 @@ router.get('/tournaments/:id/teams', authMiddleware, async (req: AuthRequest, re
     }
 
     // Verify user is tournament organizer
-    if (tournament.creator_id !== req.userId) {
-      return res.status(403).json({ success: false, error: 'Only organizer can manage teams' });
+    if (!(await isTournamentOrganizer(id, req.userId!))) {
+      return res.status(403).json({ success: false, error: 'Only tournament organizers can manage teams' });
     }
 
     // Get teams with members
@@ -1980,8 +1981,8 @@ router.post('/tournaments/:id/teams', authMiddleware, async (req: AuthRequest, r
       return res.status(400).json({ success: false, error: 'This endpoint is for team tournaments only' });
     }
 
-    if (tournament.creator_id !== req.userId) {
-      return res.status(403).json({ success: false, error: 'Only organizer can create teams' });
+    if (!(await isTournamentOrganizer(id, req.userId!))) {
+      return res.status(403).json({ success: false, error: 'Only tournament organizers can create teams' });
     }
 
     // Create team
@@ -2027,8 +2028,8 @@ router.post('/tournaments/:id/teams/:teamId/members', authMiddleware, async (req
       return res.status(404).json({ success: false, error: 'Tournament not found' });
     }
 
-    if (tournResult.rows[0].creator_id !== req.userId) {
-      return res.status(403).json({ success: false, error: 'Only organizer can add members' });
+    if (!(await isTournamentOrganizer(id, req.userId!))) {
+      return res.status(403).json({ success: false, error: 'Only tournament organizers can add members' });
     }
 
     // Check if team exists and belongs to tournament
@@ -2074,8 +2075,8 @@ router.delete('/tournaments/:id/teams/:teamId/members/:playerId', authMiddleware
       return res.status(404).json({ success: false, error: 'Tournament not found' });
     }
 
-    if (tournResult.rows[0].creator_id !== req.userId) {
-      return res.status(403).json({ success: false, error: 'Only organizer can remove members' });
+    if (!(await isTournamentOrganizer(id, req.userId!))) {
+      return res.status(403).json({ success: false, error: 'Only tournament organizers can remove members' });
     }
 
     // Remove member (mark as not participating instead of hard delete for history)
@@ -2120,8 +2121,8 @@ router.post('/tournaments/:id/teams/:teamId/substitutes', authMiddleware, async 
       return res.status(404).json({ success: false, error: 'Tournament not found' });
     }
 
-    if (tournResult.rows[0].creator_id !== req.userId) {
-      return res.status(403).json({ success: false, error: 'Only organizer can add substitutes' });
+    if (!(await isTournamentOrganizer(id, req.userId!))) {
+      return res.status(403).json({ success: false, error: 'Only tournament organizers can add substitutes' });
     }
 
     // Add substitute
@@ -2159,8 +2160,8 @@ router.delete('/tournaments/:id/teams/:teamId/substitutes/:playerId', authMiddle
       return res.status(404).json({ success: false, error: 'Tournament not found' });
     }
 
-    if (tournResult.rows[0].creator_id !== req.userId) {
-      return res.status(403).json({ success: false, error: 'Only organizer can remove substitutes' });
+    if (!(await isTournamentOrganizer(id, req.userId!))) {
+      return res.status(403).json({ success: false, error: 'Only tournament organizers can remove substitutes' });
     }
 
     // Delete substitute
@@ -2208,8 +2209,8 @@ router.delete('/tournaments/:id/teams/:teamId', authMiddleware, async (req: Auth
       return res.status(404).json({ success: false, error: 'Tournament not found' });
     }
 
-    if (tournResult.rows[0].creator_id !== req.userId) {
-      return res.status(403).json({ success: false, error: 'Only organizer can delete teams' });
+    if (!(await isTournamentOrganizer(id, req.userId!))) {
+      return res.status(403).json({ success: false, error: 'Only tournament organizers can delete teams' });
     }
 
     // Check if team has matches
@@ -2257,8 +2258,8 @@ router.post('/tournaments/:id/calculate-tiebreakers', authMiddleware, async (req
     }
 
     const tournament = tournamentResult.rows[0];
-    if (tournament.creator_id !== req.userId) {
-      return res.status(403).json({ success: false, error: 'Only tournament organizer can calculate tiebreakers' });
+    if (!(await isTournamentOrganizer(id, req.userId!))) {
+      return res.status(403).json({ success: false, error: 'Only tournament organizers can calculate tiebreakers' });
     }
 
     // Calculate tiebreakers using TypeScript functions
@@ -2450,9 +2451,9 @@ router.post('/tournaments/:id/teams/:teamId/replace-member', authMiddleware, asy
       return res.status(404).json({ success: false, error: 'Tournament not found' });
     }
 
-    if (tournResult.rows[0].creator_id !== req.userId) {
-      console.error('❌ [BACKEND] User is not organizer:', { creator_id: tournResult.rows[0].creator_id, req_userId: req.userId });
-      return res.status(403).json({ success: false, error: 'Only organizer can replace team members' });
+    if (!(await isTournamentOrganizer(id, req.userId!))) {
+      console.error('❌ [BACKEND] User is not organizer:', { req_userId: req.userId });
+      return res.status(403).json({ success: false, error: 'Only tournament organizers can replace team members' });
     }
 
     console.log('   ✓ User is organizer');

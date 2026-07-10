@@ -143,7 +143,13 @@ interface TournamentFormData {
   final_rounds_format: 'bo1' | 'bo3' | 'bo5';
   rules_template_id?: string | null;
   rules_content?: string;
+  organizer_ids?: string[];
   started_at?: string;
+}
+
+interface TournamentOrganizer {
+  user_id: string;
+  nickname: string;
 }
 
 interface TournamentParticipant {
@@ -228,6 +234,7 @@ const TournamentDetail: React.FC = () => {
   const [roundMatches, setRoundMatches] = useState<any[]>([]);
   const [rounds, setRounds] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
+  const [organizers, setOrganizers] = useState<TournamentOrganizer[]>([]);
   const [unrankedFactions, setUnrankedFactions] = useState<Array<{ id: string; name: string }>>([]);
   const [unrankedMaps, setUnrankedMaps] = useState<Array<{ id: string; name: string }>>([]);
   const [allFactions, setAllFactions] = useState<Array<{ id: string; name: string }>>([]);
@@ -337,12 +344,13 @@ const TournamentDetail: React.FC = () => {
   const fetchTournamentData = async () => {
     try {
       setLoading(true);
-      const [tournamentRes, participantsRes, matchesRes, roundMaturesRes, roundsRes] = await Promise.all([
+      const [tournamentRes, participantsRes, matchesRes, roundMaturesRes, roundsRes, organizersRes] = await Promise.all([
         publicService.getTournamentById(id!),
         tournamentService.getTournamentStandings(id!),
         tournamentService.getTournamentMatches(id!),
         tournamentService.getTournamentRoundMatches(id!),
         tournamentService.getTournamentRounds(id!),
+        tournamentService.getTournamentOrganizers(id!),
       ]);
 
       setTournament(tournamentRes.data);
@@ -358,6 +366,7 @@ const TournamentDetail: React.FC = () => {
       const roundMatchesData = roundMaturesRes.data || [];
       setRoundMatches(roundMatchesData);
       setRounds(roundsRes.data || []);
+      setOrganizers(organizersRes.data || []);
       
       // Pre-load proposals for matches with confirmed or pending schedules
       await preloadProposals(roundMatchesData);
@@ -1384,7 +1393,21 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
       {success && <p className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded mb-6">{success}</p>}
 
       <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
-        <p><strong>{t('tournament.col_organizer')}:</strong> <PlayerLink nickname={tournament.creator_nickname} userId={tournament.creator_id} /></p>
+        <p>
+          <strong>{t('tournament.col_organizer')}:</strong>{' '}
+          {(organizers.length > 0 ? organizers : [{ user_id: tournament.creator_id, nickname: tournament.creator_nickname }]).map((organizer, index, arr) => (
+            <React.Fragment key={organizer.user_id}>
+              {organizer.user_id === tournament.creator_id ? (
+                <strong>
+                  <PlayerLink nickname={organizer.nickname} userId={organizer.user_id} />
+                </strong>
+              ) : (
+                <PlayerLink nickname={organizer.nickname} userId={organizer.user_id} />
+              )}
+              {index < arr.length - 1 && ', '}
+            </React.Fragment>
+          ))}
+        </p>
         <p><strong>{t('tournament.col_type')}:</strong> {tournament.tournament_type}</p>
         <p><strong>{t('tournament.mode', 'Tournament Mode')}:</strong> {getModeLabel(tournament.tournament_mode)}</p>
         <p><strong>{t('label_max_participants')}:</strong> {tournament.max_participants || t('unlimited')}</p>

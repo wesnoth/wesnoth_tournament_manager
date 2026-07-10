@@ -122,7 +122,7 @@ export const UnrankedMapSelect: React.FC<UnrankedMapSelectProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-full bg-white border border-gray-300 rounded-lg overflow-hidden shadow-sm">
+    <div className="flex flex-col h-full min-h-[26rem] max-h-[66vh] bg-white border border-gray-300 rounded-lg overflow-hidden shadow-sm">
       <div className="flex flex-col h-full gap-0">
         <div className="flex justify-between items-center px-4 py-3 bg-gradient-to-r from-purple-700 to-indigo-500 border-b border-gray-200 text-white font-semibold flex-shrink-0">
           <h4 className="text-sm font-semibold">Maps</h4>

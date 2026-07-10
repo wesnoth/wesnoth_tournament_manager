@@ -82,11 +82,14 @@
 
 ## Tournament Routes
 
-- `[POST] /api/tournaments` — Private — body: tournament config fields — Create a tournament.
+- `[POST] /api/tournaments` — Private — body: tournament config fields (including optional `organizer_ids: string[]`) — Create a tournament.
 - `[GET] /api/tournaments/my` — Private — Tournaments created by current user.
 - `[GET] /api/tournaments/:id` — Public — Tournament full details.
+- `[GET] /api/tournaments/:id/organizers` — Public — List tournament organizers (creator + co-organizers).
+- `[POST] /api/tournaments/:id/organizers` — Private (organizer) — body: `{user_id}` — Add co-organizer with full organizer permissions.
+- `[DELETE] /api/tournaments/:id/organizers/:organizerUserId` — Private (organizer) — Remove co-organizer (creator cannot be removed).
 - `[PUT] /api/tournaments/:id` — Private (organizer) — body: `{tournament_type?, description?, rules_template_id?, rules_content?, max_participants?, round_duration_days?, auto_advance_round?, general_rounds?, final_rounds?, general_rounds_format?, final_rounds_format?, status?, started_at?}` — Update tournament config. `tournament_type` can only be changed when tournament status is `registration_open` or `registration_closed` (not `prepared`, `in_progress`, or `completed`). When format changes, round values are reset to format-specific defaults.
-- `[DELETE] /api/tournaments/:id` — Private (admin) — Delete a tournament.
+- `[DELETE] /api/tournaments/:id` — Private (organizer) — Cancel/delete a tournament before it starts.
 - `[GET] /api/tournaments/:id/rounds` — Public — Tournament rounds list.
 - `[GET] /api/tournaments` — Public — query: `page` — All tournaments.
 - `[POST] /api/tournaments/:id/join` — Private — Join tournament (immediate acceptance).

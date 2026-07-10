@@ -21,6 +21,7 @@ interface TournamentFormData {
   final_rounds_format: 'bo1' | 'bo3' | 'bo5';
   rules_template_id?: string | null;
   rules_content?: string;
+  organizer_ids?: string[];
 }
 
 const MyTournaments: React.FC = () => {
@@ -46,6 +47,7 @@ const MyTournaments: React.FC = () => {
     final_rounds_format: 'bo5',
     rules_template_id: null,
     rules_content: '',
+    organizer_ids: [],
   });
   const [unrankedFactions, setUnrankedFactions] = useState<string[]>([]);
   const [unrankedMaps, setUnrankedMaps] = useState<string[]>([]);
@@ -115,6 +117,7 @@ const MyTournaments: React.FC = () => {
         final_rounds_format: 'bo5',
         rules_template_id: null,
         rules_content: '',
+        organizer_ids: [],
       });
       setUnrankedFactions([]);
       setUnrankedMaps([]);

@@ -172,6 +172,11 @@ export const tournamentService = {
   createTournament: (data: any) => api.post('/tournaments', data),
   getRuleTemplates: () => api.get('/rule-templates'),
   getTournament: (id: string) => api.get(`/tournaments/${id}`),
+  getTournamentOrganizers: (id: string) => api.get(`/tournaments/${id}/organizers`),
+  addTournamentOrganizer: (id: string, userId: string) =>
+    api.post(`/tournaments/${id}/organizers`, { user_id: userId }),
+  removeTournamentOrganizer: (id: string, organizerUserId: string) =>
+    api.delete(`/tournaments/${id}/organizers/${organizerUserId}`),
   updateTournament: (id: string, data: any) => api.put(`/tournaments/${id}`, data),
   deleteTournament: (id: string) => api.delete(`/tournaments/${id}`),
   prepareTournament: (id: string) => api.post(`/tournaments/${id}/prepare`),

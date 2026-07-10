@@ -10,6 +10,7 @@
 | `users_extension` | Player profiles | `id` | `user_id`, `nickname`, `elo`, `level`, `is_admin` |
 | `matches` | Direct matches (1v1) | `id` | `player1_id`, `player2_id`, `winner_id`, `loser_id`, `status` |
 | `tournaments` | Tournament records | `id` | `name`, `tournament_mode`, `tournament_type`, `status`, `creator_id`, `rules_content` |
+| `tournament_organizers` | Co-organizers per tournament | (`tournament_id`,`user_id`) | `tournament_id`, `user_id`, `created_by` |
 | `tournament_rule_templates` | Reusable markdown rules templates | `id` | `title`, `content_markdown`, `is_active` |
 | `tournament_participants` | Players in tournaments | `id` | `user_id`, `team_id`, `status` |
 | `tournament_rounds` | Tournament rounds | `id` | `round_number`, `match_format`, `round_status` |
@@ -440,6 +441,21 @@ Links users to tournaments. Tracks participant status throughout tournament life
 - `idx_tournament_participants_replacement_requested_at` on `replacement_requested_at`
 - `idx_tournament_participants_replaced_by` on `replaced_by_participant_id`
 - `idx_tournament_participants_replacement_of` on `requested_replacement_of_id`
+
+---
+
+### `tournament_organizers`
+
+Co-organizers with full organizer permissions for a tournament.
+
+| Column | Type | Notes |
+|---|---|---|
+| `tournament_id` | char(36) PK/FK→tournaments | Tournament identifier |
+| `user_id` | char(36) PK/FK→users_extension | Organizer user identifier |
+| `created_by` | char(36) FK→users_extension | Who granted organizer access |
+| `created_at` | datetime | When organizer access was granted |
+
+**Behavior:** On migration rollout, each existing tournament creator is backfilled into this table. Authorization remains compatible with `tournaments.creator_id`.
 
 ---
 

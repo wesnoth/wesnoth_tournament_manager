@@ -901,6 +901,24 @@ CREATE TABLE `tournament_unranked_maps` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `tournament_organizers`
+--
+
+DROP TABLE IF EXISTS `tournament_organizers`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tournament_organizers` (
+  `tournament_id` char(36) NOT NULL,
+  `user_id` char(36) NOT NULL,
+  `created_by` char(36) DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`tournament_id`,`user_id`),
+  KEY `idx_tournament_organizers_user_id` (`user_id`),
+  KEY `idx_tournament_organizers_created_by` (`created_by`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `tournament_rule_templates`
 --
 

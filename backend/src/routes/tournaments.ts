@@ -6,6 +6,7 @@ import discordService from '../services/discordService.js';
 import { randomUUID } from 'crypto';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
 import { checkUserIsForumModerator } from '../services/phpbbAuth.js';
+import { isTournamentOrganizer } from '../services/tournamentAuthorizationService.js';
 
 const router = Router();
 
@@ -52,6 +53,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       final_rounds_format,
       rules_template_id,
       rules_content,
+      organizer_ids,
       unranked_factions,
       unranked_maps
     } = req.body;
@@ -199,6 +201,38 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
         0
       ]
     );
+
+    // Ensure creator is registered as organizer (for multi-organizer model)
+    await query(
+      `INSERT IGNORE INTO tournament_organizers (tournament_id, user_id, created_by)
+       VALUES (?, ?, ?)`,
+      [tournamentId, req.userId, req.userId]
+    );
+
+    // Optional co-organizers (full organizer permissions)
+    if (Array.isArray(organizer_ids) && organizer_ids.length > 0) {
+      const coOrganizerIds = [...new Set(organizer_ids)]
+        .filter((id: any) => typeof id === 'string' && id.trim().length > 0)
+        .filter((id: string) => id !== req.userId);
+
+      if (coOrganizerIds.length > 0) {
+        const placeholders = coOrganizerIds.map(() => '?').join(', ');
+        const existingUsers = await query(
+          `SELECT id FROM users_extension WHERE id IN (${placeholders})`,
+          coOrganizerIds
+        );
+        const existingSet = new Set(existingUsers.rows.map((row: any) => row.id));
+
+        for (const coOrganizerId of coOrganizerIds) {
+          if (!existingSet.has(coOrganizerId)) continue;
+          await query(
+            `INSERT IGNORE INTO tournament_organizers (tournament_id, user_id, created_by)
+             VALUES (?, ?, ?)`,
+            [tournamentId, coOrganizerId, req.userId]
+          );
+        }
+      }
+    }
 
     // Add allowed factions and maps for all tournament modes (ranked, unranked, team)
     if (unranked_factions || unranked_maps) {
@@ -361,6 +395,123 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// List tournament organizers
+router.get('/:id/organizers', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const tournamentResult = await query(
+      'SELECT id, creator_id FROM tournaments WHERE id = ?',
+      [id]
+    );
+
+    if (tournamentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Tournament not found' });
+    }
+
+    const organizerRows = await query(
+      `SELECT DISTINCT ue.id AS user_id, ue.nickname
+       FROM users_extension ue
+       JOIN (
+         SELECT creator_id AS user_id FROM tournaments WHERE id = ?
+         UNION
+         SELECT user_id FROM tournament_organizers WHERE tournament_id = ?
+       ) organizers ON organizers.user_id = ue.id
+       ORDER BY ue.nickname ASC`,
+      [id, id]
+    );
+
+    res.json(organizerRows.rows);
+  } catch (error) {
+    console.error('List organizers error:', error);
+    res.status(500).json({ error: 'Failed to list tournament organizers' });
+  }
+});
+
+// Add tournament organizer (existing organizers only)
+router.post('/:id/organizers', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { user_id } = req.body;
+
+    if (!user_id) {
+      return res.status(400).json({ error: 'user_id is required' });
+    }
+
+    const tournamentResult = await query(
+      'SELECT id FROM tournaments WHERE id = ?',
+      [id]
+    );
+    if (tournamentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Tournament not found' });
+    }
+
+    if (!(await isTournamentOrganizer(id, req.userId!))) {
+      return res.status(403).json({ error: 'Only tournament organizers can manage organizers' });
+    }
+
+    const targetUser = await query(
+      'SELECT id, nickname FROM users_extension WHERE id = ?',
+      [user_id]
+    );
+    if (targetUser.rows.length === 0) {
+      return res.status(404).json({ error: 'Target user not found' });
+    }
+
+    await query(
+      `INSERT IGNORE INTO tournament_organizers (tournament_id, user_id, created_by)
+       VALUES (?, ?, ?)`,
+      [id, user_id, req.userId]
+    );
+
+    res.status(201).json({
+      message: 'Organizer added successfully',
+      organizer: { user_id: targetUser.rows[0].id, nickname: targetUser.rows[0].nickname },
+    });
+  } catch (error: any) {
+    console.error('Add organizer error:', error);
+    res.status(500).json({ error: 'Failed to add tournament organizer', details: error.message });
+  }
+});
+
+// Remove tournament organizer
+router.delete('/:id/organizers/:organizerUserId', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const { id, organizerUserId } = req.params;
+
+    const tournamentResult = await query(
+      'SELECT id, creator_id FROM tournaments WHERE id = ?',
+      [id]
+    );
+    if (tournamentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Tournament not found' });
+    }
+
+    if (!(await isTournamentOrganizer(id, req.userId!))) {
+      return res.status(403).json({ error: 'Only tournament organizers can manage organizers' });
+    }
+
+    const creatorId = tournamentResult.rows[0].creator_id;
+    if (organizerUserId === creatorId) {
+      return res.status(400).json({ error: 'Cannot remove tournament creator from organizers' });
+    }
+
+    const deleteResult = await query(
+      'DELETE FROM tournament_organizers WHERE tournament_id = ? AND user_id = ?',
+      [id, organizerUserId]
+    );
+
+    if (deleteResult.rowCount === 0) {
+      return res.status(404).json({ error: 'Organizer not found for this tournament' });
+    }
+
+    res.json({ message: 'Organizer removed successfully' });
+  } catch (error: any) {
+    console.error('Remove organizer error:', error);
+    res.status(500).json({ error: 'Failed to remove tournament organizer', details: error.message });
+  }
+});
+
 // Update tournament configuration (organizer only)
 router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
   try {
@@ -391,8 +542,9 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Tournament not found' });
     }
 
-    if (tournamentResult.rows[0].creator_id !== req.userId) {
-      return res.status(403).json({ error: 'Only the tournament creator can update this tournament' });
+    const organizer = await isTournamentOrganizer(id, req.userId!);
+    if (!organizer) {
+      return res.status(403).json({ error: 'Only tournament organizers can update this tournament' });
     }
 
     const currentStatus = tournamentResult.rows[0].status;
@@ -542,9 +694,9 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res) => {
 
     const tournament = tournamentCheck.rows[0];
 
-    // Verify user is the tournament creator
-    if (tournament.creator_id !== req.userId) {
-      return res.status(403).json({ error: 'Only tournament creator can cancel tournament' });
+    // Verify user is tournament organizer
+    if (!(await isTournamentOrganizer(id, req.userId!))) {
+      return res.status(403).json({ error: 'Only tournament organizers can cancel tournament' });
     }
 
     // Verify tournament is not in progress or finished
@@ -577,6 +729,9 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res) => {
       
       // Delete tournament_participants
       await query('DELETE FROM tournament_participants WHERE tournament_id = ?', [id]);
+
+      // Delete tournament organizers
+      await query('DELETE FROM tournament_organizers WHERE tournament_id = ?', [id]);
       
       // Delete tournament
       await query('DELETE FROM tournaments WHERE id = ?', [id]);
@@ -680,7 +835,7 @@ router.post('/:id/request-join', authMiddleware, async (req: AuthRequest, res) =
     }
 
     const tournament = tournamentResult.rows[0];
-    const isOrganizer = tournament.creator_id === req.userId;
+    const isOrganizer = await isTournamentOrganizer(id, req.userId!);
     const participationStatus = isOrganizer ? 'accepted' : 'pending';
     let teamId: string | null = null;
 
@@ -905,8 +1060,8 @@ router.post('/:tournamentId/participants/:participantId/accept', authMiddleware,
       return res.status(404).json({ error: 'Tournament not found' });
     }
 
-    if (tournamentResult.rows[0].creator_id !== req.userId) {
-      return res.status(403).json({ error: 'Only the tournament creator can accept participants' });
+    if (!(await isTournamentOrganizer(tournamentId, req.userId!))) {
+      return res.status(403).json({ error: 'Only tournament organizers can accept participants' });
     }
 
     // Get participant info
@@ -1103,8 +1258,8 @@ router.post('/:tournamentId/participants/:participantId/reject', authMiddleware,
       return res.status(404).json({ error: 'Tournament not found' });
     }
 
-    if (tournamentResult.rows[0].creator_id !== req.userId) {
-      return res.status(403).json({ error: 'Only the tournament creator can reject participants' });
+    if (!(await isTournamentOrganizer(tournamentId, req.userId!))) {
+      return res.status(403).json({ error: 'Only tournament organizers can reject participants' });
     }
 
     // Get participant info including nickname
@@ -1271,8 +1426,8 @@ router.post('/:id/close-registration', authMiddleware, async (req: AuthRequest, 
     }
 
     const tournament = tournamentCheck.rows[0];
-    if (tournament.creator_id !== req.userId) {
-      return res.status(403).json({ error: 'Only tournament creator can close registration' });
+    if (!(await isTournamentOrganizer(id, req.userId!))) {
+      return res.status(403).json({ error: 'Only tournament organizers can close registration' });
     }
 
     if (tournament.status !== 'registration_open') {
@@ -1431,9 +1586,9 @@ router.post('/:id/prepare', authMiddleware, async (req: AuthRequest, res) => {
     const tournamentType = tournament.tournament_type?.toLowerCase() || 'elimination';
     console.log(`[PREPARE] Tournament type: ${tournamentType}, current status: ${tournament.status}, total_rounds in DB: ${tournament.total_rounds}`);
     
-    if (tournament.creator_id !== req.userId) {
-      console.log(`[PREPARE] Authorization failed - creator_id: ${tournament.creator_id}, userId: ${req.userId}`);
-      return res.status(403).json({ error: 'Only tournament creator can prepare tournament' });
+    if (!(await isTournamentOrganizer(id, req.userId!))) {
+      console.log(`[PREPARE] Authorization failed - userId: ${req.userId}`);
+      return res.status(403).json({ error: 'Only tournament organizers can prepare tournament' });
     }
 
     // Verify tournament is in correct status
@@ -1797,9 +1952,9 @@ router.post('/:id/start', authMiddleware, async (req: AuthRequest, res) => {
     const tournament = tournamentCheck.rows[0];
     console.log(`[START] Tournament data:`, tournament);
     
-    if (tournament.creator_id !== req.userId) {
+    if (!(await isTournamentOrganizer(id, req.userId!))) {
       console.log(`[START] Authorization failed`);
-      return res.status(403).json({ error: 'Only tournament creator can start tournament' });
+      return res.status(403).json({ error: 'Only tournament organizers can start tournament' });
     }
 
     if (tournament.status !== 'prepared') {
@@ -2393,7 +2548,7 @@ router.post('/:tournamentId/matches/:matchId/result', authMiddleware, async (req
     }
 
     const match = matchResult.rows[0];
-    const isCreator = match.creator_id === req.userId;
+    const isCreator = await isTournamentOrganizer(tournamentId, req.userId!);
     const tournamentMode = match.tournament_mode;
 
     let finalWinnerId = winner_id;
@@ -2495,10 +2650,10 @@ router.post('/:tournamentId/matches/:matchId/determine-winner', authMiddleware, 
       return res.status(404).json({ error: 'Tournament not found' });
     }
 
-    const { creator_id, tournament_type, tournament_mode, name: tournamentName, discord_thread_id } = tournamentResult.rows[0];
+    const { tournament_type, tournament_mode, name: tournamentName, discord_thread_id } = tournamentResult.rows[0];
     const isTeamMode = tournament_mode === 'team';
 
-    if (creator_id !== req.userId) {
+    if (!(await isTournamentOrganizer(tournamentId, req.userId!))) {
       return res.status(403).json({ error: 'Only the tournament organizer can determine match winners' });
     }
 
@@ -3221,9 +3376,9 @@ router.post('/:id/next-round', authMiddleware, async (req: AuthRequest, res) => 
 
     const tournament = tournamentResult.rows[0];
 
-    // Only creator can activate next round
-    if (tournament.creator_id !== req.userId) {
-      return res.status(403).json({ error: 'Only tournament creator can activate next round' });
+    // Only tournament organizers can activate next round
+    if (!(await isTournamentOrganizer(id, req.userId!))) {
+      return res.status(403).json({ error: 'Only tournament organizers can activate next round' });
     }
 
     // Tournament must be in progress
@@ -3673,7 +3828,7 @@ router.post('/:id/calculate-tiebreakers', authMiddleware, async (req: AuthReques
     );
     
     const isAdmin = userQuery && userQuery.rows && userQuery.rows.length > 0 && userQuery.rows[0].is_admin;
-    const isCreator = tournament.creator_id === req.userId;
+    const isCreator = await isTournamentOrganizer(id, req.userId!);
     
     if (!isAdmin && !isCreator) {
       return res.status(403).json({ error: 'Only admins or tournament creators can calculate tiebreakers' });
@@ -3743,7 +3898,7 @@ router.post('/leagues/:id/calculate-tiebreakers', authMiddleware, async (req: Au
     );
     
     const isAdmin = userQuery && userQuery.rows && userQuery.rows.length > 0 && userQuery.rows[0].is_admin;
-    const isCreator = tournament.creator_id === req.userId;
+    const isCreator = await isTournamentOrganizer(id, req.userId!);
     
     if (!isAdmin && !isCreator) {
       return res.status(403).json({ error: 'Only admins or tournament creators can calculate tiebreakers' });
@@ -3803,8 +3958,8 @@ router.post('/:id/notify-results', authMiddleware, async (req: AuthRequest, res)
     const tournament = tournamentResult.rows[0];
     
     // Only tournament organizer can notify results
-    if (tournament.creator_id !== req.userId) {
-      return res.status(403).json({ success: false, error: 'Only tournament organizer can notify results' });
+    if (!(await isTournamentOrganizer(id, req.userId!))) {
+      return res.status(403).json({ success: false, error: 'Only tournament organizers can notify results' });
     }
 
     if (!tournament.discord_thread_id) {
@@ -3950,8 +4105,8 @@ router.post('/:tournamentId/matches/:matchId/dispute', authMiddleware, async (re
       return res.status(404).json({ error: 'Tournament not found' });
     }
 
-    if (tournamentResult.rows[0].creator_id !== req.userId) {
-      return res.status(403).json({ error: 'Only tournament organizer can manage disputes' });
+    if (!(await isTournamentOrganizer(tournamentId, req.userId!))) {
+      return res.status(403).json({ error: 'Only tournament organizers can manage disputes' });
     }
 
     // Get the tournament match
@@ -4075,7 +4230,7 @@ router.put('/:tournamentId/teams/:teamId/rename', authMiddleware, async (req: Au
     const username = req.username!;
 
     // Check if requester is organizer
-    const isOrganizer = tournament.creator_id === userId;
+    const isOrganizer = await isTournamentOrganizer(tournamentId, userId);
 
     // Check if requester is a team member
     const memberResult = await query(
@@ -4149,7 +4304,7 @@ router.delete('/:tournamentId/participants/:participantId', authMiddleware, asyn
 
     const participant = participantResult.rows[0];
     const isSelf = participant.user_id === userId;
-    const isOrganizer = tournament.creator_id === userId;
+    const isOrganizer = await isTournamentOrganizer(tournamentId, userId);
 
     const adminResult = await query(`SELECT is_admin FROM users_extension WHERE id = ?`, [userId]);
     const isAdmin = adminResult.rows[0]?.is_admin;
