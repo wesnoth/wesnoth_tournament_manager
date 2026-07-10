@@ -109,8 +109,9 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
           tournamentService.getRuleTemplates(),
           userService.getAllUsers(),
         ]);
+        const users = usersRes.data?.data || usersRes.data || [];
         setRuleTemplates(templatesRes.data || []);
-        setAllUsers(usersRes.data || []);
+        setAllUsers(Array.isArray(users) ? users : []);
       } catch (error) {
         console.error('Failed to load tournament form data:', error);
       } finally {
