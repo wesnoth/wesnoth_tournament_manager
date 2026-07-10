@@ -1391,7 +1391,15 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
         <p><strong>{t('label_created')}:</strong> {formatDate(tournament.created_at)}</p>
         {tournament.started_at && <p><strong>{t('label_started')}:</strong> {formatDate(tournament.started_at)}</p>}
         {tournament.finished_at && <p><strong>{t('label_finished')}:</strong> {formatDate(tournament.finished_at)}</p>}
-        <div><strong>{t('label_description')}:</strong> <p className="whitespace-pre-wrap">{tournament.description}</p></div>
+        <div className="mt-4">
+          <strong>{t('label_description')}:</strong>
+          <div className="mt-2 rounded border border-gray-200 bg-gray-50 p-3">
+            <MarkdownPreview
+              markdown={tournament.description || ''}
+              emptyMessage={t('tournament.description_preview_empty', 'No description configured for this tournament.')}
+            />
+          </div>
+        </div>
         <div className="mt-4">
           <strong>{t('tournament.rules_content', 'Tournament Rules')}:</strong>
           <div className="mt-2 rounded border border-gray-200 bg-gray-50 p-3">

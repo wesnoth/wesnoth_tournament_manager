@@ -48,6 +48,29 @@ class DiscordService {
     return `${normalized.slice(0, maxLength - 1)}…`;
   }
 
+  private buildCombinedTournamentText(
+    description: string | undefined,
+    rulesMarkdown: string | undefined,
+    maxLength: number
+  ): string {
+    const descriptionText = this.toDiscordSafeText(description, 3000);
+    const rulesText = this.toDiscordSafeText(rulesMarkdown, 3000);
+    const parts: string[] = [];
+
+    if (descriptionText) {
+      parts.push(`**Description**\n${descriptionText}`);
+    }
+
+    if (rulesText) {
+      parts.push(`**Rules**\n${rulesText}`);
+    }
+
+    const combined = parts.join('\n\n');
+    if (!combined) return '';
+    if (combined.length <= maxLength) return combined;
+    return `${combined.slice(0, maxLength - 1)}…`;
+  }
+
   /**
    * Creates a thread in the forum channel for a tournament
    */
@@ -71,11 +94,9 @@ class DiscordService {
     try {
       const threadName = `${tournamentName} [${tournamentType}]`.substring(0, 100);
       const organizer = organizerNickname || 'Unknown';
-      const descriptionPreview = this.toDiscordSafeText(description, 450);
-      const rulesPreview = this.toDiscordSafeText(rulesMarkdown, 700);
-      const descriptionLine = descriptionPreview ? `\n\n${descriptionPreview}` : '';
-      const rulesLine = rulesPreview ? `\n\n**Rules preview:**\n${rulesPreview}` : '';
-      const content = `**🎮 ${threadName}**\n\nOrganizado por: **${organizer}**${descriptionLine}${rulesLine}\n\nDiscussions and updates will be posted here.`;
+      const combinedTournamentText = this.buildCombinedTournamentText(description, rulesMarkdown, 1150);
+      const combinedLine = combinedTournamentText ? `\n\n${combinedTournamentText}` : '';
+      const content = `**🎮 ${threadName}**\n\nOrganizado por: **${organizer}**${combinedLine}\n\nDiscussions and updates will be posted here.`;
       const payload = {
         name: threadName,
         auto_archive_duration: 10080, // 7 días
@@ -155,11 +176,10 @@ class DiscordService {
     maxParticipants: number | null,
     rulesMarkdown?: string
   ): Promise<boolean> {
-    const descriptionPreview = this.toDiscordSafeText(description, 350);
-    const rulesPreview = this.toDiscordSafeText(rulesMarkdown, 900);
+    const combinedTournamentText = this.buildCombinedTournamentText(description, rulesMarkdown, 1800);
     const embed: DiscordEmbed = {
       title: `🎮 ${tournamentName}`,
-      description: descriptionPreview || undefined,
+      description: combinedTournamentText || undefined,
       color: 0x3498db, // Blue
       fields: [
         {
@@ -182,15 +202,6 @@ class DiscordService {
           value: '🔓 Registration Open',
           inline: true,
         },
-        ...(rulesPreview
-          ? [
-              {
-                name: 'Rules Preview',
-                value: rulesPreview,
-                inline: false,
-              },
-            ]
-          : []),
       ],
       footer: {
         text: 'Tournament created',

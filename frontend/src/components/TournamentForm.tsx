@@ -144,18 +144,33 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
           />
         </div>
 
-        {/* Tournament Description - Full width */}
+        {/* Tournament Description - Wiki editor */}
         <div className="mb-4 flex flex-col gap-2">
           <label className="font-medium text-gray-700">{t('tournament_description', 'Description')}</label>
-          <textarea
-            placeholder={t('tournament_description', 'Description')}
-            value={formData.description}
-            onChange={(e) => onFormDataChange({ ...formData, description: e.target.value })}
-            rows={10}
-            required
-            disabled={isLoading}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 resize-vertical"
-          />
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-2">
+              <span className="text-sm font-medium text-gray-600">{t('tournament.editor', 'Editor')}</span>
+              <textarea
+                placeholder={t('tournament.description_markdown_placeholder', 'Write tournament description in markdown...')}
+                value={formData.description}
+                onChange={(e) => onFormDataChange({ ...formData, description: e.target.value })}
+                rows={12}
+                required
+                disabled={isLoading}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 resize-vertical font-mono text-sm"
+              />
+            </div>
+            <div className="rounded-md border border-gray-200 p-4 bg-gray-50">
+              <h4 className="font-semibold text-gray-800 mb-2">{t('tournament.description_preview', 'Description Preview')}</h4>
+              <MarkdownPreview
+                markdown={formData.description}
+                emptyMessage={t('tournament.description_preview_empty', 'Description preview will appear here as you write.')}
+              />
+            </div>
+          </div>
+          <small className="text-gray-600">
+            {t('tournament.description_markdown_help', 'Markdown syntax is supported, using the same renderer as Wiki Help.')}
+          </small>
         </div>
 
         <div className="mb-4 flex flex-col gap-2">
@@ -180,25 +195,29 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
 
         <div className="mb-4 flex flex-col gap-2">
           <label className="font-medium text-gray-700">{t('tournament.rules_content', 'Tournament Rules')}</label>
-          <textarea
-            placeholder={t('tournament.rules_content_placeholder', 'Write tournament rules in markdown...')}
-            value={formData.rules_content || ''}
-            onChange={(e) => onFormDataChange({ ...formData, rules_content: e.target.value })}
-            rows={12}
-            disabled={isLoading}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 resize-vertical font-mono text-sm"
-          />
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-2">
+              <span className="text-sm font-medium text-gray-600">{t('tournament.editor', 'Editor')}</span>
+              <textarea
+                placeholder={t('tournament.rules_content_placeholder', 'Write tournament rules in markdown...')}
+                value={formData.rules_content || ''}
+                onChange={(e) => onFormDataChange({ ...formData, rules_content: e.target.value })}
+                rows={12}
+                disabled={isLoading}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 resize-vertical font-mono text-sm"
+              />
+            </div>
+            <div className="rounded-md border border-gray-200 p-4 bg-gray-50">
+              <h4 className="font-semibold text-gray-800 mb-2">{t('tournament.rules_preview', 'Rules Preview')}</h4>
+              <MarkdownPreview
+                markdown={formData.rules_content || ''}
+                emptyMessage={t('tournament.rules_preview_empty', 'Rules preview will appear here as you write.')}
+              />
+            </div>
+          </div>
           <small className="text-gray-600">
             {t('tournament.rules_markdown_help', 'Markdown syntax is supported, using the same renderer as Wiki Help.')}
           </small>
-        </div>
-
-        <div className="mb-4 rounded-md border border-gray-200 p-4 bg-gray-50">
-          <h4 className="font-semibold text-gray-800 mb-2">{t('tournament.rules_preview', 'Rules Preview')}</h4>
-          <MarkdownPreview
-            markdown={formData.rules_content || ''}
-            emptyMessage={t('tournament.rules_preview_empty', 'Rules preview will appear here as you write.')}
-          />
         </div>
         
         {/* Tournament Mode Selector (Ranked/Unranked/Team) */}
