@@ -901,6 +901,29 @@ CREATE TABLE `tournament_unranked_maps` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `tournament_rule_templates`
+--
+
+DROP TABLE IF EXISTS `tournament_rule_templates`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tournament_rule_templates` (
+  `id` char(36) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `content_markdown` longtext NOT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_by` char(36) DEFAULT NULL,
+  `updated_by` char(36) DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_tournament_rule_templates_active` (`is_active`),
+  KEY `idx_tournament_rule_templates_created_by` (`created_by`),
+  KEY `idx_tournament_rule_templates_updated_by` (`updated_by`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `tournaments`
 --
 
@@ -911,6 +934,8 @@ CREATE TABLE `tournaments` (
   `id` char(36) NOT NULL,
   `name` varchar(255) NOT NULL,
   `description` text NOT NULL,
+  `rules_template_id` char(36) DEFAULT NULL,
+  `rules_content` longtext DEFAULT NULL,
   `creator_id` char(36) NOT NULL,
   `status` varchar(20) DEFAULT 'pending',
   `approved_at` datetime DEFAULT NULL,
@@ -934,7 +959,8 @@ CREATE TABLE `tournaments` (
   `tournament_mode` varchar(20) DEFAULT 'ranked',
   PRIMARY KEY (`id`),
   KEY `idx_status` (`status`),
-  KEY `idx_created_at` (`created_at`)
+  KEY `idx_created_at` (`created_at`),
+  KEY `idx_tournaments_rules_template_id` (`rules_template_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 

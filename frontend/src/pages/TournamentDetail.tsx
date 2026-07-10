@@ -13,6 +13,7 @@ import StarDisplay from '../components/StarDisplay';
 import { ReplayConfirmationModal } from '../components/ReplayConfirmationModal';
 import ScheduleProposalModal from '../components/ScheduleProposalModal';
 import { TeamReplacementModal } from '../components/TeamReplacementModal';
+import MarkdownPreview from '../components/MarkdownPreview';
 
 // Helper function to extract parsed replay data from JSON summary
 function parseReplaySummary(summaryJson: string | null): {
@@ -109,6 +110,8 @@ interface Tournament {
   id: string;
   name: string;
   description: string;
+  rules_template_id?: string | null;
+  rules_content?: string;
   creator_id: string;
   creator_nickname: string;
   status: string;
@@ -138,6 +141,8 @@ interface TournamentFormData {
   final_rounds: number;
   general_rounds_format: 'bo1' | 'bo3' | 'bo5';
   final_rounds_format: 'bo1' | 'bo3' | 'bo5';
+  rules_template_id?: string | null;
+  rules_content?: string;
   started_at?: string;
 }
 
@@ -298,7 +303,9 @@ const TournamentDetail: React.FC = () => {
     general_rounds: 0,
     final_rounds: 0,
     general_rounds_format: 'bo3' as 'bo1' | 'bo3' | 'bo5',
-    final_rounds_format: 'bo5' as 'bo1' | 'bo3' | 'bo5'
+    final_rounds_format: 'bo5' as 'bo1' | 'bo3' | 'bo5',
+    rules_template_id: null,
+    rules_content: '',
   });
 
   // Get the origin page from location state
@@ -412,7 +419,9 @@ const TournamentDetail: React.FC = () => {
         general_rounds: tournamentRes.data.general_rounds || 0,
         final_rounds: tournamentRes.data.final_rounds || 0,
         general_rounds_format: tournamentRes.data.general_rounds_format || 'bo3',
-        final_rounds_format: tournamentRes.data.final_rounds_format || 'bo5'
+        final_rounds_format: tournamentRes.data.final_rounds_format || 'bo5',
+        rules_template_id: tournamentRes.data.rules_template_id || null,
+        rules_content: tournamentRes.data.rules_content || tournamentRes.data.description || '',
       });
       
       // Check user's participation status
@@ -771,7 +780,9 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
           editData.general_rounds !== tournament?.general_rounds ||
           editData.final_rounds !== tournament?.final_rounds ||
           editData.general_rounds_format !== tournament?.general_rounds_format ||
-          editData.final_rounds_format !== tournament?.final_rounds_format) {
+          editData.final_rounds_format !== tournament?.final_rounds_format ||
+          editData.rules_template_id !== tournament?.rules_template_id ||
+          editData.rules_content !== tournament?.rules_content) {
         // Build update object, excluding started_at if empty
         const updateObj: any = {
           description: editData.description,
@@ -779,7 +790,9 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
           general_rounds: editData.general_rounds,
           final_rounds: editData.final_rounds,
           general_rounds_format: editData.general_rounds_format,
-          final_rounds_format: editData.final_rounds_format
+          final_rounds_format: editData.final_rounds_format,
+          rules_template_id: editData.rules_template_id,
+          rules_content: editData.rules_content,
         };
         if (editData.started_at) {
           updateObj.started_at = editData.started_at;
@@ -833,7 +846,9 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
         general_rounds: editData.general_rounds,
         final_rounds: editData.final_rounds,
         general_rounds_format: editData.general_rounds_format,
-        final_rounds_format: editData.final_rounds_format
+        final_rounds_format: editData.final_rounds_format,
+        rules_template_id: editData.rules_template_id,
+        rules_content: editData.rules_content,
       };
       if (editData.started_at) {
         updateObj.started_at = editData.started_at;
@@ -1377,6 +1392,15 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
         {tournament.started_at && <p><strong>{t('label_started')}:</strong> {formatDate(tournament.started_at)}</p>}
         {tournament.finished_at && <p><strong>{t('label_finished')}:</strong> {formatDate(tournament.finished_at)}</p>}
         <div><strong>{t('label_description')}:</strong> <p className="whitespace-pre-wrap">{tournament.description}</p></div>
+        <div className="mt-4">
+          <strong>{t('tournament.rules_content', 'Tournament Rules')}:</strong>
+          <div className="mt-2 rounded border border-gray-200 bg-gray-50 p-3">
+            <MarkdownPreview
+              markdown={tournament.rules_content || ''}
+              emptyMessage={t('tournament.rules_preview_empty', 'No rules configured for this tournament.')}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Tournament Assets Section */}

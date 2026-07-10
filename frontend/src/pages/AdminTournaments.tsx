@@ -94,9 +94,17 @@ const AdminTournaments: React.FC = () => {
         onViewDetails={handleViewDetails}
         onDelete={handleDeleteTournament}
       />
+      <div className="max-w-6xl mx-auto px-4 mt-4">
+        <button
+          onClick={() => navigate('/admin/rule-templates')}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors"
+        >
+          <span>📜</span>
+          <span>{t('admin.rule_templates', 'Manage rule templates')}</span>
+        </button>
+      </div>
     </MainLayout>
   );
 };
 
 export default AdminTournaments;
-

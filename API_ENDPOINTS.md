@@ -85,7 +85,7 @@
 - `[POST] /api/tournaments` — Private — body: tournament config fields — Create a tournament.
 - `[GET] /api/tournaments/my` — Private — Tournaments created by current user.
 - `[GET] /api/tournaments/:id` — Public — Tournament full details.
-- `[PUT] /api/tournaments/:id` — Private (organizer) — body: `{tournament_type?, description?, max_participants?, round_duration_days?, auto_advance_round?, general_rounds?, final_rounds?, general_rounds_format?, final_rounds_format?, status?, started_at?}` — Update tournament config. `tournament_type` can only be changed when tournament status is `registration_open` or `registration_closed` (not `prepared`, `in_progress`, or `completed`). When format changes, round values are reset to format-specific defaults.
+- `[PUT] /api/tournaments/:id` — Private (organizer) — body: `{tournament_type?, description?, rules_template_id?, rules_content?, max_participants?, round_duration_days?, auto_advance_round?, general_rounds?, final_rounds?, general_rounds_format?, final_rounds_format?, status?, started_at?}` — Update tournament config. `tournament_type` can only be changed when tournament status is `registration_open` or `registration_closed` (not `prepared`, `in_progress`, or `completed`). When format changes, round values are reset to format-specific defaults.
 - `[DELETE] /api/tournaments/:id` — Private (admin) — Delete a tournament.
 - `[GET] /api/tournaments/:id/rounds` — Public — Tournament rounds list.
 - `[GET] /api/tournaments` — Public — query: `page` — All tournaments.
@@ -113,6 +113,12 @@
 - `[GET] /api/tournaments/suggestions/by-count` — Private — Tournament suggestions by participation count.
 - `[PUT] /api/tournaments/:tournamentId/teams/:teamId/rename` — Private (organizer/team member/admin/moderator) — body: `{name: string}` — Rename a tournament team.
 - `[DELETE] /api/tournaments/:tournamentId/participants/:participantId` — Private (self/organizer/admin/moderator) — Remove a participant (only when tournament is not started/completed). Cleans up empty teams in team tournaments.
+
+---
+
+## Rule Template Routes
+
+- `[GET] /api/rule-templates` — Private — List active tournament rule templates available to organizers (`id, title, content_markdown`).
 
 ---
 
@@ -214,6 +220,12 @@
 - `[GET] /api/admin/replays` — Private (admin + moderator) — query: `{status?, limit?, offset?}` — List replays with filtering.
 - `[POST] /api/admin/replays/:replayId/force-discard` — Private (admin + moderator) — Force-discard a replay with status `new`, `parsed`, or `error`. Sets `parse_status='rejected'`.
 - `[POST] /api/admin/replays/:replayId/reprocess` — Private (admin + moderator) — Requeue a replay for reprocessing. Allowed statuses: `error`, `failed`, `rejected`, `parsed`, `skipped`, `discarded`. Blocked if replay has a `match_id`. Resets `parse_status='new'` and clears parse fields so the background job picks it up again within 30 seconds.
+
+### Tournament Rule Templates
+- `[GET] /api/admin/rule-templates` — Private (admin + moderator) — List all rule templates including inactive.
+- `[POST] /api/admin/rule-templates` — Private (admin + moderator) — body: `{title, content_markdown, is_active?}` — Create a new reusable tournament rule template.
+- `[PUT] /api/admin/rule-templates/:id` — Private (admin + moderator) — body: `{title?, content_markdown?, is_active?}` — Update template content or activation state.
+- `[DELETE] /api/admin/rule-templates/:id` — Private (admin + moderator) — Delete template only if not referenced by any tournament.
 
 ### Statistics & Debug
 - `[POST] /api/admin/recalculate-all-stats` — Private (admin) — Recalculate all player statistics.

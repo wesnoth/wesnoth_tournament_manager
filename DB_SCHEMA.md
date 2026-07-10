@@ -9,7 +9,8 @@
 |---|---|---|---|
 | `users_extension` | Player profiles | `id` | `user_id`, `nickname`, `elo`, `level`, `is_admin` |
 | `matches` | Direct matches (1v1) | `id` | `player1_id`, `player2_id`, `winner_id`, `loser_id`, `status` |
-| `tournaments` | Tournament records | `id` | `name`, `tournament_mode`, `tournament_type`, `status`, `created_by` |
+| `tournaments` | Tournament records | `id` | `name`, `tournament_mode`, `tournament_type`, `status`, `creator_id`, `rules_content` |
+| `tournament_rule_templates` | Reusable markdown rules templates | `id` | `title`, `content_markdown`, `is_active` |
 | `tournament_participants` | Players in tournaments | `id` | `user_id`, `team_id`, `status` |
 | `tournament_rounds` | Tournament rounds | `id` | `round_number`, `match_format`, `round_status` |
 | `tournament_matches` | Matches within tournaments | `id` | `player1_id`, `player2_id`, `winner_id`, `match_id`, `status`, `match_status` |
@@ -374,6 +375,8 @@ Tournament definitions.
 | `id` | char(36) PK | UUID |
 | `name` | varchar(255) | Tournament name |
 | `description` | text | Description |
+| `rules_template_id` | char(36) FK→tournament_rule_templates | Optional template reference used to bootstrap rules |
+| `rules_content` | longtext | Markdown snapshot of tournament rules; editable per tournament and decoupled from template updates |
 | `creator_id` | char(36) FK→users_extension | Organiser |
 | `status` | varchar(20) | `pending` / `registration_open` / `in_progress` / `completed` / `cancelled` |
 | `approved_at` | datetime | When admin approved the tournament |
@@ -586,6 +589,25 @@ Factions allowed in unranked tournaments.
 | `tournament_id` | char(36) FK→tournaments | |
 | `faction_id` | char(36) FK→factions | |
 | `created_at` | datetime | |
+
+---
+
+### `tournament_rule_templates`
+
+Reusable markdown templates managed by admins/moderators to speed up tournament creation.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | char(36) PK | UUID |
+| `title` | varchar(255) | Template title shown in selector |
+| `content_markdown` | longtext | Markdown template content |
+| `is_active` | tinyint(1) | 1 = selectable by organizers |
+| `created_by` | char(36) FK→users_extension | Creator user |
+| `updated_by` | char(36) FK→users_extension | Last editor user |
+| `created_at` | datetime | |
+| `updated_at` | datetime | |
+
+**Behavior:** Selecting a template copies `content_markdown` into `tournaments.rules_content`. Later edits to the tournament do not mutate the source template.
 
 ---
 

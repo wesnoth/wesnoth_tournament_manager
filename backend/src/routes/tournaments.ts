@@ -50,6 +50,8 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       final_rounds,
       general_rounds_format,
       final_rounds_format,
+      rules_template_id,
+      rules_content,
       unranked_factions,
       unranked_maps
     } = req.body;
@@ -85,6 +87,34 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     }
     if (final_rounds_format && !validFormats.includes(final_rounds_format)) {
       return res.status(400).json({ error: 'Invalid final_rounds_format. Must be: bo1, bo3, or bo5' });
+    }
+
+    let selectedTemplateId: string | null = rules_template_id || null;
+    let resolvedRulesContent: string = typeof rules_content === 'string' ? rules_content.trim() : '';
+
+    if (selectedTemplateId) {
+      const templateResult = await query(
+        `SELECT id, content_markdown, is_active
+         FROM tournament_rule_templates
+         WHERE id = ?`,
+        [selectedTemplateId]
+      );
+
+      if (templateResult.rows.length === 0) {
+        return res.status(400).json({ error: 'Selected rules template does not exist' });
+      }
+
+      if (templateResult.rows[0].is_active !== 1) {
+        return res.status(400).json({ error: 'Selected rules template is not active' });
+      }
+
+      if (!resolvedRulesContent) {
+        resolvedRulesContent = templateResult.rows[0].content_markdown || '';
+      }
+    }
+
+    if (!resolvedRulesContent) {
+      resolvedRulesContent = description;
     }
 
     // Validate tournament type-specific configurations
@@ -141,17 +171,19 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     // Create tournament
     const tournamentResult = await query(
       `INSERT INTO tournaments (
-        id, name, description, creator_id, tournament_type, tournament_mode,
+        id, name, description, rules_template_id, rules_content, creator_id, tournament_type, tournament_mode,
         max_participants, round_duration_days, auto_advance_round, 
         total_rounds, general_rounds, final_rounds,
         general_rounds_format, final_rounds_format,
         status, current_round
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        `,
       [
         tournamentId,
         name, 
         description,
+        selectedTemplateId,
+        resolvedRulesContent,
         req.userId, 
         tournament_type,
         tournament_mode || 'ranked',
@@ -229,7 +261,8 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
         name,
         tournament_type,
         organizerNickname,
-        description
+        description,
+        resolvedRulesContent
       );
 
       // Update tournament with Discord thread ID
@@ -246,7 +279,8 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
           tournament_type,
           description,
           organizerNickname,
-          max_participants
+          max_participants,
+          resolvedRulesContent
         );
       }
     } catch (discordError) {
@@ -341,6 +375,8 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
       final_rounds,
       general_rounds_format,
       final_rounds_format,
+      rules_template_id,
+      rules_content,
       status,
       started_at
     } = req.body;
@@ -373,6 +409,7 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
     // Build update query dynamically
     const updates: string[] = [];
     const values: any[] = [];
+    let autoCopiedRulesContent: string | null = null;
 
     if (tournament_type !== undefined) {
       updates.push(`tournament_type = ?`);
@@ -382,6 +419,43 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
     if (description !== undefined) {
       updates.push(`description = ?`);
       values.push(description);
+    }
+
+    if (rules_template_id !== undefined) {
+      if (rules_template_id === null || rules_template_id === '') {
+        updates.push(`rules_template_id = ?`);
+        values.push(null);
+      } else {
+        const templateResult = await query(
+          `SELECT id, content_markdown, is_active
+           FROM tournament_rule_templates
+           WHERE id = ?`,
+          [rules_template_id]
+        );
+
+        if (templateResult.rows.length === 0) {
+          return res.status(400).json({ error: 'Selected rules template does not exist' });
+        }
+
+        if (templateResult.rows[0].is_active !== 1) {
+          return res.status(400).json({ error: 'Selected rules template is not active' });
+        }
+
+        updates.push(`rules_template_id = ?`);
+        values.push(rules_template_id);
+
+        if (rules_content === undefined) {
+          autoCopiedRulesContent = templateResult.rows[0].content_markdown || '';
+        }
+      }
+    }
+
+    if (rules_content !== undefined) {
+      updates.push(`rules_content = ?`);
+      values.push(rules_content);
+    } else if (autoCopiedRulesContent !== null) {
+      updates.push(`rules_content = ?`);
+      values.push(autoCopiedRulesContent);
     }
 
     if (max_participants !== undefined) {
@@ -4122,4 +4196,3 @@ router.delete('/:tournamentId/participants/:participantId', authMiddleware, asyn
     res.status(500).json({ error: 'Failed to remove participant' });
   }
 });
-

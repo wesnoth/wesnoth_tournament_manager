@@ -170,6 +170,7 @@ export const matchService = {
 
 export const tournamentService = {
   createTournament: (data: any) => api.post('/tournaments', data),
+  getRuleTemplates: () => api.get('/rule-templates'),
   getTournament: (id: string) => api.get(`/tournaments/${id}`),
   updateTournament: (id: string, data: any) => api.put(`/tournaments/${id}`, data),
   deleteTournament: (id: string) => api.delete(`/tournaments/${id}`),
@@ -252,6 +253,14 @@ export const adminService = {
   createFaq: (data: any) => api.post('/admin/faq', data),
   updateFaq: (id: string, data: any) => api.put(`/admin/faq/${id}`, data),
   deleteFaq: (id: string) => api.delete(`/admin/faq/${id}`),
+
+  // Tournament rule templates
+  getRuleTemplates: () => api.get('/admin/rule-templates'),
+  createRuleTemplate: (data: { title: string; content_markdown: string; is_active?: boolean }) =>
+    api.post('/admin/rule-templates', data),
+  updateRuleTemplate: (id: string, data: { title?: string; content_markdown?: string; is_active?: boolean }) =>
+    api.put(`/admin/rule-templates/${id}`, data),
+  deleteRuleTemplate: (id: string) => api.delete(`/admin/rule-templates/${id}`),
 };
 
 // Public API endpoints (no auth required)

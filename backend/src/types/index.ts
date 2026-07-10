@@ -47,6 +47,8 @@ export interface Tournament {
   id: string;
   name: string;
   description: string;
+  rules_template_id?: string | null;
+  rules_content?: string;
   creator_id: string;
   status: 'registration_open' | 'registration_closed' | 'prepared' | 'in_progress' | 'finished';
   tournament_type: string;

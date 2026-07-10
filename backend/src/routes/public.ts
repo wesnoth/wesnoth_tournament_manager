@@ -130,6 +130,8 @@ router.get('/tournaments', optionalAuthMiddleware, async (req, res) => {
         t.id, 
         t.name, 
         t.description, 
+        t.rules_template_id,
+        t.rules_content,
         t.creator_id,
         u.nickname as creator_nickname,
         t.status, 
@@ -206,6 +208,8 @@ router.get('/tournaments/:id', async (req, res) => {
         t.id, 
         t.name, 
         t.description, 
+        t.rules_template_id,
+        t.rules_content,
         t.creator_id,
         u.nickname as creator_nickname,
         t.status, 
@@ -1315,4 +1319,3 @@ router.get('/tournaments/:tournamentId/pending-replays', async (req, res) => {
 });
 
 export default router;
-

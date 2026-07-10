@@ -34,6 +34,20 @@ class DiscordService {
     'Content-Type': 'application/json',
   };
 
+  private toDiscordSafeText(input: string | undefined, maxLength: number): string {
+    if (!input) return '';
+    const normalized = input
+      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '$1')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
+      .replace(/[`*_>#~\-]{1,3}/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!normalized) return '';
+    if (normalized.length <= maxLength) return normalized;
+    return `${normalized.slice(0, maxLength - 1)}…`;
+  }
+
   /**
    * Creates a thread in the forum channel for a tournament
    */
@@ -42,7 +56,8 @@ class DiscordService {
     tournamentName: string,
     tournamentType: string,
     organizerNickname?: string,
-    description?: string
+    description?: string,
+    rulesMarkdown?: string
   ): Promise<string> {
     if (!DISCORD_ENABLED) {
       console.log(`⏭️  Discord disabled (DISCORD_ENABLED=${process.env.DISCORD_ENABLED}). Skipping thread creation.`);
@@ -56,12 +71,16 @@ class DiscordService {
     try {
       const threadName = `${tournamentName} [${tournamentType}]`.substring(0, 100);
       const organizer = organizerNickname || 'Unknown';
-      const desc = description ? `\n\n${description}` : '';
+      const descriptionPreview = this.toDiscordSafeText(description, 450);
+      const rulesPreview = this.toDiscordSafeText(rulesMarkdown, 700);
+      const descriptionLine = descriptionPreview ? `\n\n${descriptionPreview}` : '';
+      const rulesLine = rulesPreview ? `\n\n**Rules preview:**\n${rulesPreview}` : '';
+      const content = `**🎮 ${threadName}**\n\nOrganizado por: **${organizer}**${descriptionLine}${rulesLine}\n\nDiscussions and updates will be posted here.`;
       const payload = {
         name: threadName,
         auto_archive_duration: 10080, // 7 días
         message: {
-          content: `**🎮 ${threadName}**\n\nOrganizado por: **${organizer}**${desc}\n\nDiscussions and updates will be posted here.`,
+          content: content.slice(0, 1900),
         },
       };
 
@@ -133,11 +152,14 @@ class DiscordService {
     tournamentType: string,
     description: string,
     organizer: string,
-    maxParticipants: number | null
+    maxParticipants: number | null,
+    rulesMarkdown?: string
   ): Promise<boolean> {
+    const descriptionPreview = this.toDiscordSafeText(description, 350);
+    const rulesPreview = this.toDiscordSafeText(rulesMarkdown, 900);
     const embed: DiscordEmbed = {
       title: `🎮 ${tournamentName}`,
-      description: description,
+      description: descriptionPreview || undefined,
       color: 0x3498db, // Blue
       fields: [
         {
@@ -160,6 +182,15 @@ class DiscordService {
           value: '🔓 Registration Open',
           inline: true,
         },
+        ...(rulesPreview
+          ? [
+              {
+                name: 'Rules Preview',
+                value: rulesPreview,
+                inline: false,
+              },
+            ]
+          : []),
       ],
       footer: {
         text: 'Tournament created',

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import UnrankedFactionSelect from './UnrankedFactionSelect';
 import UnrankedMapSelect from './UnrankedMapSelect';
+import MarkdownPreview from './MarkdownPreview';
+import { tournamentService } from '../services/api';
 
 interface TournamentFormData {
   name: string;
@@ -15,7 +17,15 @@ interface TournamentFormData {
   final_rounds: number;
   general_rounds_format: 'bo1' | 'bo3' | 'bo5';
   final_rounds_format: 'bo1' | 'bo3' | 'bo5';
+  rules_template_id?: string | null;
+  rules_content?: string;
   started_at?: string;
+}
+
+interface RuleTemplate {
+  id: string;
+  title: string;
+  content_markdown: string;
 }
 
 interface TournamentFormProps {
@@ -44,6 +54,8 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
   onCancel,
 }) => {
   const { t } = useTranslation();
+  const [ruleTemplates, setRuleTemplates] = useState<RuleTemplate[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
 
   // Determine tournament type options based on mode and status
   const canConfigureRounds = () => {
@@ -79,6 +91,39 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
     onFormDataChange(updatedData);
   };
 
+  useEffect(() => {
+    const loadRuleTemplates = async () => {
+      try {
+        setTemplatesLoading(true);
+        const res = await tournamentService.getRuleTemplates();
+        setRuleTemplates(res.data || []);
+      } catch (error) {
+        console.error('Failed to load tournament rule templates:', error);
+      } finally {
+        setTemplatesLoading(false);
+      }
+    };
+
+    loadRuleTemplates();
+  }, []);
+
+  const handleRuleTemplateChange = (templateId: string) => {
+    if (!templateId) {
+      onFormDataChange({
+        ...formData,
+        rules_template_id: null,
+      });
+      return;
+    }
+
+    const selectedTemplate = ruleTemplates.find((tpl) => tpl.id === templateId);
+    onFormDataChange({
+      ...formData,
+      rules_template_id: templateId,
+      rules_content: selectedTemplate?.content_markdown || formData.rules_content || '',
+    });
+  };
+
   return (
     <form id="tournament-form" className="bg-white rounded-lg shadow-md p-8 space-y-6" onSubmit={onSubmit}>
       {/* SECTION 1: BASIC INFORMATION */}
@@ -110,6 +155,49 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
             required
             disabled={isLoading}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 resize-vertical"
+          />
+        </div>
+
+        <div className="mb-4 flex flex-col gap-2">
+          <label className="font-medium text-gray-700">{t('tournament.rules_template', 'Rules Template')}</label>
+          <select
+            value={formData.rules_template_id || ''}
+            onChange={(e) => handleRuleTemplateChange(e.target.value)}
+            disabled={isLoading || templatesLoading}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+          >
+            <option value="">{t('tournament.rules_template_none', 'No template')}</option>
+            {ruleTemplates.map((template) => (
+              <option key={template.id} value={template.id}>
+                {template.title}
+              </option>
+            ))}
+          </select>
+          <small className="text-gray-600">
+            {t('tournament.rules_template_help', 'Selecting a template creates an editable copy for this tournament.')}
+          </small>
+        </div>
+
+        <div className="mb-4 flex flex-col gap-2">
+          <label className="font-medium text-gray-700">{t('tournament.rules_content', 'Tournament Rules')}</label>
+          <textarea
+            placeholder={t('tournament.rules_content_placeholder', 'Write tournament rules in markdown...')}
+            value={formData.rules_content || ''}
+            onChange={(e) => onFormDataChange({ ...formData, rules_content: e.target.value })}
+            rows={12}
+            disabled={isLoading}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 resize-vertical font-mono text-sm"
+          />
+          <small className="text-gray-600">
+            {t('tournament.rules_markdown_help', 'Markdown syntax is supported, using the same renderer as Wiki Help.')}
+          </small>
+        </div>
+
+        <div className="mb-4 rounded-md border border-gray-200 p-4 bg-gray-50">
+          <h4 className="font-semibold text-gray-800 mb-2">{t('tournament.rules_preview', 'Rules Preview')}</h4>
+          <MarkdownPreview
+            markdown={formData.rules_content || ''}
+            emptyMessage={t('tournament.rules_preview_empty', 'Rules preview will appear here as you write.')}
           />
         </div>
         
