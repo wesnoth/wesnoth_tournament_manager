@@ -36,6 +36,8 @@ Every challenge action creates a persisted in-app notification for the other aff
 
 Before proposing or editing slots, the frontend checks the authenticated participants' active P2P and tournament proposals. Reserved slots are shown with a source-specific color and cannot be selected. The proposal currently being answered or edited is excluded from the conflict lookup so its own slots remain usable.
 
+All P2P proposal and reservation timestamps are persisted and compared in UTC. The scheduling grid converts those UTC slot keys into the current viewer's IANA timezone for date and time display. The viewer timezone is initialized from the authenticated player's profile and remains visible in the modal; selecting a displayed slot converts it back to its canonical UTC value before sending it to the API.
+
 The availability grid keeps its expensive slot generation, availability lookup, and virtualized columns memoized. Parent forms also keep grid inputs stable while notes are edited, so typing does not rebuild the full matrix.
 
 The legacy `superseded` status remains readable for historical data, but new proposals are no longer automatically marked superseded. Overlapping slots are rejected instead, while non-overlapping proposals remain independent.

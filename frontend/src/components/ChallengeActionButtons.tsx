@@ -94,7 +94,8 @@ const ChallengeActionButtons: React.FC<ChallengeActionButtonsProps> = ({
       ];
 
       setParticipants(participants);
-      setViewingTimezone(proposedByUser.data.timezone || 'UTC');
+      const viewerProfile = participants.find((participant) => participant.id === userId);
+      setViewingTimezone(viewerProfile?.timezone || 'UTC');
     } catch (err) {
       console.error('Error loading proposal:', err);
     } finally {
