@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../config/database.js';
 import { queryPhpbb } from '../config/phpbbDatabase.js';
-import { authMiddleware, moderatorOrAdminMiddleware, AuthRequest } from '../middleware/auth.js';
+import { adminMiddleware, authMiddleware, moderatorOrAdminMiddleware, AuthRequest } from '../middleware/auth.js';
 import { calculateNewRating, calculateTrend } from '../utils/elo.js';
 import { unlockAccount } from '../services/accountLockout.js';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
@@ -559,31 +559,66 @@ router.post('/recalculate-all-stats', authMiddleware, async (req: AuthRequest, r
   }
 });
 
-// Get audit logs — accessible to admins and tournament moderators
+/** Parse and bound audit-log retention windows before they reach SQL. */
+function parseAuditDays(value: unknown, fallback: number): number | null {
+  if (value === undefined || value === null || value === '') return fallback;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 3650 ? parsed : null;
+}
+
+/** Convert MariaDB JSON text into the object shape expected by the admin UI. */
+function parseAuditDetails(value: unknown): Record<string, unknown> {
+  if (!value) return {};
+  if (typeof value === 'object') return value as Record<string, unknown>;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' ? parsed : { value: parsed };
+    } catch {
+      return { raw: value };
+    }
+  }
+  return { value };
+}
+
+// Get audit logs — accessible to admins and tournament moderators.
 router.get('/audit-logs', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
   try {
-    const { eventType, username, ipAddress, daysBack = 7 } = req.query;
+    const { eventType, username, ipAddress } = req.query;
+    const daysBack = parseAuditDays(req.query.daysBack, 7);
+    if (daysBack === null) {
+      return res.status(400).json({ error: 'daysBack must be an integer between 1 and 3650' });
+    }
 
     // Build WHERE clause
     let whereConditions: string[] = [];
     let params: any[] = [];
 
-    // Filter by date range
-    whereConditions.push(`created_at >= DATE_SUB(NOW(), INTERVAL ${parseInt(daysBack as string) || 7} DAY)`);
+    // Filter by date range. The value is validated and bounded above.
+    whereConditions.push(`created_at >= DATE_SUB(NOW(), INTERVAL ${daysBack} DAY)`);
 
     if (eventType) {
+      if (typeof eventType !== 'string' || eventType.trim().length > 50) {
+        return res.status(400).json({ error: 'eventType must be at most 50 characters' });
+      }
       whereConditions.push(`event_type = ?`);
-      params.push(eventType);
+      params.push(eventType.trim());
     }
 
     if (username) {
+      if (typeof username !== 'string' || username.length > 255) {
+        return res.status(400).json({ error: 'username must be at most 255 characters' });
+      }
       whereConditions.push(`username LIKE ?`);
       params.push(`%${username}%`);
     }
 
     if (ipAddress) {
+      if (typeof ipAddress !== 'string' || ipAddress.length > 45) {
+        return res.status(400).json({ error: 'ipAddress must be at most 45 characters' });
+      }
       whereConditions.push(`ip_address = ?`);
-      params.push(ipAddress);
+      params.push(ipAddress.trim());
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
@@ -597,26 +632,27 @@ router.get('/audit-logs', moderatorOrAdminMiddleware, async (req: AuthRequest, r
       params
     );
 
-    res.json(result.rows);
+    res.json(result.rows.map((row: any) => ({
+      ...row,
+      details: parseAuditDetails(row.details),
+    })));
   } catch (error) {
     console.error('Audit logs fetch error:', error);
     res.status(500).json({ error: 'Failed to fetch audit logs' });
   }
 });
 
-// Delete selected audit logs
-router.delete('/audit-logs', authMiddleware, async (req: AuthRequest, res) => {
+// Delete selected audit logs. Only administrators may destroy audit history.
+router.delete('/audit-logs', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
   try {
-    // Check if user is admin
-    const adminCheck = await query('SELECT is_admin FROM users_extension WHERE id = ?', [req.userId]);
-    if (!adminCheck.rows[0]?.is_admin) {
-      return res.status(403).json({ error: 'Only admins can delete audit logs' });
-    }
-
     const { logIds } = req.body;
 
-    if (!logIds || !Array.isArray(logIds) || logIds.length === 0) {
-      return res.status(400).json({ error: 'No log IDs provided' });
+    if (!Array.isArray(logIds) || logIds.length === 0 || logIds.length > 500) {
+      return res.status(400).json({ error: 'Provide between 1 and 500 log IDs' });
+    }
+
+    if (!logIds.every((id) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))) {
+      return res.status(400).json({ error: 'All log IDs must be valid UUIDs' });
     }
 
     // Delete logs with proper parameterized query
@@ -642,19 +678,12 @@ router.delete('/audit-logs', authMiddleware, async (req: AuthRequest, res) => {
   }
 });
 
-// Delete old audit logs (older than X days)
-router.delete('/audit-logs/old', authMiddleware, async (req: AuthRequest, res) => {
+// Delete old audit logs (older than X days). Only administrators may purge history.
+router.delete('/audit-logs/old', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
   try {
-    // Check if user is admin
-    const adminCheck = await query('SELECT is_admin FROM users_extension WHERE id = ?', [req.userId]);
-    if (!adminCheck.rows[0]?.is_admin) {
-      return res.status(403).json({ error: 'Only admins can delete audit logs' });
-    }
-
-    const { daysBack = 30 } = req.body;
-
-    if (daysBack < 1) {
-      return res.status(400).json({ error: 'daysBack must be at least 1' });
+    const daysBack = parseAuditDays(req.body?.daysBack, 30);
+    if (daysBack === null) {
+      return res.status(400).json({ error: 'daysBack must be an integer between 1 and 3650' });
     }
 
     // Get count before deletion

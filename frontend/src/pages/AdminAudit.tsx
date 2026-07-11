@@ -4,12 +4,13 @@ import { useNavigate } from 'react-router-dom';
 import { adminService } from '../services/api';
 import UserProfileNav from '../components/UserProfileNav';
 
+/** Audit log row returned by the normalized administrative API. */
 interface AuditLog {
   id: string;
   event_type: string;
   user_id: string | null;
   username: string | null;
-  ip_address: string;
+  ip_address: string | null;
   user_agent: string | null;
   details: Record<string, any>;
   created_at: string;
@@ -130,24 +131,6 @@ export default function AdminAudit() {
   // Format timestamp
   const formatTime = (timestamp: string) => {
     return new Date(timestamp).toLocaleString();
-  };
-
-  // Get event type badge color
-  const getEventTypeBadgeClass = (eventType: string) => {
-    switch (eventType) {
-      case 'LOGIN_SUCCESS':
-        return 'badge-success';
-      case 'LOGIN_FAILED':
-        return 'badge-danger';
-      case 'REGISTRATION':
-        return 'badge-info';
-      case 'ADMIN_ACTION':
-        return 'badge-warning';
-      case 'SECURITY_EVENT':
-        return 'badge-critical';
-      default:
-        return 'badge-default';
-    }
   };
 
   return (
@@ -299,7 +282,7 @@ export default function AdminAudit() {
                     <td className="px-4 py-3 text-gray-700 text-sm">
                       {log.username || log.user_id || 'ANONYMOUS'}
                     </td>
-                    <td className="px-4 py-3 text-gray-700 text-sm">{log.ip_address}</td>
+                    <td className="px-4 py-3 text-gray-700 text-sm">{log.ip_address || 'UNKNOWN'}</td>
                     <td className="px-4 py-3 text-gray-700 text-sm">
                       <code className="bg-gray-100 px-2 py-1 rounded text-xs">{JSON.stringify(log.details, null, 2)}</code>
                     </td>

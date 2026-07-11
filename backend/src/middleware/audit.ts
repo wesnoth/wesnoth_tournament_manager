@@ -10,7 +10,6 @@ export interface AuditLogEntry {
   ip_address?: string;
   user_agent?: string;
   details: Record<string, any>;
-  timestamp?: Date;
 }
 
 /**
