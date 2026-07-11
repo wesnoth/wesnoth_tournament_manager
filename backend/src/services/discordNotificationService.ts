@@ -7,33 +7,34 @@
 import { query } from '../config/database.js';
 import { v4 as uuidv4 } from 'uuid';
 import discordService from './discordService.js';
-import { resolveDiscordIdFromUsername } from './discord.js';
+import { isValidDiscordSnowflake } from './discord.js';
 
 const DISCORD_ENABLED = process.env.DISCORD_ENABLED === 'true';
 
 interface DiscordScheduleNotificationData {
-  tournamentName: string;
   fromUserName?: string;
   fromTeamName?: string;
   actionByUserName?: string;
   cancelledByUserName?: string;
   fromTeamMembers?: string[];
-  fromDiscordId?: string;
   toUserName?: string;
   toTeamName?: string;
   toTeamMembers?: string[];
-  toDiscordIds?: string[];
+  /** Discord user IDs that should receive a direct mention. */
+  discordIds?: string[];
   proposedDateTime?: string; // Legacy: single datetime
   proposedTimeRanges?: string; // New: formatted time ranges (from formatTimeRangesForDiscord)
   messageExtra?: string;
 }
 
+/** Format a team and its members for a Discord embed field. */
 function formatTeamWithMembers(teamName?: string, members?: string[]): string {
   const name = teamName || 'Unknown team';
   if (!members || members.length === 0) return `${name}\nMembers: Unknown`;
   return `${name}\nMembers: ${members.join(', ')}`;
 }
 
+/** Add the actor and participant fields shared by all schedule embeds. */
 function appendActorAndTargetFields(
   fields: Array<{ name: string; value: string; inline?: boolean }>,
   data: DiscordScheduleNotificationData
@@ -62,8 +63,8 @@ function appendActorAndTargetFields(
 }
 
 /**
- * Build Discord message for schedule proposal with clear structure
- * Supports both legacy single datetime and new multiple time ranges
+ * Build the embed published when a player proposes a schedule.
+ * Supports the current time-range format and the legacy single datetime field.
  */
 function buildScheduleProposalEmbed(
   tournamentName: string,
@@ -98,8 +99,8 @@ function buildScheduleProposalEmbed(
 }
 
 /**
- * Build Discord message for schedule confirmation with clear structure
- * Supports both legacy single datetime and new multiple time ranges
+ * Build the embed published when a schedule proposal is confirmed.
+ * Supports the current time-range format and the legacy single datetime field.
  */
 function buildScheduleConfirmationEmbed(
   tournamentName: string,
@@ -128,7 +129,7 @@ function buildScheduleConfirmationEmbed(
 }
 
 /**
- * Build Discord message for schedule proposal change
+ * Build the embed published when a schedule proposal is changed.
  */
 function buildScheduleChangedEmbed(
   tournamentName: string,
@@ -154,7 +155,7 @@ function buildScheduleChangedEmbed(
 }
 
 /**
- * Build Discord message for schedule proposal cancellation
+ * Build the embed published when a schedule proposal is cancelled.
  */
 function buildScheduleCancelledEmbed(
   tournamentName: string,
@@ -181,7 +182,7 @@ function buildScheduleCancelledEmbed(
 }
 
 /**
- * Build Discord message for schedule rejection
+ * Build the embed published when a schedule proposal is rejected.
  */
 function buildScheduleRejectionEmbed(
   tournamentName: string,
@@ -207,7 +208,9 @@ function buildScheduleRejectionEmbed(
 }
 
 /**
- * Send an enhanced Discord notification to the tournament thread
+ * Build and publish a scheduling notification in the tournament thread.
+ * `discordIds` already contains canonical Discord user IDs, so no username
+ * or discriminator lookup is performed before creating mentions.
  */
 export async function sendDiscordNotification(
   tournamentId: string,
@@ -254,32 +257,16 @@ export async function sendDiscordNotification(
 
     // Build message content with mentions
     let messageContent = '';
-    if (notificationData.toDiscordIds && notificationData.toDiscordIds.length > 0) {
-      console.log(`🔍 [DISCORD-MENTION] Starting to resolve ${notificationData.toDiscordIds.length} Discord usernames:`, notificationData.toDiscordIds);
-      
-      // Resolve usernames to numeric Discord IDs for proper mentions
-      const resolvedIds: string[] = [];
-      for (const discordUsername of notificationData.toDiscordIds) {
-        console.log(`🔄 [DISCORD-MENTION] Attempting to resolve username: ${discordUsername}`);
-        const numericId = await resolveDiscordIdFromUsername(discordUsername);
-        if (numericId) {
-          console.log(`✅ [DISCORD-MENTION] Successfully resolved ${discordUsername} → ${numericId}`);
-          resolvedIds.push(numericId);
-        } else {
-          console.warn(`❌ [DISCORD-MENTION] Failed to resolve Discord ID for username: ${discordUsername}`);
-        }
-      }
-      
-      console.log(`📊 [DISCORD-MENTION] Resolution summary: ${resolvedIds.length}/${notificationData.toDiscordIds.length} resolved`);
-      
-      if (resolvedIds.length > 0) {
-        messageContent = resolvedIds.map(id => `<@${id}>`).join(' ');
+    if (notificationData.discordIds && notificationData.discordIds.length > 0) {
+      const validIds = notificationData.discordIds.filter(isValidDiscordSnowflake);
+      if (validIds.length > 0) {
+        messageContent = validIds.map(id => `<@${id}>`).join(' ');
         console.log(`📝 [DISCORD-MENTION] Final message content: ${messageContent}`);
       } else {
-        console.warn(`⚠️  [DISCORD-MENTION] No Discord IDs resolved, message will have no mentions`);
+        console.warn('⚠️  [DISCORD-MENTION] No valid Discord IDs provided; message will have no mentions');
       }
     } else {
-      console.log(`ℹ️  [DISCORD-MENTION] No Discord IDs provided in notification data`);
+      console.log('ℹ️  [DISCORD-MENTION] No Discord IDs provided in notification data');
     }
 
     const discordMessage = { 
@@ -306,7 +293,7 @@ export async function sendDiscordNotification(
 }
 
 /**
- * Store a notification in the database to be shown when users access the app
+ * Store an in-app notification for users who may be offline when the event occurs.
  */
 export async function storeNotificationForUsers(
   userIds: string[],

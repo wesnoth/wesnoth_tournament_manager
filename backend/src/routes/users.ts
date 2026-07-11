@@ -451,13 +451,13 @@ router.get('/search/:searchQuery', searchLimiter, async (req, res) => {
   }
 });
 
-// Update Discord ID
+// Store the user's canonical Discord snowflake ID.
 router.put('/profile/discord', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { discord_id } = req.body;
     console.log('Update Discord ID request:', { discord_id, userId: req.userId });
 
-    if (!discord_id || discord_id.trim() === '') {
+    if (typeof discord_id !== 'string' || discord_id.trim() === '') {
       return res.status(400).json({ error: 'Discord ID cannot be empty' });
     }
 
@@ -492,12 +492,12 @@ router.put('/profile/discord', authMiddleware, async (req: AuthRequest, res) => 
   }
 });
 
-// Validate Discord ID against guild membership
+// Validate the supplied Discord snowflake against the configured guild.
 router.post('/profile/discord/validate', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { discord_id } = req.body;
 
-    if (!discord_id || discord_id.trim() === '') {
+    if (typeof discord_id !== 'string' || discord_id.trim() === '') {
       return res.status(400).json({ error: 'Discord ID cannot be empty' });
     }
 

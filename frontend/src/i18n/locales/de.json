@@ -576,7 +576,7 @@
   "profile.discord_placeholder": "Geben Sie Ihre Discord-ID ein",
   "profile.discord_title": "Discord-ID",
   "profile.error_discord_empty": "Discord-ID darf nicht leer sein",
-  "profile.error_discord_invalid": "Ungültiges Discord-ID-Format. Verwenden Sie eine Discord-ID oder Erwähnung.",
+  "profile.error_discord_invalid": "Ungültiges Discord-ID-Format. Gib die 17-20-stellige numerische Discord-Benutzer-ID ein.",
   "profile.error_ranked_update": "Fehler beim Aktualisieren der Ranked-Einstellung",
   "profile.error_update_avatar_failed": "Fehler beim Aktualisieren des Avatars",
   "profile.error_update_country_failed": "Fehler beim Aktualisieren des Landes",

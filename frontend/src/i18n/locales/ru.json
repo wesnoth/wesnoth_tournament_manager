@@ -576,7 +576,7 @@
   "profile.discord_placeholder": "Введите ваш ID Discord",
   "profile.discord_title": "ID Discord",
   "profile.error_discord_empty": "ID Discord не может быть пустым",
-  "profile.error_discord_invalid": "Неверный формат ID Discord. Используйте ID или упоминание Discord.",
+  "profile.error_discord_invalid": "Неверный формат Discord ID. Введите числовой ID пользователя Discord длиной 17–20 цифр.",
   "profile.error_ranked_update": "Ошибка при обновлении предпочтения рейтинговых матчей",
   "profile.error_update_avatar_failed": "Ошибка при обновлении аватара",
   "profile.error_update_country_failed": "Ошибка при обновлении страны",

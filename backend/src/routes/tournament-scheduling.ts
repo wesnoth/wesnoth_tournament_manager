@@ -23,7 +23,7 @@ const router = Router();
 
 console.log('🔧 Registering tournament scheduling routes');
 
-// Convert ISO string to MySQL datetime format (YYYY-MM-DD HH:MM:SS)
+/** Convert an ISO timestamp to the UTC MySQL DATETIME format used by scheduling tables. */
 const isoToMySQLDatetime = (isoString: string): string => {
   const date = new Date(isoString);
   const year = date.getUTCFullYear();
@@ -42,6 +42,7 @@ interface TeamNotificationContext {
   memberDiscordIds: string[];
 }
 
+/** Load the display names, application IDs, and Discord IDs for a tournament team. */
 const getTeamNotificationContext = async (tournamentId: string, teamId: string): Promise<TeamNotificationContext> => {
   const teamResult = await query(
     'SELECT name FROM tournament_teams WHERE id = ?',
@@ -494,12 +495,12 @@ router.post('/:tournamentRoundMatchId/propose-schedule', authMiddleware, async (
       ).catch(err => console.error('⚠️ Error marking old notifications as read:', err));
     }
 
-    // Get opponent name/email for Discord notification
-    // For team tournaments, get team members; for 1v1, get opponent user
+    // Get the opponent display data and canonical Discord IDs for notification.
+    // For team tournaments, collect every opponent team member; for 1v1, collect one user ID.
     let opponentName = 'Opponent';
     let proposerName = 'Player';
     let actorUserName = 'Player';
-    let opponentEmail = null;
+    let opponentDiscordIds: string[] = [];
     let opponentSocketRecipients: string[] = [];
     let proposerTeamMembers: string[] = [];
     let opponentTeamMembers: string[] = [];
@@ -525,7 +526,7 @@ router.post('/:tournamentRoundMatchId/propose-schedule', authMiddleware, async (
       opponentSocketRecipients = opponentTeamContext.memberUserIds;
 
       if (opponentTeamContext.memberDiscordIds.length > 0) {
-        opponentEmail = opponentTeamContext.memberDiscordIds;
+        opponentDiscordIds = opponentTeamContext.memberDiscordIds;
       }
     } else {
       // 1v1 tournament
@@ -543,7 +544,7 @@ router.post('/:tournamentRoundMatchId/propose-schedule', authMiddleware, async (
       
       // Get Discord ID for mention
       if (opponentResult.rows && opponentResult.rows.length > 0 && opponentResult.rows[0].discord_id) {
-        opponentEmail = [opponentResult.rows[0].discord_id]; // Store as array for consistency
+        opponentDiscordIds = [opponentResult.rows[0].discord_id];
       }
       
       // For 1v1, send notification to the opponent user only
@@ -561,15 +562,14 @@ router.post('/:tournamentRoundMatchId/propose-schedule', authMiddleware, async (
     const scheduleTimeUTC = new Date(scheduled_datetime).toLocaleString('es-ES', { timeZone: 'UTC' });
     
     console.log(`📋 [SCHEDULE_PROPOSAL] About to send Discord notification with:`, {
-      opponentEmail,
-      toDiscordIds: Array.isArray(opponentEmail) ? opponentEmail : 'NOT ARRAY'
+      opponentDiscordIds,
+      discordIds: opponentDiscordIds
     });
     
     await sendDiscordNotification(
       match.tournament_id,
       'schedule_proposal',
       {
-        tournamentName,
         actionByUserName: actorUserName,
         fromTeamName: match.tournament_mode === 'team' ? proposerName : undefined,
         fromTeamMembers: match.tournament_mode === 'team' ? proposerTeamMembers : undefined,
@@ -577,7 +577,7 @@ router.post('/:tournamentRoundMatchId/propose-schedule', authMiddleware, async (
         toTeamName: match.tournament_mode === 'team' ? opponentName : undefined,
         toTeamMembers: match.tournament_mode === 'team' ? opponentTeamMembers : undefined,
         toUserName: match.tournament_mode === '1v1' ? opponentName : undefined,
-        toDiscordIds: Array.isArray(opponentEmail) ? opponentEmail : undefined,
+        discordIds: opponentDiscordIds.length > 0 ? opponentDiscordIds : undefined,
         proposedDateTime: scheduleTimeUTC,
         messageExtra: sanitizedMessage || undefined,
       }
@@ -861,16 +861,14 @@ router.post('/:tournamentRoundMatchId/confirm-schedule', authMiddleware, async (
       match.tournament_id,
       'schedule_confirmed',
       {
-        tournamentName,
         actionByUserName: confirmerUserName,
         fromUserName: match.tournament_mode === '1v1' ? confirmerName : confirmerUserName,
         fromTeamName: match.tournament_mode === 'team' ? confirmerName : undefined,
         fromTeamMembers: match.tournament_mode === 'team' ? confirmerTeamMembers : undefined,
-        fromDiscordId: proposerDiscordIds.length > 0 ? proposerDiscordIds[0] : undefined,
         toUserName: match.tournament_mode === '1v1' ? opponentName : undefined,
         toTeamName: match.tournament_mode === 'team' ? proposerTeamName : undefined,
         toTeamMembers: match.tournament_mode === 'team' ? proposerTeamMembers : undefined,
-        toDiscordIds: proposerDiscordIds.length > 0 ? proposerDiscordIds : undefined,
+        discordIds: proposerDiscordIds.length > 0 ? proposerDiscordIds : undefined,
         proposedDateTime: scheduleTimeUTC,
       }
     ).catch(err => console.error('⚠️ Discord notification failed:', err));
@@ -1133,7 +1131,6 @@ router.post(
         tournamentId,
         'schedule_proposal',
         {
-          tournamentName,
           actionByUserName: actorUserName,
           fromTeamName: match.tournament_mode === 'team' ? proposerName : undefined,
           fromTeamMembers: match.tournament_mode === 'team' ? proposerTeamMembers : undefined,
@@ -1141,7 +1138,7 @@ router.post(
           toTeamName: match.tournament_mode === 'team' ? opponentName : undefined,
           toTeamMembers: match.tournament_mode === 'team' ? opponentTeamMembers : undefined,
           toUserName: match.tournament_mode === '1v1' ? opponentName : undefined,
-          toDiscordIds: opponentDiscordIds.length > 0 ? opponentDiscordIds : undefined,
+          discordIds: opponentDiscordIds.length > 0 ? opponentDiscordIds : undefined,
           proposedTimeRanges: formattedRanges,
           messageExtra: notes || undefined,
         }
@@ -1312,7 +1309,6 @@ router.post(
         tournamentId,
         'schedule_proposal',
         {
-          tournamentName,
           actionByUserName: actorUserName,
           fromTeamName: match.tournament_mode === 'team' ? proposerName : undefined,
           fromTeamMembers: match.tournament_mode === 'team' ? proposerTeamMembers : undefined,
@@ -1320,7 +1316,7 @@ router.post(
           toTeamName: match.tournament_mode === 'team' ? opponentName : undefined,
           toTeamMembers: match.tournament_mode === 'team' ? opponentTeamMembers : undefined,
           toUserName: match.tournament_mode === '1v1' ? opponentName : undefined,
-          toDiscordIds: opponentDiscordIds.length > 0 ? opponentDiscordIds : undefined,
+          discordIds: opponentDiscordIds.length > 0 ? opponentDiscordIds : undefined,
           proposedTimeRanges: formattedRanges,
           messageExtra: notes || undefined,
         }
@@ -1540,7 +1536,6 @@ router.post(
              tournamentId,
              'schedule_confirmed',
              {
-               tournamentName,
                actionByUserName: confirmerUserName,
                fromUserName: tournamentMode === '1v1' ? confirmerName : confirmerUserName,
                fromTeamName: tournamentMode === 'team' ? confirmerName : undefined,
@@ -1548,7 +1543,7 @@ router.post(
                toUserName: tournamentMode === '1v1' ? proposerName : undefined,
                toTeamName: tournamentMode === 'team' ? proposerName : undefined,
                toTeamMembers: tournamentMode === 'team' ? proposerTeamMembers : undefined,
-               toDiscordIds: proposerDiscordIds.length > 0 ? proposerDiscordIds : undefined,
+               discordIds: proposerDiscordIds.length > 0 ? proposerDiscordIds : undefined,
                proposedTimeRanges: formattedRanges,
              }
            ).catch(err => console.error('⚠️ Discord notification failed:', err));
@@ -1573,7 +1568,6 @@ router.post(
              tournamentId,
              'schedule_rejected',
              {
-               tournamentName,
                actionByUserName: confirmerUserName,
                fromUserName: tournamentMode === '1v1' ? confirmerName : confirmerUserName,
                fromTeamName: tournamentMode === 'team' ? confirmerName : undefined,
@@ -1581,7 +1575,7 @@ router.post(
                toUserName: tournamentMode === '1v1' ? proposerName : undefined,
                toTeamName: tournamentMode === 'team' ? proposerName : undefined,
                toTeamMembers: tournamentMode === 'team' ? proposerTeamMembers : undefined,
-               toDiscordIds: proposerDiscordIds.length > 0 ? proposerDiscordIds : undefined,
+               discordIds: proposerDiscordIds.length > 0 ? proposerDiscordIds : undefined,
                proposedTimeRanges: formattedRejectedRanges,
              }
            ).catch(err => console.error('⚠️ Discord notification failed:', err));
@@ -2052,7 +2046,6 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
           tournamentId,
           'schedule_proposal',
           {
-            tournamentName,
             actionByUserName: counterProposerUserName,
             fromUserName: tournamentMode === '1v1' ? counterProposerName : counterProposerUserName,
             fromTeamName: tournamentMode === 'team' ? counterProposerName : undefined,
@@ -2060,7 +2053,7 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
             toUserName: tournamentMode === '1v1' ? originalProposerName : undefined,
             toTeamName: tournamentMode === 'team' ? originalProposerName : undefined,
             toTeamMembers: tournamentMode === 'team' ? originalProposerMembers : undefined,
-            toDiscordIds: originalProposerDiscordIds.length > 0 ? originalProposerDiscordIds : undefined,
+            discordIds: originalProposerDiscordIds.length > 0 ? originalProposerDiscordIds : undefined,
             proposedTimeRanges: formattedRanges,
             messageExtra: notes || undefined,
           }
@@ -2198,7 +2191,6 @@ router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, re
         tournamentId,
         'schedule_changed',
         {
-          tournamentName,
           actionByUserName: proposerUserName,
           fromUserName: tournamentMode === '1v1' ? proposerName : proposerUserName,
           fromTeamName: tournamentMode === 'team' ? proposerName : undefined,
@@ -2206,7 +2198,7 @@ router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, re
           toUserName: tournamentMode === '1v1' ? opponentName : undefined,
           toTeamName: tournamentMode === 'team' ? opponentName : undefined,
           toTeamMembers: tournamentMode === 'team' ? opponentTeamMembers : undefined,
-          toDiscordIds: opponentDiscordIds.length > 0 ? opponentDiscordIds : undefined,
+          discordIds: opponentDiscordIds.length > 0 ? opponentDiscordIds : undefined,
           proposedTimeRanges: formattedRanges,
           messageExtra: notes || undefined,
         }
@@ -2439,7 +2431,6 @@ router.delete('/proposals/:proposalId', authMiddleware, async (req: AuthRequest,
         tournamentId,
         'schedule_cancelled',
         {
-          tournamentName,
           actionByUserName: proposerName,
           fromUserName: tournamentMode === '1v1' ? proposerName : undefined,
           fromTeamName: tournamentMode === 'team' ? cancellingTeamName : undefined,
@@ -2448,7 +2439,7 @@ router.delete('/proposals/:proposalId', authMiddleware, async (req: AuthRequest,
           toUserName: tournamentMode === '1v1' ? opponentName : undefined,
           toTeamName: tournamentMode === 'team' ? opponentName : undefined,
           toTeamMembers: tournamentMode === 'team' ? opponentTeamMembers : undefined,
-          toDiscordIds: opponentDiscordIds.length > 0 ? opponentDiscordIds : undefined,
+          discordIds: opponentDiscordIds.length > 0 ? opponentDiscordIds : undefined,
           proposedTimeRanges: formattedCancelledRanges,
         }
       ).catch(err => console.error('⚠️ Discord notification failed:', err));

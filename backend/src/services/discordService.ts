@@ -34,6 +34,7 @@ class DiscordService {
     'Content-Type': 'application/json',
   };
 
+  /** Remove markdown that is not useful in Discord embeds and enforce a limit. */
   private toDiscordSafeText(input: string | undefined, maxLength: number): string {
     if (!input) return '';
     const normalized = input
@@ -48,6 +49,7 @@ class DiscordService {
     return `${normalized.slice(0, maxLength - 1)}…`;
   }
 
+  /** Combine the optional tournament description and rules into one embed-safe block. */
   private buildCombinedTournamentText(
     description: string | undefined,
     rulesMarkdown: string | undefined,
@@ -71,9 +73,7 @@ class DiscordService {
     return `${combined.slice(0, maxLength - 1)}…`;
   }
 
-  /**
-   * Creates a thread in the forum channel for a tournament
-   */
+  /** Create the forum thread that becomes the tournament's Discord discussion space. */
   async createTournamentThread(
     tournamentId: string,
     tournamentName: string,
@@ -99,7 +99,7 @@ class DiscordService {
       const content = `**🎮 ${threadName}**\n\nOrganizers: **${organizers}**${combinedLine}\n\nDiscussions and updates will be posted here.`;
       const payload = {
         name: threadName,
-        auto_archive_duration: 10080, // 7 días
+        auto_archive_duration: 10080, // 7 days
         message: {
           content: content.slice(0, 1900),
         },
@@ -117,17 +117,15 @@ class DiscordService {
       console.log(`✅ Thread created for tournament ${tournamentId}: ${threadId}`);
       return threadId;
     } catch (error: any) {
-      console.error('❌ Error creando thread en Discord:', error.response?.data || error.message);
+      console.error('❌ Error creating Discord thread:', error.response?.data || error.message);
       if (error.response?.data?.errors) {
-        console.error('Detalles de errores:', JSON.stringify(error.response.data.errors, null, 2));
+        console.error('Discord error details:', JSON.stringify(error.response.data.errors, null, 2));
       }
       return '';
     }
   }
 
-  /**
-   * Publica un mensaje en un thread de torneo
-   */
+  /** Publish an embed or content message to a Discord channel or tournament thread. */
   async publishTournamentMessage(
     threadId: string,
     message: DiscordMessage
@@ -148,15 +146,12 @@ class DiscordService {
       );
       return true;
     } catch (error) {
-      console.error('Error publicando mensaje en Discord:', error);
+      console.error('Error publishing Discord message:', error);
       return false;
     }
   }
 
-  /**
-   * Publish a message to a plain Discord channel (non-thread).
-   * Used for global channels like P2P challenges.
-   */
+  /** Publish a message to a plain Discord channel, such as the P2P challenge channel. */
   async publishChannelMessage(
     channelId: string,
     message: DiscordMessage
@@ -164,9 +159,7 @@ class DiscordService {
     return this.publishTournamentMessage(channelId, message);
   }
 
-  /**
-   * Torneo Creado
-   */
+  /** Publish the initial tournament details after its forum thread is created. */
   async postTournamentCreated(
     threadId: string,
     tournamentName: string,
@@ -212,29 +205,7 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /**
-   * Inscripción Abierta
-   */
-  async postRegistrationOpen(
-    threadId: string,
-    tournamentName: string
-  ): Promise<boolean> {
-    const embed: DiscordEmbed = {
-      title: `🔓 Registration Open`,
-      description: `Registration for **${tournamentName}** is now open.`,
-      color: 0x2ecc71, // Green
-      footer: {
-        text: 'Status: Registration open',
-      },
-      timestamp: new Date().toISOString(),
-    };
-
-    return this.publishTournamentMessage(threadId, { embeds: [embed] });
-  }
-
-  /**
-   * Jugador Inscrito
-   */
+  /** Publish a notification when a player requests to join the tournament. */
   async postPlayerRegistered(
     threadId: string,
     playerNickname: string,
@@ -265,9 +236,7 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /**
-   * Jugador Aceptado
-   */
+  /** Publish a notification when an organizer accepts a participant. */
   async postPlayerAccepted(
     threadId: string,
     playerNickname: string,
@@ -293,9 +262,7 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /**
-   * Inscripción Cerrada
-   */
+  /** Publish a notification when tournament registration closes. */
   async postRegistrationClosed(
     threadId: string,
     totalParticipants: number
@@ -320,9 +287,7 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /**
-   * Torneo Iniciado
-   */
+  /** Publish the tournament-start notification with participant and round counts. */
   async postTournamentStarted(
     threadId: string,
     tournamentName: string,
@@ -354,9 +319,7 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /**
-   * Ronda Iniciada
-   */
+  /** Publish the opening of one tournament round and its deadline. */
   async postRoundStarted(
     threadId: string,
     roundNumber: number,
@@ -388,9 +351,7 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /**
-   * Cuadro de Emparejamientos
-   */
+  /** Publish the pairings generated for a tournament round. */
   async postMatchups(
     threadId: string,
     roundNumber: number,
@@ -413,50 +374,7 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /**
-   * Resultado de Partida Reportada
-   */
-  async postMatchResult(
-    threadId: string,
-    player1: string,
-    player2: string,
-    winner: string,
-    map: string,
-    faction: string
-  ): Promise<boolean> {
-    const embed: DiscordEmbed = {
-      title: `🏆 Match Result - ${winner} Wins`,
-      description: `**${player1}** vs **${player2}**`,
-      color: 0x2ecc71, // Green
-      fields: [
-        {
-          name: 'Winner',
-          value: winner,
-          inline: true,
-        },
-        {
-          name: 'Map',
-          value: map,
-          inline: true,
-        },
-        {
-          name: 'Faction',
-          value: faction,
-          inline: true,
-        },
-      ],
-      footer: {
-        text: 'Match reported',
-      },
-      timestamp: new Date().toISOString(),
-    };
-
-    return this.publishTournamentMessage(threadId, { embeds: [embed] });
-  }
-
-  /**
-   * Liga iniciada — todas las rondas abiertas simultáneamente
-   */
+  /** Publish that a league has started with all rounds open simultaneously. */
   async postLeagueStarted(
     threadId: string,
     totalRounds: number,
@@ -487,29 +405,7 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /**
-   * Fin de Ronda
-   */
-  async postRoundEnded(
-    threadId: string,
-    roundNumber: number
-  ): Promise<boolean> {
-    const embed: DiscordEmbed = {
-      title: `✅ Round ${roundNumber} Completed`,
-      description: `Round ${roundNumber} has finished.`,
-      color: 0x27ae60, // Dark green
-      footer: {
-        text: `Round ${roundNumber}`,
-      },
-      timestamp: new Date().toISOString(),
-    };
-
-    return this.publishTournamentMessage(threadId, { embeds: [embed] });
-  }
-
-  /**
-   * Fin de Ronda en Liga con clasificación actual
-   */
+  /** Publish league standings after a round has completed. */
   async postLeagueRoundCompleted(
     threadId: string,
     roundNumber: number,
@@ -541,42 +437,7 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /**
-   * Clasificados para la Siguiente Ronda
-   */
-  async postQualifiedPlayers(
-    threadId: string,
-    roundNumber: number,
-    players: Array<{ nickname: string; points: number }>
-  ): Promise<boolean> {
-    const playerText = players
-      .slice(0, 20) // Max 20 to not exceed Discord limit
-      .map((p, i) => `${i + 1}. **${p.nickname}** - ${p.points} pts`)
-      .join('\n');
-
-    const embed: DiscordEmbed = {
-      title: `📊 Standings - Round ${roundNumber}`,
-      description: playerText || 'No qualified players',
-      color: 0x3498db, // Blue
-      fields: [
-        {
-          name: 'Total',
-          value: `${players.length} players`,
-          inline: true,
-        },
-      ],
-      footer: {
-        text: `Round ${roundNumber}`,
-      },
-      timestamp: new Date().toISOString(),
-    };
-
-    return this.publishTournamentMessage(threadId, { embeds: [embed] });
-  }
-
-  /**
-   * Jugador/equipo eliminado del torneo (por decisión del organizador)
-   */
+  /** Publish the current standings after a player or team is eliminated. */
   async postEliminatedFromTournament(
     threadId: string,
     tournamentName: string,
@@ -601,9 +462,7 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /**
-   * Torneo Finalizado
-   */
+  /** Publish the tournament winner and runner-up when the tournament ends. */
   async postTournamentFinished(
     threadId: string,
     tournamentName: string,
@@ -635,9 +494,7 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /**
-   * Torneo Cancelado
-   */
+  /** Publish the cancellation notice for a tournament thread. */
   async postTournamentCancelled(
     threadId: string,
     tournamentName: string,

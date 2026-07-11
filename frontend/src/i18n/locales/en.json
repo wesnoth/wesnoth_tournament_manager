@@ -593,7 +593,7 @@
   "profile.discord_placeholder": "Enter your Discord ID",
   "profile.discord_title": "Discord ID",
   "profile.error_discord_empty": "Discord ID cannot be empty",
-  "profile.error_discord_invalid": "Invalid Discord ID format. Use a Discord ID or mention.",
+  "profile.error_discord_invalid": "Invalid Discord ID format. Enter the 17-20 digit Discord user ID.",
   "profile.error_ranked_update": "Error updating ranked preference",
   "profile.error_update_avatar_failed": "Failed to update avatar",
   "profile.error_update_country_failed": "Failed to update country",

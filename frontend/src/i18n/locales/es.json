@@ -583,7 +583,7 @@
   "profile.discord_placeholder": "Ingresa tu ID de Discord",
   "profile.discord_title": "ID de Discord",
   "profile.error_discord_empty": "El ID de Discord no puede estar vacío",
-  "profile.error_discord_invalid": "Formato de ID de Discord inválido. Usa un ID o mención de Discord.",
+  "profile.error_discord_invalid": "Formato de ID de Discord inválido. Introduce el ID numérico de usuario de Discord (17-20 dígitos).",
   "profile.error_ranked_update": "Error al actualizar la preferencia de clasificadas",
   "profile.error_update_avatar_failed": "Error al actualizar el avatar",
   "profile.error_update_country_failed": "Error al actualizar el país",

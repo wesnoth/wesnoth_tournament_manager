@@ -171,10 +171,7 @@ const Profile: React.FC = () => {
   }, [discordId, t]);
 
   const isValidDiscordIdFormat = useCallback((id: string): boolean => {
-    const normalized = id.trim();
-    const mentionRegex = /^<@!?(\d{17,20})>$/;
-    const idRegex = /^\d{17,20}$/;
-    return mentionRegex.test(normalized) || idRegex.test(normalized);
+    return /^\d{17,20}$/.test(id.trim());
   }, []);
 
   const handleValidateDiscordId = useCallback(async () => {

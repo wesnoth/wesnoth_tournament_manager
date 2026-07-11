@@ -18,6 +18,7 @@ import { buildNotificationMessage, formatTimeRangesForDiscord, groupSlotsIntoRan
 const router = Router();
 const DISCORD_P2P_CHALLENGE_CHANNEL_ID = process.env.DISCORD_P2P_CHALLENGE_CHANNEL_ID || '';
 
+/** Publish a challenge event to the configured public P2P Discord channel. */
 const sendChallengeDiscord = async (
   title: string,
   color: number,
@@ -37,9 +38,10 @@ const sendChallengeDiscord = async (
   });
 };
 
-const getUserSummary = async (userId: string): Promise<{ nickname: string; discordId: string | null }> => {
+/** Load the display name used in challenge notifications. */
+const getUserSummary = async (userId: string): Promise<{ nickname: string }> => {
   const result = await query(
-    `SELECT COALESCE(nickname, id) AS nickname, discord_id
+    `SELECT COALESCE(nickname, id) AS nickname
      FROM users_extension
      WHERE id = ?
      LIMIT 1`,
@@ -47,12 +49,11 @@ const getUserSummary = async (userId: string): Promise<{ nickname: string; disco
   );
 
   if (!result.rows || result.rows.length === 0) {
-    return { nickname: 'Player', discordId: null };
+    return { nickname: 'Player' };
   }
 
   return {
     nickname: result.rows[0].nickname,
-    discordId: result.rows[0].discord_id || null,
   };
 };
 
