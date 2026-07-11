@@ -22,6 +22,22 @@ interface EventItem {
   userTeamParticipates?: boolean;
 }
 
+/** Format an event timestamp in the authenticated user's IANA timezone. */
+const formatEventDateTime = (datetime: string, timezone: string): string =>
+  new Date(datetime).toLocaleString(undefined, { timeZone: timezone });
+
+/** Return the calendar date key for an event in the viewer's timezone. */
+const getEventDateKey = (datetime: string, timezone: string): string => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(datetime));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+};
+
 const Events: React.FC = () => {
   const { t } = useTranslation();
   const { userId } = useAuthStore();
@@ -167,7 +183,7 @@ const Events: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [t, userId]);
 
   useEffect(() => {
     loadEvents();
@@ -216,11 +232,13 @@ const Events: React.FC = () => {
         {ranges.map((range, idx) => (
           <div key={idx}>
             {range.start.toLocaleTimeString('es-ES', {
+              timeZone: timezone,
               hour: '2-digit',
               minute: '2-digit'
             })}
             {' – '}
             {range.end.toLocaleTimeString('es-ES', {
+              timeZone: timezone,
               hour: '2-digit',
               minute: '2-digit'
             })}
@@ -266,30 +284,30 @@ const Events: React.FC = () => {
       }
 
       const eventDate = new Date(event.datetime);
+      // The default events view is an upcoming-events view. Historical events
+      // remain available when the user explicitly selects a start date.
+      if (!fromDateFilter && eventDate.getTime() < Date.now()) return false;
+      const eventDateKey = getEventDateKey(event.datetime, userTimezone);
       if (fromDateFilter) {
-        const from = new Date(fromDateFilter);
-        from.setHours(0, 0, 0, 0);
-        if (eventDate < from) return false;
+        if (eventDateKey < fromDateFilter) return false;
       }
       if (toDateFilter) {
-        const to = new Date(toDateFilter);
-        to.setHours(23, 59, 59, 999);
-        if (eventDate > to) return false;
+        if (eventDateKey > toDateFilter) return false;
       }
 
       return true;
     });
-  }, [events, typeFilter, tournamentNameFilter, playerFilter, fromDateFilter, toDateFilter, myEventsOnly, userId]);
+  }, [events, typeFilter, tournamentNameFilter, playerFilter, fromDateFilter, toDateFilter, myEventsOnly, userId, userTimezone]);
 
   const groupedByDay = useMemo(() => {
     const grouped: Record<string, EventItem[]> = {};
     for (const event of filteredEvents) {
-      const key = new Date(event.datetime).toISOString().slice(0, 10);
+      const key = getEventDateKey(event.datetime, userTimezone);
       if (!grouped[key]) grouped[key] = [];
       grouped[key].push(event);
     }
     return Object.entries(grouped).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [filteredEvents]);
+  }, [filteredEvents, userTimezone]);
 
   return (
     <div className="bg-gradient-to-br from-gray-100 to-gray-300 min-h-screen py-8 px-4">
@@ -410,7 +428,7 @@ const Events: React.FC = () => {
                       <td className="px-4 py-3">{event.title}</td>
                       <td className="px-4 py-3">{event.players.join(' vs ')}</td>
                       <td className="px-4 py-3">
-                        {new Date(event.datetime).toLocaleString()}
+                        {formatEventDateTime(event.datetime, userTimezone)}
                         {event.type === 'p2p' && event.raw?.slots && (
                           renderScheduleSlots(event.raw, userTimezone)
                         )}
@@ -448,7 +466,13 @@ const Events: React.FC = () => {
             {groupedByDay.map(([dateKey, dayEvents]) => (
               <section key={dateKey} className="bg-white rounded-lg shadow">
                 <div className="px-4 py-3 border-b border-gray-200 font-semibold text-gray-800">
-                  {new Date(dateKey).toLocaleDateString()}
+                  {dayEvents[0] && new Date(dayEvents[0].datetime).toLocaleDateString(undefined, {
+                    timeZone: userTimezone,
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'numeric',
+                    day: 'numeric',
+                  })}
                 </div>
                 <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                   {dayEvents.map((event) => (
@@ -461,7 +485,7 @@ const Events: React.FC = () => {
                       <h3 className="font-semibold text-gray-800 mt-1">{event.title}</h3>
                       <p className="text-sm text-gray-700 mt-1">{event.players.join(' vs ')}</p>
                       <p className="text-sm text-gray-600 mt-1">
-                        {new Date(event.datetime).toLocaleString()}
+                        {formatEventDateTime(event.datetime, userTimezone)}
                       </p>
                      {event.type === 'p2p' && event.raw?.slots && (
                        renderScheduleSlots(event.raw, userTimezone)

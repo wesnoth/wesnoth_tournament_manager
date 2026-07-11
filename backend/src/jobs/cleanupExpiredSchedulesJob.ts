@@ -1,17 +1,14 @@
 import { query } from '../config/database.js';
 
+interface ExpiredProposalRow {
+  id: string;
+  linked_round_match_id: string | null;
+}
+
 /**
- * Clean up expired schedule proposals (both P2P and tournament)
- * 
- * A proposal is considered expired if:
- * 1. Status is NOT 'confirmed' or 'cancelled'
- * 2. The latest slot_datetime in the proposal + EXPIRED_SCHEDULE_CLEANUP_DAYS < NOW()
- * 
- * When expired:
- * - Delete all slots for the proposal
- * - Delete confirmations for the proposal
- * - Delete the proposal itself
- * - If tournament proposal: reset tournament_round_matches back to pending
+ * Remove old P2P and tournament proposals together with their slots and
+ * confirmations. The retention window uses `expires_at`, falling back to the
+ * latest slot for legacy proposals without an expiration timestamp.
  */
 export async function cleanupExpiredSchedules(): Promise<void> {
   const cleanupDays = parseInt(process.env.EXPIRED_SCHEDULE_CLEANUP_DAYS || '3', 10);
@@ -19,62 +16,47 @@ export async function cleanupExpiredSchedules(): Promise<void> {
   try {
     console.log(`⏰ [SCHEDULES] Starting cleanup of expired schedules (threshold: ${cleanupDays} days)...`);
 
-    // Find all non-confirmed, non-cancelled proposals with expired latest slots
     const expiredResult = await query(
-      `SELECT 
-         msp.id,
-         msp.proposal_type,
-         msp.tournament_round_match_id,
-         MAX(mss.slot_datetime) as latest_slot
-       FROM match_schedule_proposals msp
-       LEFT JOIN match_schedule_slots mss ON msp.id = mss.proposal_id
-       WHERE msp.status NOT IN ('confirmed', 'cancelled')
-         AND mss.status = 'pending'
-       GROUP BY msp.id
-       HAVING latest_slot IS NOT NULL
-         AND latest_slot < DATE_SUB(NOW(), INTERVAL ? DAY)
-       ORDER BY latest_slot ASC`,
+      `SELECT p.id,
+              COALESCE(p.tournament_round_match_id, tm.tournament_round_match_id) AS linked_round_match_id
+       FROM match_schedule_proposals p
+       LEFT JOIN match_schedule_slots s ON s.proposal_id = p.id
+       LEFT JOIN tournament_matches tm ON tm.id = p.tournament_match_id
+       GROUP BY p.id, p.tournament_round_match_id, tm.tournament_round_match_id, p.expires_at
+       HAVING COALESCE(p.expires_at, MAX(s.slot_datetime)) < DATE_SUB(NOW(), INTERVAL ? DAY)
+       ORDER BY COALESCE(p.expires_at, MAX(s.slot_datetime)) ASC`,
       [cleanupDays]
     );
 
-    const expiredProposals = (expiredResult as any).rows || [];
+    const expiredProposals = (expiredResult.rows || []) as ExpiredProposalRow[];
     let deletedCount = 0;
     let failedCount = 0;
 
     for (const proposal of expiredProposals) {
       try {
-        const { id: proposalId, tournament_round_match_id } = proposal;
+        await query(`DELETE FROM match_schedule_confirmations WHERE proposal_id = ?`, [proposal.id]);
+        await query(`DELETE FROM match_schedule_slots WHERE proposal_id = ?`, [proposal.id]);
 
-        // Delete slots
-        await query(
-          `DELETE FROM match_schedule_slots WHERE proposal_id = ?`,
-          [proposalId]
-        );
-
-        // Delete confirmations
-        await query(
-          `DELETE FROM match_schedule_confirmations WHERE proposal_id = ?`,
-          [proposalId]
-        );
-
-        // If tournament proposal, reset tournament_round_matches
-        if (tournament_round_match_id) {
+        // Do not clear a match schedule if another active proposal replaced it.
+        if (proposal.linked_round_match_id) {
           await query(
-            `UPDATE tournament_round_matches 
-             SET scheduled_datetime = NULL, 
+            `UPDATE tournament_round_matches
+             SET scheduled_datetime = NULL,
                  scheduled_status = 'pending',
+                 scheduled_by_player_id = NULL,
                  scheduled_confirmed_at = NULL
-             WHERE id = ?`,
-            [tournament_round_match_id]
+             WHERE id = ?
+               AND NOT EXISTS (
+                 SELECT 1 FROM match_schedule_proposals
+                 WHERE tournament_round_match_id = ?
+                   AND id <> ?
+                   AND status IN ('pending', 'confirmed', 'active')
+               )`,
+            [proposal.linked_round_match_id, proposal.linked_round_match_id, proposal.id]
           );
         }
 
-        // Delete proposal
-        await query(
-          `DELETE FROM match_schedule_proposals WHERE id = ?`,
-          [proposalId]
-        );
-
+        await query(`DELETE FROM match_schedule_proposals WHERE id = ?`, [proposal.id]);
         deletedCount++;
       } catch (error) {
         console.error(`❌ [SCHEDULES] Failed to delete expired proposal ${proposal.id}:`, error);
@@ -82,9 +64,30 @@ export async function cleanupExpiredSchedules(): Promise<void> {
       }
     }
 
-    if (expiredProposals.length > 0) {
+    // Clear schedules created by the legacy single-slot endpoints, which may
+    // have no row in match_schedule_proposals to anchor their retention.
+    const legacyScheduleResult = await query(
+      `UPDATE tournament_round_matches trm
+       SET scheduled_datetime = NULL,
+           scheduled_status = 'pending',
+           scheduled_by_player_id = NULL,
+           scheduled_confirmed_at = NULL
+       WHERE trm.scheduled_datetime IS NOT NULL
+         AND trm.scheduled_datetime < DATE_SUB(NOW(), INTERVAL ? DAY)
+         AND NOT EXISTS (
+           SELECT 1
+           FROM match_schedule_proposals p
+           LEFT JOIN tournament_matches tm ON tm.id = p.tournament_match_id
+           WHERE (p.tournament_round_match_id = trm.id OR tm.tournament_round_match_id = trm.id)
+             AND p.status IN ('pending', 'confirmed', 'active')
+         )`,
+      [cleanupDays]
+    );
+    const legacySchedulesCleared = legacyScheduleResult.rowCount || 0;
+
+    if (expiredProposals.length > 0 || legacySchedulesCleared > 0) {
       console.log(
-        `✅ [SCHEDULES] Cleanup completed: ${deletedCount} expired proposals deleted, ${failedCount} failed out of ${expiredProposals.length}`
+        `✅ [SCHEDULES] Cleanup completed: ${deletedCount} proposals deleted, ${legacySchedulesCleared} legacy schedules cleared, ${failedCount} failed`
       );
     }
   } catch (error) {
