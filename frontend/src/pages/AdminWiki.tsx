@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../store/authStore';
 import WikiEditor from '../components/WikiEditor';
+import JSZip from 'jszip';
 
 interface WikiTranslation {
   title: string;
@@ -311,12 +312,99 @@ const AdminWiki: React.FC = () => {
 
       try {
         setLoading(true);
-        // For now, show placeholder - full ZIP parsing requires adm-zip or similar library
-        alert('ZIP import feature coming soon. Currently use manual import via article editor.');
-        setError('ZIP import not yet fully implemented.');
+        setError(null);
+
+        // Parse ZIP file
+        const zip = new JSZip();
+        const zipData = await zip.loadAsync(file);
+
+        // Extract metadata
+        const metadataFile = zipData.file('article-metadata.json');
+        if (!metadataFile) {
+          throw new Error('article-metadata.json not found in ZIP');
+        }
+
+        const metadataText = await metadataFile.async('text');
+        const metadata = JSON.parse(metadataText);
+
+        // Validate metadata
+        if (!metadata.slug) {
+          throw new Error('Invalid metadata: missing slug');
+        }
+
+        // Extract images
+        const images: Array<{ filename: string; data: string }> = [];
+        const imagesFolder = zipData.folder('images');
+
+        if (imagesFolder) {
+          await Promise.all(
+            imagesFolder.file(/.+/).map(async (file) => {
+              try {
+                const data = await file.async('base64');
+                images.push({
+                  filename: file.name.split('/').pop() || '',
+                  data: data,
+                });
+              } catch (err) {
+                console.warn(`Failed to extract image ${file.name}:`, err);
+              }
+            })
+          );
+        }
+
+        // Check for conflicts first
+        const checkResponse = await fetch(
+          `/api/admin/wiki/import-check/${metadata.slug}`,
+          {
+            headers: { 'Authorization': `Bearer ${token}` },
+          }
+        );
+
+        const conflictInfo = await checkResponse.json();
+
+        if (conflictInfo.exists) {
+          // Show conflict dialog
+          const confirmed = confirm(
+            `Article "${metadata.slug}" already exists with languages: ${conflictInfo.current_languages?.join(', ')}\n\nOverwrite all translations?`
+          );
+
+          if (!confirmed) {
+            setLoading(false);
+            return;
+          }
+        }
+
+        // Send import request
+        const importResponse = await fetch('/api/admin/wiki/import', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            metadata,
+            images,
+            force: conflictInfo.exists,
+          }),
+        });
+
+        if (!importResponse.ok) {
+          const error = await importResponse.json();
+          throw new Error(error.error || 'Import failed');
+        }
+
+        const result = await importResponse.json();
+        alert(
+          `✅ Import successful!\n\n${result.message}`
+        );
+
+        // Refresh articles list
+        fetchArticles();
+        setActiveTab('articles');
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Import failed';
         setError(msg);
+        console.error('Import error:', err);
       } finally {
         setLoading(false);
       }

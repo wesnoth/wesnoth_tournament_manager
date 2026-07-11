@@ -210,17 +210,16 @@ router.post('/import-check/:slug', moderatorOrAdminMiddleware, async (req: AuthR
 
 /**
  * POST /api/admin/wiki/import
- * Import article from metadata JSON
+ * Import article from metadata JSON with images
  * Body: {
- *   metadata: { slug, articles: [...] },
- *   overwrite: boolean (if article exists)
+ *   metadata: { slug, articles: [...], images: [...] },
+ *   images: [{ filename, data: Buffer | string }],
+ *   force: boolean (if article exists)
  * }
- * 
- * Note: For full ZIP import with images, use separate image upload endpoint
  */
 router.post('/import', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const { metadata, overwrite } = req.body;
+    const { metadata, images, force } = req.body;
 
     if (!metadata) {
       return res.status(400).json({ error: 'Missing metadata in request' });
@@ -235,29 +234,50 @@ router.post('/import', moderatorOrAdminMiddleware, async (req: AuthRequest, res:
       });
     }
 
-    // Check if article exists
-    const existing = await wikiAdminService.queryDatabase(
-      `SELECT id FROM wiki_articles WHERE slug = ? LIMIT 1`,
-      [metadata.slug],
-    );
+    // Convert images: handle both Buffer objects and base64 strings
+    const processedImages: Array<{ filename: string; data: Buffer }> = [];
 
-    if (existing && (existing as any[]).length > 0 && !overwrite) {
-      return res.status(409).json({
-        error: `Article "${metadata.slug}" already exists`,
-        slug: metadata.slug,
-        conflict: true,
-      });
+    if (Array.isArray(images)) {
+      for (const img of images) {
+        try {
+          let buffer: Buffer;
+
+          if (typeof img.data === 'string') {
+            // Base64 string
+            buffer = Buffer.from(img.data, 'base64');
+          } else if (img.data instanceof ArrayBuffer) {
+            // ArrayBuffer from frontend
+            buffer = Buffer.from(img.data);
+          } else if (Buffer.isBuffer(img.data)) {
+            // Already a buffer
+            buffer = img.data;
+          } else if (typeof img.data === 'object' && img.data.type === 'Buffer') {
+            // Serialized buffer object { type: 'Buffer', data: [...] }
+            buffer = Buffer.from(img.data.data);
+          } else {
+            console.warn(`Unknown image data type for ${img.filename}, skipping`);
+            continue;
+          }
+
+          processedImages.push({
+            filename: img.filename,
+            data: buffer,
+          });
+        } catch (err) {
+          console.error(`Failed to process image ${img.filename}:`, err);
+        }
+      }
     }
 
-    // Import article (will overwrite if existing and overwrite=true)
+    // Import article (will overwrite if existing and force=true)
     const result = await wikiExportImportService.importArticle(
       metadata,
-      [],
+      processedImages,
       req.userId!,
-      overwrite
+      force
     );
 
-    res.status(overwrite ? 200 : 201).json(result);
+    res.status(force ? 200 : 201).json(result);
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     res.status(400).json({ error: msg });
