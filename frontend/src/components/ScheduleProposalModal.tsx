@@ -364,9 +364,8 @@ export default function ScheduleProposalModal({
     [proposal, proposalRanges]
   );
 
-  // Memoize formatted slot data to avoid expensive date calculations on every render
-  if (!isOpen) return null;
-
+  // Keep these hooks before the closed-state return so the hook order remains
+  // identical when the modal opens and closes.
   const dateEnd = useMemo(() => {
     const end = new Date(displayDateStart);
     end.setDate(end.getDate() + 14);
@@ -378,6 +377,8 @@ export default function ScheduleProposalModal({
     [proposal]
   );
   const confirmedSlotsMap = useMemo<Record<string, string[]>>(() => ({}), []);
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
