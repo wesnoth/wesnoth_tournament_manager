@@ -384,8 +384,8 @@ export async function importArticle(
     } else {
       // Create new
       await queryTournament(
-        `INSERT INTO wiki_articles (slug, translations, author_id, is_published, created_at, updated_at)
-         VALUES (?, ?, ?, 1, NOW(), NOW())`,
+        `INSERT INTO wiki_articles (id, slug, translations, author_id, is_published, created_at, updated_at)
+         VALUES (UUID(), ?, ?, ?, 1, NOW(), NOW())`,
         [slug, JSON.stringify(translations), userId],
       );
     }
