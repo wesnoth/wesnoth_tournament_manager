@@ -16,7 +16,10 @@ import { logAuditEvent } from '../middleware/audit.js';
  * Due replays can still be downloaded but cannot be confirmed or used in matches
  */
 export async function autoDiscardUnconfirmedReplays(): Promise<void> {
-  const thresholdDays = parseInt(process.env.REPLAY_AUTO_DISCARD_TIME || '30', 10);
+  const configuredThreshold = Number(process.env.REPLAY_AUTO_DISCARD_TIME || '30');
+  const thresholdDays = Number.isInteger(configuredThreshold) && configuredThreshold >= 1 && configuredThreshold <= 3650
+    ? configuredThreshold
+    : 30;
   
   try {
     const result = await query(
@@ -24,10 +27,9 @@ export async function autoDiscardUnconfirmedReplays(): Promise<void> {
        FROM replays
        WHERE parse_status = 'parsed'
          AND integration_confidence = 1
-         AND created_at < DATE_SUB(NOW(), INTERVAL ? DAY)
+         AND created_at < DATE_SUB(NOW(), INTERVAL ${thresholdDays} DAY)
          AND deleted_at IS NULL
-       ORDER BY created_at ASC`,
-      [thresholdDays]
+       ORDER BY created_at ASC`
     );
     
     const replays = (result as any).rows || [];

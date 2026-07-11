@@ -44,6 +44,7 @@ function formatReplayDate(dateStr: string | null): string {
   if (!dateStr) return '—';
   try {
     const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return '—';
     const day = String(date.getDate()).padStart(2, '0');
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const year = date.getFullYear();
@@ -94,8 +95,15 @@ const AdminReplays: React.FC = () => {
       return;
     }
     fetchReplays();
-    fetchSystemSettings();
   }, [isAuthenticated, isAdmin, isTournamentModerator, navigate, statusFilter, currentPage, appliedFilters]);
+
+  useEffect(() => {
+    if (isAuthenticated && isAdmin) fetchSystemSettings();
+  }, [isAuthenticated, isAdmin]);
+
+  useEffect(() => () => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+  }, []);
 
   const fetchReplays = async () => {
     try {
@@ -258,8 +266,8 @@ const AdminReplays: React.FC = () => {
         {error && <p className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</p>}
         {message && <p className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-4">{message}</p>}
 
-        {/* System Settings Section */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+        {/* System settings are replay-processing controls, shown only to administrators. */}
+        {isAdmin && <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <h2 className="text-xl font-bold text-gray-800 mb-4">System Settings</h2>
           
           {loadingSettings ? (
@@ -301,7 +309,7 @@ const AdminReplays: React.FC = () => {
               </table>
             </div>
           )}
-        </div>
+        </div>}
 
         {/* Filter */}
         <div className="bg-white rounded-lg shadow-md p-4 mb-6">
@@ -514,7 +522,7 @@ const AdminReplays: React.FC = () => {
                             📎
                           </button>
                           {/* Force discard */}
-                          {['new', 'parsed', 'error', 'failed', 'processing'].includes(replay.parse_status) && !replay.match_id && (
+                          {['new', 'parsed', 'error'].includes(replay.parse_status) && !replay.match_id && (
                             <button
                               className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
                               disabled={discarding === replay.id}

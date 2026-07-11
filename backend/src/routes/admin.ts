@@ -716,18 +716,46 @@ router.delete('/audit-logs/old', authMiddleware, adminMiddleware, async (req: Au
   }
 });
 
-// List replays with filtering — accessible to admins and tournament moderators
+const REPLAY_PAGE_SIZE = 20;
+const REPLAY_STATUSES = new Set([
+  'new', 'processing', 'parsed', 'completed', 'error', 'failed',
+  'rejected', 'due', 'skipped', 'discarded', 'reported',
+]);
+
+/** Parse and validate the administrative replay list page number. */
+function parseReplayPage(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') return 1;
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) return null;
+  const page = Number(value);
+  return Number.isSafeInteger(page) && page >= 1 && page <= 100_000 ? page : null;
+}
+
+/** Return the map expression used by the UI, preferring parsed replay metadata. */
+const effectiveReplayMapSql = `COALESCE(
+  CASE WHEN JSON_VALID(parse_summary) THEN COALESCE(
+    NULLIF(JSON_UNQUOTE(JSON_EXTRACT(parse_summary, '$.finalMap')), ''),
+    NULLIF(JSON_UNQUOTE(JSON_EXTRACT(parse_summary, '$.forumMap')), ''),
+    NULLIF(JSON_UNQUOTE(JSON_EXTRACT(parse_summary, '$.resolvedMap')), '')
+  ) END,
+  map_name
+)`;
+
+// List replays with filtering — accessible to admins and tournament moderators.
 router.get('/replays', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
   try {
     const { status, page = '1', game_id, map, player } = req.query;
-    const limit = 20;
-    const pageNum = Math.max(1, parseInt(page as string) || 1);
-    const offset = (pageNum - 1) * limit;
+    const pageNum = parseReplayPage(page);
+    if (pageNum === null) {
+      return res.status(400).json({ error: 'page must be an integer between 1 and 100000' });
+    }
 
     const params: any[] = [];
     let where = 'WHERE deleted_at IS NULL';
-    
+
     if (status && status !== 'all') {
+      if (typeof status !== 'string' || !REPLAY_STATUSES.has(status)) {
+        return res.status(400).json({ error: 'Unsupported replay status filter' });
+      }
       if (status === 'reported') {
         where += ' AND match_id IS NOT NULL';
       } else {
@@ -736,74 +764,59 @@ router.get('/replays', moderatorOrAdminMiddleware, async (req: AuthRequest, res)
       }
     }
 
-    // Filter by game_id
+    // Filter by game ID only after strict validation; invalid numeric input must not become NaN.
     if (game_id) {
+      if (typeof game_id !== 'string' || !/^\d+$/.test(game_id)) {
+        return res.status(400).json({ error: 'game_id must be a positive integer' });
+      }
+      const gameId = Number(game_id);
+      if (!Number.isSafeInteger(gameId) || gameId < 1 || gameId > 4_294_967_295) {
+        return res.status(400).json({ error: 'game_id must be a valid unsigned integer' });
+      }
       where += ' AND game_id = ?';
-      params.push(parseInt(game_id as string));
+      params.push(gameId);
     }
 
-    // Get current page (without pagination limit first)
-    let result = await query(
+    if (map) {
+      if (typeof map !== 'string' || map.trim().length > 255) {
+        return res.status(400).json({ error: 'map must be at most 255 characters' });
+      }
+      where += ` AND LOWER(${effectiveReplayMapSql}) LIKE ?`;
+      params.push(`%${map.trim().toLowerCase()}%`);
+    }
+
+    if (player) {
+      if (typeof player !== 'string' || player.trim().length > 255) {
+        return res.status(400).json({ error: 'player must be at most 255 characters' });
+      }
+      where += ` AND CASE WHEN JSON_VALID(parse_summary) THEN
+        JSON_SEARCH(LOWER(parse_summary), 'one', ?, NULL, '$.forumPlayers[*].user_name')
+        ELSE NULL END IS NOT NULL`;
+      params.push(`%${player.trim().toLowerCase()}%`);
+    }
+
+    const countResult = await query(`SELECT COUNT(*) AS total FROM replays ${where}`, params);
+    const total = Number(countResult.rows[0]?.total || 0);
+    const totalPages = Math.ceil(total / REPLAY_PAGE_SIZE);
+    const offset = (pageNum - 1) * REPLAY_PAGE_SIZE;
+    const result = await query(
       `SELECT id, game_id, instance_uuid, replay_filename, parse_status, match_id,
               integration_confidence, parse_error_message, parse_summary,
               detected_at, start_time, map_name
        FROM replays ${where}
-       ORDER BY detected_at DESC`,
-      params
+       ORDER BY detected_at DESC, id DESC
+       LIMIT ? OFFSET ?`,
+      [...params, REPLAY_PAGE_SIZE, offset]
     );
 
-    // Filter by map/player using the same data source shown in UI parse summary when available.
-    let filtered = result.rows;
-    let total = filtered.length;
-
-    if (map) {
-      const mapLower = (map as string).toLowerCase().trim();
-      filtered = filtered.filter((replay: any) => {
-        let effectiveMap = replay.map_name || '';
-
-        if (replay.parse_summary) {
-          try {
-            const summary = JSON.parse(replay.parse_summary);
-            effectiveMap = summary.finalMap || summary.forumMap || summary.resolvedMap || effectiveMap;
-          } catch {
-            // Keep DB map_name fallback if parse_summary is invalid
-          }
-        }
-
-        return String(effectiveMap).toLowerCase().includes(mapLower);
-      });
-      total = filtered.length;
-    }
-
-    if (player) {
-      const playerLower = (player as string).toLowerCase();
-      filtered = filtered.filter((replay: any) => {
-        if (!replay.parse_summary) return false;
-        try {
-          const summary = JSON.parse(replay.parse_summary);
-          const players = summary.forumPlayers || [];
-          return players.some((p: any) => 
-            (p.user_name && p.user_name.toLowerCase().includes(playerLower))
-          );
-        } catch {
-          return false;
-        }
-      });
-      total = filtered.length;
-    }
-
-    // Apply pagination on filtered results
-    const totalPages = Math.ceil(total / limit);
-    const paginatedReplays = filtered.slice(offset, offset + limit);
-
     res.json({
-      replays: paginatedReplays,
+      replays: result.rows,
       pagination: {
         page: pageNum,
-        limit,
+        limit: REPLAY_PAGE_SIZE,
         total,
         totalPages,
-        showing: paginatedReplays.length
+        showing: result.rows.length
       }
     });
   } catch (error) {
@@ -818,7 +831,7 @@ router.post('/replays/:replayId/force-discard', moderatorOrAdminMiddleware, asyn
     const { replayId } = req.params;
 
     const replayResult = await query(
-      `SELECT id, parse_status, replay_filename FROM replays WHERE id = ?`,
+      `SELECT id, parse_status, replay_filename FROM replays WHERE id = ? AND deleted_at IS NULL`,
       [replayId]
     );
     if (replayResult.rows.length === 0) {
@@ -838,6 +851,7 @@ router.post('/replays/:replayId/force-discard', moderatorOrAdminMiddleware, asyn
     await logAuditEvent({
       event_type: 'REPLAY_FORCE_DISCARDED',
       user_id: req.userId,
+      username: req.username,
       ip_address: getUserIP(req),
       user_agent: getUserAgent(req),
       details: { replay_id: replayId, filename: replay.replay_filename, previous_status: replay.parse_status }
@@ -893,6 +907,7 @@ router.post('/replays/:replayId/reprocess', moderatorOrAdminMiddleware, async (r
 
     await logAuditEvent({
       event_type: 'REPLAY_REPROCESS_REQUESTED',
+      user_id: req.userId,
       username: req.username,
       ip_address: getUserIP(req),
       user_agent: getUserAgent(req),
@@ -2763,7 +2778,7 @@ router.post('/user/tournaments/:id/confirm-replacement/:participantId', authMidd
 });
 
 // Get system settings
-router.get('/system-settings', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
+router.get('/system-settings', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
   try {
     const result = await query(
       `SELECT id, setting_key, setting_value, description, created_at, updated_at, updated_by
@@ -2779,7 +2794,7 @@ router.get('/system-settings', moderatorOrAdminMiddleware, async (req: AuthReque
 });
 
 // Update system setting
-router.put('/system-settings/:setting_key', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
+router.put('/system-settings/:setting_key', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
   try {
     const { setting_key } = req.params;
     const { setting_value } = req.body;
