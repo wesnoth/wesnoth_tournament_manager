@@ -48,6 +48,11 @@ Thumbs.db
 # GitHub configuration
 .github/
 
+# Codex / local skills (never commit skill implementations or metadata)
+.github/skills/
+.codex/skills/
+**/skills/
+
 # Testing artifacts
 /testing/results/
 /testing/scripts/test_credentials.csv
@@ -69,4 +74,5 @@ tmp/
 scripts/
 playwright-report/
 wiki-artifacts/
+.wiki-tmp/
 test-results/
