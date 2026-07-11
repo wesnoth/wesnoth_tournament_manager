@@ -4,6 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { renderWikiMarkdown } from '../utils/wikiMarkdown';
 
@@ -30,6 +31,7 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
   isLoading
 }) => {
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const [article, setArticle] = useState<WikiArticle | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,10 +59,15 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
 
         if (!response.ok) {
           if (response.status === 404) {
-            // Keep the requested URL visible so a missing article can be diagnosed.
-            const msg = `Article "${slug}" not found`;
-            setError(msg);
-            onError?.(msg);
+            // Help links are derived from page names, so missing articles must use
+            // the stable getting-started article instead of leaving the user at an error page.
+            if (slug !== 'getting-started') {
+              navigate('/help/getting-started', { replace: true });
+            } else {
+              const msg = 'Article "getting-started" not found';
+              setError(msg);
+              onError?.(msg);
+            }
           } else {
             const msg = 'Failed to load article';
             setError(msg);
@@ -84,7 +91,7 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
     };
 
     fetchArticle();
-  }, [slug, language]);
+  }, [slug, language, navigate]);
 
   if (loading) {
     return (
