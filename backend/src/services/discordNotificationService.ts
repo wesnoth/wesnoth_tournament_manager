@@ -11,30 +11,61 @@ import { isValidDiscordSnowflake } from './discord.js';
 
 const DISCORD_ENABLED = process.env.DISCORD_ENABLED === 'true';
 
+/** Input data shared by all tournament match-scheduling Discord embeds. */
 interface DiscordScheduleNotificationData {
+  /** Display name of the player or team that initiated the action. */
   fromUserName?: string;
+  /** Display name of the source team for team tournaments. */
   fromTeamName?: string;
+  /** Display name of the user who performed the current action. */
   actionByUserName?: string;
+  /** Display name of the user who cancelled the proposal, when applicable. */
   cancelledByUserName?: string;
+  /** Display names of members in the source team. */
   fromTeamMembers?: string[];
+  /** Display name of the target player for one-versus-one matches. */
   toUserName?: string;
+  /** Display name of the target team for team tournaments. */
   toTeamName?: string;
+  /** Display names of members in the target team. */
   toTeamMembers?: string[];
   /** Discord user IDs that should receive a direct mention. */
   discordIds?: string[];
-  proposedDateTime?: string; // Legacy: single datetime
-  proposedTimeRanges?: string; // New: formatted time ranges (from formatTimeRangesForDiscord)
+  /** Legacy single UTC date/time retained for older scheduling flows. */
+  proposedDateTime?: string;
+  /** Current formatted UTC time ranges produced by slotGrouping utilities. */
+  proposedTimeRanges?: string;
+  /** Optional user-authored message attached to the proposal. */
   messageExtra?: string;
 }
 
-/** Format a team and its members for a Discord embed field. */
+/** Discord embed shape produced by the scheduling notification builders. */
+interface DiscordScheduleEmbed {
+  title: string;
+  description?: string;
+  color?: number;
+  fields: Array<{ name: string; value: string; inline?: boolean }>;
+  footer?: { text: string };
+  timestamp?: string;
+}
+
+/**
+ * Format a team and its members for a Discord embed field.
+ * @param teamName Team display name, or a fallback when unavailable.
+ * @param members Member display names to include below the team name.
+ * @returns A multiline value suitable for a Discord embed field.
+ */
 function formatTeamWithMembers(teamName?: string, members?: string[]): string {
   const name = teamName || 'Unknown team';
   if (!members || members.length === 0) return `${name}\nMembers: Unknown`;
   return `${name}\nMembers: ${members.join(', ')}`;
 }
 
-/** Add the actor and participant fields shared by all schedule embeds. */
+/**
+ * Add the actor and participant fields shared by all schedule embeds.
+ * @param fields Mutable field list receiving the common fields.
+ * @param data Scheduling event data containing actor and participant names.
+ */
 function appendActorAndTargetFields(
   fields: Array<{ name: string; value: string; inline?: boolean }>,
   data: DiscordScheduleNotificationData
@@ -65,11 +96,14 @@ function appendActorAndTargetFields(
 /**
  * Build the embed published when a player proposes a schedule.
  * Supports the current time-range format and the legacy single datetime field.
+ * @param tournamentName Tournament display name loaded from the database.
+ * @param data Scheduling event details.
+ * @returns A Discord embed ready to publish.
  */
 function buildScheduleProposalEmbed(
   tournamentName: string,
   data: DiscordScheduleNotificationData
-): any {
+): DiscordScheduleEmbed {
   const fields: Array<{ name: string; value: string; inline?: boolean }> = [
     { name: '📋 Tournament', value: tournamentName, inline: false },
   ];
@@ -101,11 +135,14 @@ function buildScheduleProposalEmbed(
 /**
  * Build the embed published when a schedule proposal is confirmed.
  * Supports the current time-range format and the legacy single datetime field.
+ * @param tournamentName Tournament display name loaded from the database.
+ * @param data Scheduling event details.
+ * @returns A Discord embed ready to publish.
  */
 function buildScheduleConfirmationEmbed(
   tournamentName: string,
   data: DiscordScheduleNotificationData
-): any {
+): DiscordScheduleEmbed {
   const fields: Array<{ name: string; value: string; inline?: boolean }> = [
     { name: '📋 Tournament', value: tournamentName, inline: false },
   ];
@@ -130,11 +167,14 @@ function buildScheduleConfirmationEmbed(
 
 /**
  * Build the embed published when a schedule proposal is changed.
+ * @param tournamentName Tournament display name loaded from the database.
+ * @param data Scheduling event details.
+ * @returns A Discord embed ready to publish.
  */
 function buildScheduleChangedEmbed(
   tournamentName: string,
   data: DiscordScheduleNotificationData
-): any {
+): DiscordScheduleEmbed {
   const fields: Array<{ name: string; value: string; inline?: boolean }> = [
     { name: '📋 Tournament', value: tournamentName, inline: false },
   ];
@@ -156,11 +196,14 @@ function buildScheduleChangedEmbed(
 
 /**
  * Build the embed published when a schedule proposal is cancelled.
+ * @param tournamentName Tournament display name loaded from the database.
+ * @param data Scheduling event details.
+ * @returns A Discord embed ready to publish.
  */
 function buildScheduleCancelledEmbed(
   tournamentName: string,
   data: DiscordScheduleNotificationData
-): any {
+): DiscordScheduleEmbed {
   const fields: Array<{ name: string; value: string; inline?: boolean }> = [
     { name: '📋 Tournament', value: tournamentName, inline: false },
     { name: '🚫 Event', value: 'Proposal cancelled', inline: false },
@@ -183,11 +226,14 @@ function buildScheduleCancelledEmbed(
 
 /**
  * Build the embed published when a schedule proposal is rejected.
+ * @param tournamentName Tournament display name loaded from the database.
+ * @param data Scheduling event details.
+ * @returns A Discord embed ready to publish.
  */
 function buildScheduleRejectionEmbed(
   tournamentName: string,
   data: DiscordScheduleNotificationData
-): any {
+): DiscordScheduleEmbed {
   const fields: Array<{ name: string; value: string; inline?: boolean }> = [
     { name: '📋 Tournament', value: tournamentName, inline: false },
   ];
@@ -211,6 +257,10 @@ function buildScheduleRejectionEmbed(
  * Build and publish a scheduling notification in the tournament thread.
  * `discordIds` already contains canonical Discord user IDs, so no username
  * or discriminator lookup is performed before creating mentions.
+ * @param tournamentId Tournament whose Discord thread receives the message.
+ * @param notificationType Scheduling event type used to select the embed.
+ * @param notificationData Actor, participant, time, and mention data.
+ * @returns `true` when the notification is skipped or published successfully; otherwise `false`.
  */
 export async function sendDiscordNotification(
   tournamentId: string,
@@ -294,6 +344,14 @@ export async function sendDiscordNotification(
 
 /**
  * Store an in-app notification for users who may be offline when the event occurs.
+ * @param userIds Application user IDs that should receive the notification.
+ * @param tournamentId Tournament or proposal owner used by the notification record.
+ * @param matchId Match or proposal identifier associated with the event.
+ * @param type Notification type consumed by the in-app notification UI.
+ * @param title Short notification title.
+ * @param message Human-readable notification body.
+ * @param messageExtra Optional additional content stored separately.
+ * @returns `true` when all inserts succeed; otherwise `false`.
  */
 export async function storeNotificationForUsers(
   userIds: string[],

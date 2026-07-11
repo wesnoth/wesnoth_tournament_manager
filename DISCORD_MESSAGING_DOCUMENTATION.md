@@ -1,33 +1,20 @@
 # Discord Messaging Integration
 
-This document describes the Discord integration currently implemented in the Wesnoth Tournament Manager.
+This document is a high-level guide to the Discord integration in the Wesnoth Tournament Manager. The source code and its English comments/JSDoc are the authoritative documentation for individual functions, parameters, limits, payloads, and implementation details.
+
+Keep this document focused on architecture, responsibilities, configuration, and user-visible behavior. Do not duplicate function inventories or line-level implementation details here.
+
+## Scope
 
 Discord is an optional, best-effort notification channel. Tournament and challenge operations must continue to work when Discord is disabled, misconfigured, or temporarily unavailable.
 
-## Supported identity model
+The integration currently covers:
 
-The application accepts and stores only the canonical Discord user ID: the numeric Discord snowflake copied from Discord Developer Mode.
-
-Examples of valid input:
-
-```text
-123456789012345678
-```
-
-The following are not supported:
-
-- Discord usernames
-- `username#discriminator` values
-- Discord mentions such as `<@123456789012345678>`
-- Display names or nicknames
-
-The stored value is `users_extension.discord_id`. It is used directly to build mentions:
-
-```text
-<@DISCORD_USER_ID>
-```
-
-No username search or discriminator lookup is performed by the application.
+- Tournament forum threads and tournament lifecycle events.
+- Public P2P challenge events.
+- Tournament match-scheduling events.
+- Direct Discord mentions for users whose canonical Discord IDs are stored.
+- In-app notification fallback for scheduling and challenge events.
 
 ## Configuration
 
@@ -36,205 +23,81 @@ The backend reads these environment variables:
 | Variable | Purpose |
 | --- | --- |
 | `DISCORD_ENABLED=true` | Enables Discord publishing. Any other value disables it. |
-| `DISCORD_BOT_TOKEN` | Bot token used for Discord API requests. |
+| `DISCORD_BOT_TOKEN` | Bot token used for Discord REST API requests. |
 | `DISCORD_GUILD_ID` | Guild used when validating a user's Discord ID. |
 | `DISCORD_FORUM_CHANNEL_ID` | Forum channel where tournament threads are created. |
 | `DISCORD_P2P_CHALLENGE_CHANNEL_ID` | Plain channel where public P2P challenge events are posted. |
 
-`DISCORD_BOT_TOKEN` and the channel IDs are required for publishing. `DISCORD_GUILD_ID` and the bot token are required by the profile validation endpoint.
+Discord publishing requires the bot token and the relevant channel ID. Profile guild validation additionally requires `DISCORD_GUILD_ID`.
 
-## Code map
+## Identity model
 
-| File | Responsibility |
-| --- | --- |
-| `backend/src/services/discord.ts` | Snowflake validation and guild-membership validation. |
-| `backend/src/services/discordService.ts` | Discord API client, tournament threads, embeds, and generic publishing. |
-| `backend/src/services/discordNotificationService.ts` | Match-scheduling embeds, direct mentions, and in-app notification fallback. |
-| `backend/src/routes/tournaments.ts` | Tournament lifecycle notifications and custom tournament messages. |
-| `backend/src/utils/tournament.ts` | Notifications emitted by automatic tournament progression and completion. |
-| `backend/src/routes/challenges.ts` | Public P2P challenge-channel notifications. |
-| `backend/src/routes/tournament-scheduling.ts` | Schedule proposal and confirmation notifications. |
-| `backend/src/routes/users.ts` | Profile update and guild validation endpoints for Discord IDs. |
-| `frontend/src/pages/Profile.tsx` | Profile input and validation UI for the numeric Discord ID. |
-
-## Identity validation
-
-### `isValidDiscordSnowflake()`
-
-File: `backend/src/services/discord.ts`
-
-This is a local sanity check. It requires a 17-20 digit decimal value and checks the timestamp encoded in the Discord snowflake.
-
-The timestamp calculation:
-
-```ts
-const timestampMs = Number((snowflake >> 22n) + DISCORD_EPOCH_MS);
-```
-
-extracts the creation timestamp encoded in a Discord snowflake. The check rejects values before Discord's epoch and values more than one year in the future. It is useful for rejecting accidental or malformed numeric input, but it does not prove that the ID belongs to a real Discord user.
-
-### `validateDiscordId()`
-
-This function performs the authoritative application-side validation:
-
-1. Trim the submitted numeric ID.
-2. Apply `isValidDiscordSnowflake()`.
-3. Request `GET /guilds/{guildId}/members/{userId}` using the bot token.
-4. Return the Discord nickname, username, or ID for display.
-5. Return `null` for an invalid ID or a user who is not in the configured guild.
-
-The profile endpoint uses this function:
+The application accepts and stores only the canonical numeric Discord user ID, also known as the Discord snowflake copied from Discord Developer Mode.
 
 ```text
-POST /api/users/profile/discord/validate
-Body: { "discord_id": "123456789012345678" }
+123456789012345678
 ```
 
-The update endpoint accepts only a string containing the numeric ID and stores it in `users_extension.discord_id`:
+Usernames, `username#discriminator` values, display names, and Discord mention strings such as `<@123456789012345678>` are not valid input. The value is stored in `users_extension.discord_id` and is used directly when constructing mentions.
 
-```text
-PUT /api/users/profile/discord
-Body: { "discord_id": "123456789012345678" }
-```
+There is no username search or discriminator lookup. Format validation is local; the profile validation endpoint can additionally verify guild membership through Discord's API.
 
-Updating the profile performs format validation. The explicit validation endpoint performs the additional guild-membership check.
+## Architecture
 
-## Tournament Discord service
+| Area | Main location | Responsibility |
+| --- | --- | --- |
+| Discord identity validation | `backend/src/services/discord.ts` | Validate numeric IDs and optionally verify guild membership. |
+| Discord transport and tournament messages | `backend/src/services/discordService.ts` | Call Discord REST API, create tournament threads, publish embeds, and preserve readable user-authored text. |
+| Scheduling notifications | `backend/src/services/discordNotificationService.ts` | Build schedule embeds, mention stored Discord IDs, and store in-app fallback notifications. |
+| Tournament lifecycle | `backend/src/routes/tournaments.ts` and `backend/src/utils/tournament.ts` | Trigger tournament thread creation and lifecycle messages. |
+| P2P challenges | `backend/src/routes/challenges.ts` | Publish public challenge-channel messages and store in-app notifications. |
+| Scheduling routes | `backend/src/routes/tournament-scheduling.ts` | Supply schedule events and canonical Discord IDs to the notification service. |
+| Profile integration | `backend/src/routes/users.ts` and `frontend/src/pages/Profile.tsx` | Accept, display, and validate the numeric Discord ID. |
 
-File: `backend/src/services/discordService.ts`
+The tournament's Discord forum thread ID is stored in `tournaments.discord_thread_id`. Later tournament messages are sent to that thread only when the value exists.
 
-The service uses the Discord REST API v10 and returns a boolean or empty string instead of throwing publishing failures into tournament workflows.
+## User-visible notification flows
 
-### Thread and transport functions
+### Tournament notifications
 
-| Function | Use |
-| --- | --- |
-| `createTournamentThread()` | Creates one forum thread for a tournament and returns its Discord thread ID. |
-| `publishTournamentMessage()` | Publishes content or embeds to a Discord channel or tournament thread. |
-| `publishChannelMessage()` | Explicit wrapper for publishing to a non-thread channel, currently used for P2P challenges. |
-| `toDiscordSafeText()` | Removes unusable image/link targets, preserves Markdown and paragraph breaks, normalizes line endings, neutralizes public mentions, and truncates text when required. |
-| `buildCombinedTournamentText()` | Combines the tournament description and rules within Discord's embed limits while preserving their readable structure. |
+Tournament creation creates a forum thread and publishes the initial description, rules, organizers, type, and capacity. Later messages cover registration, participant acceptance, registration closure, tournament start, league start, round start, pairings, eliminations, standings, cancellation, and completion.
 
-The created thread ID is stored in `tournaments.discord_thread_id`. Every subsequent tournament notification checks that value before publishing.
+Automatic tournament progression can publish completion and league standings messages. The organizer-only results endpoint is also available as an intentional manual resend mechanism for league standings and final results.
 
-### Active tournament event functions
+### P2P challenge notifications
 
-| Function | Event |
-| --- | --- |
-| `postTournamentCreated()` | Tournament thread created and initial tournament details published. |
-| `postTournamentCancelled()` | Tournament cancelled. |
-| `postPlayerRegistered()` | User requested to join. |
-| `postPlayerAccepted()` | Organizer accepted a participant. |
-| `postRegistrationClosed()` | Registration closed. |
-| `postTournamentStarted()` | Tournament started. |
-| `postLeagueStarted()` | League started with all rounds open. |
-| `postRoundStarted()` | A round opened, including match count and deadline. |
-| `postMatchups()` | Pairings for a round published. |
-| `postEliminatedFromTournament()` | Player or team eliminated and current standings published. |
-| `postLeagueRoundCompleted()` | League round completed and standings published. |
-| `postTournamentFinished()` | Champion and runner-up published. |
+Public P2P challenge messages are sent to `DISCORD_P2P_CHALLENGE_CHANNEL_ID`. The current events are proposal, confirmation or rejection, counter-proposal, cancellation, and schedule update.
 
-Some tournament routes also build a custom embed and call `publishTournamentMessage()` directly when the message does not fit one of these event-specific helpers.
+These public messages use application nicknames and schedule information. They currently do not mention users because the public challenge flow does not need Discord user IDs. The same actions store in-app notifications for the affected users.
 
-## Tournament lifecycle coverage
+### Tournament scheduling notifications
 
-The active route and utility flows publish these events:
+Scheduling messages are sent to the tournament forum thread. They cover proposals, confirmations, rejections, changes, and cancellations. When recipients have stored canonical Discord IDs, the notification content includes direct mentions without performing any Discord username lookup.
 
-1. Tournament creation creates the forum thread, stores `discord_thread_id`, and publishes the initial details.
-2. Cancellation publishes a cancellation message when a thread exists.
-3. Join requests publish the new participant and current count.
-4. Participant acceptance publishes the accepted player and accepted count.
-5. Registration closure publishes the final participant count.
-6. Tournament start publishes the participant and round counts.
-7. League start publishes that all rounds are open.
-8. Round start publishes the round deadline and matchups.
-9. Organizer eliminations publish the eliminated player/team and standings.
-10. League progress publishes standings after each completed round.
-11. Tournament completion publishes the winner and runner-up.
+The same events are stored in `user_notifications` so users can see them inside the application even when they were offline or Discord publishing failed.
 
-Discord failures are logged and do not fail the corresponding tournament operation.
+## Formatting policy
 
-The organizer-only `POST /api/tournaments/:id/notify-results` endpoint is a deliberate manual resend mechanism for league standings and final results. It can therefore publish a repeated result notification; it is not dead code or a duplicate automatic trigger.
+Tournament descriptions and rules are authored by users. The transport layer preserves paragraph breaks, lists, numbering, and supported Markdown so the Discord embed remains readable. It removes unusable image/link targets, normalizes line endings, limits excessive blank lines, protects public broadcast mentions, and applies Discord size limits.
 
-## P2P challenge notifications
+The exact normalization and truncation behavior belongs in the comments/JSDoc beside the implementation in `backend/src/services/discordService.ts`.
 
-File: `backend/src/routes/challenges.ts`
+## Failure policy
 
-`sendChallengeDiscord()` publishes embeds to `DISCORD_P2P_CHALLENGE_CHANNEL_ID`. These messages are public channel notifications and do not create a thread.
+Discord is auxiliary and must not become part of the transaction that changes tournament or challenge state.
 
-Current challenge events are:
+- Disabled Discord skips publishing.
+- Missing configuration skips the affected message.
+- A Discord API failure is logged and does not fail the main operation.
+- A missing tournament thread skips thread-specific messages.
+- Missing or invalid recipient IDs publish the event without those mentions.
+- In-app notification storage remains a separate fallback path.
 
-- New P2P challenge proposal
-- Challenge confirmed or rejected after slot selection
-- P2P counter-proposal
-- Challenge cancellation
-- Challenge schedule update
+## Maintenance rule
 
-The challenge route uses application nicknames for the embed fields. It does not resolve usernames and does not query Discord IDs because these public challenge messages currently do not mention users.
+When changing Discord behavior:
 
-The same actions also call `storeNotificationForUsers()` so the affected application users can see an in-app notification when they return to the site.
-
-## Tournament schedule notifications
-
-File: `backend/src/services/discordNotificationService.ts`
-
-`sendDiscordNotification()` publishes scheduling events to the tournament's Discord thread. The `discordIds` field contains canonical Discord user IDs already loaded from `users_extension.discord_id`.
-
-Supported notification types:
-
-| Type | Embed |
-| --- | --- |
-| `schedule_proposal` | New schedule proposal or counter-proposal. |
-| `schedule_confirmed` | Schedule accepted. |
-| `schedule_rejected` | Schedule rejected. |
-| `schedule_changed` | Existing proposal changed. |
-| `schedule_cancelled` | Existing proposal cancelled. |
-
-When IDs are present, the service creates direct mentions without any lookup:
-
-```ts
-const messageContent = discordIds.map(id => `<@${id}>`).join(' ');
-```
-
-IDs are sanity-checked before mention construction. The embed itself contains the tournament, actor, team/player, time-range, and optional message fields.
-
-`storeNotificationForUsers()` inserts the corresponding event into `user_notifications`. This is the in-app fallback and is independent of whether Discord publishing succeeds.
-
-## Notification failure policy
-
-- `DISCORD_ENABLED` disabled: Discord publishing is skipped.
-- Missing token or channel ID: publishing is skipped.
-- Discord API failure: the error is logged and the main tournament/challenge operation continues.
-- Missing tournament thread: the notification is skipped.
-- Missing or invalid user Discord ID: the event is still published without that mention.
-- Database notification failure: the error is logged and the request follows the caller's existing error handling.
-
-Discord is therefore an auxiliary integration, not part of the transactional success criteria for tournament or challenge state changes.
-
-## Removed or obsolete code
-
-The following code was removed because there are no references in the current TypeScript source:
-
-- `resolveDiscordIdFromUsername()`
-- `normalizeDiscordInput()`
-- `extractDiscordIdCandidate()`
-- `checkGuildMembershipByDiscordId()`
-- `DiscordService.postRegistrationOpen()`
-- `DiscordService.postMatchResult()`
-- `DiscordService.postRoundEnded()`
-- `DiscordService.postQualifiedPlayers()`
-- `DiscordScheduleNotificationData.fromDiscordId`
-
-Username/discriminator resolution was obsolete because all notification producers now read the canonical ID from the database. The timestamp validation was retained because it remains a useful local sanity check before accepting or formatting numeric input; guild membership validation remains the authoritative Discord check.
-
-## Verification checklist
-
-For a local verification:
-
-1. Run the backend TypeScript build.
-2. Run the frontend build.
-3. With Discord disabled, create/update/cancel a test tournament and challenge; all application operations must succeed without Discord calls.
-4. With Discord enabled in the test environment, verify thread creation and the lifecycle events above.
-5. Save a numeric Discord user ID in a test profile and verify the guild validation endpoint.
-6. Confirm a schedule notification mentions the stored ID directly.
-7. Try a username, `username#1234`, and `<@id>` in the profile; all must be rejected.
+1. Update the English comments/JSDoc in the affected source code first; they are the detailed source of truth.
+2. Update this Markdown file only when architecture, configuration, supported flows, identity policy, formatting policy, or failure behavior changes.
+3. Keep both source-code documentation and Markdown documentation in English.
+4. Avoid copying implementation details, function signatures, line numbers, or temporary behavior into this document.

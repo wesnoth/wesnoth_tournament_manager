@@ -8,6 +8,7 @@ const DISCORD_ENABLED = process.env.DISCORD_ENABLED === 'true'; // Enable Discor
 // Log Discord status on module load
 console.log(`🔔 Discord Service: ${DISCORD_ENABLED ? '✅ ENABLED' : '⏭️  DISABLED'} (DISCORD_ENABLED=${process.env.DISCORD_ENABLED || 'not set'})`);
 
+/** Payload shape accepted by Discord for an embed used by this service. */
 interface DiscordEmbed {
   title: string;
   description?: string;
@@ -23,6 +24,7 @@ interface DiscordEmbed {
   timestamp?: string;
 }
 
+/** Message body accepted by the Discord channel-message endpoint. */
 interface DiscordMessage {
   content?: string;
   embeds?: DiscordEmbed[];
@@ -85,7 +87,16 @@ class DiscordService {
     return `${truncated.slice(0, safeCut).trimEnd()}…`;
   }
 
-  /** Create the forum thread that becomes the tournament's Discord discussion space. */
+  /**
+   * Create the forum thread that becomes the tournament's Discord discussion space.
+   * @param tournamentId Application tournament ID used for logging.
+   * @param tournamentName Name used in the Discord thread title.
+   * @param tournamentType Tournament type shown in the title.
+   * @param organizersDisplay Optional organizer text for the first message.
+   * @param description Optional tournament description.
+   * @param rulesMarkdown Optional tournament rules.
+   * @returns The Discord thread ID, or an empty string when publishing is skipped or fails.
+   */
   async createTournamentThread(
     tournamentId: string,
     tournamentName: string,
@@ -137,7 +148,12 @@ class DiscordService {
     }
   }
 
-  /** Publish an embed or content message to a Discord channel or tournament thread. */
+  /**
+   * Publish an embed or content message to a Discord channel or tournament thread.
+   * @param threadId Discord channel or thread ID receiving the message.
+   * @param message Discord content and/or embeds to publish.
+   * @returns `true` when Discord accepts the message; otherwise `false`.
+   */
   async publishTournamentMessage(
     threadId: string,
     message: DiscordMessage
@@ -163,7 +179,12 @@ class DiscordService {
     }
   }
 
-  /** Publish a message to a plain Discord channel, such as the P2P challenge channel. */
+  /**
+   * Publish a message to a plain Discord channel, such as the P2P challenge channel.
+   * @param channelId Discord channel ID receiving the message.
+   * @param message Discord content and/or embeds to publish.
+   * @returns `true` when Discord accepts the message; otherwise `false`.
+   */
   async publishChannelMessage(
     channelId: string,
     message: DiscordMessage
@@ -171,7 +192,10 @@ class DiscordService {
     return this.publishTournamentMessage(channelId, message);
   }
 
-  /** Publish the initial tournament details after its forum thread is created. */
+  /**
+   * Publish the initial tournament details after its forum thread is created.
+   * @returns Whether the initial message was published successfully.
+   */
   async postTournamentCreated(
     threadId: string,
     tournamentName: string,
@@ -217,7 +241,10 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /** Publish a notification when a player requests to join the tournament. */
+  /**
+   * Publish a notification when a player requests to join the tournament.
+   * @returns Whether the participant message was published successfully.
+   */
   async postPlayerRegistered(
     threadId: string,
     playerNickname: string,
@@ -248,7 +275,10 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /** Publish a notification when an organizer accepts a participant. */
+  /**
+   * Publish a notification when an organizer accepts a participant.
+   * @returns Whether the acceptance message was published successfully.
+   */
   async postPlayerAccepted(
     threadId: string,
     playerNickname: string,
@@ -274,7 +304,10 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /** Publish a notification when tournament registration closes. */
+  /**
+   * Publish a notification when tournament registration closes.
+   * @returns Whether the registration-closed message was published successfully.
+   */
   async postRegistrationClosed(
     threadId: string,
     totalParticipants: number
@@ -299,7 +332,10 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /** Publish the tournament-start notification with participant and round counts. */
+  /**
+   * Publish the tournament-start notification with participant and round counts.
+   * @returns Whether the tournament-start message was published successfully.
+   */
   async postTournamentStarted(
     threadId: string,
     tournamentName: string,
@@ -331,7 +367,10 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /** Publish the opening of one tournament round and its deadline. */
+  /**
+   * Publish the opening of one tournament round and its deadline.
+   * @returns Whether the round-start message was published successfully.
+   */
   async postRoundStarted(
     threadId: string,
     roundNumber: number,
@@ -363,7 +402,10 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /** Publish the pairings generated for a tournament round. */
+  /**
+   * Publish the pairings generated for a tournament round.
+   * @returns Whether the pairings message was published successfully.
+   */
   async postMatchups(
     threadId: string,
     roundNumber: number,
@@ -386,7 +428,10 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /** Publish that a league has started with all rounds open simultaneously. */
+  /**
+   * Publish that a league has started with all rounds open simultaneously.
+   * @returns Whether the league-start message was published successfully.
+   */
   async postLeagueStarted(
     threadId: string,
     totalRounds: number,
@@ -417,7 +462,10 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /** Publish league standings after a round has completed. */
+  /**
+   * Publish league standings after a round has completed.
+   * @returns Whether the standings message was published successfully.
+   */
   async postLeagueRoundCompleted(
     threadId: string,
     roundNumber: number,
@@ -449,7 +497,10 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /** Publish the current standings after a player or team is eliminated. */
+  /**
+   * Publish the current standings after a player or team is eliminated.
+   * @returns Whether the elimination message was published successfully.
+   */
   async postEliminatedFromTournament(
     threadId: string,
     tournamentName: string,
@@ -474,7 +525,10 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /** Publish the tournament winner and runner-up when the tournament ends. */
+  /**
+   * Publish the tournament winner and runner-up when the tournament ends.
+   * @returns Whether the completion message was published successfully.
+   */
   async postTournamentFinished(
     threadId: string,
     tournamentName: string,
@@ -506,7 +560,10 @@ class DiscordService {
     return this.publishTournamentMessage(threadId, { embeds: [embed] });
   }
 
-  /** Publish the cancellation notice for a tournament thread. */
+  /**
+   * Publish the cancellation notice for a tournament thread.
+   * @returns Whether the cancellation message was published successfully.
+   */
   async postTournamentCancelled(
     threadId: string,
     tournamentName: string,
