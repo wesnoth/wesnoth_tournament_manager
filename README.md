@@ -292,6 +292,7 @@ wesnoth_tournament_manager/
 ├── API_ENDPOINTS.md             # REST API reference
 ├── REPLAY_PARSING.md            # Replay processing docs
 ├── REPLAY_ADMIN_DOCUMENTATION.md # Replay administration overview
+├── MATCH_DISPUTES_DOCUMENTATION.md # Match dispute overview
 ├── MariaDB_tournament_schema.sql # Tournament schema
 ├── MariaDB_forum_schema.sql     # Forum schema (reference)
 └── README.md
@@ -851,6 +852,7 @@ Configured in `backend/src/middleware/rateLimiter.ts`:
 - **[DB_SCHEMA.md](DB_SCHEMA.md)** — Database tables and relationships
 - **[REPLAY_PARSING.md](REPLAY_PARSING.md)** — How replays are processed
 - **[REPLAY_ADMIN_DOCUMENTATION.md](REPLAY_ADMIN_DOCUMENTATION.md)** — Replay administration overview
+- **[MATCH_DISPUTES_DOCUMENTATION.md](MATCH_DISPUTES_DOCUMENTATION.md)** — Match dispute handling overview
 - **[LANGUAGE_FALLBACK_SYSTEM_EN.md](LANGUAGE_FALLBACK_SYSTEM_EN.md)** — i18n implementation
 - **[START_HERE_EN.md](START_HERE_EN.md)** — Getting started guide
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — Contribution guidelines

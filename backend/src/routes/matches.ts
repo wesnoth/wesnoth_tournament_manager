@@ -21,6 +21,7 @@ import {
 } from '../services/statisticsCalculator.js';
 import { updateTournamentRoundMatch } from '../services/matchCreationService.js';
 import { validateAndCorrectFactions, handlePostConfirmation } from '../services/replayConfirmationService.js';
+import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
 // NOTE: Supabase replay storage temporarily disabled - using /uploads/replays instead
 import multer from 'multer';
 import path from 'path';
@@ -956,39 +957,51 @@ router.post('/:id/confirm', authMiddleware, async (req: AuthRequest, res) => {
       console.log('✅ Respondiendo con éxito - confirm');
       res.json({ message: 'Match confirmed successfully with your comments and rating' });
     } else if (action === 'dispute') {
+      if (!isLoser) {
+        return res.status(403).json({ error: 'Only the losing player can dispute this match' });
+      }
+
       if (isUnranked) {
         // UNRANKED: save comment in the appropriate column and mark as disputed
-        const commentColumn = isWinner ? 'winner_comments' : 'loser_comments';
         await query(
           `UPDATE tournament_matches SET match_status = 'completed', status = 'disputed',
-            ${commentColumn} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            loser_comments = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
           [comments || null, id]
         );
 
-        console.log(`Unranked tournament match ${id} marked as disputed by ${isWinner ? 'winner' : 'loser'} ${req.userId}`);
+        console.log(`Unranked tournament match ${id} marked as disputed by loser ${req.userId}`);
+        await logAuditEvent({
+          event_type: 'ADMIN_ACTION',
+          user_id: req.userId,
+          username: req.username,
+          ip_address: getUserIP(req),
+          user_agent: getUserAgent(req),
+          details: { action: 'MATCH_DISPUTED', tournament_match_id: id },
+        });
         res.json({ message: 'Match disputed. Awaiting organizer review.' });
       } else {
-        // RANKED: save comment in winner_comments or loser_comments and mark as disputed
-        if (isWinner) {
-          await query(
-            `UPDATE matches SET status = 'disputed', winner_comments = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [comments || null, id]
-          );
-        } else {
-          await query(
-            `UPDATE matches SET status = 'disputed', loser_comments = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [comments || null, id]
-          );
-        }
+        // RANKED: only the losing player may dispute the reported result.
+        await query(
+          `UPDATE matches SET status = 'disputed', loser_comments = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+          [comments || null, id]
+        );
 
         // Also update tournament_matches if this is a tournament ranked match
         if (tournamentMatchId) {
-          const tmCommentColumn = isWinner ? 'winner_comments' : 'loser_comments';
           await query(
-            `UPDATE tournament_matches SET status = 'disputed', ${tmCommentColumn} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            `UPDATE tournament_matches SET status = 'disputed', loser_comments = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
             [comments || null, tournamentMatchId]
           );
         }
+
+        await logAuditEvent({
+          event_type: 'ADMIN_ACTION',
+          user_id: req.userId,
+          username: req.username,
+          ip_address: getUserIP(req),
+          user_agent: getUserAgent(req),
+          details: { action: 'MATCH_DISPUTED', match_id: id, tournament_match_id: tournamentMatchId },
+        });
 
         console.log(
           `Match ${id} disputed by loser ${req.userId}: Awaiting admin review. Stats remain unchanged.`
@@ -1006,9 +1019,33 @@ router.post('/:id/confirm', authMiddleware, async (req: AuthRequest, res) => {
   }
 });
 
-// Get all disputed matches (admin view) - MUST be before /:id route
+const DISPUTES_PAGE_SIZE = 20;
+
+/** Parse and bound the administrative dispute list page number. */
+function parseDisputePage(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') return 1;
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) return null;
+  const page = Number(value);
+  return Number.isSafeInteger(page) && page >= 1 && page <= 100_000 ? page : null;
+}
+
+// Get disputed ranked matches (admin view) - MUST be before /:id route.
 router.get('/disputed/all', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
   try {
+    const page = parseDisputePage(req.query.page);
+    if (page === null) {
+      return res.status(400).json({ error: 'page must be an integer between 1 and 100000' });
+    }
+
+    const offset = (page - 1) * DISPUTES_PAGE_SIZE;
+    const countResult = await query(
+      `SELECT COUNT(*) AS total
+       FROM matches m
+       JOIN users_extension w ON m.winner_id = w.id
+       JOIN users_extension l ON m.loser_id = l.id
+       WHERE m.status = 'disputed'`
+    );
+    const total = Number(countResult.rows[0]?.total || 0);
     const result = await query(
       `SELECT m.*,
               w.nickname as winner_nickname,
@@ -1017,11 +1054,23 @@ router.get('/disputed/all', moderatorOrAdminMiddleware, async (req: AuthRequest,
        JOIN users_extension w ON m.winner_id = w.id
        JOIN users_extension l ON m.loser_id = l.id
        WHERE m.status = 'disputed'
-       ORDER BY m.updated_at DESC`
+       ORDER BY m.updated_at DESC, m.id DESC
+       LIMIT ? OFFSET ?`,
+      [DISPUTES_PAGE_SIZE, offset]
     );
 
-    res.json(result.rows);
+    res.json({
+      disputes: result.rows,
+      pagination: {
+        page,
+        limit: DISPUTES_PAGE_SIZE,
+        total,
+        totalPages: Math.ceil(total / DISPUTES_PAGE_SIZE),
+        showing: result.rows.length,
+      },
+    });
   } catch (error) {
+    console.error('Failed to fetch disputed matches:', error);
     res.status(500).json({ error: 'Failed to fetch disputed matches' });
   }
 });
@@ -1329,7 +1378,7 @@ router.post('/admin/:id/dispute', moderatorOrAdminMiddleware, async (req: AuthRe
         const tournamentMatch = tournamentMatchResult.rows[0];
         await query(
           `UPDATE tournament_matches
-           SET match_status = 'pending', winner_id = NULL, match_id = NULL, played_at = NULL
+           SET match_status = 'pending', status = 'unconfirmed', winner_id = NULL, match_id = NULL, played_at = NULL
            WHERE id = ?`,
           [tournamentMatch.tm_id]
         );
@@ -1337,6 +1386,14 @@ router.post('/admin/:id/dispute', moderatorOrAdminMiddleware, async (req: AuthRe
       }
 
       console.log(`Match ${id} dispute validated by admin ${req.userId}: Cancelled, cascade recalculated ${matchesRecalculated} subsequent matches, updated ${affectedPlayers.size} affected players`);
+      await logAuditEvent({
+        event_type: 'ADMIN_ACTION',
+        user_id: req.userId,
+        username: req.username,
+        ip_address: getUserIP(req),
+        user_agent: getUserAgent(req),
+        details: { action: 'MATCH_DISPUTE_VALIDATED', match_id: id, matches_recalculated: matchesRecalculated, affected_players: affectedPlayers.size },
+      });
       res.json({
         message: 'Dispute validated. Match cancelled, ELO recalculated for all affected players, and reopened for re-reporting.',
         reopened: tournamentMatchResult.rows.length > 0,
@@ -1355,6 +1412,22 @@ router.post('/admin/:id/dispute', moderatorOrAdminMiddleware, async (req: AuthRe
          WHERE id = ?`,
         ['confirmed', req.userId, id]
       );
+
+      await query(
+        `UPDATE tournament_matches
+         SET status = 'confirmed', match_status = 'completed', updated_at = CURRENT_TIMESTAMP
+         WHERE match_id = ?`,
+        [id]
+      );
+
+      await logAuditEvent({
+        event_type: 'ADMIN_ACTION',
+        user_id: req.userId,
+        username: req.username,
+        ip_address: getUserIP(req),
+        user_agent: getUserAgent(req),
+        details: { action: 'MATCH_DISPUTE_REJECTED', match_id: id },
+      });
 
       console.log(`Match ${id} dispute rejected by admin ${req.userId}: Match remains confirmed`);
       res.json({ message: 'Dispute rejected. Match confirmed.' });
@@ -3126,4 +3199,3 @@ router.post('/admin-discard-replay', authMiddleware, async (req: AuthRequest, re
 
 export default router;
 export { performGlobalStatsRecalculation };
-

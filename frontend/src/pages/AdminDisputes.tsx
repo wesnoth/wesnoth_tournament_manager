@@ -5,16 +5,42 @@ import { useAuthStore } from '../store/authStore';
 import { matchService } from '../services/api';
 import MainLayout from '../components/MainLayout';
 
+interface DisputedMatch {
+  id: string;
+  winner_nickname?: string;
+  loser_nickname?: string;
+  map?: string;
+  winner_faction?: string;
+  loser_faction?: string;
+  winner_comments?: string | null;
+  loser_comments?: string | null;
+  winner_rating?: number | null;
+  loser_rating?: number | null;
+  status: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+function formatDisputeDate(value?: string | null): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
+}
+
 const AdminDisputes: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { isAuthenticated, isAdmin, isTournamentModerator } = useAuthStore();
   
-  const [disputes, setDisputes] = useState<any[]>([]);
+  const [disputes, setDisputes] = useState<DisputedMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [selectedDispute, setSelectedDispute] = useState<any>(null);
+  const [selectedDispute, setSelectedDispute] = useState<DisputedMatch | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated || (!isAdmin && !isTournamentModerator)) {
@@ -23,13 +49,15 @@ const AdminDisputes: React.FC = () => {
     }
 
     fetchDisputes();
-  }, [isAuthenticated, isAdmin, isTournamentModerator, navigate]);
+  }, [isAuthenticated, isAdmin, isTournamentModerator, navigate, currentPage]);
 
   const fetchDisputes = async () => {
     try {
       setLoading(true);
-      const response = await matchService.getAllDisputedMatches();
-      setDisputes(response.data || []);
+      const response = await matchService.getAllDisputedMatches(currentPage);
+      setDisputes(response.data?.disputes || response.data || []);
+      setTotal(response.data?.pagination?.total || 0);
+      setTotalPages(response.data?.pagination?.totalPages || 1);
       setError('');
     } catch (err: any) {
       console.error('Error fetching disputes:', err);
@@ -41,6 +69,8 @@ const AdminDisputes: React.FC = () => {
   };
 
   const handleValidateDispute = async (matchId: string) => {
+    setProcessingId(matchId);
+    setError('');
     try {
       const response = await matchService.validateDispute(matchId);
       setMessage(response.data?.message || 'Dispute validated');
@@ -48,10 +78,14 @@ const AdminDisputes: React.FC = () => {
       fetchDisputes();
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'Failed to validate dispute');
+    } finally {
+      setProcessingId(null);
     }
   };
 
   const handleRejectDispute = async (matchId: string) => {
+    setProcessingId(matchId);
+    setError('');
     try {
       const response = await matchService.rejectDispute(matchId);
       setMessage(response.data?.message || 'Dispute rejected');
@@ -59,6 +93,16 @@ const AdminDisputes: React.FC = () => {
       fetchDisputes();
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'Failed to reject dispute');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+      setSelectedDispute(null);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
@@ -78,9 +122,20 @@ const AdminDisputes: React.FC = () => {
           <p className="text-center text-gray-600">{t('no_data')}</p>
         ) : (
           <section>
-            <div className="mb-6">
-              <h2 className="text-2xl font-semibold text-gray-800">Disputed Matches ({disputes.length})</h2>
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="text-2xl font-semibold text-gray-800">Disputed Matches ({total})</h2>
+              <span className="text-sm text-gray-500">Page {currentPage} of {totalPages}</span>
             </div>
+
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center gap-2 mb-4">
+                <button className="px-3 py-2 border rounded disabled:opacity-50" onClick={() => handlePageChange(1)} disabled={currentPage === 1}>First</button>
+                <button className="px-3 py-2 border rounded disabled:opacity-50" onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1}>Previous</button>
+                <span className="px-3 text-sm text-gray-600">{disputes.length} shown</span>
+                <button className="px-3 py-2 border rounded disabled:opacity-50" onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages}>Next</button>
+                <button className="px-3 py-2 border rounded disabled:opacity-50" onClick={() => handlePageChange(totalPages)} disabled={currentPage === totalPages}>Last</button>
+              </div>
+            )}
 
             <table className="w-full border-collapse bg-white shadow-md rounded-lg overflow-hidden">
               <thead>
@@ -106,7 +161,7 @@ const AdminDisputes: React.FC = () => {
                     <td className="px-4 py-3 text-gray-700">{dispute.winner_faction}</td>
                     <td className="px-4 py-3 text-gray-700">{dispute.loser_faction}</td>
                     <td className="px-4 py-3"><span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded-full">{dispute.status}</span></td>
-                    <td className="px-4 py-3 text-gray-700">{new Date(dispute.updated_at).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-gray-700">{formatDisputeDate(dispute.updated_at)}</td>
                     <td className="px-4 py-3">
                       <div>
                         <button 
@@ -155,24 +210,24 @@ const AdminDisputes: React.FC = () => {
                     </div>
                     <div className="flex justify-between">
                       <span className="font-semibold text-gray-800">Played:</span>
-                      <span className="text-gray-900 font-medium">{new Date(selectedDispute.created_at).toLocaleString()}</span>
+                      <span className="text-gray-900 font-medium">{formatDisputeDate(selectedDispute.created_at)}</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="bg-green-50 rounded-lg p-6 border-l-4 border-green-500">
-                  <h3 className="text-lg font-bold text-green-900 mb-4">✓ Winner's Report</h3>
+                  <h3 className="text-lg font-bold text-green-900 mb-4">Winner's Comments</h3>
                   <p className="text-gray-800 leading-relaxed">{selectedDispute.winner_comments || 'No comments provided'}</p>
-                  {selectedDispute.loser_rating && (
-                    <p className="text-sm text-green-700 mt-4 font-semibold">⭐ Match Rating: {selectedDispute.loser_rating}/5</p>
+                  {selectedDispute.winner_rating && (
+                    <p className="text-sm text-green-700 mt-4 font-semibold">⭐ Match Rating: {selectedDispute.winner_rating}/5</p>
                   )}
                 </div>
 
                 <div className="bg-red-50 rounded-lg p-6 border-l-4 border-red-500">
-                  <h3 className="text-lg font-bold text-red-900 mb-4">⚠ Loser's Dispute Reason</h3>
+                  <h3 className="text-lg font-bold text-red-900 mb-4">Loser's Comments / Dispute Reason</h3>
                   <p className="text-gray-800 leading-relaxed">{selectedDispute.loser_comments || 'No comments provided'}</p>
-                  {selectedDispute.winner_rating && (
-                    <p className="text-sm text-red-700 mt-4 font-semibold">⭐ Match Rating: {selectedDispute.winner_rating}/5</p>
+                  {selectedDispute.loser_rating && (
+                    <p className="text-sm text-red-700 mt-4 font-semibold">⭐ Match Rating: {selectedDispute.loser_rating}/5</p>
                   )}
                 </div>
 
@@ -190,6 +245,7 @@ const AdminDisputes: React.FC = () => {
                 </button>
                 <button 
                   className="px-6 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold transition-colors shadow-md flex items-center gap-2"
+                  disabled={processingId === selectedDispute.id}
                   onClick={() => {
                     if (window.confirm('Validate this dispute? The match will be voided and stats recalculated.')) {
                       handleValidateDispute(selectedDispute.id);
@@ -200,6 +256,7 @@ const AdminDisputes: React.FC = () => {
                 </button>
                 <button 
                   className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold transition-colors shadow-md flex items-center gap-2"
+                  disabled={processingId === selectedDispute.id}
                   onClick={() => {
                     if (window.confirm('Reject this dispute? The match will be confirmed.')) {
                       handleRejectDispute(selectedDispute.id);
