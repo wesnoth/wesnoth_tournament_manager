@@ -34,14 +34,21 @@ class DiscordService {
     'Content-Type': 'application/json',
   };
 
-  /** Remove markdown that is not useful in Discord embeds and enforce a limit. */
+  /**
+   * Normalize user-authored text while preserving the line breaks and Markdown
+   * that make tournament descriptions and rules readable in Discord embeds.
+   * Public broadcast mentions are neutralized so rules cannot ping everyone.
+   */
   private toDiscordSafeText(input: string | undefined, maxLength: number): string {
     if (!input) return '';
     const normalized = input
       .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '$1')
       .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
-      .replace(/[`*_>#~\-]{1,3}/g, ' ')
-      .replace(/\s+/g, ' ')
+      .replace(/\r\n?/g, '\n')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/@everyone\b/g, '@\u200beveryone')
+      .replace(/@here\b/g, '@\u200bhere')
       .trim();
 
     if (!normalized) return '';
@@ -70,7 +77,12 @@ class DiscordService {
     const combined = parts.join('\n\n');
     if (!combined) return '';
     if (combined.length <= maxLength) return combined;
-    return `${combined.slice(0, maxLength - 1)}…`;
+
+    // Prefer ending at a line boundary so a rule is not cut in the middle.
+    const truncated = combined.slice(0, maxLength - 1);
+    const lastLineBreak = truncated.lastIndexOf('\n');
+    const safeCut = lastLineBreak > maxLength * 0.6 ? lastLineBreak : truncated.length;
+    return `${truncated.slice(0, safeCut).trimEnd()}…`;
   }
 
   /** Create the forum thread that becomes the tournament's Discord discussion space. */
@@ -169,7 +181,7 @@ class DiscordService {
     maxParticipants: number | null,
     rulesMarkdown?: string
   ): Promise<boolean> {
-    const combinedTournamentText = this.buildCombinedTournamentText(description, rulesMarkdown, 1800);
+    const combinedTournamentText = this.buildCombinedTournamentText(description, rulesMarkdown, 3800);
     const embed: DiscordEmbed = {
       title: `🎮 ${tournamentName}`,
       description: combinedTournamentText || undefined,

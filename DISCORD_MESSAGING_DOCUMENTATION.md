@@ -112,8 +112,8 @@ The service uses the Discord REST API v10 and returns a boolean or empty string 
 | `createTournamentThread()` | Creates one forum thread for a tournament and returns its Discord thread ID. |
 | `publishTournamentMessage()` | Publishes content or embeds to a Discord channel or tournament thread. |
 | `publishChannelMessage()` | Explicit wrapper for publishing to a non-thread channel, currently used for P2P challenges. |
-| `toDiscordSafeText()` | Removes unsuitable Markdown and truncates text before it is put in a Discord message. |
-| `buildCombinedTournamentText()` | Combines the tournament description and rules within Discord's embed limits. |
+| `toDiscordSafeText()` | Removes unusable image/link targets, preserves Markdown and paragraph breaks, normalizes line endings, neutralizes public mentions, and truncates text when required. |
+| `buildCombinedTournamentText()` | Combines the tournament description and rules within Discord's embed limits while preserving their readable structure. |
 
 The created thread ID is stored in `tournaments.discord_thread_id`. Every subsequent tournament notification checks that value before publishing.
 
