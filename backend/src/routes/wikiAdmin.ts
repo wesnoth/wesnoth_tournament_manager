@@ -152,7 +152,6 @@ router.get('/:slug/export', moderatorOrAdminMiddleware, async (req: AuthRequest,
 
     const { stream, filename } = await wikiExportImportService.exportArticleAsZip(
       slug,
-      process.env.FORUM_URL || 'http://localhost:7100'
     );
 
     // Set response headers for ZIP download

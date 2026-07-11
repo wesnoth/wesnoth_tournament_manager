@@ -352,7 +352,8 @@ const AdminWiki: React.FC = () => {
           );
         }
 
-        // Check for conflicts first
+        // Check for conflicts first (best effort)
+        let conflictInfo: { exists: boolean; current_languages?: string[] } = { exists: false };
         const checkResponse = await fetch(
           `/api/admin/wiki/import-check/${metadata.slug}`,
           {
@@ -360,22 +361,24 @@ const AdminWiki: React.FC = () => {
           }
         );
 
-        const conflictInfo = await checkResponse.json();
+        if (checkResponse.ok) {
+          conflictInfo = await checkResponse.json();
+        }
 
+        let forceImport = false;
         if (conflictInfo.exists) {
-          // Show conflict dialog
           const confirmed = confirm(
             `Article "${metadata.slug}" already exists with languages: ${conflictInfo.current_languages?.join(', ')}\n\nOverwrite all translations?`
           );
-
           if (!confirmed) {
             setLoading(false);
             return;
           }
+          forceImport = true;
         }
 
         // Send import request
-        const importResponse = await fetch('/api/admin/wiki/import', {
+        let importResponse = await fetch('/api/admin/wiki/import', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -384,12 +387,44 @@ const AdminWiki: React.FC = () => {
           body: JSON.stringify({
             metadata,
             images,
-            force: conflictInfo.exists,
+            force: forceImport,
           }),
         });
 
+        // Fallback: if backend reports conflict, ask confirmation and retry with force=true
         if (!importResponse.ok) {
-          const error = await importResponse.json();
+          const error = await importResponse.json().catch(() => ({ error: 'Import failed' }));
+          const errorMessage = error.error || 'Import failed';
+          const conflictDetected = errorMessage.includes('already exists');
+
+          if (conflictDetected && !forceImport) {
+            const confirmed = confirm(
+              `Article "${metadata.slug}" already exists.\n\nOverwrite all translations?`
+            );
+            if (!confirmed) {
+              setLoading(false);
+              return;
+            }
+
+            importResponse = await fetch('/api/admin/wiki/import', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                metadata,
+                images,
+                force: true,
+              }),
+            });
+          } else {
+            throw new Error(errorMessage);
+          }
+        }
+
+        if (!importResponse.ok) {
+          const error = await importResponse.json().catch(() => ({ error: 'Import failed' }));
           throw new Error(error.error || 'Import failed');
         }
 

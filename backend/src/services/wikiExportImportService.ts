@@ -21,7 +21,6 @@ import path from 'path';
 import { ZipArchive } from 'archiver';
 import { Writable, PassThrough } from 'stream';
 import { fileURLToPath } from 'url';
-import axios from 'axios';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -73,17 +72,26 @@ function extractImageFilenames(
 }
 
 /**
- * Download image from server
+ * Read image from filesystem (local disk)
  */
-async function downloadImage(filename: string, baseUrl: string): Promise<Buffer | null> {
+async function readImageFromDisk(filename: string): Promise<Buffer | null> {
   try {
-    const response = await axios.get(`${baseUrl}/api/public/wiki/images/${filename}`, {
-      responseType: 'arraybuffer',
-      timeout: 10000,
-    });
-    return Buffer.from(response.data);
+    const uploadDir = path.join(__dirname, '../../uploads/wiki');
+    const filepath = path.join(uploadDir, filename);
+
+    // Security: ensure path is within uploads directory
+    const realpath = await fs.realpath(filepath);
+    const realUploadDir = await fs.realpath(uploadDir);
+
+    if (!realpath.startsWith(realUploadDir)) {
+      console.warn(`Security: attempted to read file outside upload directory: ${filename}`);
+      return null;
+    }
+
+    const data = await fs.readFile(filepath);
+    return data;
   } catch (error) {
-    console.warn(`Failed to download image: ${filename}`, error);
+    console.warn(`Failed to read image from disk: ${filename}`, error);
     return null;
   }
 }
@@ -117,27 +125,39 @@ function replaceRelativeUrlsWithAbsolute(content: string, imageMapping: Map<stri
  */
 async function saveImageToDatabase(filename: string, buffer: Buffer): Promise<number> {
   try {
+    const safeFilename = path.basename(filename);
+    if (safeFilename !== filename) {
+      throw new Error(`Invalid image filename: ${filename}`);
+    }
+
+    const uploadDir = path.join(__dirname, '../../uploads/wiki');
+    await fs.mkdir(uploadDir, { recursive: true });
+    const filepath = path.join(uploadDir, safeFilename);
+
+    // Always write/overwrite file on disk so imported ZIP image is the source of truth.
+    await fs.writeFile(filepath, buffer);
+
     // Check if image already exists
     const existing = await queryTournament(
       `SELECT id FROM wiki_images WHERE filename = ? LIMIT 1`,
-      [filename],
+      [safeFilename],
     );
 
     let imageId: number;
 
     if (existing && (existing as any[]).length > 0) {
-      // Update existing
+      // Keep DB metadata aligned without assuming non-existent columns.
       imageId = (existing as any[])[0].id;
       await queryTournament(
-        `UPDATE wiki_images SET file_data = ?, updated_at = NOW() WHERE id = ?`,
-        [buffer, imageId],
+        `UPDATE wiki_images SET original_name = ?, uploaded_by = ? WHERE id = ?`,
+        [safeFilename, null, imageId],
       );
     } else {
-      // Create new
+      // Create new metadata row.
       const result = await queryTournament(
-        `INSERT INTO wiki_images (filename, file_data, created_at, updated_at)
-         VALUES (?, ?, NOW(), NOW())`,
-        [filename, buffer],
+        `INSERT INTO wiki_images (filename, original_name, uploaded_by, created_at)
+         VALUES (?, ?, ?, NOW())`,
+        [safeFilename, safeFilename, null],
       );
       imageId = (result as any).insertId || 0;
     }
@@ -155,7 +175,6 @@ async function saveImageToDatabase(filename: string, buffer: Buffer): Promise<nu
  */
 export async function exportArticleAsZip(
   slug: string,
-  baseUrl: string = process.env.FORUM_URL || 'http://localhost:7100',
 ): Promise<{ stream: Writable; filename: string }> {
   try {
     // Get article from database
@@ -174,13 +193,13 @@ export async function exportArticleAsZip(
     const articleRow = (article as any[])[0];
     const translations = JSON.parse(articleRow.translations);
 
-    // Extract image filenames and download them
+    // Extract image filenames and read them from disk
     const imageMap = extractImageFilenames(translations);
     const imageMapping = new Map<string, string>(); // old filename -> new relative path
     const downloadedImages: Array<{ buffer: Buffer; filename: string }> = [];
 
     for (const [filename] of imageMap) {
-      const imageBuffer = await downloadImage(filename, baseUrl);
+      const imageBuffer = await readImageFromDisk(filename);
       if (imageBuffer) {
         downloadedImages.push({ buffer: imageBuffer, filename });
         imageMapping.set(filename, `./images/${filename}`);
