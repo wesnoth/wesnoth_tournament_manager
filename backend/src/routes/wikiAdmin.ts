@@ -226,10 +226,14 @@ router.get('/import-check/:slug', moderatorOrAdminMiddleware, async (req: AuthRe
  */
 router.post('/import', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const { metadata, images, force } = req.body;
+    const { metadata, images, force, overwriteConfirmed } = req.body;
 
     if (!metadata) {
       return res.status(400).json({ error: 'Missing metadata in request' });
+    }
+
+    if (force === true && overwriteConfirmed !== true) {
+      return res.status(400).json({ error: 'Overwrite requires explicit user confirmation' });
     }
 
     // Validate metadata structure

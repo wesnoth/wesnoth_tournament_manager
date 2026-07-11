@@ -388,6 +388,7 @@ const AdminWiki: React.FC = () => {
             metadata,
             images,
             force: forceImport,
+            overwriteConfirmed: forceImport,
           }),
         });
 
@@ -416,6 +417,7 @@ const AdminWiki: React.FC = () => {
                 metadata,
                 images,
                 force: true,
+                overwriteConfirmed: true,
               }),
             });
           } else {
