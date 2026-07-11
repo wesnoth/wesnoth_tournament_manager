@@ -109,7 +109,7 @@ export async function createMatch(input: CreateMatchInput): Promise<CreateMatchR
          winner_ranking_pos, winner_ranking_change, loser_ranking_pos, loser_ranking_change,
          winner_side, game_id, wesnoth_version, instance_uuid,
          created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'reported', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'reported', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         matchId,
         winner.id, loser.id,
