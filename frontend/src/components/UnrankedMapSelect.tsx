@@ -5,7 +5,6 @@ interface UnrankedMapSelectProps {
   selectedMapIds: string[];
   onChange: (mapIds: string[]) => void;
   disabled?: boolean;
-  tournamentId?: string;
   isRankedOnly?: boolean;
 }
 
@@ -29,7 +28,6 @@ export const UnrankedMapSelect: React.FC<UnrankedMapSelectProps> = ({
   selectedMapIds,
   onChange,
   disabled = false,
-  tournamentId,
   isRankedOnly = false
 }) => {
   const [maps, setMaps] = useState<Map[]>([]);

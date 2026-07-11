@@ -1,5 +1,6 @@
+/** Administrative CRUD UI for canonical maps, factions, and their translations. */
+
 import React, { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../services/api';
@@ -103,7 +104,6 @@ const LangForm: React.FC<{
 );
 
 const AdminMapsAndFactions: React.FC = () => {
-  const { t } = useTranslation();
   const navigate = useNavigate();
   const { isAuthenticated, isAdmin } = useAuthStore();
 
@@ -226,10 +226,10 @@ const AdminMapsAndFactions: React.FC = () => {
   };
 
   const handleDeleteMap = async (mapId: string) => {
-    if (!window.confirm('Are you sure you want to delete this map?')) return;
+    if (!window.confirm('Delete this map if unused, or deactivate it if historical data still references it?')) return;
     try {
-      await api.delete(`/admin/maps/${mapId}`);
-      setSuccess('Map deleted successfully');
+      const response = await api.delete(`/admin/maps/${mapId}`);
+      setSuccess(response.data?.deactivated ? response.data.message : 'Map deleted successfully');
       fetchData();
     } catch (err: any) { setError(err.response?.data?.error || 'Failed to delete map'); }
   };
@@ -309,10 +309,10 @@ const AdminMapsAndFactions: React.FC = () => {
   };
 
   const handleDeleteFaction = async (factionId: string) => {
-    if (!window.confirm('Are you sure you want to delete this faction?')) return;
+    if (!window.confirm('Delete this faction if unused, or deactivate it if historical data still references it?')) return;
     try {
-      await api.delete(`/admin/factions/${factionId}`);
-      setSuccess('Faction deleted successfully');
+      const response = await api.delete(`/admin/factions/${factionId}`);
+      setSuccess(response.data?.deactivated ? response.data.message : 'Faction deleted successfully');
       fetchData();
     } catch (err: any) { setError(err.response?.data?.error || 'Failed to delete faction'); }
   };
@@ -452,4 +452,3 @@ const AdminMapsAndFactions: React.FC = () => {
 };
 
 export default AdminMapsAndFactions;
-

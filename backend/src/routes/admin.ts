@@ -881,6 +881,59 @@ router.post('/replays/:replayId/reprocess', moderatorOrAdminMiddleware, async (r
 // MAPS MANAGEMENT
 // ============================================================
 
+/** Return active tournament references and related data counts for a map. */
+async function getMapUsage(mapId: string, mapName: string): Promise<Record<string, number>> {
+  const result = await query(
+    `SELECT
+       (SELECT COUNT(*) FROM tournaments t
+        JOIN tournament_unranked_maps tum ON tum.tournament_id = t.id
+        WHERE tum.map_id = ?
+          AND t.status IN ('CREATED', 'REGISTRATION_OPEN', 'STARTED', 'MATCHES_ONGOING')) AS active_tournaments,
+       (SELECT COUNT(*) FROM tournament_unranked_maps WHERE map_id = ?) AS tournament_selections,
+       (SELECT COUNT(*) FROM matches WHERE map = ?) AS matches_count,
+       (SELECT COUNT(*) FROM faction_map_statistics WHERE map_id = ?) AS statistics_count,
+       (SELECT COUNT(*) FROM faction_map_statistics_history WHERE map_id = ?) AS statistics_history_count,
+       (SELECT COUNT(*) FROM player_match_statistics WHERE map_id = ?) AS player_statistics_count,
+       (SELECT COUNT(*) FROM balance_events WHERE map_id = ?) AS balance_events_count`,
+    [mapId, mapId, mapName, mapId, mapId, mapId, mapId],
+  );
+  return Object.fromEntries(
+    Object.entries(result.rows[0] || {}).map(([key, value]) => [key, Number(value)]),
+  );
+}
+
+/** Return active tournament references and related data counts for a faction. */
+async function getFactionUsage(factionId: string, factionName: string): Promise<Record<string, number>> {
+  const result = await query(
+    `SELECT
+       (SELECT COUNT(*) FROM tournaments t
+        JOIN tournament_unranked_factions tuf ON tuf.tournament_id = t.id
+        WHERE tuf.faction_id = ?
+          AND t.status IN ('CREATED', 'REGISTRATION_OPEN', 'STARTED', 'MATCHES_ONGOING')) AS active_tournaments,
+       (SELECT COUNT(*) FROM tournament_unranked_factions WHERE faction_id = ?) AS tournament_selections,
+       (SELECT COUNT(*) FROM matches WHERE winner_faction = ? OR loser_faction = ?) AS matches_count,
+       (SELECT COUNT(*) FROM faction_map_statistics WHERE faction_id = ? OR opponent_faction_id = ?) AS statistics_count,
+       (SELECT COUNT(*) FROM faction_map_statistics_history WHERE faction_id = ? OR opponent_faction_id = ?) AS statistics_history_count,
+       (SELECT COUNT(*) FROM player_match_statistics WHERE faction_id = ? OR opponent_faction_id = ?) AS player_statistics_count,
+       (SELECT COUNT(*) FROM balance_events WHERE faction_id = ?) AS balance_events_count`,
+    [factionId, factionId, factionName, factionName, factionId, factionId, factionId, factionId, factionId, factionId, factionId, factionId],
+  );
+  return Object.fromEntries(
+    Object.entries(result.rows[0] || {}).map(([key, value]) => [key, Number(value)]),
+  );
+}
+
+/** Whether any current or historical record still refers to the asset. */
+function hasAssetUsage(usage: Record<string, number>): boolean {
+  return Object.values(usage).some((count) => count > 0);
+}
+
+/** Explain why an asset must be deactivated instead of physically deleted. */
+function getUsageReason(usage: Record<string, number>): string {
+  if (usage.active_tournaments > 0) return 'Used by an active tournament';
+  return 'Referenced by historical matches, statistics, events, or tournament data';
+}
+
 // Get all maps
 router.get('/maps', authMiddleware, async (req: AuthRequest, res) => {
   try {
@@ -1053,16 +1106,23 @@ router.delete('/maps/:mapId', authMiddleware, async (req: AuthRequest, res) => {
     }
 
     const { mapId } = req.params;
-
-    // Check if map is being used
-    const usageResult = await query(`
-      SELECT COUNT(*) as count FROM matches WHERE map = (SELECT name FROM game_maps WHERE id = ?)
-    `, [mapId]);
-
-    if (parseInt(usageResult.rows[0].count) > 0) {
-      return res.status(400).json({ error: 'Cannot delete map that has been used in matches' });
+    const mapResult = await query('SELECT id, name FROM game_maps WHERE id = ?', [mapId]);
+    if (mapResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Map not found' });
     }
 
+    const usage = await getMapUsage(mapId, mapResult.rows[0].name);
+    if (hasAssetUsage(usage)) {
+      await query('UPDATE game_maps SET is_active = 0 WHERE id = ?', [mapId]);
+      return res.json({
+        success: true,
+        deactivated: true,
+        message: `Map deactivated: ${getUsageReason(usage)}`,
+        usage,
+      });
+    }
+
+    await query('DELETE FROM map_translations WHERE map_id = ?', [mapId]);
     await query('DELETE FROM game_maps WHERE id = ?', [mapId]);
     res.json({ success: true });
   } catch (error) {
@@ -1247,18 +1307,23 @@ router.delete('/factions/:factionId', authMiddleware, async (req: AuthRequest, r
     }
 
     const { factionId } = req.params;
-
-    // Check if faction is being used
-    const usageResult = await query(`
-      SELECT COUNT(*) as count FROM matches 
-      WHERE winner_faction = (SELECT name FROM factions WHERE id = ?)
-      OR loser_faction = (SELECT name FROM factions WHERE id = ?)
-    `, [factionId, factionId]);
-
-    if (parseInt(usageResult.rows[0].count) > 0) {
-      return res.status(400).json({ error: 'Cannot delete faction that has been used in matches' });
+    const factionResult = await query('SELECT id, name FROM factions WHERE id = ?', [factionId]);
+    if (factionResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Faction not found' });
     }
 
+    const usage = await getFactionUsage(factionId, factionResult.rows[0].name);
+    if (hasAssetUsage(usage)) {
+      await query('UPDATE factions SET is_active = 0 WHERE id = ?', [factionId]);
+      return res.json({
+        success: true,
+        deactivated: true,
+        message: `Faction deactivated: ${getUsageReason(usage)}`,
+        usage,
+      });
+    }
+
+    await query('DELETE FROM faction_translations WHERE faction_id = ?', [factionId]);
     await query('DELETE FROM factions WHERE id = ?', [factionId]);
     res.json({ success: true });
   } catch (error) {
@@ -1382,11 +1447,12 @@ router.get('/unranked-factions', authMiddleware, async (req: AuthRequest, res) =
         COUNT(DISTINCT tuf.tournament_id) as used_in_tournaments
       FROM factions f
       LEFT JOIN tournament_unranked_factions tuf ON f.id = tuf.faction_id
+      WHERE f.is_active = 1
     `;
 
     const params = [];
     if (search) {
-      query_str += ` WHERE f.name LIKE ?`;
+      query_str += ` AND f.name LIKE ?`;
       params.push(`%${search}%`);
     }
 
@@ -1403,7 +1469,7 @@ router.get('/unranked-factions', authMiddleware, async (req: AuthRequest, res) =
 // Create new unranked faction (any authenticated user can create, always as unranked)
 router.post('/unranked-factions', authMiddleware, async (req: AuthRequest, res) => {
   try {
-    const { name, description } = req.body;
+    const { name } = req.body;
 
     if (!name || name.trim().length === 0 || name.length > 100) {
       return res.status(400).json({
@@ -1492,6 +1558,7 @@ router.get('/unranked-factions/:id/usage', authMiddleware, async (req: AuthReque
     );
 
     const total = activeTournaments.rows.length + completedTournaments.rows.length;
+    const usage = await getFactionUsage(id, faction.name);
 
     res.json({
       success: true,
@@ -1501,11 +1568,10 @@ router.get('/unranked-factions/:id/usage', authMiddleware, async (req: AuthReque
         total_tournaments_using: total,
         active_tournaments: activeTournaments.rows,
         completed_tournaments: completedTournaments.rows,
-        can_delete: activeTournaments.rows.length === 0,
+        can_delete: !hasAssetUsage(usage),
+        usage,
         reason:
-          activeTournaments.rows.length > 0
-            ? `In use by ${activeTournaments.rows.length} active tournament(s)`
-            : 'No active tournaments using this faction'
+          hasAssetUsage(usage) ? getUsageReason(usage) : 'No references found'
       }
     });
   } catch (error) {
@@ -1536,26 +1602,18 @@ router.delete('/unranked-factions/:id', authMiddleware, async (req: AuthRequest,
       return res.status(404).json({ success: false, error: 'Faction not found' });
     }
 
-    // Check for active tournaments
-    const activeTournaments = await query(
-      `SELECT t.id, t.name, t.status
-       FROM tournaments t
-       JOIN tournament_unranked_factions tuf ON t.id = tuf.tournament_id
-       WHERE tuf.faction_id = ?
-       AND t.status IN ('CREATED', 'REGISTRATION_OPEN', 'STARTED', 'MATCHES_ONGOING')`,
-      [id]
-    );
-
-    if (activeTournaments.rows.length > 0) {
-      return res.status(409).json({
-        success: false,
-        error: 'FACTION_IN_ACTIVE_TOURNAMENTS',
-        message: `Cannot delete faction - in use by ${activeTournaments.rows.length} active tournament(s)`,
-        data: { active_tournaments: activeTournaments.rows }
+    const usage = await getFactionUsage(id, factionResult.rows[0].name);
+    if (hasAssetUsage(usage)) {
+      await query('UPDATE factions SET is_active = 0 WHERE id = ?', [id]);
+      return res.json({
+        success: true,
+        deactivated: true,
+        message: `Faction deactivated: ${getUsageReason(usage)}`,
+        data: { usage },
       });
     }
 
-    // Delete faction (cascade will remove associations)
+    await query('DELETE FROM faction_translations WHERE faction_id = ?', [id]);
     await query('DELETE FROM factions WHERE id = ?', [id]);
 
     res.json({ success: true, message: 'Faction deleted successfully' });
@@ -1580,11 +1638,12 @@ router.get('/unranked-maps', authMiddleware, async (req: AuthRequest, res) => {
         COUNT(DISTINCT tum.tournament_id) as used_in_tournaments
       FROM game_maps m
       LEFT JOIN tournament_unranked_maps tum ON m.id = tum.map_id
+      WHERE m.is_active = 1
     `;
 
     const params = [];
     if (search) {
-      query_str += ` WHERE m.name LIKE ?`;
+      query_str += ` AND m.name LIKE ?`;
       params.push(`%${search}%`);
     }
 
@@ -1692,6 +1751,7 @@ router.get('/unranked-maps/:id/usage', authMiddleware, async (req: AuthRequest, 
     );
 
     const total = activeTournaments.rows.length + completedTournaments.rows.length;
+    const usage = await getMapUsage(id, map.name);
 
     res.json({
       success: true,
@@ -1701,11 +1761,10 @@ router.get('/unranked-maps/:id/usage', authMiddleware, async (req: AuthRequest, 
         total_tournaments_using: total,
         active_tournaments: activeTournaments.rows,
         completed_tournaments: completedTournaments.rows,
-        can_delete: activeTournaments.rows.length === 0,
+        can_delete: !hasAssetUsage(usage),
+        usage,
         reason:
-          activeTournaments.rows.length > 0
-            ? `In use by ${activeTournaments.rows.length} active tournament(s)`
-            : 'No active tournaments using this map'
+          hasAssetUsage(usage) ? getUsageReason(usage) : 'No references found'
       }
     });
   } catch (error) {
@@ -1736,26 +1795,18 @@ router.delete('/unranked-maps/:id', authMiddleware, async (req: AuthRequest, res
       return res.status(404).json({ success: false, error: 'Map not found' });
     }
 
-    // Check for active tournaments
-    const activeTournaments = await query(
-      `SELECT t.id, t.name, t.status
-       FROM tournaments t
-       JOIN tournament_unranked_maps tum ON t.id = tum.tournament_id
-       WHERE tum.map_id = ?
-       AND t.status IN ('CREATED', 'REGISTRATION_OPEN', 'STARTED', 'MATCHES_ONGOING')`,
-      [id]
-    );
-
-    if (activeTournaments.rows.length > 0) {
-      return res.status(409).json({
-        success: false,
-        error: 'MAP_IN_ACTIVE_TOURNAMENTS',
-        message: `Cannot delete map - in use by ${activeTournaments.rows.length} active tournament(s)`,
-        data: { active_tournaments: activeTournaments.rows }
+    const usage = await getMapUsage(id, mapResult.rows[0].name);
+    if (hasAssetUsage(usage)) {
+      await query('UPDATE game_maps SET is_active = 0 WHERE id = ?', [id]);
+      return res.json({
+        success: true,
+        deactivated: true,
+        message: `Map deactivated: ${getUsageReason(usage)}`,
+        data: { usage },
       });
     }
 
-    // Delete map (cascade will remove associations)
+    await query('DELETE FROM map_translations WHERE map_id = ?', [id]);
     await query('DELETE FROM game_maps WHERE id = ?', [id]);
 
     res.json({ success: true, message: 'Map deleted successfully' });

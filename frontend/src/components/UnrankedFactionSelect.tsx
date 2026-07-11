@@ -5,7 +5,6 @@ interface UnrankedFactionSelectProps {
   selectedFactionIds: string[];
   onChange: (factionIds: string[]) => void;
   disabled?: boolean;
-  tournamentId?: string;
   isRankedOnly?: boolean;
 }
 
@@ -27,7 +26,6 @@ export const UnrankedFactionSelect: React.FC<UnrankedFactionSelectProps> = ({
   selectedFactionIds,
   onChange,
   disabled = false,
-  tournamentId,
   isRankedOnly = false
 }) => {
   const [factions, setFactions] = useState<Faction[]>([]);

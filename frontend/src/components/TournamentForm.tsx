@@ -399,13 +399,11 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
           <p className="text-sm text-gray-600 italic mb-4">{t('tournament.select_allowed_factions_maps', 'Select which factions and maps are allowed in this tournament')}</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <UnrankedFactionSelect 
-              tournamentId={undefined}
               selectedFactionIds={unrankedFactions}
               onChange={onUnrankedFactionsChange}
               disabled={isLoading}
             />
             <UnrankedMapSelect 
-              tournamentId={undefined}
               selectedMapIds={unrankedMaps}
               onChange={onUnrankedMapsChange}
               disabled={isLoading}
@@ -421,13 +419,11 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
           <p className="text-sm text-gray-600 italic mb-4">{t('tournament.select_allowed_factions_maps', 'Select which factions and maps are allowed in this tournament')}</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <UnrankedFactionSelect 
-              tournamentId={undefined}
               selectedFactionIds={unrankedFactions}
               onChange={onUnrankedFactionsChange}
               disabled={isLoading}
             />
             <UnrankedMapSelect 
-              tournamentId={undefined}
               selectedMapIds={unrankedMaps}
               onChange={onUnrankedMapsChange}
               disabled={isLoading}
@@ -443,14 +439,12 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
           <p className="text-sm text-gray-600 italic mb-4">{t('tournament.select_allowed_ranked_factions_maps', 'Select which ranked factions and maps are allowed in this tournament')}</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <UnrankedFactionSelect 
-              tournamentId={undefined}
               selectedFactionIds={unrankedFactions}
               onChange={onUnrankedFactionsChange}
               disabled={isLoading}
               isRankedOnly={true}
             />
             <UnrankedMapSelect 
-              tournamentId={undefined}
               selectedMapIds={unrankedMaps}
               onChange={onUnrankedMapsChange}
               disabled={isLoading}
