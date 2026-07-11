@@ -55,6 +55,41 @@ router.get('/images', moderatorOrAdminMiddleware, async (req: AuthRequest, res: 
 });
 
 /**
+ * GET /api/admin/wiki/images/orphaned
+ * Detect orphaned image files in filesystem (not in database)
+ */
+router.get('/images/orphaned/list', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await wikiAdminService.detectOrphanedImages();
+    res.json(result);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * DELETE /api/admin/wiki/images/orphaned/cleanup
+ * Delete specified orphaned image files
+ * Body: { filenames: string[] }
+ */
+router.delete('/images/orphaned/cleanup', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { filenames } = req.body;
+
+    if (!Array.isArray(filenames) || filenames.length === 0) {
+      return res.status(400).json({ error: 'No filenames provided' });
+    }
+
+    const result = await wikiAdminService.deleteOrphanedImages(filenames);
+    res.json(result);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
  * GET /api/admin/wiki/images/:filename/usage
  * Get articles that use this image
  */
@@ -115,28 +150,9 @@ router.get('/:slug/export', moderatorOrAdminMiddleware, async (req: AuthRequest,
       return res.status(400).json({ error: 'Invalid slug format' });
     }
 
-    // Get image getter callback
-    const imageGetterCallback = async (filename: string): Promise<Buffer | null> => {
-      try {
-        // Query the wiki_images table for the image data
-        const result = await wikiAdminService.queryDatabase(
-          `SELECT file_data FROM wiki_images WHERE filename = ? LIMIT 1`,
-          [filename],
-        );
-
-        if (result && (result as any[]).length > 0) {
-          return (result as any[])[0].file_data;
-        }
-        return null;
-      } catch (error) {
-        console.error(`Failed to get image ${filename}:`, error);
-        return null;
-      }
-    };
-
     const { stream, filename } = await wikiExportImportService.exportArticleAsZip(
       slug,
-      imageGetterCallback,
+      process.env.FORUM_URL || 'http://localhost:7100'
     );
 
     // Set response headers for ZIP download
@@ -233,19 +249,13 @@ router.post('/import', moderatorOrAdminMiddleware, async (req: AuthRequest, res:
       });
     }
 
-    let result;
-    if (existing && (existing as any[]).length > 0 && overwrite) {
-      // Overwrite existing
-      result = await wikiExportImportService.overwriteArticle(
-        metadata.slug,
-        metadata,
-        [],
-        req.userId!,
-      );
-    } else {
-      // Import new
-      result = await wikiExportImportService.importArticle(metadata, [], req.userId!);
-    }
+    // Import article (will overwrite if existing and overwrite=true)
+    const result = await wikiExportImportService.importArticle(
+      metadata,
+      [],
+      req.userId!,
+      overwrite
+    );
 
     res.status(overwrite ? 200 : 201).json(result);
   } catch (error) {

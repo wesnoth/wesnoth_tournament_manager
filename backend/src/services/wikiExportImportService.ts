@@ -1,6 +1,18 @@
 /**
  * Wiki Export/Import Service
  * Handles exporting and importing wiki articles with images as ZIP files
+ * 
+ * Export process:
+ * 1. Get article metadata from database
+ * 2. Download all referenced images from /api/public/wiki/images/
+ * 3. Replace image URLs with relative paths (./images/filename)
+ * 4. Create ZIP with article-metadata.json + images/ folder
+ * 
+ * Import process:
+ * 1. Extract metadata.json from ZIP
+ * 2. Upload all images from images/ folder to database
+ * 3. Replace relative URLs back to /api/public/wiki/images/
+ * 4. Create or update article with new image references
  */
 
 import { queryTournament } from '../config/tournamentDatabase.js';
@@ -9,6 +21,7 @@ import path from 'path';
 import { ZipArchive } from 'archiver';
 import { Writable, PassThrough } from 'stream';
 import { fileURLToPath } from 'url';
+import axios from 'axios';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -21,6 +34,10 @@ interface ArticleMetadata {
   }>;
   exported_at: string;
   app_version: string;
+  images: Array<{
+    original_filename: string;
+    relative_path: string;
+  }>;
 }
 
 interface ImportedImage {
@@ -29,12 +46,116 @@ interface ImportedImage {
 }
 
 /**
+ * Extract image filenames from markdown content
+ * Returns Map of original_filename -> appears_in_languages
+ */
+function extractImageFilenames(
+  translations: Record<string, any>,
+): Map<string, string[]> {
+  const imageMap = new Map<string, string[]>();
+  const regex = /\/api\/public\/wiki\/images\/([^\)]+)/g;
+
+  Object.entries(translations).forEach(([lang, data]: [string, any]) => {
+    const content = data.content_markdown || '';
+    let match;
+    while ((match = regex.exec(content)) !== null) {
+      const filename = match[1];
+      if (!imageMap.has(filename)) {
+        imageMap.set(filename, []);
+      }
+      if (!imageMap.get(filename)!.includes(lang)) {
+        imageMap.get(filename)!.push(lang);
+      }
+    }
+  });
+
+  return imageMap;
+}
+
+/**
+ * Download image from server
+ */
+async function downloadImage(filename: string, baseUrl: string): Promise<Buffer | null> {
+  try {
+    const response = await axios.get(`${baseUrl}/api/public/wiki/images/${filename}`, {
+      responseType: 'arraybuffer',
+      timeout: 10000,
+    });
+    return Buffer.from(response.data);
+  } catch (error) {
+    console.warn(`Failed to download image: ${filename}`, error);
+    return null;
+  }
+}
+
+/**
+ * Replace image URLs in markdown with relative paths (for export)
+ */
+function replaceImageUrlsWithRelative(content: string, oldToNewMapping: Map<string, string>): string {
+  let updated = content;
+  oldToNewMapping.forEach((newPath, oldFilename) => {
+    const oldUrl = `/api/public/wiki/images/${oldFilename}`;
+    updated = updated.replace(new RegExp(oldUrl, 'g'), newPath);
+  });
+  return updated;
+}
+
+/**
+ * Replace relative image URLs with absolute URLs (for import)
+ */
+function replaceRelativeUrlsWithAbsolute(content: string, imageMapping: Map<string, string>): string {
+  let updated = content;
+  imageMapping.forEach((absoluteUrl, relativePath) => {
+    updated = updated.replace(new RegExp(relativePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), absoluteUrl);
+  });
+  return updated;
+}
+
+/**
+ * Save image to wiki_images table
+ * Returns the ID of the created/updated image record
+ */
+async function saveImageToDatabase(filename: string, buffer: Buffer): Promise<number> {
+  try {
+    // Check if image already exists
+    const existing = await queryTournament(
+      `SELECT id FROM wiki_images WHERE filename = ? LIMIT 1`,
+      [filename],
+    );
+
+    let imageId: number;
+
+    if (existing && (existing as any[]).length > 0) {
+      // Update existing
+      imageId = (existing as any[])[0].id;
+      await queryTournament(
+        `UPDATE wiki_images SET file_data = ?, updated_at = NOW() WHERE id = ?`,
+        [buffer, imageId],
+      );
+    } else {
+      // Create new
+      const result = await queryTournament(
+        `INSERT INTO wiki_images (filename, file_data, created_at, updated_at)
+         VALUES (?, ?, NOW(), NOW())`,
+        [filename, buffer],
+      );
+      imageId = (result as any).insertId || 0;
+    }
+
+    return imageId;
+  } catch (error) {
+    console.error(`Failed to save image to database: ${filename}`, error);
+    throw error;
+  }
+}
+
+/**
  * Export article as ZIP with metadata and images
  * Returns a stream that can be piped to response
  */
 export async function exportArticleAsZip(
   slug: string,
-  imageGetterCallback: (filename: string) => Promise<Buffer | null>,
+  baseUrl: string = process.env.FORUM_URL || 'http://localhost:7100',
 ): Promise<{ stream: Writable; filename: string }> {
   try {
     // Get article from database
@@ -53,16 +174,45 @@ export async function exportArticleAsZip(
     const articleRow = (article as any[])[0];
     const translations = JSON.parse(articleRow.translations);
 
+    // Extract image filenames and download them
+    const imageMap = extractImageFilenames(translations);
+    const imageMapping = new Map<string, string>(); // old filename -> new relative path
+    const downloadedImages: Array<{ buffer: Buffer; filename: string }> = [];
+
+    for (const [filename] of imageMap) {
+      const imageBuffer = await downloadImage(filename, baseUrl);
+      if (imageBuffer) {
+        downloadedImages.push({ buffer: imageBuffer, filename });
+        imageMapping.set(filename, `./images/${filename}`);
+      }
+    }
+
+    // Update markdown content with new image URLs
+    const updatedTranslations = Object.entries(translations).reduce(
+      (acc, [lang, data]: [string, any]) => {
+        acc[lang] = {
+          ...data,
+          content_markdown: replaceImageUrlsWithRelative(data.content_markdown || '', imageMapping),
+        };
+        return acc;
+      },
+      {} as Record<string, any>,
+    );
+
     // Create metadata
     const metadata: ArticleMetadata = {
       slug,
-      articles: Object.entries(translations).map(([lang, data]: [string, any]) => ({
+      articles: Object.entries(updatedTranslations).map(([lang, data]: [string, any]) => ({
         language: lang,
         title: data.title,
         content: data.content_markdown,
       })),
       exported_at: new Date().toISOString(),
       app_version: '1.0.0',
+      images: Array.from(imageMapping.entries()).map(([original, relative]) => ({
+        original_filename: original,
+        relative_path: relative,
+      })),
     };
 
     // Create ZIP stream
@@ -86,29 +236,9 @@ export async function exportArticleAsZip(
       name: 'article-metadata.json',
     });
 
-    // Find all image filenames in content
-    const imageFilenames = new Set<string>();
-    Object.values(translations).forEach((data: any) => {
-      const content = data.content_markdown || '';
-      const matches = content.match(/\/api\/public\/wiki\/images\/([^\)]+)/g);
-      if (matches) {
-        matches.forEach((match: string) => {
-          const filename = match.replace('/api/public/wiki/images/', '');
-          imageFilenames.add(filename);
-        });
-      }
-    });
-
     // Add images to ZIP
-    for (const filename of imageFilenames) {
-      try {
-        const imageBuffer = await imageGetterCallback(filename);
-        if (imageBuffer) {
-          archive.append(imageBuffer, { name: `images/${filename}` });
-        }
-      } catch (error) {
-        console.warn(`Could not add image to ZIP: ${filename}`);
-      }
+    for (const { buffer, filename } of downloadedImages) {
+      archive.append(buffer, { name: `images/${filename}` });
     }
 
     // Finalize the archive
@@ -124,35 +254,46 @@ export async function exportArticleAsZip(
 }
 
 /**
- * Parse ZIP import and extract article data
+ * Check for import conflicts
+ * Returns whether article exists and current languages
  */
-export async function parseImportZip(buffer: Buffer): Promise<{
-  metadata: ArticleMetadata;
-  images: ImportedImage[];
+export async function checkImportConflicts(slug: string): Promise<{
+  exists: boolean;
+  current_languages?: string[];
 }> {
   try {
-    // For now, we'll use a simple approach: the ZIP is expected to contain
-    // article-metadata.json and images/ folder
-    // In production, you'd use unzipper or similar library
+    // Check if article exists
+    const existing = await queryTournament(
+      `SELECT slug, translations FROM wiki_articles WHERE slug = ? LIMIT 1`,
+      [slug],
+    );
 
-    // This is a placeholder - actual implementation would need
-    // to properly unzip the buffer. For this, we'd need another library.
-    // For now, we'll assume the client sends metadata + images separately.
+    if (existing && (existing as any[]).length > 0) {
+      const row = (existing as any[])[0];
+      const translations = JSON.parse(row.translations);
+      const languages = Object.keys(translations).filter((lang) => translations[lang].title);
 
-    throw new Error('ZIP parsing not fully implemented - use metadata + images API');
+      return {
+        exists: true,
+        current_languages: languages,
+      };
+    }
+
+    return { exists: false };
   } catch (error) {
-    throw new Error(`Failed to parse import ZIP: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(`Failed to check import conflicts: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
 /**
  * Import article from metadata and images
- * Checks for conflicts before importing
+ * Creates new article or updates existing (if force=true)
  */
 export async function importArticle(
   metadata: ArticleMetadata,
   images: ImportedImage[],
   userId: string,
+  force: boolean = false,
 ): Promise<{
   slug: string;
   imported_languages: string[];
@@ -172,41 +313,68 @@ export async function importArticle(
       [slug],
     );
 
-    if (existing && (existing as any[]).length > 0) {
-      // Return conflict info - caller must confirm overwrite
-      return {
-        slug,
-        imported_languages: [],
-        message: `Article "${slug}" already exists. Confirm to overwrite all translations.`,
-      };
+    if (existing && (existing as any[]).length > 0 && !force) {
+      throw new Error(
+        `Article "${slug}" already exists. Use force=true to overwrite.`,
+      );
     }
 
-    // Prepare translations object
+    // Upload images and create URL mapping
+    const imageUrlMapping = new Map<string, string>(); // relative path -> absolute URL
+
+    for (const image of images) {
+      try {
+        const imageId = await saveImageToDatabase(image.filename, image.data);
+        // Map relative path to new absolute URL
+        imageUrlMapping.set(`./images/${image.filename}`, `/api/public/wiki/images/${image.filename}`);
+      } catch (error) {
+        console.warn(`Failed to upload image: ${image.filename}`, error);
+      }
+    }
+
+    // Prepare translations object and update image URLs back to absolute
     const translations: Record<string, any> = {};
     const importedLanguages: string[] = [];
 
     for (const article of articles) {
-      translations[article.language] = {
-        title: article.title,
-        content_markdown: article.content,
-      };
-      importedLanguages.push(article.language);
+      if (article.title) {
+        // Replace relative paths back to absolute URLs
+        const updatedContent = replaceRelativeUrlsWithAbsolute(article.content, imageUrlMapping);
+
+        translations[article.language] = {
+          title: article.title,
+          content_markdown: updatedContent,
+        };
+        importedLanguages.push(article.language);
+      }
     }
 
-    // Save images first (if image handler provided in controller)
-    // For now, we'll just validate the metadata
+    if (importedLanguages.length === 0) {
+      throw new Error('No valid language translations found in import');
+    }
 
-    // Create article in database
-    await queryTournament(
-      `INSERT INTO wiki_articles (slug, translations, author_id, is_published, created_at, updated_at)
-       VALUES (?, ?, ?, ?, NOW(), NOW())`,
-      [slug, JSON.stringify(translations), userId, 1],
-    );
+    // Create or update article in database
+    if (existing && (existing as any[]).length > 0) {
+      // Update existing
+      await queryTournament(
+        `UPDATE wiki_articles 
+         SET translations = ?, updated_at = NOW()
+         WHERE slug = ?`,
+        [JSON.stringify(translations), slug],
+      );
+    } else {
+      // Create new
+      await queryTournament(
+        `INSERT INTO wiki_articles (slug, translations, author_id, is_published, created_at, updated_at)
+         VALUES (?, ?, ?, 1, NOW(), NOW())`,
+        [slug, JSON.stringify(translations), userId],
+      );
+    }
 
     return {
       slug,
       imported_languages: importedLanguages,
-      message: `Article "${slug}" imported successfully with ${importedLanguages.length} languages.`,
+      message: `Article "${slug}" imported successfully with ${importedLanguages.length} languages and ${images.length} images.`,
     };
   } catch (error) {
     throw new Error(`Failed to import article: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -214,134 +382,31 @@ export async function importArticle(
 }
 
 /**
- * Confirm overwrite of existing article
+ * Validate ZIP structure
+ * Checks for required article-metadata.json
  */
-export async function overwriteArticle(
-  slug: string,
-  metadata: ArticleMetadata,
-  images: ImportedImage[],
-  userId: string,
-): Promise<{
-  slug: string;
-  updated_languages: string[];
-  message: string;
-}> {
-  try {
-    // Prepare translations object
-    const translations: Record<string, any> = {};
-    const updatedLanguages: string[] = [];
-
-    for (const article of metadata.articles) {
-      translations[article.language] = {
-        title: article.title,
-        content_markdown: article.content,
-      };
-      updatedLanguages.push(article.language);
-    }
-
-    // Update existing article
-    await queryTournament(
-      `UPDATE wiki_articles
-       SET translations = ?, editor_id = ?, updated_at = NOW()
-       WHERE slug = ?`,
-      [JSON.stringify(translations), userId, slug],
-    );
-
-    return {
-      slug,
-      updated_languages: updatedLanguages,
-      message: `Article "${slug}" overwritten successfully with ${updatedLanguages.length} languages.`,
-    };
-  } catch (error) {
-    throw new Error(
-      `Failed to overwrite article: ${error instanceof Error ? error.message : 'Unknown error'}`,
-    );
-  }
-}
-
-/**
- * Get images for an article and create image map
- */
-export async function getArticleImages(slug: string): Promise<Map<string, Buffer>> {
-  try {
-    const article = await queryTournament(
-      `SELECT translations FROM wiki_articles WHERE slug = ? LIMIT 1`,
-      [slug],
-    );
-
-    if (!article || (article as any[]).length === 0) {
-      return new Map();
-    }
-
-    const translations = JSON.parse((article as any[])[0].translations);
-    const imageFilenames = new Set<string>();
-
-    // Extract all image filenames from markdown
-    Object.values(translations).forEach((data: any) => {
-      const content = data.content_markdown || '';
-      const matches = content.match(/\/api\/public\/wiki\/images\/([^\)]+)/g);
-      if (matches) {
-        matches.forEach((match: string) => {
-          const filename = match.replace('/api/public/wiki/images/', '');
-          imageFilenames.add(filename);
-        });
-      }
-    });
-
-    // Fetch images from database
-    const imageMap = new Map<string, Buffer>();
-
-    for (const filename of imageFilenames) {
-      try {
-        const result = await queryTournament(
-          `SELECT file_data FROM wiki_images WHERE filename = ? LIMIT 1`,
-          [filename],
-        );
-
-        if (result && (result as any[]).length > 0) {
-          const imageBuffer = (result as any[])[0].file_data;
-          imageMap.set(filename, imageBuffer);
-        }
-      } catch (error) {
-        console.warn(`Failed to fetch image: ${filename}`);
-      }
-    }
-
-    return imageMap;
-  } catch (error) {
-    throw new Error(
-      `Failed to get article images: ${error instanceof Error ? error.message : 'Unknown error'}`,
-    );
-  }
-}
-
-/**
- * Validate exported ZIP structure
- */
-export function validateZipStructure(metadata: any): { valid: boolean; errors: string[] } {
+export function validateZipStructure(metadata: ArticleMetadata): {
+  valid: boolean;
+  errors: string[];
+} {
   const errors: string[] = [];
 
-  // Check metadata structure
-  if (!metadata.slug || typeof metadata.slug !== 'string') {
-    errors.push('Missing or invalid slug in metadata');
+  if (!metadata.slug) {
+    errors.push('Missing slug in metadata');
   }
 
   if (!Array.isArray(metadata.articles) || metadata.articles.length === 0) {
     errors.push('No articles found in metadata');
+  } else {
+    const validArticles = metadata.articles.filter((a) => a.language && a.title && a.content);
+    if (validArticles.length === 0) {
+      errors.push('No valid articles with language, title, and content');
+    }
   }
 
-  // Check article structure
-  metadata.articles?.forEach((article: any, index: number) => {
-    if (!article.language) {
-      errors.push(`Article ${index}: missing language`);
-    }
-    if (!article.title) {
-      errors.push(`Article ${index}: missing title`);
-    }
-    if (!article.content) {
-      errors.push(`Article ${index}: missing content`);
-    }
-  });
+  if (!Array.isArray(metadata.images)) {
+    metadata.images = [];
+  }
 
   return {
     valid: errors.length === 0,
@@ -350,13 +415,11 @@ export function validateZipStructure(metadata: any): { valid: boolean; errors: s
 }
 
 /**
- * Get export/import statistics
+ * Export article stats (for UI feedback)
  */
 export async function getExportStats(slug: string): Promise<{
-  slug: string;
   languages: string[];
   image_count: number;
-  total_size_kb: number;
 }> {
   try {
     const article = await queryTournament(
@@ -369,42 +432,12 @@ export async function getExportStats(slug: string): Promise<{
     }
 
     const translations = JSON.parse((article as any[])[0].translations);
-    const languages = Object.keys(translations);
-
-    // Get image count
-    const imageFilenames = new Set<string>();
-    Object.values(translations).forEach((data: any) => {
-      const content = data.content_markdown || '';
-      const matches = content.match(/\/api\/public\/wiki\/images\/([^\)]+)/g);
-      if (matches) {
-        matches.forEach((match: string) => {
-          const filename = match.replace('/api/public/wiki/images/', '');
-          imageFilenames.add(filename);
-        });
-      }
-    });
-
-    // Calculate size estimate (metadata + images)
-    let totalSize = JSON.stringify(translations).length;
-    for (const filename of imageFilenames) {
-      try {
-        const result = await queryTournament(
-          `SELECT LENGTH(file_data) as size FROM wiki_images WHERE filename = ? LIMIT 1`,
-          [filename],
-        );
-        if (result && (result as any[]).length > 0) {
-          totalSize += (result as any[])[0].size || 0;
-        }
-      } catch (error) {
-        // Ignore image size errors
-      }
-    }
+    const languages = Object.keys(translations).filter((lang) => translations[lang].title);
+    const imageMap = extractImageFilenames(translations);
 
     return {
-      slug,
       languages,
-      image_count: imageFilenames.size,
-      total_size_kb: Math.ceil(totalSize / 1024),
+      image_count: imageMap.size,
     };
   } catch (error) {
     throw new Error(`Failed to get export stats: ${error instanceof Error ? error.message : 'Unknown error'}`);

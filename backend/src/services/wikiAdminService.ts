@@ -493,3 +493,109 @@ export const queryDatabase = async (sql: string, params?: any[]): Promise<any> =
     throw error;
   }
 };
+
+/**
+ * Detect orphaned images in filesystem (not registered in database)
+ */
+export const detectOrphanedImages = async (): Promise<{
+  orphaned: Array<{ filename: string; path: string; size: number }>;
+  total_size_bytes: number;
+}> => {
+  try {
+    const uploadDir = path.join(__dirname, '../../uploads/wiki');
+
+    // Get all files from filesystem
+    let filesOnDisk: string[] = [];
+    try {
+      filesOnDisk = await fs.readdir(uploadDir);
+    } catch (error) {
+      console.warn('Could not read upload directory:', error);
+      return { orphaned: [], total_size_bytes: 0 };
+    }
+
+    // Get all filenames from database
+    const dbImages = (await queryTournament(
+      `SELECT filename FROM wiki_images ORDER BY filename`
+    )) as any[];
+
+    const dbFilenames = new Set(dbImages.map((img) => img.filename));
+
+    // Find orphaned files
+    const orphaned: Array<{ filename: string; path: string; size: number }> = [];
+    let total_size_bytes = 0;
+
+    for (const filename of filesOnDisk) {
+      if (!dbFilenames.has(filename)) {
+        const filepath = path.join(uploadDir, filename);
+        try {
+          const stats = await fs.stat(filepath);
+          orphaned.push({
+            filename,
+            path: filepath,
+            size: stats.size,
+          });
+          total_size_bytes += stats.size;
+        } catch (error) {
+          console.warn(`Could not stat file: ${filename}`, error);
+        }
+      }
+    }
+
+    return {
+      orphaned: orphaned.sort((a, b) => b.size - a.size),
+      total_size_bytes,
+    };
+  } catch (error) {
+    console.error('Error detecting orphaned images:', error);
+    throw error;
+  }
+};
+
+/**
+ * Delete orphaned image files
+ */
+export const deleteOrphanedImages = async (filenames: string[]): Promise<{
+  deleted: string[];
+  failed: string[];
+}> => {
+  const uploadDir = path.join(__dirname, '../../uploads/wiki');
+  const deleted: string[] = [];
+  const failed: string[] = [];
+
+  for (const filename of filenames) {
+    try {
+      const filepath = path.join(uploadDir, filename);
+
+      // Security check: ensure path is within uploads directory
+      const realpath = await fs.realpath(filepath);
+      const realUploadDir = await fs.realpath(uploadDir);
+
+      if (!realpath.startsWith(realUploadDir)) {
+        console.warn(`Security: attempted to delete file outside upload directory: ${filename}`);
+        failed.push(filename);
+        continue;
+      }
+
+      // Check if file exists and is not in database
+      const dbCheck = (await queryTournament(
+        `SELECT id FROM wiki_images WHERE filename = ? LIMIT 1`,
+        [filename]
+      )) as any[];
+
+      if (dbCheck.length > 0) {
+        console.warn(`Security: attempted to delete registered image: ${filename}`);
+        failed.push(filename);
+        continue;
+      }
+
+      // Delete file
+      await fs.unlink(filepath);
+      deleted.push(filename);
+    } catch (error) {
+      console.error(`Error deleting orphaned image ${filename}:`, error);
+      failed.push(filename);
+    }
+  }
+
+  return { deleted, failed };
+};

@@ -50,6 +50,9 @@ const AdminWiki: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'articles' | 'images'>('articles');
   const [articles, setArticles] = useState<WikiArticle[]>([]);
   const [images, setImages] = useState<WikiImage[]>([]);
+  const [orphanedImages, setOrphanedImages] = useState<Array<{ filename: string; size: number }>>([]);
+  const [orphanedTotalSize, setOrphanedTotalSize] = useState(0);
+  const [showOrphanedTab, setShowOrphanedTab] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,6 +70,7 @@ const AdminWiki: React.FC = () => {
       fetchArticles();
     } else {
       fetchImages();
+      fetchOrphanedImages();
     }
   }, [activeTab]);
 
@@ -106,6 +110,52 @@ const AdminWiki: React.FC = () => {
       setImages(data);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to fetch images';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchOrphanedImages = async () => {
+    try {
+      const response = await fetch('/api/admin/wiki/images/orphaned/list', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch orphaned images');
+
+      const data = await response.json();
+      setOrphanedImages(data.orphaned || []);
+      setOrphanedTotalSize(data.total_size_bytes || 0);
+    } catch (err) {
+      console.error('Failed to fetch orphaned images:', err);
+    }
+  };
+
+  const cleanupOrphanedImages = async (filenames: string[]) => {
+    if (!confirm(`Delete ${filenames.length} orphaned image(s)? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await fetch('/api/admin/wiki/images/orphaned/cleanup', {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ filenames })
+      });
+
+      if (!response.ok) throw new Error('Cleanup failed');
+
+      const result = await response.json();
+      setError(null);
+      alert(`Deleted ${result.deleted.length} files. ${result.failed.length > 0 ? `Failed: ${result.failed.join(', ')}` : ''}`);
+      fetchOrphanedImages();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Cleanup failed';
       setError(msg);
     } finally {
       setLoading(false);
@@ -483,10 +533,55 @@ const AdminWiki: React.FC = () => {
               </table>
             </div>
           )}
+
+          {/* Orphaned Images Section */}
+          {orphanedImages.length > 0 && (
+            <div className="mt-8 border-t-2 border-gray-300 pt-8">
+              <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4 mb-4">
+                <h3 className="text-lg font-bold text-yellow-900 mb-2">
+                  ⚠️ Orphaned Images Found ({orphanedImages.length})
+                </h3>
+                <p className="text-yellow-800 text-sm">
+                  These image files exist on the server but are not registered in the database. 
+                  They can be safely deleted to free up disk space.
+                </p>
+                <p className="text-yellow-800 text-sm font-semibold mt-2">
+                  Total size: {(orphanedTotalSize / 1024 / 1024).toFixed(2)} MB
+                </p>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="border-b-2 border-gray-300 bg-gray-50">
+                      <th className="text-left px-4 py-3 font-semibold text-gray-900">Filename</th>
+                      <th className="text-right px-4 py-3 font-semibold text-gray-900">Size</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orphanedImages.map((image) => (
+                      <tr key={image.filename} className="border-b border-gray-200 hover:bg-yellow-50">
+                        <td className="px-4 py-3 font-mono text-sm text-gray-600">{image.filename}</td>
+                        <td className="px-4 py-3 text-right text-sm text-gray-600">
+                          {(image.size / 1024).toFixed(2)} KB
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <button
+                onClick={() => cleanupOrphanedImages(orphanedImages.map((img) => img.filename))}
+                className="mt-4 px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
+                disabled={loading}
+              >
+                🗑️ Delete All Orphaned Images
+              </button>
+            </div>
+          )}
         </div>
       )}
-
-      {/* Image Deletion Modal */}
       {deletingImage && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-6 max-w-md">
