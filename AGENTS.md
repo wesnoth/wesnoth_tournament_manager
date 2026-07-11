@@ -1,5 +1,10 @@
 # Project instructions
 
+## Git branch safety
+
+- Never create commits directly on the `prod` branch.
+- Before making changes or creating commits, verify the active branch. Work and commit on `test` or on a dedicated feature/fix branch, then promote changes to `prod` only through the agreed release workflow.
+
 ## Documentation
 
 - Write all source-code comments and JSDoc in English.
