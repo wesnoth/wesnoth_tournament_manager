@@ -225,6 +225,55 @@ const AdminWiki: React.FC = () => {
     }
   };
 
+  const handleExportArticle = async (slug: string) => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/admin/wiki/${slug}/export`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) throw new Error('Export failed');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${slug}-${Date.now()}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Export failed';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleImportArticle = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.zip,application/zip';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      try {
+        setLoading(true);
+        // For now, show placeholder - full ZIP parsing requires adm-zip or similar library
+        alert('ZIP import feature coming soon. Currently use manual import via article editor.');
+        setError('ZIP import not yet fully implemented.');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Import failed';
+        setError(msg);
+      } finally {
+        setLoading(false);
+      }
+    };
+    input.click();
+  };
+
   if (showEditor) {
     return (
       <WikiEditor
@@ -275,12 +324,20 @@ const AdminWiki: React.FC = () => {
       {/* Articles Tab */}
       {activeTab === 'articles' && (
         <div>
-          <button
-            onClick={handleCreateArticle}
-            className="mb-6 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark font-medium"
-          >
-            ➕ New Article
-          </button>
+          <div className="flex gap-2 mb-6">
+            <button
+              onClick={handleCreateArticle}
+              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark font-medium"
+            >
+              ➕ New Article
+            </button>
+            <button
+              onClick={handleImportArticle}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
+            >
+              📥 Import Article
+            </button>
+          </div>
 
           {loading ? (
             <div className="text-center py-12">
@@ -342,6 +399,12 @@ const AdminWiki: React.FC = () => {
                           className="text-blue-600 hover:text-blue-800 text-sm font-medium mr-3"
                         >
                           ✏️ Edit
+                        </button>
+                        <button
+                          onClick={() => handleExportArticle(article.slug)}
+                          className="text-green-600 hover:text-green-800 text-sm font-medium mr-3"
+                        >
+                          📥 Export
                         </button>
                         <button
                           onClick={() => handleDeleteArticle(article.slug, false)}

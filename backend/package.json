@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.47.0",
+    "archiver": "^8.0.0",
     "axios": "^1.7.7",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^2.4.3",
@@ -37,6 +38,7 @@
     "uuid": "^10.0.0"
   },
   "devDependencies": {
+    "@types/archiver": "^8.0.0",
     "@types/bcrypt": "^5.0.2",
     "@types/bcryptjs": "^2.4.2",
     "@types/chokidar": "^2.1.7",

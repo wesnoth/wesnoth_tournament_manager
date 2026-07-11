@@ -480,3 +480,16 @@ const linkImagesToArticle = async (articleId: number, imageFilenames: string[]):
     throw error;
   }
 };
+
+/**
+ * Direct query database for export/import operations
+ * Used by export/import endpoints to fetch data
+ */
+export const queryDatabase = async (sql: string, params?: any[]): Promise<any> => {
+  try {
+    return await queryTournament(sql, params);
+  } catch (error) {
+    console.error('Database query error:', error);
+    throw error;
+  }
+};

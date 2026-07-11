@@ -12,6 +12,7 @@ import { Router, Request, Response } from 'express';
 import { AuthRequest, moderatorOrAdminMiddleware } from '../middleware/auth.js';
 import multer from 'multer';
 import * as wikiAdminService from '../services/wikiAdminService.js';
+import * as wikiExportImportService from '../services/wikiExportImportService.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -98,6 +99,158 @@ router.get('/', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Respon
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * GET /api/admin/wiki/:slug/export
+ * Export article with all languages and images as ZIP
+ * Query params: ?download=true to download instead of stream
+ */
+router.get('/:slug/export', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { slug } = req.params;
+
+    if (!wikiAdminService.validateSlug(slug)) {
+      return res.status(400).json({ error: 'Invalid slug format' });
+    }
+
+    // Get image getter callback
+    const imageGetterCallback = async (filename: string): Promise<Buffer | null> => {
+      try {
+        // Query the wiki_images table for the image data
+        const result = await wikiAdminService.queryDatabase(
+          `SELECT file_data FROM wiki_images WHERE filename = ? LIMIT 1`,
+          [filename],
+        );
+
+        if (result && (result as any[]).length > 0) {
+          return (result as any[])[0].file_data;
+        }
+        return null;
+      } catch (error) {
+        console.error(`Failed to get image ${filename}:`, error);
+        return null;
+      }
+    };
+
+    const { stream, filename } = await wikiExportImportService.exportArticleAsZip(
+      slug,
+      imageGetterCallback,
+    );
+
+    // Set response headers for ZIP download
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+
+    // Pipe the ZIP stream to response
+    stream.pipe(res);
+
+    stream.on('error', (error) => {
+      console.error('ZIP stream error:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to generate ZIP' });
+      }
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    res.status(400).json({ error: msg });
+  }
+});
+
+/**
+ * POST /api/admin/wiki/import-metadata
+ * Check if article exists and get conflict info
+ * Body: { slug, metadata }
+ */
+router.post('/import-check/:slug', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { slug } = req.params;
+
+    if (!wikiAdminService.validateSlug(slug)) {
+      return res.status(400).json({ error: 'Invalid slug format' });
+    }
+
+    // Check if article exists
+    const result = await wikiAdminService.queryDatabase(
+      `SELECT id, updated_at FROM wiki_articles WHERE slug = ? LIMIT 1`,
+      [slug],
+    );
+
+    const exists = result && (result as any[]).length > 0;
+
+    res.json({
+      slug,
+      exists,
+      last_updated: exists ? (result as any[])[0].updated_at : null,
+      message: exists ? `Article "${slug}" already exists. Confirm to overwrite.` : null,
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    res.status(400).json({ error: msg });
+  }
+});
+
+/**
+ * POST /api/admin/wiki/import
+ * Import article from metadata JSON
+ * Body: {
+ *   metadata: { slug, articles: [...] },
+ *   overwrite: boolean (if article exists)
+ * }
+ * 
+ * Note: For full ZIP import with images, use separate image upload endpoint
+ */
+router.post('/import', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { metadata, overwrite } = req.body;
+
+    if (!metadata) {
+      return res.status(400).json({ error: 'Missing metadata in request' });
+    }
+
+    // Validate metadata structure
+    const validation = wikiExportImportService.validateZipStructure(metadata);
+    if (!validation.valid) {
+      return res.status(400).json({
+        error: 'Invalid metadata structure',
+        details: validation.errors,
+      });
+    }
+
+    // Check if article exists
+    const existing = await wikiAdminService.queryDatabase(
+      `SELECT id FROM wiki_articles WHERE slug = ? LIMIT 1`,
+      [metadata.slug],
+    );
+
+    if (existing && (existing as any[]).length > 0 && !overwrite) {
+      return res.status(409).json({
+        error: `Article "${metadata.slug}" already exists`,
+        slug: metadata.slug,
+        conflict: true,
+      });
+    }
+
+    let result;
+    if (existing && (existing as any[]).length > 0 && overwrite) {
+      // Overwrite existing
+      result = await wikiExportImportService.overwriteArticle(
+        metadata.slug,
+        metadata,
+        [],
+        req.userId!,
+      );
+    } else {
+      // Import new
+      result = await wikiExportImportService.importArticle(metadata, [], req.userId!);
+    }
+
+    res.status(overwrite ? 200 : 201).json(result);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    res.status(400).json({ error: msg });
   }
 });
 
