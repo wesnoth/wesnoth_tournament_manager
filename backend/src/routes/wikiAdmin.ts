@@ -176,11 +176,10 @@ router.get('/:slug/export', moderatorOrAdminMiddleware, async (req: AuthRequest,
 });
 
 /**
- * POST /api/admin/wiki/import-metadata
+ * GET /api/admin/wiki/import-check/:slug
  * Check if article exists and get conflict info
- * Body: { slug, metadata }
  */
-router.post('/import-check/:slug', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/import-check/:slug', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { slug } = req.params;
 
@@ -190,17 +189,26 @@ router.post('/import-check/:slug', moderatorOrAdminMiddleware, async (req: AuthR
 
     // Check if article exists
     const result = await wikiAdminService.queryDatabase(
-      `SELECT id, updated_at FROM wiki_articles WHERE slug = ? LIMIT 1`,
+      `SELECT id, translations, updated_at FROM wiki_articles WHERE slug = ? LIMIT 1`,
       [slug],
     );
 
     const exists = result && (result as any[]).length > 0;
+    let current_languages: string[] = [];
+
+    if (exists) {
+      const row = (result as any[])[0];
+      try {
+        const translations = JSON.parse(row.translations);
+        current_languages = Object.keys(translations).filter((lang) => translations[lang].title);
+      } catch (err) {
+        console.error('Failed to parse translations:', err);
+      }
+    }
 
     res.json({
-      slug,
       exists,
-      last_updated: exists ? (result as any[])[0].updated_at : null,
-      message: exists ? `Article "${slug}" already exists. Confirm to overwrite.` : null,
+      current_languages,
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
