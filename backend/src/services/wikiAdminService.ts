@@ -7,6 +7,8 @@ import { queryTournament } from '../config/tournamentDatabase.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
+import { v4 as uuidv4 } from 'uuid';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -43,7 +45,7 @@ interface ImageMetadata {
 }
 
 interface WikiArticleRow {
-  id: number;
+  id: string;
   slug: string;
   translations: string; // JSON string
   author_id: string;
@@ -90,14 +92,20 @@ export const getArticlesList = async (): Promise<any[]> => {
  * Matches ![alt](/uploads/wiki/FILENAME) patterns
  */
 export const extractImageUrls = (markdown: string): string[] => {
-  const urlRegex = /!\[.*?\]\(\/uploads\/wiki\/([^)]+)\)/g;
-  const matches = [];
+  const urlRegex = /!\[[^\]]*\]\((?:\/uploads\/wiki\/|\/api\/public\/wiki\/images\/)([^)\s]+)(?:\s+"[^"]*")?\)/g;
+  const matches: string[] = [];
   let match;
   while ((match = urlRegex.exec(markdown)) !== null) {
-    matches.push(match[1]); // Extract just the filename
+    if (isSafeImageFilename(match[1])) {
+      matches.push(match[1]);
+    }
   }
-  return matches;
+  return [...new Set(matches)];
 };
+
+/** Accept only generated image names; this value is also used in filesystem paths. */
+export const isSafeImageFilename = (filename: string): boolean =>
+  /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(filename) && !filename.includes('..');
 
 /**
  * Validate slug format (alphanumeric, hyphens, underscores)
@@ -109,13 +117,13 @@ export const validateSlug = (slug: string): boolean => {
 /**
  * Create new wiki article with translations
  */
-export const createArticle = async (params: CreateArticleParams): Promise<number> => {
+export const createArticle = async (params: CreateArticleParams): Promise<string> => {
   if (!validateSlug(params.slug)) {
     throw new Error('Invalid slug format. Use only lowercase letters, numbers, hyphens, and underscores.');
   }
 
   // Validate translations
-  const { en, ...otherLangs } = params.translations;
+  const { en } = params.translations;
   if (!en || !en.title || !en.content_markdown) {
     throw new Error('English (en) translation with title and content is required');
   }
@@ -142,14 +150,13 @@ export const createArticle = async (params: CreateArticleParams): Promise<number
 
   // Create article with translations JSON
   const translationsJson = JSON.stringify(params.translations);
-  const result = await queryTournament(
+  const articleId = uuidv4();
+  await queryTournament(
     `INSERT INTO wiki_articles 
       (id, slug, translations, author_id, is_published, created_at, updated_at) 
-     VALUES (UUID(), ?, ?, ?, ?, NOW(), NOW())`,
-    [params.slug, translationsJson, params.author_id, params.is_published ? 1 : 0]
+     VALUES (?, ?, ?, ?, ?, NOW(), NOW())`,
+    [articleId, params.slug, translationsJson, params.author_id, params.is_published ? 1 : 0]
   );
-
-  const articleId = (result as any).insertId as number;
 
   // Extract and link images from all language versions
   const allImageFilenames = new Set<string>();
@@ -305,8 +312,13 @@ export const uploadImage = async (
     throw new Error('No file provided');
   }
 
-  const timestamp = Date.now();
-  const filename = `${timestamp}_${Math.random().toString(36).substring(7)}.${file.originalname.split('.').pop()}`;
+  const allowedMimeTypes = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+  if (!allowedMimeTypes.has(file.mimetype)) {
+    throw new Error('Only JPEG, PNG, GIF, and WebP images are supported');
+  }
+
+  const extension = path.extname(file.originalname).toLowerCase();
+  const filename = `${Date.now()}_${crypto.randomBytes(8).toString('hex')}${extension}`;
   const uploadDir = path.join(__dirname, '../../uploads/wiki');
 
   // Ensure directory exists
@@ -414,6 +426,10 @@ export const getImageUsage = async (filename: string): Promise<any[]> => {
  */
 export const deleteImage = async (filename: string): Promise<void> => {
   try {
+    if (!isSafeImageFilename(filename)) {
+      throw new Error('Invalid image filename');
+    }
+
     // Find image id
     const result = (await queryTournament(
       `SELECT id FROM wiki_images WHERE filename = ?`,
@@ -426,11 +442,13 @@ export const deleteImage = async (filename: string): Promise<void> => {
 
     const imageId = result[0].id;
 
-    // Delete image links
-    await queryTournament(
-      `DELETE FROM wiki_article_images WHERE wiki_image_id = ?`,
-      [imageId]
-    );
+    const usage = (await queryTournament(
+      `SELECT 1 FROM wiki_article_images WHERE wiki_image_id = ? LIMIT 1`,
+      [imageId],
+    )) as any[];
+    if (usage.length > 0) {
+      throw new Error('Image is still used by one or more articles');
+    }
 
     // Delete metadata
     await queryTournament(
@@ -455,7 +473,7 @@ export const deleteImage = async (filename: string): Promise<void> => {
 /**
  * Link images to article
  */
-const linkImagesToArticle = async (articleId: number, imageFilenames: string[]): Promise<void> => {
+export const linkImagesToArticle = async (articleId: string, imageFilenames: string[]): Promise<void> => {
   try {
     for (const filename of imageFilenames) {
       // Get image id by filename
@@ -564,13 +582,17 @@ export const deleteOrphanedImages = async (filenames: string[]): Promise<{
 
   for (const filename of filenames) {
     try {
+      if (!isSafeImageFilename(filename)) {
+        failed.push(filename);
+        continue;
+      }
       const filepath = path.join(uploadDir, filename);
 
       // Security check: ensure path is within uploads directory
       const realpath = await fs.realpath(filepath);
       const realUploadDir = await fs.realpath(uploadDir);
 
-      if (!realpath.startsWith(realUploadDir)) {
+      if (!realpath.startsWith(`${realUploadDir}${path.sep}`)) {
         console.warn(`Security: attempted to delete file outside upload directory: ${filename}`);
         failed.push(filename);
         continue;

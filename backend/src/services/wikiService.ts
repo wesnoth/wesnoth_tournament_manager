@@ -4,13 +4,13 @@
  */
 
 import { query } from '../config/database.js';
-import type { WikiArticle, WikiArticlePublic, WikiListItem } from '../types/wiki.js';
+import type { WikiArticlePublic, WikiListItem } from '../types/wiki.js';
 
 interface WikiArticleRow {
-  id: number;
+  id: string;
   slug: string;
   translations: string; // JSON string
-  author_id: string;
+  author_id: string | null;
   is_published: number;
   created_at: string;
   updated_at: string;
@@ -21,6 +21,31 @@ interface WikiTranslations {
     title?: string;
     content_markdown?: string;
   };
+}
+
+/** Parse the persisted translation object and reject malformed rows consistently. */
+function parseTranslations(value: string): WikiTranslations {
+  const translations = JSON.parse(value) as WikiTranslations;
+  return translations && typeof translations === 'object' ? translations : {};
+}
+
+/** Return a complete translation, or null when the article has no usable content. */
+function getCompleteTranslation(
+  translations: WikiTranslations,
+  language: string,
+): { language: string; title: string; content_markdown: string } | null {
+  const candidates = [language, 'en'];
+  for (const candidate of candidates) {
+    const translation = translations[candidate];
+    if (translation?.title?.trim() && translation.content_markdown?.trim()) {
+      return {
+        language: candidate,
+        title: translation.title,
+        content_markdown: translation.content_markdown,
+      };
+    }
+  }
+  return null;
 }
 
 /**
@@ -45,15 +70,8 @@ export async function getWikiArticle(
     }
 
     const row = result.rows[0] as WikiArticleRow;
-    const translations: WikiTranslations = JSON.parse(row.translations);
-
-    // Try requested language first, fallback to English
-    let translation = translations[language];
-    if (!translation || !translation.title || !translation.content_markdown) {
-      translation = translations['en'];
-    }
-
-    if (!translation || !translation.title || !translation.content_markdown) {
+    const translation = getCompleteTranslation(parseTranslations(row.translations), language);
+    if (!translation) {
       return null;
     }
 
@@ -61,7 +79,7 @@ export async function getWikiArticle(
       slug: row.slug,
       title: translation.title,
       content_markdown: translation.content_markdown,
-      language: Object.keys(translations).includes(language) ? language : 'en',
+      language: translation.language,
       created_at: row.created_at,
       updated_at: row.updated_at
     };
@@ -91,21 +109,22 @@ export async function getWikiArticlesList(
     
     for (const row of result.rows) {
       const articleRow = row as WikiArticleRow;
-      const translations: WikiTranslations = JSON.parse(articleRow.translations);
-      
-      // Add an entry for each available language
-      for (const lang of Object.keys(translations)) {
-        const trans = translations[lang];
-        if (trans && trans.title && trans.content_markdown) {
-          // If language filter is specified, only include matching languages
-          if (!language || lang === language) {
-            items.push({
-              slug: articleRow.slug,
-              title: trans.title,
-              language: lang,
-              updated_at: articleRow.updated_at
-            });
-          }
+      const translations = parseTranslations(articleRow.translations);
+      const languages = language
+        ? [language, ...(language !== 'en' ? ['en'] : [])]
+        : Object.keys(translations);
+
+      // List the requested translation and English fallback once per article.
+      for (const candidate of languages) {
+        const translation = getCompleteTranslation(translations, candidate);
+        if (translation && translation.language === candidate) {
+          items.push({
+            slug: articleRow.slug,
+            title: translation.title,
+            language: translation.language,
+            updated_at: articleRow.updated_at,
+          });
+          break;
         }
       }
     }
@@ -113,33 +132,6 @@ export async function getWikiArticlesList(
     return items;
   } catch (error) {
     console.error('Error fetching wiki articles list:', error);
-    throw error;
-  }
-}
-
-/**
- * Check if a wiki article exists (published)
- */
-export async function wikiArticleExists(slug: string, language: string = 'en'): Promise<boolean> {
-  try {
-    const result = await query(
-      `SELECT translations FROM wiki_articles
-       WHERE slug = ? AND is_published = 1
-       LIMIT 1`,
-      [slug]
-    );
-    
-    if (result.rows.length === 0) {
-      return false;
-    }
-
-    const row = result.rows[0] as WikiArticleRow;
-    const translations: WikiTranslations = JSON.parse(row.translations);
-    const trans = translations[language] || translations['en'];
-    
-    return !!(trans && trans.title && trans.content_markdown);
-  } catch (error) {
-    console.error('Error checking wiki article existence:', error);
     throw error;
   }
 }

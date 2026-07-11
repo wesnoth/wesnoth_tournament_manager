@@ -15,16 +15,16 @@ interface WikiTranslation {
 }
 
 interface WikiArticle {
-  id: number;
+  id: string;
   slug: string;
   translations: {
     en?: WikiTranslation;
     es?: WikiTranslation;
     de?: WikiTranslation;
-    fr?: WikiTranslation;
+    ru?: WikiTranslation;
     zh?: WikiTranslation;
   };
-  is_published: number;
+  is_published: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -33,15 +33,15 @@ interface WikiImage {
   id: number;
   filename: string;
   original_name: string;
-  uploaded_by: number | null;
+  uploaded_by: string | null;
   created_at: string;
   usage_count: number;
 }
 
 interface ImageUsage {
-  id: number;
+  article_id: string;
   slug: string;
-  title: string;
+  titles: Record<string, string>;
 }
 
 const AdminWiki: React.FC = () => {
@@ -53,13 +53,11 @@ const AdminWiki: React.FC = () => {
   const [images, setImages] = useState<WikiImage[]>([]);
   const [orphanedImages, setOrphanedImages] = useState<Array<{ filename: string; size: number }>>([]);
   const [orphanedTotalSize, setOrphanedTotalSize] = useState(0);
-  const [showOrphanedTab, setShowOrphanedTab] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Editor state
   const [showEditor, setShowEditor] = useState(false);
-  const [editingSlug, setEditingSlug] = useState<string | null>(null);
   const [editingArticle, setEditingArticle] = useState<WikiArticle | null>(null);
 
   // Image deletion state
@@ -164,13 +162,11 @@ const AdminWiki: React.FC = () => {
   };
 
   const handleCreateArticle = () => {
-    setEditingSlug(null);
     setEditingArticle(null);
     setShowEditor(true);
   };
 
   const handleEditArticle = (article: WikiArticle) => {
-    setEditingSlug(article.slug);
     setEditingArticle(article);
     setShowEditor(true);
   };
@@ -181,7 +177,7 @@ const AdminWiki: React.FC = () => {
       en?: { title: string; content_markdown: string };
       es?: { title: string; content_markdown: string };
       de?: { title: string; content_markdown: string };
-      fr?: { title: string; content_markdown: string };
+      ru?: { title: string; content_markdown: string };
       zh?: { title: string; content_markdown: string };
     };
     is_published: boolean;
@@ -216,13 +212,13 @@ const AdminWiki: React.FC = () => {
     }
   };
 
-  const handleDeleteArticle = async (slug: string, hard: boolean) => {
-    if (!confirm(`Are you sure? This will ${hard ? 'permanently delete' : 'archive'} the article.`)) {
+  const handleDeleteArticle = async (slug: string) => {
+    if (!confirm('Are you sure? This will permanently delete the article.')) {
       return;
     }
 
     try {
-      const response = await fetch(`/api/admin/wiki/${slug}?hard=${hard}`, {
+      const response = await fetch(`/api/admin/wiki/${slug}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -582,13 +578,7 @@ const AdminWiki: React.FC = () => {
                           📥 Export
                         </button>
                         <button
-                          onClick={() => handleDeleteArticle(article.slug, false)}
-                          className="text-yellow-600 hover:text-yellow-800 text-sm font-medium mr-3"
-                        >
-                          🗑️ Archive
-                        </button>
-                        <button
-                          onClick={() => handleDeleteArticle(article.slug, true)}
+                          onClick={() => handleDeleteArticle(article.slug)}
                           className="text-red-600 hover:text-red-800 text-sm font-medium"
                         >
                           🔴 Delete
@@ -719,8 +709,8 @@ const AdminWiki: React.FC = () => {
                 </p>
                 <ul className="bg-red-50 border border-red-200 rounded p-3 mb-4 max-h-48 overflow-y-auto">
                   {imageUsage.map((usage) => (
-                    <li key={usage.id} className="text-sm text-red-700">
-                      • {usage.title} ({usage.slug})
+                    <li key={usage.article_id} className="text-sm text-red-700">
+                      • {Object.values(usage.titles).join(' / ') || usage.slug} ({usage.slug})
                     </li>
                   ))}
                 </ul>

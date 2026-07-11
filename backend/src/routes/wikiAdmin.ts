@@ -96,6 +96,9 @@ router.delete('/images/orphaned/cleanup', moderatorOrAdminMiddleware, async (req
 router.get('/images/:filename/usage', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { filename } = req.params;
+    if (!wikiAdminService.isSafeImageFilename(filename)) {
+      return res.status(400).json({ error: 'Invalid image filename' });
+    }
     const usage = await wikiAdminService.getImageUsage(filename);
     res.json(usage);
   } catch (error) {
@@ -111,6 +114,9 @@ router.get('/images/:filename/usage', moderatorOrAdminMiddleware, async (req: Au
 router.delete('/images/:filename', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { filename } = req.params;
+    if (!wikiAdminService.isSafeImageFilename(filename)) {
+      return res.status(400).json({ error: 'Invalid image filename' });
+    }
     await wikiAdminService.deleteImage(filename);
     res.json({ filename, message: 'Image deleted successfully' });
   } catch (error) {
@@ -129,7 +135,7 @@ router.delete('/images/:filename', moderatorOrAdminMiddleware, async (req: AuthR
  */
 router.get('/', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const result = await wikiAdminService.getArticlesList?.() || [];
+    const result = await wikiAdminService.getArticlesList();
     res.json(result);
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';

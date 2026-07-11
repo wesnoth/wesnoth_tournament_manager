@@ -21,6 +21,7 @@ import path from 'path';
 import { ZipArchive } from 'archiver';
 import { Writable, PassThrough } from 'stream';
 import { fileURLToPath } from 'url';
+import { v4 as uuidv4 } from 'uuid';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -44,6 +45,11 @@ interface ImportedImage {
   data: Buffer;
 }
 
+/** Accept only filenames that can safely be written below the wiki upload directory. */
+function isSafeImageFilename(filename: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(filename) && !filename.includes('..');
+}
+
 /**
  * Extract image filenames from markdown content
  * Returns Map of original_filename -> appears_in_languages
@@ -52,7 +58,7 @@ function extractImageFilenames(
   translations: Record<string, any>,
 ): Map<string, string[]> {
   const imageMap = new Map<string, string[]>();
-  const regex = /\/api\/public\/wiki\/images\/([^\)]+)/g;
+  const regex = /(?:\/api\/public\/wiki\/images\/|\/uploads\/wiki\/)([^)\s]+)/g;
 
   Object.entries(translations).forEach(([lang, data]: [string, any]) => {
     const content = data.content_markdown || '';
@@ -102,8 +108,10 @@ async function readImageFromDisk(filename: string): Promise<Buffer | null> {
 function replaceImageUrlsWithRelative(content: string, oldToNewMapping: Map<string, string>): string {
   let updated = content;
   oldToNewMapping.forEach((newPath, oldFilename) => {
-    const oldUrl = `/api/public/wiki/images/${oldFilename}`;
-    updated = updated.replace(new RegExp(oldUrl, 'g'), newPath);
+    const escapedFilename = oldFilename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    updated = updated
+      .replace(new RegExp(`/api/public/wiki/images/${escapedFilename}`, 'g'), newPath)
+      .replace(new RegExp(`/uploads/wiki/${escapedFilename}`, 'g'), newPath);
   });
   return updated;
 }
@@ -126,7 +134,7 @@ function replaceRelativeUrlsWithAbsolute(content: string, imageMapping: Map<stri
 async function saveImageToDatabase(filename: string, buffer: Buffer): Promise<number> {
   try {
     const safeFilename = path.basename(filename);
-    if (safeFilename !== filename) {
+    if (safeFilename !== filename || !isSafeImageFilename(filename)) {
       throw new Error(`Invalid image filename: ${filename}`);
     }
 
@@ -273,38 +281,6 @@ export async function exportArticleAsZip(
 }
 
 /**
- * Check for import conflicts
- * Returns whether article exists and current languages
- */
-export async function checkImportConflicts(slug: string): Promise<{
-  exists: boolean;
-  current_languages?: string[];
-}> {
-  try {
-    // Check if article exists
-    const existing = await queryTournament(
-      `SELECT slug, translations FROM wiki_articles WHERE slug = ? LIMIT 1`,
-      [slug],
-    );
-
-    if (existing && (existing as any[]).length > 0) {
-      const row = (existing as any[])[0];
-      const translations = JSON.parse(row.translations);
-      const languages = Object.keys(translations).filter((lang) => translations[lang].title);
-
-      return {
-        exists: true,
-        current_languages: languages,
-      };
-    }
-
-    return { exists: false };
-  } catch (error) {
-    throw new Error(`Failed to check import conflicts: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-}
-
-/**
  * Import article from metadata and images
  * Creates new article or updates existing (if force=true)
  */
@@ -322,7 +298,7 @@ export async function importArticle(
     const { slug, articles } = metadata;
 
     // Validate slug
-    if (!/^[a-z0-9-]+$/.test(slug)) {
+    if (!/^[a-z0-9_-]+$/.test(slug)) {
       throw new Error('Invalid slug format');
     }
 
@@ -340,12 +316,14 @@ export async function importArticle(
 
     // Upload images and create URL mapping
     const imageUrlMapping = new Map<string, string>(); // relative path -> absolute URL
+    const importedImageFilenames: string[] = [];
 
     for (const image of images) {
       try {
         const imageId = await saveImageToDatabase(image.filename, image.data);
         // Map relative path to new absolute URL
         imageUrlMapping.set(`./images/${image.filename}`, `/api/public/wiki/images/${image.filename}`);
+        importedImageFilenames.push(image.filename);
       } catch (error) {
         console.warn(`Failed to upload image: ${image.filename}`, error);
       }
@@ -372,22 +350,45 @@ export async function importArticle(
       throw new Error('No valid language translations found in import');
     }
 
-    // Create or update article in database
+    const englishTranslation = translations.en;
+    if (!englishTranslation?.title?.trim() || !englishTranslation.content_markdown?.trim()) {
+      throw new Error('English (en) translation with title and content is required');
+    }
+
+    // Create or update article in database.
+    let articleId: string;
     if (existing && (existing as any[]).length > 0) {
-      // Update existing
+      articleId = (existing as any[])[0].id;
       await queryTournament(
         `UPDATE wiki_articles 
          SET translations = ?, updated_at = NOW()
          WHERE slug = ?`,
         [JSON.stringify(translations), slug],
       );
+      await queryTournament(`DELETE FROM wiki_article_images WHERE article_id = ?`, [articleId]);
     } else {
       // Create new
+      articleId = uuidv4();
       await queryTournament(
         `INSERT INTO wiki_articles (id, slug, translations, author_id, is_published, created_at, updated_at)
-         VALUES (UUID(), ?, ?, ?, 1, NOW(), NOW())`,
-        [slug, JSON.stringify(translations), userId],
+         VALUES (?, ?, ?, ?, 1, NOW(), NOW())`,
+        [articleId, slug, JSON.stringify(translations), userId],
       );
+    }
+
+    // Rebuild the article-image links so exports and orphan detection stay consistent.
+    for (const filename of importedImageFilenames) {
+      const image = (await queryTournament(
+        `SELECT id FROM wiki_images WHERE filename = ? LIMIT 1`,
+        [filename],
+      )) as any[];
+      if (image.length > 0) {
+        await queryTournament(
+          `INSERT IGNORE INTO wiki_article_images (article_id, wiki_image_id, created_at)
+           VALUES (?, ?, NOW())`,
+          [articleId, image[0].id],
+        );
+      }
     }
 
     return {
@@ -410,55 +411,27 @@ export function validateZipStructure(metadata: ArticleMetadata): {
 } {
   const errors: string[] = [];
 
-  if (!metadata.slug) {
+  if (!metadata || !/^[a-z0-9_-]+$/.test(metadata.slug || '')) {
     errors.push('Missing slug in metadata');
   }
 
-  if (!Array.isArray(metadata.articles) || metadata.articles.length === 0) {
+  if (!metadata || !Array.isArray(metadata.articles) || metadata.articles.length === 0) {
     errors.push('No articles found in metadata');
   } else {
-    const validArticles = metadata.articles.filter((a) => a.language && a.title && a.content);
+    const validArticles = metadata.articles.filter(
+      (a) => /^[a-z]{2,5}$/.test(a.language || '') && a.title?.trim() && a.content?.trim(),
+    );
     if (validArticles.length === 0) {
       errors.push('No valid articles with language, title, and content');
     }
   }
 
-  if (!Array.isArray(metadata.images)) {
-    metadata.images = [];
+  if (metadata && metadata.images !== undefined && !Array.isArray(metadata.images)) {
+    errors.push('Images must be an array');
   }
 
   return {
     valid: errors.length === 0,
     errors,
   };
-}
-
-/**
- * Export article stats (for UI feedback)
- */
-export async function getExportStats(slug: string): Promise<{
-  languages: string[];
-  image_count: number;
-}> {
-  try {
-    const article = await queryTournament(
-      `SELECT translations FROM wiki_articles WHERE slug = ? LIMIT 1`,
-      [slug],
-    );
-
-    if (!article || (article as any[]).length === 0) {
-      throw new Error(`Article not found: ${slug}`);
-    }
-
-    const translations = JSON.parse((article as any[])[0].translations);
-    const languages = Object.keys(translations).filter((lang) => translations[lang].title);
-    const imageMap = extractImageFilenames(translations);
-
-    return {
-      languages,
-      image_count: imageMap.size,
-    };
-  } catch (error) {
-    throw new Error(`Failed to get export stats: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
 }

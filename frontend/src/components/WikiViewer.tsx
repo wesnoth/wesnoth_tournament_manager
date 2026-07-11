@@ -4,12 +4,8 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { marked } from 'marked';
-import DOMPurify from 'dompurify';
-import hljs from 'highlight.js';
-import 'highlight.js/styles/atom-one-dark.css';
 import { useTranslation } from 'react-i18next';
+import { renderWikiMarkdown } from '../utils/wikiMarkdown';
 
 interface WikiViewerProps {
   slug: string;
@@ -34,7 +30,6 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
   isLoading
 }) => {
   const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
   const [article, setArticle] = useState<WikiArticle | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,14 +57,10 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
 
         if (!response.ok) {
           if (response.status === 404) {
-            // Article not found - redirect to getting-started if not already there
-            if (slug !== 'getting-started') {
-              navigate('/help/getting-started', { replace: true });
-            } else {
-              const msg = `Article "getting-started" not found`;
-              setError(msg);
-              onError?.(msg);
-            }
+            // Keep the requested URL visible so a missing article can be diagnosed.
+            const msg = `Article "${slug}" not found`;
+            setError(msg);
+            onError?.(msg);
           } else {
             const msg = 'Failed to load article';
             setError(msg);
@@ -93,15 +84,7 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
     };
 
     fetchArticle();
-  }, [slug, language, navigate]);
-
-  // Configure marked for security and features
-  useEffect(() => {
-    marked.setOptions({
-     breaks: false,
-     gfm: true
-    });
-  }, []);
+  }, [slug, language]);
 
   if (loading) {
     return (
@@ -128,72 +111,7 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
     );
   }
 
-  // Parse and sanitize markdown
-  let htmlContent = '';
-  try {
-    const rawHtml = marked(article.content_markdown) as string;
-    htmlContent = DOMPurify.sanitize(rawHtml, {
-      ALLOWED_TAGS: [
-        'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-        'p', 'br', 'strong', 'em', 'u', 'del',
-        'ol', 'ul', 'li',
-        'table', 'thead', 'tbody', 'tr', 'th', 'td',
-        'blockquote', 'pre', 'code',
-        'a', 'img',
-        'div', 'span'
-      ],
-      ALLOWED_ATTR: [
-        'href', 'title', 'class', 'id',
-        'src', 'alt', 'width', 'height',
-        'target', 'rel',
-        'colspan', 'rowspan',
-        'data-language'
-      ],
-      KEEP_CONTENT: true
-    });
-    
-    // Add Tailwind classes directly to HTML elements
-    // Fix malformed <li><p>...</p></li> structures
-    htmlContent = htmlContent
-      // Headers with proper sizing and spacing
-      .replace(/<h1>/g, '<h1 class="text-4xl font-bold mt-8 mb-4 text-gray-900">')
-      .replace(/<h2>/g, '<h2 class="text-3xl font-bold mt-6 mb-3 text-gray-800 border-b-2 border-blue-500 pb-2">')
-      .replace(/<h3>/g, '<h3 class="text-2xl font-bold mt-5 mb-2 text-gray-800">')
-      .replace(/<h4>/g, '<h4 class="text-xl font-bold mt-4 mb-2 text-gray-700">')
-      .replace(/<h5>/g, '<h5 class="text-lg font-bold mt-3 mb-2 text-gray-700">')
-      .replace(/<h6>/g, '<h6 class="text-base font-bold mt-2 mb-2 text-gray-600">')
-      // Paragraphs with proper spacing
-      .replace(/<p>/g, '<p class="my-4 text-gray-800 leading-relaxed">')
-      // Lists
-      .replace(/<ol>/g, '<ol class="list-decimal list-inside ml-4 my-2 space-y-1">')
-      .replace(/<ul>/g, '<ul class="list-disc list-inside ml-4 my-2 space-y-1">')
-      // Remove opening <p> inside <li>
-      .replace(/<li>(\s*)<p>/g, '<li class="text-gray-700">$1')
-      // Remove closing </p> inside </li>
-      .replace(/<\/p>(\s*)<\/li>/g, '$1</li>')
-      // Handle remaining <li> without class (shouldn't happen but just in case)
-      .replace(/<li>(?!.*class)/g, '<li class="text-gray-700">')
-      // Links with blue color and underline
-      .replace(/<a /g, '<a class="text-blue-600 underline hover:text-blue-800 hover:no-underline transition-colors" ')
-      // Add classes to images and proxy through API for better reliability
-      .replace(/<img src="\/uploads\/wiki\//g, '<img src="' + (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api') + '/public/wiki/images/')
-      .replace(/<img /g, '<img class="max-w-full h-auto rounded-lg shadow-md my-2 block" ');
-    console.log('SANITIZED HTML FULL:', htmlContent);
-  } catch (e) {
-    console.error('Error parsing markdown:', e);
-    htmlContent = `<p>${DOMPurify.sanitize(article.content_markdown)}</p>`;
-  }
-
-  // Generate table of contents from headings
-  const headings = article.content_markdown
-    .split('\n')
-    .filter(line => /^#{1,6}\s/.test(line))
-    .map((line, idx) => {
-      const level = line.match(/^#+/)![0].length;
-      const text = line.replace(/^#+\s/, '').trim();
-      const id = `heading-${idx}`;
-      return { level, text, id };
-    });
+  const { html: htmlContent, headings } = renderWikiMarkdown(article.content_markdown);
 
   return (
     <article className="wiki-viewer max-w-4xl mx-auto py-8">

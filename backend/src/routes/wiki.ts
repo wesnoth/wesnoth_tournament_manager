@@ -5,7 +5,6 @@
 
 import { Router, Request, Response } from 'express';
 import * as wikiService from '../services/wikiService.js';
-import type { WikiArticlePublic } from '../types/wiki.js';
 
 const router = Router();
 
