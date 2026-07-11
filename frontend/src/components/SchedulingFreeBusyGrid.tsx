@@ -51,6 +51,28 @@ const PARTICIPANT_COLUMN_WIDTH = 180;
 const SLOT_COLUMN_WIDTH = 56;
 const OVERSCAN_COLUMNS = 10;
 
+/** Return a YYYY-MM-DD calendar key for a timestamp in an IANA timezone. */
+const getDateKeyInTimezone = (date: Date, timezone: string): string => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+};
+
+/** Return the current hour in an IANA timezone for initial grid scrolling. */
+const getCurrentHourInTimezone = (timezone: string): number => {
+  const hour = Number(new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: '2-digit',
+    hour12: false,
+  }).format(new Date()));
+  return hour === 24 ? 0 : hour;
+};
+
 /** Convert a displayed local grid slot into its canonical UTC ISO key. */
 const slotToUTCDatetime = (
   slot: Pick<GridSlot, 'dateStr' | 'timeStr'>,
@@ -204,6 +226,13 @@ function SchedulingFreeBusyGrid({
     () => generateSlots(dateStart, dateEnd, viewingTimezone),
     [dateStart, dateEnd, viewingTimezone]
   );
+  const currentDateKey = useMemo(() => getDateKeyInTimezone(new Date(), viewingTimezone), [viewingTimezone]);
+  const effectiveScrollToHour = useMemo(() => {
+    if (scrollToHour !== null && scrollToHour !== undefined) return scrollToHour;
+    return slots[0]?.dateStr === currentDateKey
+      ? getCurrentHourInTimezone(viewingTimezone)
+      : null;
+  }, [scrollToHour, slots, currentDateKey, viewingTimezone]);
 
   const proposedSlotsSet = useMemo(() => new Set(proposedSlots), [proposedSlots]);
   const confirmedSlotsSet = useMemo(() => {
@@ -334,9 +363,9 @@ function SchedulingFreeBusyGrid({
   }, []);
 
   useEffect(() => {
-    if (scrollToHour !== null && scrollToHour !== undefined && gridContainerRef.current) {
+    if (effectiveScrollToHour !== null && effectiveScrollToHour !== undefined && gridContainerRef.current) {
       const rowHeight = 30;
-      const hoursToScroll = scrollToHour * 2;
+      const hoursToScroll = effectiveScrollToHour * 2;
       const scrollPosition = hoursToScroll * rowHeight;
       const timer = window.setTimeout(() => {
         if (gridContainerRef.current) {
@@ -346,7 +375,7 @@ function SchedulingFreeBusyGrid({
       return () => window.clearTimeout(timer);
     }
     return undefined;
-  }, [scrollToHour]);
+  }, [effectiveScrollToHour]);
 
   const virtualWindow = useMemo(() => {
     const totalColumns = flatSlots.length;
@@ -409,6 +438,7 @@ function SchedulingFreeBusyGrid({
     if (readOnly || !onSlotToggle) return;
 
     const key = slot.slotKey;
+    if (new Date(key).getTime() <= Date.now()) return;
     const now = Date.now();
 
     // Ignore synthetic click that follows touchend on mobile Safari.
@@ -486,6 +516,10 @@ function SchedulingFreeBusyGrid({
             <span>Reserved tournament</span>
           </div>
           <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-gray-200 border border-gray-400 rounded"></div>
+            <span>Past</span>
+          </div>
+          <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-green-500 border border-green-700 rounded"></div>
             <span>Confirmed</span>
           </div>
@@ -500,6 +534,10 @@ function SchedulingFreeBusyGrid({
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-purple-200 border border-purple-400 rounded"></div>
             <span>Reserved tournament</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-gray-200 border border-gray-400 rounded"></div>
+            <span>Past</span>
           </div>
         </div>
       ) : (
@@ -636,11 +674,15 @@ function SchedulingFreeBusyGrid({
                   const isSelected = selectedSlots.has(slotKey);
                   const reservationSource = reservedSlotsMap.get(slotKey);
                   const isReserved = Boolean(reservationSource) && !isProposed;
+                  const isPast = new Date(slotKey).getTime() <= Date.now();
 
                   let bgColor = dayColor;
                   let borderColor = 'border-gray-200';
 
-                  if (confirmMode && isProposed) {
+                  if (isPast) {
+                    bgColor = 'bg-gray-200';
+                    borderColor = 'border-gray-400';
+                  } else if (confirmMode && isProposed) {
                     if (isSelected) {
                       bgColor = 'bg-green-500';
                       borderColor = 'border-green-700';
@@ -671,8 +713,8 @@ function SchedulingFreeBusyGrid({
                   return (
                     <td
                       key={`${participant.id}-${dateKey}-${slotKey}`}
-                      className={`border ${borderColor} p-0.5 h-8 cursor-${readOnly || isReserved ? 'default' : 'pointer'} ${bgColor} ${
-                        !readOnly && !isProposed && !isReserved ? 'hover:opacity-75 touch-manipulation' : ''
+                      className={`border ${borderColor} p-0.5 h-8 cursor-${readOnly || isReserved || isPast ? 'default' : 'pointer'} ${bgColor} ${
+                        !readOnly && !isProposed && !isReserved && !isPast ? 'hover:opacity-75 touch-manipulation' : ''
                       }`}
                       style={{ minWidth: `${SLOT_COLUMN_WIDTH}px`, width: `${SLOT_COLUMN_WIDTH}px` }}
                       onTouchStart={(event) => handleSlotTouchStart(event, slot)}
@@ -682,7 +724,7 @@ function SchedulingFreeBusyGrid({
                         touchGestureRef.current = null;
                       }}
                       onClick={() => handleSlotToggleAction(slot, 'click')}
-                      title={`${participant.nickname} - ${slot.dateStr} ${slot.timeStr}${isReserved ? ` (${reservationSource} slot already reserved)` : ''}`}
+                      title={`${participant.nickname} - ${slot.dateStr} ${slot.timeStr}${isPast ? ' (past slot)' : ''}${isReserved ? ` (${reservationSource} slot already reserved)` : ''}`}
                     >
                       {isConfirmed && (
                         <div className="w-full h-full flex items-center justify-center text-green-700 font-bold">

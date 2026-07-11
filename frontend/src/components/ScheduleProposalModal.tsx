@@ -377,6 +377,12 @@ export default function ScheduleProposalModal({
     [proposal]
   );
   const confirmedSlotsMap = useMemo<Record<string, string[]>>(() => ({}), []);
+  const minimumDate = new Intl.DateTimeFormat('en-CA', {
+    timeZone: viewingTimezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
 
   if (!isOpen) return null;
 
@@ -417,6 +423,7 @@ export default function ScheduleProposalModal({
                 <div className="flex gap-2">
                   <input
                     type="date"
+                    min={minimumDate}
                     value={displayDateStart.toISOString().split('T')[0]}
                     onChange={(e) => setDisplayDateStart(new Date(e.target.value))}
                     className="px-3 py-2 border border-gray-300 rounded text-sm"
