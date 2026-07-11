@@ -309,7 +309,7 @@ npx playwright show-report
 ## Known Limitations / Future Improvements
 
 1. **Pagination** - Currently only applies to "All" filter (by design)
-2. **Real-time Updates** - No WebSocket/polling for live notification updates
+2. **Live Updates** - Notifications use HTTP requests and navbar polling; no WebSocket push channel is used.
 3. **Search** - No search functionality for notifications
 4. **Filters** - Fixed to 3 filters (could be extensible)
 5. **Batch Actions** - No multi-select or batch delete

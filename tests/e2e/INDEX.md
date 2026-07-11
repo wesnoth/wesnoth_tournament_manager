@@ -7,7 +7,7 @@
 ## Quick Links
 
 ### 📋 Documentation (Start Here)
-1. **[COMPLETE TEST REPORT](../../NOTIFICATIONS_E2E_TEST_REPORT.md)** 
+1. **[NOTIFICATIONS DOCUMENTATION](../../NOTIFICATIONS_DOCUMENTATION.md)**
    - Executive summary, validation results, deployment checklist
    - Start here for overview
 
@@ -208,7 +208,7 @@ Status: ✅ APPROVED
 - **How to run tests?** → See [README.md](README.md)
 - **Step-by-step procedures?** → See [NOTIFICATIONS_TEST_GUIDE.md](NOTIFICATIONS_TEST_GUIDE.md)
 - **Detailed results?** → See [VALIDATION_RESULTS.md](VALIDATION_RESULTS.md)
-- **Overall status?** → See [../../NOTIFICATIONS_E2E_TEST_REPORT.md](../../NOTIFICATIONS_E2E_TEST_REPORT.md)
+- **Implementation overview?** → See [../../NOTIFICATIONS_DOCUMENTATION.md](../../NOTIFICATIONS_DOCUMENTATION.md)
 
 ### Issues?
 1. Check [README.md](README.md) Troubleshooting section

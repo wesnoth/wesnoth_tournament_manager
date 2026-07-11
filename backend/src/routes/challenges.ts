@@ -18,7 +18,13 @@ import { buildNotificationMessage, formatTimeRangesForDiscord, groupSlotsIntoRan
 const router = Router();
 const DISCORD_P2P_CHALLENGE_CHANNEL_ID = process.env.DISCORD_P2P_CHALLENGE_CHANNEL_ID || '';
 
-/** Publish a challenge event to the configured public P2P Discord channel. */
+/**
+ * Publish a challenge event to the configured public P2P Discord channel.
+ * @param title Embed title describing the challenge event.
+ * @param color Discord embed color.
+ * @param fields Event details shown in the embed.
+ * @returns A promise that resolves after publishing is attempted; skipped when no channel is configured.
+ */
 const sendChallengeDiscord = async (
   title: string,
   color: number,
@@ -38,7 +44,11 @@ const sendChallengeDiscord = async (
   });
 };
 
-/** Load the display name used in challenge notifications. */
+/**
+ * Load the display name used in challenge notifications.
+ * @param userId Application user ID.
+ * @returns The user's nickname, or `Player` when the user cannot be found.
+ */
 const getUserSummary = async (userId: string): Promise<{ nickname: string }> => {
   const result = await query(
     `SELECT COALESCE(nickname, id) AS nickname

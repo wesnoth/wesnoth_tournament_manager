@@ -48,7 +48,6 @@ const App: React.FC = () => {
   const { isAdmin, token, validateToken, isValidating } = useAuthStore();
   const [authChecked, setAuthChecked] = React.useState(false);
   const [maintenanceMode, setMaintenanceMode] = React.useState(false);
-  const [notificationsLoaded, setNotificationsLoaded] = React.useState(false);
 
   useEffect(() => {
     // Validate token on app load if token exists
@@ -61,14 +60,6 @@ const App: React.FC = () => {
     
     checkAuth();
   }, [token, validateToken]);
-
-  useEffect(() => {
-    // Mark as loaded when token and auth is checked
-    // Popups removed - users can see notifications via navbar bell icon
-    if (token && authChecked && !notificationsLoaded) {
-      setNotificationsLoaded(true);
-    }
-  }, [token, authChecked, notificationsLoaded]);
 
   useEffect(() => {
     // Fetch maintenance status on app load

@@ -6,6 +6,16 @@ import { useAuthStore } from '../store/authStore';
 import { userService } from '../services/api';
 import { getHelpSlugFromPath } from '../utils/helpNavigation';
 
+/** Minimal notification shape required by the navbar dropdown. */
+interface NavbarNotification {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  created_at: string;
+  is_read: boolean;
+}
+
 const Navbar: React.FC = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -16,7 +26,7 @@ const Navbar: React.FC = () => {
   const [languageDropdownOpen, setLanguageDropdownOpen] = useState(false);
   const [notificationsDropdownOpen, setNotificationsDropdownOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [recentNotifications, setRecentNotifications] = useState<any[]>([]);
+  const [recentNotifications, setRecentNotifications] = useState<NavbarNotification[]>([]);
   const userBtnRef = useRef<HTMLButtonElement>(null);
   const languageBtnRef = useRef<HTMLButtonElement>(null);
   const languageBtnMobileRef = useRef<HTMLButtonElement>(null);
@@ -58,7 +68,7 @@ const Navbar: React.FC = () => {
       };
       fetchUserProfile();
 
-      // Load notification count
+      // Load the persisted unread count for the navbar badge.
       const loadUnreadCount = async () => {
         try {
           const token = localStorage.getItem('token');
@@ -76,7 +86,7 @@ const Navbar: React.FC = () => {
         }
       };
 
-      // Load recent notifications for dropdown (unread only)
+      // Load recent persisted notifications for the dropdown.
       const loadRecentNotifications = async () => {
         try {
           const token = localStorage.getItem('token');
@@ -97,7 +107,7 @@ const Navbar: React.FC = () => {
       loadUnreadCount();
       loadRecentNotifications();
 
-      // Refresh unread count every 30 seconds
+      // Poll the HTTP count because the application has no push notification channel.
       const interval = setInterval(loadUnreadCount, 30000);
       return () => clearInterval(interval);
     }

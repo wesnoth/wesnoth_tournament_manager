@@ -7,6 +7,9 @@ const router = Router();
 
 console.log(`🔧 Registering notifications routes`);
 
+// Notifications are persisted and served over authenticated HTTP; this router
+// intentionally contains no WebSocket or push-transport integration.
+
 /**
  * GET /unread-count
  * Get count of unread notifications for navbar badge
@@ -35,39 +38,6 @@ router.get('/unread-count', authMiddleware, async (req: AuthRequest, res: Respon
     });
   } catch (error) {
     console.error('❌ Error fetching unread count:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-/**
- * GET /unread
- * Get all unread notifications for the current user (excludes deleted)
- */
-router.get('/unread', authMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.userId;
-
-    if (!userId) {
-      return res.status(401).json({ error: 'Not authenticated' });
-    }
-
-    const result = await query(
-      `SELECT id, user_id, tournament_id, match_id, type, title, message, message_extra, is_read, created_at
-       FROM user_notifications
-       WHERE user_id = ? AND is_read = false AND is_deleted = false
-       ORDER BY created_at DESC`,
-      [userId]
-    );
-
-    const notifications = result.rows || [];
-    console.log(`✅ Retrieved ${notifications.length} unread notifications for user ${userId}`);
-
-    res.json({
-      success: true,
-      notifications,
-    });
-  } catch (error) {
-    console.error('❌ Error fetching unread notifications:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

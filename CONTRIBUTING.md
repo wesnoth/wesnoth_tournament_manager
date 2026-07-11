@@ -89,7 +89,10 @@ Use clear commit messages in English or Spanish:
 
 - Update README.md if configuration changes.
 - Document new APIs.
-- Add comments for complex code.
+- Write all source-code comments/JSDoc and Markdown documentation in English.
+- Treat comments/JSDoc in the source code as the detailed documentation for functions and implementation behavior.
+- Keep Markdown documentation high-level and stable: describe architecture, responsibilities, configuration, workflows, and policies without duplicating volatile code details.
+- Add concise comments for complex code, focusing on intent and non-obvious behavior.
 
 ## 🐛 Reporting Bugs
 

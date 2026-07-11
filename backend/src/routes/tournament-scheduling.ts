@@ -42,7 +42,12 @@ interface TeamNotificationContext {
   memberDiscordIds: string[];
 }
 
-/** Load the display names, application IDs, and Discord IDs for a tournament team. */
+/**
+ * Load the display names, application IDs, and Discord IDs for a tournament team.
+ * @param tournamentId Tournament containing the team.
+ * @param teamId Team whose members are being notified.
+ * @returns Team display data used by in-app notifications and Discord embeds.
+ */
 const getTeamNotificationContext = async (tournamentId: string, teamId: string): Promise<TeamNotificationContext> => {
   const teamResult = await query(
     'SELECT name FROM tournament_teams WHERE id = ?',
@@ -501,7 +506,7 @@ router.post('/:tournamentRoundMatchId/propose-schedule', authMiddleware, async (
     let proposerName = 'Player';
     let actorUserName = 'Player';
     let opponentDiscordIds: string[] = [];
-    let opponentSocketRecipients: string[] = [];
+    let opponentNotificationRecipients: string[] = [];
     let proposerTeamMembers: string[] = [];
     let opponentTeamMembers: string[] = [];
 
@@ -523,7 +528,7 @@ router.post('/:tournamentRoundMatchId/propose-schedule', authMiddleware, async (
       opponentName = opponentTeamContext.teamName;
       proposerTeamMembers = proposerTeamContext.memberNames;
       opponentTeamMembers = opponentTeamContext.memberNames;
-      opponentSocketRecipients = opponentTeamContext.memberUserIds;
+      opponentNotificationRecipients = opponentTeamContext.memberUserIds;
 
       if (opponentTeamContext.memberDiscordIds.length > 0) {
         opponentDiscordIds = opponentTeamContext.memberDiscordIds;
@@ -548,7 +553,7 @@ router.post('/:tournamentRoundMatchId/propose-schedule', authMiddleware, async (
       }
       
       // For 1v1, send notification to the opponent user only
-      opponentSocketRecipients = [opponentId];
+      opponentNotificationRecipients = [opponentId];
     }
 
     // Get tournament details for Discord
@@ -588,7 +593,7 @@ router.post('/:tournamentRoundMatchId/propose-schedule', authMiddleware, async (
     const notificationMessage = `${proposerName} proposed schedule: ${scheduleTimeUTC} UTC`;
     
     await storeNotificationForUsers(
-      opponentSocketRecipients,
+      opponentNotificationRecipients,
       match.tournament_id,
       tournamentRoundMatchId,
       'schedule_proposal',
@@ -717,10 +722,10 @@ router.post('/:tournamentRoundMatchId/confirm-schedule', authMiddleware, async (
       [tournamentRoundMatchId]
     ).catch(err => console.error('⚠️ Error marking old notifications as read:', err));
 
-    // Get opponent name for Discord notification and team members for Socket.IO
+    // Get opponent display data and application recipients for the persisted notification.
     let opponentName = 'Opponent';
-    let proposerSocketRecipients: string[] = [];
-    let confirmerSocketRecipients: string[] = [];
+    let proposerNotificationRecipients: string[] = [];
+    let confirmerNotificationRecipients: string[] = [];
     let proposerTeamMembers: string[] = [];
     let confirmerTeamMembers: string[] = [];
     let proposerTeamName: string | undefined;
@@ -766,8 +771,8 @@ router.post('/:tournamentRoundMatchId/confirm-schedule', authMiddleware, async (
       const confirmerTeamContext = await getTeamNotificationContext(match.tournament_id, confirmerTeamId!);
       proposerTeamName = proposerTeamContext.teamName;
       opponentName = proposerTeamContext.teamName;
-      proposerSocketRecipients = proposerTeamContext.memberUserIds;
-      confirmerSocketRecipients = confirmerTeamContext.memberUserIds;
+      proposerNotificationRecipients = proposerTeamContext.memberUserIds;
+      confirmerNotificationRecipients = confirmerTeamContext.memberUserIds;
       proposerTeamMembers = proposerTeamContext.memberNames;
       confirmerTeamMembers = confirmerTeamContext.memberNames;
     } else {
@@ -778,8 +783,8 @@ router.post('/:tournamentRoundMatchId/confirm-schedule', authMiddleware, async (
       );
       opponentName = proposerResult.rows && proposerResult.rows.length > 0 ? proposerResult.rows[0].username : 'Opponent';
 
-      proposerSocketRecipients = [proposerId];
-      confirmerSocketRecipients = [confirmerId];
+      proposerNotificationRecipients = [proposerId];
+      confirmerNotificationRecipients = [confirmerId];
     }
 
     // Get tournament details for Discord
@@ -878,7 +883,7 @@ router.post('/:tournamentRoundMatchId/confirm-schedule', authMiddleware, async (
     const notificationMessage = `Match scheduled for: ${scheduleTimeUTC} UTC`;
     
     // Combine all recipients (both proposer and confirmer teams)
-    const allRecipients = [...new Set([...proposerSocketRecipients, ...confirmerSocketRecipients])];
+    const allRecipients = [...new Set([...proposerNotificationRecipients, ...confirmerNotificationRecipients])];
     
     await storeNotificationForUsers(
       allRecipients,

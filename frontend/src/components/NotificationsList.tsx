@@ -2,12 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
+/** Notification record returned by the authenticated notification API. */
 interface Notification {
   id: string;
   user_id: string;
   tournament_id: string;
   match_id: string;
-  type: 'schedule_proposal' | 'schedule_confirmed' | 'schedule_cancelled';
+  type:
+    | 'schedule_proposal'
+    | 'schedule_confirmed'
+    | 'schedule_rejected'
+    | 'schedule_changed'
+    | 'schedule_cancelled'
+    | 'challenge_proposal'
+    | 'challenge_confirmed'
+    | 'challenge_rejected'
+    | 'challenge_counter_proposal'
+    | 'challenge_updated'
+    | 'challenge_cancelled';
   title: string;
   message: string;
   message_extra?: string | null;
@@ -15,18 +27,14 @@ interface Notification {
   created_at: string;
 }
 
+/** Callbacks and filter options for the full-page notification list. */
 interface NotificationsListProps {
   filter?: 'all' | 'pending' | 'accepted';
-  onNotificationDeleted?: () => void;
-  onNotificationRead?: () => void;
-  onNotificationsLoaded?: () => void;
 }
 
+/** Render the persisted notification list and its read/delete controls. */
 const NotificationsList: React.FC<NotificationsListProps> = ({
   filter = 'all',
-  onNotificationDeleted,
-  onNotificationRead,
-  onNotificationsLoaded,
 }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -45,12 +53,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
     loadNotifications();
   }, [currentFilter, pageOffset]);
 
-  useEffect(() => {
-    if (onNotificationsLoaded && !loading) {
-      onNotificationsLoaded();
-    }
-  }, [notifications, loading]);
-
+  /** Toggle one notification in the current bulk-action selection. */
   const toggleSelectNotification = (notificationId: string) => {
     const newSelected = new Set(selectedIds);
     if (newSelected.has(notificationId)) {
@@ -61,6 +64,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
     setSelectedIds(newSelected);
   };
 
+  /** Select or clear every notification currently visible on the page. */
   const toggleSelectAll = () => {
     if (selectedIds.size === notifications.length) {
       setSelectedIds(new Set());
@@ -94,9 +98,6 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
           )
         );
         setSelectedIds(new Set());
-        if (onNotificationRead) {
-          onNotificationRead();
-        }
       } else {
         console.error('Some notifications failed to mark as read:', responses.map(r => r.status));
       }
@@ -163,9 +164,6 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
         notifications.filter(n => !selectedIds.has(n.id))
       );
       setSelectedIds(new Set());
-      if (onNotificationDeleted) {
-        onNotificationDeleted();
-      }
     } catch (err) {
       console.error('Error deleting notifications:', err);
     } finally {
@@ -173,6 +171,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
     }
   };
 
+  /** Select the HTTP endpoint matching the active filter. */
   const getEndpoint = () => {
     switch (currentFilter) {
       case 'pending':
@@ -184,6 +183,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
     }
   };
 
+  /** Fetch the current page of notifications over authenticated HTTP. */
   const loadNotifications = async () => {
     try {
       setLoading(true);
@@ -234,9 +234,6 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
             n.id === notificationId ? { ...n, is_read: true } : n
           )
         );
-        if (onNotificationRead) {
-          onNotificationRead();
-        }
       } else {
         const errorData = await response.json();
         console.error(`Error marking notification as read: ${response.status}`, errorData);
@@ -285,15 +282,13 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
 
       if (response.ok) {
         setNotifications(notifications.filter(n => n.id !== notificationId));
-        if (onNotificationDeleted) {
-          onNotificationDeleted();
-        }
       }
     } catch (err) {
       console.error('Error deleting notification:', err);
     }
   };
 
+  /** Map persisted notification categories to their UI icon. */
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'schedule_proposal':
@@ -307,6 +302,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
     }
   };
 
+  /** Format API timestamps for the user's local display. */
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleString('es-ES', {

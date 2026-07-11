@@ -31,9 +31,6 @@ const Notifications: React.FC = () => {
           <div className="bg-white rounded-lg shadow-md p-8">
             <NotificationsList 
               filter="all"
-              onNotificationsLoaded={() => {}}
-              onNotificationDeleted={() => {}}
-              onNotificationRead={() => {}}
             />
           </div>
         </div>

@@ -1,10 +1,9 @@
 import { query } from '../config/database.js';
 
 /**
- * Clean up old user notifications
- * 
- * Deletes notifications that are older than OLD_NOTIFICATIONS_CLEANUP_DAYS
- * based on their created_at timestamp.
+ * Permanently delete notifications older than the configured retention period.
+ * The scheduler invokes this job daily; user-triggered deletion remains a
+ * separate soft-delete operation in the notifications routes.
  */
 export async function cleanupOldNotifications(): Promise<void> {
   const cleanupDays = parseInt(process.env.OLD_NOTIFICATIONS_CLEANUP_DAYS || '90', 10);
