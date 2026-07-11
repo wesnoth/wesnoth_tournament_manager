@@ -58,7 +58,7 @@ const getTeamNotificationContext = async (tournamentId: string, teamId: string):
     : 'Team';
 
   const membersResult = await query(
-    `SELECT tp.user_id, ue.discord_id, COALESCE(ue.nickname, ue.username, tp.user_id) AS display_name
+    `SELECT tp.user_id, ue.discord_id, COALESCE(ue.nickname, tp.user_id) AS display_name
      FROM tournament_participants tp
      LEFT JOIN users_extension ue ON tp.user_id = ue.id
      WHERE tp.tournament_id = ? AND tp.team_id = ?`,
@@ -345,12 +345,12 @@ router.get('/:tournamentId/matches-pending-schedule', authMiddleware, async (req
           trm.scheduled_by_player_id,
           trm.scheduled_confirmed_at,
           tr.round_number,
-          u1.username as player1_name,
-          u2.username as player2_name
+          u1.nickname as player1_name,
+          u2.nickname as player2_name
         FROM tournament_round_matches trm
         JOIN tournament_rounds tr ON trm.round_id = tr.id
-        JOIN users_extension u1 ON trm.player1_id = u1.user_id
-        JOIN users_extension u2 ON trm.player2_id = u2.user_id
+        JOIN users_extension u1 ON trm.player1_id = u1.id
+        JOIN users_extension u2 ON trm.player2_id = u2.id
         WHERE trm.tournament_id = ?
           AND trm.series_status IN ('pending', 'in_progress')
           AND (trm.player1_id = ? OR trm.player2_id = ?)
@@ -536,16 +536,16 @@ router.post('/:tournamentRoundMatchId/propose-schedule', authMiddleware, async (
     } else {
       // 1v1 tournament
       const opponentResult = await query(
-        'SELECT username, discord_id FROM users_extension WHERE user_id = ?',
+        'SELECT nickname, discord_id FROM users_extension WHERE id = ?',
         [opponentId]
       );
-      opponentName = opponentResult.rows && opponentResult.rows.length > 0 ? opponentResult.rows[0].username : 'Opponent';
+      opponentName = opponentResult.rows && opponentResult.rows.length > 0 ? opponentResult.rows[0].nickname : 'Opponent';
       
       const proposerResult = await query(
-        'SELECT username FROM users_extension WHERE user_id = ?',
+        'SELECT nickname FROM users_extension WHERE id = ?',
         [userId]
       );
-      proposerName = proposerResult.rows && proposerResult.rows.length > 0 ? proposerResult.rows[0].username : 'Player';
+      proposerName = proposerResult.rows && proposerResult.rows.length > 0 ? proposerResult.rows[0].nickname : 'Player';
       
       // Get Discord ID for mention
       if (opponentResult.rows && opponentResult.rows.length > 0 && opponentResult.rows[0].discord_id) {
@@ -778,10 +778,10 @@ router.post('/:tournamentRoundMatchId/confirm-schedule', authMiddleware, async (
     } else {
       // 1v1 tournament
       const proposerResult = await query(
-        'SELECT username, discord_id FROM users_extension WHERE user_id = ?',
+        'SELECT nickname, discord_id FROM users_extension WHERE id = ?',
         [proposerId]
       );
-      opponentName = proposerResult.rows && proposerResult.rows.length > 0 ? proposerResult.rows[0].username : 'Opponent';
+      opponentName = proposerResult.rows && proposerResult.rows.length > 0 ? proposerResult.rows[0].nickname : 'Opponent';
 
       proposerNotificationRecipients = [proposerId];
       confirmerNotificationRecipients = [confirmerId];
@@ -840,10 +840,10 @@ router.post('/:tournamentRoundMatchId/confirm-schedule', authMiddleware, async (
       }
     } else {
       const confirmerResult = await query(
-        'SELECT username, discord_id FROM users_extension WHERE user_id = ?',
+        'SELECT nickname, discord_id FROM users_extension WHERE id = ?',
         [confirmerId]
       );
-      confirmerName = confirmerResult.rows && confirmerResult.rows.length > 0 ? confirmerResult.rows[0].username : 'Player';
+      confirmerName = confirmerResult.rows && confirmerResult.rows.length > 0 ? confirmerResult.rows[0].nickname : 'Player';
       
       if (confirmerResult.rows && confirmerResult.rows.length > 0 && confirmerResult.rows[0].discord_id) {
         confirmerDiscordIds = [confirmerResult.rows[0].discord_id];
@@ -851,7 +851,7 @@ router.post('/:tournamentRoundMatchId/confirm-schedule', authMiddleware, async (
       
       // Get proposer Discord ID from earlier query
       const proposerResult = await query(
-        'SELECT discord_id FROM users_extension WHERE user_id = ?',
+        'SELECT discord_id FROM users_extension WHERE id = ?',
         [proposerId]
       );
       if (proposerResult.rows && proposerResult.rows.length > 0 && proposerResult.rows[0].discord_id) {
@@ -1103,20 +1103,20 @@ router.post(
         opponentIds = [opponentId];
 
         const opponentResult = await query(
-          'SELECT username, discord_id FROM users_extension WHERE user_id = ?',
+          'SELECT nickname, discord_id FROM users_extension WHERE id = ?',
           [opponentId]
         );
-        opponentName = opponentResult.rows && opponentResult.rows.length > 0 ? opponentResult.rows[0].username : 'Opponent';
+        opponentName = opponentResult.rows && opponentResult.rows.length > 0 ? opponentResult.rows[0].nickname : 'Opponent';
         
         if (opponentResult.rows && opponentResult.rows.length > 0 && opponentResult.rows[0].discord_id) {
           opponentDiscordIds = [opponentResult.rows[0].discord_id];
         }
 
         const proposerResult = await query(
-          'SELECT username FROM users_extension WHERE user_id = ?',
+        'SELECT nickname FROM users_extension WHERE id = ?',
           [userId]
         );
-        proposerName = proposerResult.rows && proposerResult.rows.length > 0 ? proposerResult.rows[0].username : 'Player';
+        proposerName = proposerResult.rows && proposerResult.rows.length > 0 ? proposerResult.rows[0].nickname : 'Player';
       }
 
       // Get tournament name
@@ -1169,9 +1169,10 @@ router.post(
       });
     } catch (error) {
       console.error('❌ [SCHEDULING] Error proposing round match slots:', error);
-      res.status(500).json({
+      const message = (error as Error).message || 'Failed to propose schedule';
+      res.status(message.includes('already reserved') ? 409 : 500).json({
         error: 'Failed to propose schedule',
-        details: (error as any).message
+        details: message
       });
     }
   }
@@ -1281,20 +1282,20 @@ router.post(
         opponentIds = [opponentId];
 
         const opponentResult = await query(
-          'SELECT username, discord_id FROM users_extension WHERE user_id = ?',
+        'SELECT nickname, discord_id FROM users_extension WHERE id = ?',
           [opponentId]
         );
-        opponentName = opponentResult.rows && opponentResult.rows.length > 0 ? opponentResult.rows[0].username : 'Opponent';
+        opponentName = opponentResult.rows && opponentResult.rows.length > 0 ? opponentResult.rows[0].nickname : 'Opponent';
         
         if (opponentResult.rows && opponentResult.rows.length > 0 && opponentResult.rows[0].discord_id) {
           opponentDiscordIds = [opponentResult.rows[0].discord_id];
         }
 
         const proposerResult = await query(
-          'SELECT username FROM users_extension WHERE user_id = ?',
+        'SELECT nickname FROM users_extension WHERE id = ?',
           [userId]
         );
-        proposerName = proposerResult.rows && proposerResult.rows.length > 0 ? proposerResult.rows[0].username : 'Player';
+        proposerName = proposerResult.rows && proposerResult.rows.length > 0 ? proposerResult.rows[0].nickname : 'Player';
       }
 
       // Get tournament name
@@ -1347,9 +1348,10 @@ router.post(
       });
     } catch (error) {
       console.error('❌ [SCHEDULING] Error proposing match slots:', error);
-      res.status(500).json({
+      const message = (error as Error).message || 'Failed to propose schedule';
+      res.status(message.includes('already reserved') ? 409 : 500).json({
         error: 'Failed to propose schedule',
-        details: (error as any).message
+        details: message
       });
     }
   }
@@ -1496,10 +1498,10 @@ router.post(
            }
          } else {
            const userResult = await query(
-             `SELECT username, discord_id FROM users_extension WHERE user_id = ?`,
+             `SELECT nickname, discord_id FROM users_extension WHERE id = ?`,
              [userId]
            );
-           confirmerName = userResult.rows && userResult.rows.length > 0 ? userResult.rows[0].username : 'Player';
+           confirmerName = userResult.rows && userResult.rows.length > 0 ? userResult.rows[0].nickname : 'Player';
            confirmerUserName = confirmerName;
          }
 
@@ -1521,10 +1523,10 @@ router.post(
            }
          } else {
            const userResult = await query(
-             `SELECT username, discord_id FROM users_extension WHERE user_id = ?`,
+             `SELECT nickname, discord_id FROM users_extension WHERE id = ?`,
              [proposerId]
            );
-           proposerName = userResult.rows && userResult.rows.length > 0 ? userResult.rows[0].username : 'Player';
+           proposerName = userResult.rows && userResult.rows.length > 0 ? userResult.rows[0].nickname : 'Player';
            if (userResult.rows && userResult.rows.length > 0 && userResult.rows[0].discord_id) {
              proposerDiscordIds = [userResult.rows[0].discord_id];
            }
@@ -2007,10 +2009,10 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
           }
         } else {
           const userResult = await query(
-            `SELECT username, discord_id FROM users_extension WHERE user_id = ?`,
+            `SELECT nickname, discord_id FROM users_extension WHERE id = ?`,
             [userId]
           );
-          counterProposerName = userResult.rows && userResult.rows.length > 0 ? userResult.rows[0].username : 'Player';
+          counterProposerName = userResult.rows && userResult.rows.length > 0 ? userResult.rows[0].nickname : 'Player';
           counterProposerUserName = counterProposerName;
         }
 
@@ -2032,10 +2034,10 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
           }
         } else {
           const userResult = await query(
-            `SELECT username, discord_id FROM users_extension WHERE user_id = ?`,
+            `SELECT nickname, discord_id FROM users_extension WHERE id = ?`,
             [proposerOfOriginal]
           );
-          originalProposerName = userResult.rows && userResult.rows.length > 0 ? userResult.rows[0].username : 'Player';
+          originalProposerName = userResult.rows && userResult.rows.length > 0 ? userResult.rows[0].nickname : 'Player';
           if (userResult.rows && userResult.rows.length > 0 && userResult.rows[0].discord_id) {
             originalProposerDiscordIds = [userResult.rows[0].discord_id];
           }

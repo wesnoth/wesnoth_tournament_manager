@@ -130,9 +130,13 @@
 - `[GET] /api/tournament-scheduling/pending-confirmations` — Private — Proposal confirmations pending for current user.
 - `[GET] /api/tournament-scheduling/:tournamentRoundMatchId/schedule` — Public — Active schedule context for a tournament round match.
 - `[GET] /api/tournament-scheduling/:tournamentId/matches-pending-schedule` — Private — Round matches waiting for schedule proposal.
-- `[POST] /api/tournament-scheduling/:tournamentRoundMatchId/propose-schedule` — Private — body: `{ slot_datetimes[], message?, user_timezone? }` — Create tournament proposal (`challenge_mode='tournament'`).
-- `[POST] /api/tournament-scheduling/:tournamentRoundMatchId/confirm-schedule` — Private — body: `{ proposal_id, confirmed_slot_ids[] }` — Confirm one or more proposed slots.
-- `[POST] /api/tournament-scheduling/:tournamentRoundMatchId/cancel-schedule` — Private — Cancel active schedule proposal flow for that round match.
+- `[POST] /api/tournament-scheduling/:tournamentRoundMatchId/propose-schedule` — Legacy — Single-slot compatibility endpoint; new UI uses multi-slot scheduling below.
+- `[POST] /api/tournament-scheduling/:tournamentRoundMatchId/confirm-schedule` — Legacy — Single-slot compatibility endpoint; new UI uses multi-slot scheduling below.
+- `[POST] /api/tournament-scheduling/:tournamentRoundMatchId/cancel-schedule` — Legacy — Single-slot compatibility endpoint.
+- `[POST] /api/tournament-scheduling/tournament/:tournamentId/round-match/:roundMatchId/propose-slots` — Private — body: `{ slot_datetimes[], notes? }` — Create a multi-slot round-match proposal.
+- `[POST] /api/tournament-scheduling/tournament/:tournamentId/match/:matchId/propose-slots` — Private — body: `{ slot_datetimes[], notes? }` — Create a multi-slot game proposal.
+- `[POST] /api/tournament-scheduling/tournament/:tournamentId/round-match/:roundMatchId/confirm-slots` — Private — body: `{ proposal_id, confirmed_slot_ids[] }` — Confirm selected round-match slots.
+- `[POST] /api/tournament-scheduling/tournament/:tournamentId/match/:matchId/confirm-slots` — Private — body: `{ proposal_id, confirmed_slot_ids[] }` — Confirm selected game slots.
 - `[POST] /api/tournament-scheduling/proposals/:proposalId/confirm` — Private — Confirm proposal participation.
 - `[POST] /api/tournament-scheduling/proposals/:proposalId/cancel-confirmation` — Private — Remove own confirmation.
 - `[POST] /api/tournament-scheduling/proposals/:proposalId/counter-propose` — Private — body: `{ slot_datetimes[], message?, user_timezone? }` — Create counter-proposal for tournament schedule.

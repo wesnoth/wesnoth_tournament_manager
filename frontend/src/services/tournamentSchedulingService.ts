@@ -1,68 +1,7 @@
 import { api } from './api';
 
 export const tournamentSchedulingService = {
-  /**
-   * Get all pending/in_progress matches available for scheduling
-   */
-  getPendingScheduleMatches: async (tournamentId: string) => {
-    const response = await api.get(
-      `/tournament-scheduling/${tournamentId}/matches-pending-schedule`
-    );
-    return response.data;
-  },
-
-  /**
-   * Get schedule status for a match
-   */
-  getSchedule: async (tournamentRoundMatchId: string) => {
-    const response = await api.get(
-      `/tournament-scheduling/${tournamentRoundMatchId}/schedule`
-    );
-    return response.data;
-  },
-
-  /**
-   * Propose a match schedule (old single-slot format)
-   */
-  proposeSchedule: async (tournamentRoundMatchId: string, scheduledDatetime: string, scheduleMessage?: string) => {
-    const response = await api.post(
-      `/tournament-scheduling/${tournamentRoundMatchId}/propose-schedule`,
-      { 
-        scheduled_datetime: scheduledDatetime,
-        ...(scheduleMessage && { scheduleMessage })
-      }
-    );
-    return response.data;
-  },
-
-  /**
-   * Confirm a proposed schedule (old format)
-   */
-  confirmSchedule: async (tournamentRoundMatchId: string, scheduledDatetime?: string, scheduleMessage?: string) => {
-    const response = await api.post(
-      `/tournament-scheduling/${tournamentRoundMatchId}/confirm-schedule`,
-      {
-        ...(scheduledDatetime && { scheduled_datetime: scheduledDatetime }),
-        ...(scheduleMessage && { scheduleMessage })
-      }
-    );
-    return response.data;
-  },
-
-  /**
-   * Cancel/withdraw a schedule proposal or confirmation
-   */
-  cancelSchedule: async (tournamentRoundMatchId: string) => {
-    const response = await api.post(
-      `/tournament-scheduling/${tournamentRoundMatchId}/cancel-schedule`,
-      {}
-    );
-    return response.data;
-  },
-
-  // ============================================================
-  // NEW Phase 3 Methods - Multi-slot scheduling
-  // ============================================================
+  /** Create a multi-slot proposal for an entire tournament round match. */
 
   /**
    * Propose multiple slots for a round match (entire series)
