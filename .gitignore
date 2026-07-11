@@ -68,4 +68,5 @@ tmp/
 # Scripts / export files
 scripts/
 playwright-report/
+wiki-artifacts/
 test-results/
