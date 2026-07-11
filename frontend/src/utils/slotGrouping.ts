@@ -4,6 +4,7 @@ export interface GroupedTimeRange {
   hours: string;
 }
 
+/** Group adjacent 30-minute UTC slots into ranges for the scheduling grid. */
 export const groupSlotsIntoRanges = (slotDatetimes: string[]): GroupedTimeRange[] => {
   if (slotDatetimes.length === 0) return [];
 

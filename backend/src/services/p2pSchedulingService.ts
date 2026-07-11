@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../config/database.js';
 import { roundToNearest30Min, validateSlotDatetimes } from './tournamentSchedulingService.js';
-
+import { assertSlotsAreAvailable } from './schedulingConflictService.js';
 interface P2PProposalRow {
   id: string;
   proposed_by_user_id: string;
@@ -13,6 +13,22 @@ interface P2PProposalRow {
   expires_at: Date | null;
 }
 
+interface P2PSlotRow {
+  id: string;
+  slot_datetime: Date | string;
+  status: string;
+}
+
+interface P2PConfirmationRow {
+  user_id: string;
+  confirmed_at: Date | string;
+}
+
+
+/**
+ * Create a new pending challenge, replacing older active challenges between
+ * the same two players and recording the proposer's confirmation.
+ */
 export const createP2PProposal = async (
   proposedByUserId: string,
   challengedUserId: string,
@@ -42,20 +58,15 @@ export const createP2PProposal = async (
     throw new Error('Invalid proposer or challenged user');
   }
 
+  await assertSlotsAreAvailable(
+    [proposedByUserId, challengedUserId],
+    slotDatetimes
+  );
+
   const proposalId = uuidv4();
   const now = new Date();
   const maxSlotDatetime = new Date(Math.max(...slotDatetimes.map(dt => new Date(dt).getTime())));
   const expiresAt = new Date(maxSlotDatetime.getTime() + 7 * 24 * 60 * 60 * 1000);
-
-  await query(
-    `UPDATE match_schedule_proposals
-     SET status = 'superseded'
-     WHERE challenge_mode = 'p2p'
-       AND status IN ('pending', 'confirmed')
-       AND proposed_by_user_id = ?
-       AND challenged_user_id = ?`,
-    [proposedByUserId, challengedUserId]
-  );
 
   await query(
     `INSERT INTO match_schedule_proposals
@@ -90,6 +101,10 @@ export const createP2PProposal = async (
   return { proposalId, slotsCreated };
 };
 
+/**
+ * Return a proposal and its slots only when the requester is one of its players.
+ * This is the authorization boundary used by the proposal detail route.
+ */
 export const getP2PProposalForUser = async (proposalId: string, userId: string) => {
   const proposalResult = await query(
     `SELECT id, proposed_by_user_id, challenged_user_id, proposed_at, status, notes, visibility, expires_at
@@ -124,17 +139,21 @@ export const getP2PProposalForUser = async (proposalId: string, userId: string) 
 
   return {
     ...proposal,
-    slots: slotsResult.rows || [],
-    confirmations: confirmationsResult.rows || [],
+    slots: (slotsResult.rows || []) as P2PSlotRow[],
+    confirmations: (confirmationsResult.rows || []) as P2PConfirmationRow[],
   };
 };
 
+/**
+ * List challenges visible to a player, optionally restricted to incoming or
+ * outgoing proposals. Slot dates are aggregated for event-list rendering.
+ */
 export const listP2PProposalsForUser = async (
   userId: string,
   mode: 'incoming' | 'outgoing' | 'all' = 'all'
 ) => {
   let whereClause = '(p.proposed_by_user_id = ? OR p.challenged_user_id = ?)';
-  const params: any[] = [userId, userId];
+  const params: string[] = [userId, userId];
 
   if (mode === 'incoming') {
     whereClause = 'p.challenged_user_id = ?';
@@ -165,6 +184,10 @@ export const listP2PProposalsForUser = async (
   return result.rows || [];
 };
 
+/**
+ * Apply the challenged player's slot selection and transition the proposal to
+ * confirmed when at least one slot remains, or rejected when none remain.
+ */
 export const confirmP2PProposalSlots = async (
   proposalId: string,
   userId: string,
@@ -208,7 +231,8 @@ export const confirmP2PProposalSlots = async (
     throw new Error('No slots found for this proposal');
   }
 
-  const allSlotIds = new Set(slotsResult.rows.map((s: any) => s.id));
+  const slots = (slotsResult.rows || []) as P2PSlotRow[];
+  const allSlotIds = new Set(slots.map((slot) => slot.id));
   for (const slotId of confirmedSlotIds) {
     if (!allSlotIds.has(slotId)) {
       throw new Error(`Slot ${slotId} is not part of this proposal`);
@@ -216,7 +240,7 @@ export const confirmP2PProposalSlots = async (
   }
 
   const confirmedSet = new Set(confirmedSlotIds);
-  for (const slot of slotsResult.rows) {
+  for (const slot of slots) {
     if (slot.status === 'pending') {
       const nextStatus = confirmedSet.has(slot.id) ? 'confirmed' : 'rejected';
       await query(`UPDATE match_schedule_slots SET status = ? WHERE id = ?`, [nextStatus, slot.id]);
@@ -234,9 +258,9 @@ export const confirmP2PProposalSlots = async (
     `SELECT id, slot_datetime, status FROM match_schedule_slots WHERE proposal_id = ? ORDER BY slot_datetime ASC`,
     [proposalId]
   );
-  const updatedSlots = updatedSlotsResult.rows || [];
+  const updatedSlots = (updatedSlotsResult.rows || []) as P2PSlotRow[];
 
-  const confirmedCount = updatedSlots.filter((s: any) => s.status === 'confirmed').length;
+  const confirmedCount = updatedSlots.filter((slot) => slot.status === 'confirmed').length;
   const totalSlots = updatedSlots.length;
   const nextProposalStatus = confirmedCount > 0 ? 'confirmed' : (totalSlots > 0 ? 'rejected' : 'pending');
 
@@ -252,6 +276,10 @@ export const confirmP2PProposalSlots = async (
   };
 };
 
+/**
+ * Reject the current proposal and create a new proposal in the opposite
+ * direction, preserving the challenge negotiation as a sequence of records.
+ */
 export const counterProposeP2P = async (
   proposalId: string,
   userId: string,
@@ -300,11 +328,15 @@ export const counterProposeP2P = async (
   );
 };
 
+/**
+ * Replace the slots and notes of a still-pending proposal owned by the proposer.
+ * Passing `null` for notes explicitly clears previously stored notes.
+ */
 export const updateP2PProposal = async (
   proposalId: string,
   userId: string,
   slotDatetimes: string[],
-  notes?: string
+  notes?: string | null
 ) => {
   const validation = validateSlotDatetimes(slotDatetimes);
   if (!validation.valid) {
@@ -373,6 +405,10 @@ export const updateP2PProposal = async (
   };
 };
 
+/**
+ * Cancel a proposal and mark its remaining pending slots as cancelled.
+ * Only the original proposer may perform this operation.
+ */
 export const cancelP2PProposal = async (proposalId: string, userId: string) => {
   const proposalResult = await query(
     `SELECT id, proposed_by_user_id
@@ -405,40 +441,4 @@ export const cancelP2PProposal = async (proposalId: string, userId: string) => {
   );
 
   return { success: true };
-};
-
-export const getP2PParticipantsAvailability = async (proposalId: string, requesterUserId: string) => {
-  const proposalResult = await query(
-    `SELECT proposed_by_user_id, challenged_user_id
-     FROM match_schedule_proposals
-     WHERE id = ? AND challenge_mode = 'p2p'`,
-    [proposalId]
-  );
-
-  if (!proposalResult.rows || proposalResult.rows.length === 0) {
-    throw new Error('Proposal not found');
-  }
-
-  const proposal = proposalResult.rows[0];
-  if (proposal.proposed_by_user_id !== requesterUserId && proposal.challenged_user_id !== requesterUserId) {
-    throw new Error('You do not have access to this proposal');
-  }
-
-  const usersResult = await query(
-    `SELECT id, nickname, timezone, availability_schedule
-     FROM users_extension
-     WHERE id IN (?, ?)
-     ORDER BY nickname ASC`,
-    [proposal.proposed_by_user_id, proposal.challenged_user_id]
-  );
-
-  return {
-    participants: (usersResult.rows || []).map((u: any) => ({
-      ...u,
-      availability_schedule:
-        typeof u.availability_schedule === 'string'
-          ? JSON.parse(u.availability_schedule)
-          : u.availability_schedule,
-    })),
-  };
 };

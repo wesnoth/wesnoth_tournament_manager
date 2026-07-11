@@ -51,7 +51,8 @@ const ChallengeActionButtons: React.FC<ChallengeActionButtonsProps> = ({
   const [viewingTimezone, setViewingTimezone] = useState('UTC');
   const [loadingData, setLoadingData] = useState(false);
 
-  // Show actions if user is the challenged player OR the proposer, and proposal is pending
+  // Both participants may open the pending proposal; the backend still enforces
+  // which participant may confirm, edit, or cancel each operation.
   const isIncoming = userId === challengedUserId;
   const isProposer = userId === proposedByUserId;
   const isPending = status === 'pending';
@@ -94,7 +95,7 @@ const ChallengeActionButtons: React.FC<ChallengeActionButtonsProps> = ({
 
       setParticipants(participants);
       setViewingTimezone(proposedByUser.data.timezone || 'UTC');
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error loading proposal:', err);
     } finally {
       setLoadingData(false);

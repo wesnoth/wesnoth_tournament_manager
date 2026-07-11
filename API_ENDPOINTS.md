@@ -144,12 +144,13 @@
 ## P2P Challenges Routes
 
 - `[GET] /api/challenges/proposals` — Private — query: `mode=incoming|outgoing|all` — List P2P proposals for current user.
-- `[GET] /api/challenges/proposals/:proposalId` — Private — Full P2P proposal detail (proposal, slots, participants).
-- `[GET] /api/challenges/proposals/:proposalId/participants-availability` — Private — Availability + timezone context for proposer/challenged users.
+- `[GET] /api/challenges/proposals/:proposalId` — Private — Full P2P proposal detail (proposal, slots, confirmations).
+- `[GET] /api/challenges/occupied-slots` — Private — query: `user_ids=comma,separated,ids`, optional `exclude_proposal_id` — List slots reserved by active P2P or tournament proposals involving those users.
 - `[POST] /api/challenges/proposals` — Private — body: `{ challenged_user_id, slot_datetimes[], notes?, visibility? }` — Create new P2P challenge proposal (`challenge_mode='p2p'`).
 - `[POST] /api/challenges/proposals/:proposalId/confirm-slots` — Private — body: `{ confirmed_slot_ids[] }` — Confirm selected slots or reject if none confirmed.
 - `[POST] /api/challenges/proposals/:proposalId/counter-propose` — Private — body: `{ slot_datetimes[], notes?, visibility? }` — Create P2P counter-proposal.
 - `[POST] /api/challenges/proposals/:proposalId/cancel` — Private — Cancel P2P proposal.
+- `[PUT] /api/challenges/proposals/:proposalId` — Private — body: `{ slot_datetimes[], notes? }` — Update a pending proposal owned by its proposer.
 
 ---
 

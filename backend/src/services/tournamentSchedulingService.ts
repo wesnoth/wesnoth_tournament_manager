@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../config/database.js';
+import { assertSlotsAreAvailable } from './schedulingConflictService.js';
 import { validateTimezone, validateAvailabilitySchedule } from '../utils/timezoneUtils.js';
 
 export interface TimeRange {
@@ -311,33 +312,37 @@ export const createRoundMatchProposal = async (
 
   const { tournament_id, tournament_mode } = matchResult.rows[0];
 
-  let proposerTeamId: string | null = null;
+  let participantUserIds: string[] = [];
   if (tournament_mode === 'team') {
-    // Get proposer's team
-    const teamResult = await query(
-      `SELECT team_id FROM tournament_participants 
-       WHERE tournament_id = ? AND user_id = ? LIMIT 1`,
-      [tournament_id, proposedByUserId]
+    const participantsResult = await query(
+      `SELECT DISTINCT user_id
+       FROM tournament_participants
+       WHERE tournament_id = ?
+         AND team_id IN (
+           SELECT player1_id FROM tournament_round_matches WHERE id = ?
+           UNION
+           SELECT player2_id FROM tournament_round_matches WHERE id = ?
+         )`,
+      [tournament_id, tournamentRoundMatchId, tournamentRoundMatchId]
     );
-
-    if (teamResult.rows && teamResult.rows.length > 0) {
-      proposerTeamId = teamResult.rows[0].team_id;
-    }
+    participantUserIds = (participantsResult.rows || []).map((row) => row.user_id);
+  } else {
+    const participantsResult = await query(
+      `SELECT player1_id AS user_id FROM tournament_round_matches WHERE id = ?
+       UNION
+       SELECT player2_id AS user_id FROM tournament_round_matches WHERE id = ?`,
+      [tournamentRoundMatchId, tournamentRoundMatchId]
+    );
+    participantUserIds = (participantsResult.rows || []).map((row) => row.user_id);
   }
 
-  // 1. Mark any previous active proposals as superseded
-  await query(
-    `UPDATE match_schedule_proposals 
-     SET status = 'superseded' 
-     WHERE tournament_round_match_id = ? AND status = 'active' AND proposed_by_user_id = ? AND challenge_mode = 'tournament'`,
-    [tournamentRoundMatchId, proposedByUserId]
-  );
+  await assertSlotsAreAvailable(participantUserIds, slotDatetimes);
 
-  // 2. Calculate expires_at: MAX(slot_datetime) + 7 days
+  // Calculate expires_at: MAX(slot_datetime) + 7 days
   const maxSlotDatetime = new Date(Math.max(...slotDatetimes.map(dt => new Date(dt).getTime())));
   const expiresAt = new Date(maxSlotDatetime.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-  // 3. Create new proposal
+  // Create new proposal
   const result = await query(
     `INSERT INTO match_schedule_proposals 
       (id, tournament_round_match_id, proposed_by_user_id, proposed_at, status, notes, expires_at, user_id, challenge_mode, challenged_user_id)
@@ -349,7 +354,7 @@ export const createRoundMatchProposal = async (
     throw new Error('Failed to create proposal');
   }
 
-  // 4. Create slots
+  // Create slots
   let slotsCreated = 0;
   const slotIds: string[] = [];
   for (const dtString of slotDatetimes) {
@@ -369,7 +374,7 @@ export const createRoundMatchProposal = async (
     }
   }
 
-  // 5. Insert one confirmation at proposal level (proposer auto-confirms their own proposal)
+  // Insert one confirmation at proposal level (proposer auto-confirms their own proposal)
   if (slotsCreated > 0) {
     const confirmationId = uuidv4();
     try {
@@ -384,7 +389,7 @@ export const createRoundMatchProposal = async (
     }
   }
 
-  // 5. Update tournament_round_matches to reflect pending scheduling
+  // Update tournament_round_matches to reflect pending scheduling
   if (slotsCreated > 0) {
     const firstSlot = new Date(slotDatetimes[0]);
     const roundedFirstSlot = roundToNearest30Min(firstSlot);
@@ -438,33 +443,37 @@ export const createMatchProposal = async (
 
   const { tournament_id, tournament_mode } = matchInfo.rows[0];
 
-  let proposerTeamId: string | null = null;
+  let participantUserIds: string[] = [];
   if (tournament_mode === 'team') {
-    // Get proposer's team
-    const teamResult = await query(
-      `SELECT team_id FROM tournament_participants 
-       WHERE tournament_id = ? AND user_id = ? LIMIT 1`,
-      [tournament_id, proposedByUserId]
+    const participantsResult = await query(
+      `SELECT DISTINCT user_id
+       FROM tournament_participants
+       WHERE tournament_id = ?
+         AND team_id IN (
+           SELECT player1_id FROM tournament_matches WHERE id = ?
+           UNION
+           SELECT player2_id FROM tournament_matches WHERE id = ?
+         )`,
+      [tournament_id, tournamentMatchId, tournamentMatchId]
     );
-
-    if (teamResult.rows && teamResult.rows.length > 0) {
-      proposerTeamId = teamResult.rows[0].team_id;
-    }
+    participantUserIds = (participantsResult.rows || []).map((row) => row.user_id);
+  } else {
+    const participantsResult = await query(
+      `SELECT player1_id AS user_id FROM tournament_matches WHERE id = ?
+       UNION
+       SELECT player2_id AS user_id FROM tournament_matches WHERE id = ?`,
+      [tournamentMatchId, tournamentMatchId]
+    );
+    participantUserIds = (participantsResult.rows || []).map((row) => row.user_id);
   }
 
-  // 1. Mark previous active proposals as superseded
-  await query(
-    `UPDATE match_schedule_proposals 
-     SET status = 'superseded' 
-     WHERE tournament_match_id = ? AND status = 'active' AND proposed_by_user_id = ? AND challenge_mode = 'tournament'`,
-    [tournamentMatchId, proposedByUserId]
-  );
+  await assertSlotsAreAvailable(participantUserIds, slotDatetimes);
 
-  // 2. Calculate expires_at: MAX(slot_datetime) + 7 days
+  // Calculate expires_at: MAX(slot_datetime) + 7 days
   const maxSlotDatetime = new Date(Math.max(...slotDatetimes.map(dt => new Date(dt).getTime())));
   const expiresAt = new Date(maxSlotDatetime.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-  // 3. Create proposal (proponent doesn't auto-confirm, just creates it)
+  // Create proposal (proponent doesn't auto-confirm, just creates it)
   const result = await query(
     `INSERT INTO match_schedule_proposals 
       (id, tournament_match_id, proposed_by_user_id, proposed_at, status, notes, expires_at, user_id, challenge_mode, challenged_user_id)
@@ -476,7 +485,7 @@ export const createMatchProposal = async (
     throw new Error('Failed to create proposal');
   }
 
-  // 4. Create slots
+  // Create slots
   let slotsCreated = 0;
   const slotIds: string[] = [];
   for (const dtString of slotDatetimes) {

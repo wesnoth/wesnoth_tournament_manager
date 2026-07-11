@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useDeferredValue, useRef, useCallb
 import SchedulingFreeBusyGrid from './SchedulingFreeBusyGrid';
 import { useAuthStore } from '../store/authStore';
 import { tournamentSchedulingService } from '../services/tournamentSchedulingService';
+import { p2pChallengesService } from '../services/p2pChallengesService';
 import { groupSlotsIntoRanges, type GroupedTimeRange } from '../utils/slotGrouping';
 
 interface ScheduleProposalModalProps {
@@ -95,6 +96,7 @@ export default function ScheduleProposalModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [participants, setParticipants] = useState<Participant[]>(initialParticipants || []);
+  const [reservedSlots, setReservedSlots] = useState<Record<string, 'p2p' | 'tournament'>>({});
   const [viewingTimezone, setViewingTimezone] = useState(initialViewingTimezone || 'UTC');
   const [proposal, setProposal] = useState<ProposalData | null>(initialProposal || null);
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
@@ -141,6 +143,32 @@ export default function ScheduleProposalModal({
     }
   }, [isOpen, initialParticipants, initialProposal, initialViewingTimezone, initialDisplayDateStart, initialScrollToHour]);
 
+  // Block slots already used by any active P2P or tournament proposal involving
+  // these participants, excluding the proposal currently being edited/responded to.
+  useEffect(() => {
+    if (!isOpen || participants.length === 0) return;
+    let cancelled = false;
+
+    p2pChallengesService
+      .getOccupiedSlots(participants.map((participant) => participant.id), proposal?.id)
+      .then((response) => {
+        if (cancelled) return;
+        const next: Record<string, 'p2p' | 'tournament'> = {};
+        for (const conflict of response.conflicts || []) {
+          next[new Date(conflict.slot_datetime).toISOString()] = conflict.source;
+        }
+        setReservedSlots(next);
+      })
+      .catch((error) => {
+        console.error('Error loading occupied scheduling slots:', error);
+        if (!cancelled) setReservedSlots({});
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, participants, proposal?.id]);
+
   // Initialize mode based on preloaded proposal data
   useEffect(() => {
     if (!isOpen) return;
@@ -169,7 +197,7 @@ export default function ScheduleProposalModal({
     }
   }, [isOpen, proposal, userId]);
 
-  const handleSlotToggle = (slotDatetime: string, selected: boolean) => {
+  const handleSlotToggle = useCallback((slotDatetime: string, selected: boolean) => {
     setSelectedSlots((prevSelected) => {
       const nextSelected = new Set(prevSelected);
       if (selected) {
@@ -179,13 +207,13 @@ export default function ScheduleProposalModal({
       }
       return nextSelected;
     });
-  };
+  }, []);
 
   /**
    * In confirm mode: first click deselects all others and keeps only this one
    * Subsequent clicks: normal toggle
    */
-  const handleConfirmSlotToggle = (slotDatetime: string, selected: boolean) => {
+  const handleConfirmSlotToggle = useCallback((slotDatetime: string, selected: boolean) => {
     if (!hasStartedConfirmationSelectionRef.current) {
       // First click: clear all and select only this one
       hasStartedConfirmationSelectionRef.current = true;
@@ -203,7 +231,7 @@ export default function ScheduleProposalModal({
         return nextConfirmed;
       });
     }
-  };
+  }, []);
 
   const handleProposeSlots = async () => {
     if (selectedSlots.size === 0) {
@@ -339,11 +367,17 @@ export default function ScheduleProposalModal({
   // Memoize formatted slot data to avoid expensive date calculations on every render
   if (!isOpen) return null;
 
-  const dateEnd = new Date(displayDateStart);
-  dateEnd.setDate(dateEnd.getDate() + 14); // 14-day window
+  const dateEnd = useMemo(() => {
+    const end = new Date(displayDateStart);
+    end.setDate(end.getDate() + 14);
+    return end;
+  }, [displayDateStart]);
 
-  const proposedSlotDatetimes = proposal?.slots?.map(s => s.slot_datetime) || [];
-  const confirmedSlotsMap: Record<string, string[]> = {};
+  const proposedSlotDatetimes = useMemo(
+    () => proposal?.slots?.map((slot) => slot.slot_datetime) || [],
+    [proposal]
+  );
+  const confirmedSlotsMap = useMemo<Record<string, string[]>>(() => ({}), []);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -407,6 +441,7 @@ export default function ScheduleProposalModal({
                   readOnly={false}
                   proposedSlots={proposedSlotDatetimes}
                   confirmedSlots={confirmedSlotsMap}
+                  reservedSlots={reservedSlots}
                   viewingTimezone={viewingTimezone}
                   scrollToHour={scrollToHour}
                   confirmMode={mode === 'confirm'}

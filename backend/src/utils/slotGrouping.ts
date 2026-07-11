@@ -56,36 +56,6 @@ export function groupSlotsIntoRanges(slotDatetimes: string[]): TimeRange[] {
 }
 
 /**
- * Format time ranges for display
- * @param ranges Array of time ranges
- * @returns Formatted string with date and time ranges
- * Example: "2026-05-15 19:00-20:30 UTC" or "2026-05-15 19:00-20:30 UTC, 2026-05-16 18:00-18:30 UTC"
- */
-export function formatTimeRangesForDisplay(ranges: TimeRange[]): string {
-  if (ranges.length === 0) return 'No time slots';
-
-  const dateGrouped = new Map<string, TimeRange[]>();
-  
-  // Group by date (YYYY-MM-DD)
-  for (const range of ranges) {
-    const dateKey = range.start.toISOString().split('T')[0];
-    if (!dateGrouped.has(dateKey)) {
-      dateGrouped.set(dateKey, []);
-    }
-    dateGrouped.get(dateKey)!.push(range);
-  }
-
-  // Format each date group
-  const formatted: string[] = [];
-  for (const [dateStr, dateRanges] of dateGrouped.entries()) {
-    const times = dateRanges.map(r => r.hours).join(', ');
-    formatted.push(`${dateStr} ${times} UTC`);
-  }
-
-  return formatted.join(' | ');
-}
-
-/**
  * Format time ranges with line breaks (for Discord embeds and database messages)
  * @param ranges Array of time ranges
  * @returns String with newline-separated ranges

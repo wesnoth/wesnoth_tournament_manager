@@ -39,6 +39,7 @@ interface SchedulingFreeBusyGridProps {
   readOnly?: boolean;
   proposedSlots?: string[];
   confirmedSlots?: Record<string, string[]>;
+  reservedSlots?: Record<string, 'p2p' | 'tournament'>;
   viewingTimezone?: string;
   scrollToHour?: number | null;
   confirmMode?: boolean;
@@ -50,7 +51,12 @@ const PARTICIPANT_COLUMN_WIDTH = 180;
 const SLOT_COLUMN_WIDTH = 56;
 const OVERSCAN_COLUMNS = 10;
 
-const slotToUTCDatetime = (slot: Pick<GridSlot, 'dateStr' | 'timeStr'>, viewingTimezone: string): string => {
+/** Convert a displayed local grid slot into its canonical UTC ISO key. */
+const slotToUTCDatetime = (
+  slot: Pick<GridSlot, 'dateStr' | 'timeStr'>,
+  viewingTimezone: string,
+  formatter: Intl.DateTimeFormat
+): string => {
   const localDateTimeStr = `${slot.dateStr}T${slot.timeStr}:00`;
   const localDate = new Date(localDateTimeStr);
   const [targetYear, targetMonth, targetDay] = slot.dateStr.split('-').map(Number);
@@ -58,16 +64,6 @@ const slotToUTCDatetime = (slot: Pick<GridSlot, 'dateStr' | 'timeStr'>, viewingT
 
   for (let offsetHours = -12; offsetHours <= 14; offsetHours++) {
     const testUtc = new Date(localDate.getTime() - offsetHours * 60 * 60 * 1000);
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: viewingTimezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
-
     const parts = formatter.formatToParts(testUtc);
     const testYear = parseInt(parts.find(p => p.type === 'year')?.value || '0');
     const testMonth = parseInt(parts.find(p => p.type === 'month')?.value || '0');
@@ -89,6 +85,7 @@ const slotToUTCDatetime = (slot: Pick<GridSlot, 'dateStr' | 'timeStr'>, viewingT
   return new Date(localDateTimeStr).toISOString();
 };
 
+/** Generate the visible half-hour columns for the selected date window. */
 const generateSlots = (dateStart: Date, dateEnd: Date, viewingTimezone: string = 'UTC'): GridSlot[] => {
   const slots: GridSlot[] = [];
   const dateFormatter = new Intl.DateTimeFormat('en-US', {
@@ -97,6 +94,15 @@ const generateSlots = (dateStart: Date, dateEnd: Date, viewingTimezone: string =
     month: '2-digit',
     day: '2-digit',
     weekday: 'long',
+    hour12: false
+  });
+  const utcSlotFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: viewingTimezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
     hour12: false
   });
 
@@ -126,7 +132,7 @@ const generateSlots = (dateStart: Date, dateEnd: Date, viewingTimezone: string =
             dayOfWeek,
             dayKey,
             timeMinutes: hour * 60 + minute,
-            slotKey: slotToUTCDatetime(slotBase, viewingTimezone)
+            slotKey: slotToUTCDatetime(slotBase, viewingTimezone, utcSlotFormatter)
           });
         }
       }
@@ -138,11 +144,13 @@ const generateSlots = (dateStart: Date, dateEnd: Date, viewingTimezone: string =
   return slots;
 };
 
+/** Convert an availability schedule time such as 09:30 to minutes since midnight. */
 const parseTimeToMinutes = (time: string): number => {
   const [hours, minutes] = time.split(':').map(Number);
   return hours * 60 + minutes;
 };
 
+/** Normalize profile availability into numeric ranges for fast slot lookup. */
 const normalizeAvailabilitySchedule = (
   schedule?: Record<string, Array<{ start: string; end: string }>>
 ): Record<string, Array<{ start: number; end: number }>> | null => {
@@ -161,6 +169,11 @@ const normalizeAvailabilitySchedule = (
   return normalized;
 };
 
+/**
+ * Render the virtualized availability matrix used by both tournament and P2P
+ * scheduling. Reserved slots are intentionally represented separately from
+ * availability so they can be displayed and blocked without changing profiles.
+ */
 function SchedulingFreeBusyGrid({
   participants,
   dateStart,
@@ -170,6 +183,7 @@ function SchedulingFreeBusyGrid({
   readOnly = false,
   proposedSlots = [],
   confirmedSlots = {},
+  reservedSlots = {},
   viewingTimezone = 'UTC',
   scrollToHour = null,
   confirmMode = false
@@ -201,6 +215,7 @@ function SchedulingFreeBusyGrid({
     }
     return set;
   }, [confirmedSlots]);
+  const reservedSlotsMap = useMemo(() => new Map(Object.entries(reservedSlots)), [reservedSlots]);
 
   const slotsByDate = useMemo(() => {
     const grouped: Record<string, GridSlot[]> = {};
@@ -409,6 +424,12 @@ function SchedulingFreeBusyGrid({
       return;
     }
 
+    // Reserved slots remain visible but cannot be selected. The current
+    // proposal is represented by proposedSlots and remains selectable.
+    if (reservedSlotsMap.has(key) && !proposedSlotsSet.has(key)) {
+      return;
+    }
+
     onSlotToggle(key, !selectedSlots.has(key));
   };
 
@@ -457,12 +478,28 @@ function SchedulingFreeBusyGrid({
             <span>Proposed</span>
           </div>
           <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-orange-200 border border-orange-400 rounded"></div>
+            <span>Reserved P2P</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-purple-200 border border-purple-400 rounded"></div>
+            <span>Reserved tournament</span>
+          </div>
+          <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-green-500 border border-green-700 rounded"></div>
             <span>Confirmed</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-red-300 border border-red-500 rounded"></div>
             <span>Rejected</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-orange-200 border border-orange-400 rounded"></div>
+            <span>Reserved P2P</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-purple-200 border border-purple-400 rounded"></div>
+            <span>Reserved tournament</span>
           </div>
         </div>
       ) : (
@@ -597,6 +634,8 @@ function SchedulingFreeBusyGrid({
                   const isProposed = proposedSlotsSet.has(slotKey);
                   const isConfirmed = confirmedSlotsSet.has(slotKey);
                   const isSelected = selectedSlots.has(slotKey);
+                  const reservationSource = reservedSlotsMap.get(slotKey);
+                  const isReserved = Boolean(reservationSource) && !isProposed;
 
                   let bgColor = dayColor;
                   let borderColor = 'border-gray-200';
@@ -615,6 +654,9 @@ function SchedulingFreeBusyGrid({
                   } else if (isProposed) {
                     bgColor = 'bg-blue-200';
                     borderColor = 'border-blue-400';
+                  } else if (isReserved) {
+                    bgColor = reservationSource === 'tournament' ? 'bg-purple-200' : 'bg-orange-200';
+                    borderColor = reservationSource === 'tournament' ? 'border-purple-400' : 'border-orange-400';
                   } else if (isSelected) {
                     bgColor = 'bg-yellow-100';
                     borderColor = 'border-yellow-400';
@@ -629,8 +671,8 @@ function SchedulingFreeBusyGrid({
                   return (
                     <td
                       key={`${participant.id}-${dateKey}-${slotKey}`}
-                      className={`border ${borderColor} p-0.5 h-8 cursor-${readOnly ? 'default' : 'pointer'} ${bgColor} ${
-                        !readOnly && !isProposed ? 'hover:opacity-75 touch-manipulation' : ''
+                      className={`border ${borderColor} p-0.5 h-8 cursor-${readOnly || isReserved ? 'default' : 'pointer'} ${bgColor} ${
+                        !readOnly && !isProposed && !isReserved ? 'hover:opacity-75 touch-manipulation' : ''
                       }`}
                       style={{ minWidth: `${SLOT_COLUMN_WIDTH}px`, width: `${SLOT_COLUMN_WIDTH}px` }}
                       onTouchStart={(event) => handleSlotTouchStart(event, slot)}
@@ -640,7 +682,7 @@ function SchedulingFreeBusyGrid({
                         touchGestureRef.current = null;
                       }}
                       onClick={() => handleSlotToggleAction(slot, 'click')}
-                      title={`${participant.nickname} - ${slot.dateStr} ${slot.timeStr}`}
+                      title={`${participant.nickname} - ${slot.dateStr} ${slot.timeStr}${isReserved ? ` (${reservationSource} slot already reserved)` : ''}`}
                     >
                       {isConfirmed && (
                         <div className="w-full h-full flex items-center justify-center text-green-700 font-bold">

@@ -8,18 +8,25 @@ import {
   confirmP2PProposalSlots,
   counterProposeP2P,
   createP2PProposal,
-  getP2PParticipantsAvailability,
   getP2PProposalForUser,
   listP2PProposalsForUser,
   updateP2PProposal,
 } from '../services/p2pSchedulingService.js';
+import { getSchedulingConflictsForUsers } from '../services/schedulingConflictService.js';
 import { buildNotificationMessage, formatTimeRangesForDiscord, groupSlotsIntoRanges } from '../utils/slotGrouping.js';
 
 const router = Router();
 const DISCORD_P2P_CHALLENGE_CHANNEL_ID = process.env.DISCORD_P2P_CHALLENGE_CHANNEL_ID || '';
 
+interface ChallengeSlotRow {
+  slot_datetime: Date | string;
+  status: string;
+}
+
 /**
  * Publish a challenge event to the configured public P2P Discord channel.
+ * Discord is an optional side effect, so a delivery failure is logged and
+ * never changes the outcome of the challenge operation that already succeeded.
  * @param title Embed title describing the challenge event.
  * @param color Discord embed color.
  * @param fields Event details shown in the embed.
@@ -32,16 +39,13 @@ const sendChallengeDiscord = async (
 ) => {
   if (!DISCORD_P2P_CHALLENGE_CHANNEL_ID) return;
 
-  await discordService.publishChannelMessage(DISCORD_P2P_CHALLENGE_CHANNEL_ID, {
-    embeds: [
-      {
-        title,
-        color,
-        fields,
-        timestamp: new Date().toISOString(),
-      },
-    ],
-  });
+  try {
+    await discordService.publishChannelMessage(DISCORD_P2P_CHALLENGE_CHANNEL_ID, {
+      embeds: [{ title, color, fields, timestamp: new Date().toISOString() }],
+    });
+  } catch (error) {
+    console.error('[CHALLENGES] Failed to publish optional Discord event:', error);
+  }
 };
 
 /**
@@ -67,6 +71,7 @@ const getUserSummary = async (userId: string): Promise<{ nickname: string }> => 
   };
 };
 
+/** List the authenticated player's incoming, outgoing, or all P2P proposals. */
 router.get('/proposals', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
@@ -83,6 +88,7 @@ router.get('/proposals', authMiddleware, async (req: AuthRequest, res: Response)
   }
 });
 
+/** Return proposal details after enforcing that the requester is a participant. */
 router.get('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
@@ -100,19 +106,29 @@ router.get('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, re
   }
 });
 
-router.get('/proposals/:proposalId/participants-availability', authMiddleware, async (req: AuthRequest, res: Response) => {
+/**
+ * Return slots already reserved by active P2P or tournament proposals for the
+ * authenticated player and the requested opponent/participants.
+ */
+router.get('/occupied-slots', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.userId!;
-    const { proposalId } = req.params;
+    const requestedIds = typeof req.query.user_ids === 'string'
+      ? req.query.user_ids.split(',').map((id) => id.trim())
+      : [];
+    const userIds = [...new Set([req.userId!, ...requestedIds].filter(Boolean))];
+    const excludedProposalId = typeof req.query.exclude_proposal_id === 'string'
+      ? req.query.exclude_proposal_id
+      : undefined;
 
-    const result = await getP2PParticipantsAvailability(proposalId, userId);
-    return res.json(result);
+    const conflicts = await getSchedulingConflictsForUsers(userIds, excludedProposalId);
+    return res.json({ conflicts });
   } catch (error) {
-    console.error('❌ [CHALLENGES] Error getting availability:', error);
-    return res.status(400).json({ error: (error as Error).message || 'Failed to fetch availability' });
+    console.error('[CHALLENGES] Error getting occupied scheduling slots:', error);
+    return res.status(500).json({ error: 'Failed to fetch occupied scheduling slots' });
   }
 });
 
+/** Create a proposal, then notify the challenged player and the public Discord channel. */
 router.post('/proposals', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const proposedByUserId = req.userId!;
@@ -160,6 +176,7 @@ router.post('/proposals', authMiddleware, async (req: AuthRequest, res: Response
   }
 });
 
+/** Apply the challenged player's slot selection and notify the original proposer. */
 router.post('/proposals/:proposalId/confirm-slots', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
@@ -180,9 +197,9 @@ router.post('/proposals/:proposalId/confirm-slots', authMiddleware, async (req: 
     const confirmer = await getUserSummary(userId);
     const proposer = await getUserSummary(proposerId);
 
-    const confirmedSlots = (result.slots || [])
-      .filter((slot: any) => slot.status === 'confirmed')
-      .map((slot: any) => slot.slot_datetime);
+    const confirmedSlots = ((result.slots || []) as ChallengeSlotRow[])
+      .filter((slot) => slot.status === 'confirmed')
+      .map((slot) => new Date(slot.slot_datetime).toISOString());
     const ranges = groupSlotsIntoRanges(confirmedSlots);
     const message = buildNotificationMessage(
       result.status === 'confirmed' ? 'confirmed' : 'rejected',
@@ -220,6 +237,7 @@ router.post('/proposals/:proposalId/confirm-slots', authMiddleware, async (req: 
   }
 });
 
+/** Reject the current proposal and create a replacement in the opposite direction. */
 router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
@@ -271,6 +289,7 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
   }
 });
 
+/** Cancel a proposal owned by the authenticated proposer and notify its target. */
 router.post('/proposals/:proposalId/cancel', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
@@ -289,7 +308,8 @@ router.post('/proposals/:proposalId/cancel', authMiddleware, async (req: AuthReq
       [proposalId]
     );
     
-    const cancelledSlots = (slotsResult.rows || []).map((s: any) => s.slot_datetime);
+    const cancelledSlots = ((slotsResult.rows || []) as ChallengeSlotRow[])
+      .map((slot) => new Date(slot.slot_datetime).toISOString());
     const ranges = groupSlotsIntoRanges(cancelledSlots);
 
     await cancelP2PProposal(proposalId, userId);
@@ -323,6 +343,7 @@ router.post('/proposals/:proposalId/cancel', authMiddleware, async (req: AuthReq
   }
 });
 
+/** Replace the slots and notes of a pending proposal owned by its proposer. */
 router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
@@ -341,7 +362,8 @@ router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, re
       [proposalId]
     );
     
-    const oldSlots = (oldSlotsResult.rows || []).map((s: any) => s.slot_datetime);
+    const oldSlots = ((oldSlotsResult.rows || []) as ChallengeSlotRow[])
+      .map((slot) => new Date(slot.slot_datetime).toISOString());
     const oldRanges = groupSlotsIntoRanges(oldSlots);
 
     await updateP2PProposal(proposalId, userId, slot_datetimes, notes);

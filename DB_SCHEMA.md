@@ -929,7 +929,7 @@ Schedule proposals for tournament scheduling and P2P challenges. In tournament f
 | `tournament_match_id` | char(36) FK→tournament_matches | Target direct match (NULL if for round match) |
 | `proposed_by_user_id` | char(36) FK→users_extension | User who proposed this schedule |
 | `proposed_at` | datetime | When proposal was created |
-| `status` | varchar(20) | `pending` = awaiting confirmation, `confirmed` = all players agreed, `cancelled` = withdrawn |
+| `status` | varchar(20) | `pending` = awaiting confirmation, `confirmed` = at least one slot accepted, `rejected` = no slot accepted, `cancelled` = withdrawn, `expired` = no longer actionable; `superseded` is legacy-only |
 | `expires_at` | datetime | Optional: automatic expiration timestamp |
 | `cancelled_at` | datetime | When cancelled (NULL if active/confirmed) |
 | `user_id` | char(36) FK→users_extension | Legacy field (deprecated) |
@@ -941,7 +941,7 @@ Schedule proposals for tournament scheduling and P2P challenges. In tournament f
 | `created_at` | datetime | |
 | `updated_at` | datetime | |
 
-**Status flow**: `pending` → (`confirmed` OR `cancelled`)
+**Status flow**: `pending` → (`confirmed` OR `rejected` OR `cancelled` OR `expired`). New overlapping proposals are rejected before persistence rather than superseding an existing proposal.
 
 ---
 

@@ -2,7 +2,7 @@ import { api } from './api';
 
 export const p2pChallengesService = {
   /**
-   * Create a new P2P challenge proposal with slots
+   * Create a new P2P challenge proposal with the selected UTC slots.
    */
   proposeChallenge: async (
     challengedUserId: string,
@@ -20,7 +20,7 @@ export const p2pChallengesService = {
   },
 
   /**
-   * Confirm selected slots for a challenge proposal
+   * Confirm the slots selected by the challenged player, or reject them all.
    */
   confirmSlots: async (proposalId: string, confirmedSlotIds: string[]) => {
     const response = await api.post(`/challenges/proposals/${proposalId}/confirm-slots`, {
@@ -30,7 +30,7 @@ export const p2pChallengesService = {
   },
 
   /**
-   * Create a counter-proposal for a challenge
+   * Replace the current proposal with a counter-proposal from the challenged player.
    */
   counterPropose: async (
     proposalId: string,
@@ -47,7 +47,7 @@ export const p2pChallengesService = {
   },
 
   /**
-   * Cancel a challenge proposal
+   * Cancel a proposal owned by the authenticated proposer.
    */
   cancelProposal: async (proposalId: string) => {
     const response = await api.post(`/challenges/proposals/${proposalId}/cancel`);
@@ -55,7 +55,7 @@ export const p2pChallengesService = {
   },
 
   /**
-   * Update an existing challenge proposal (only proposer can do this)
+   * Replace the slots and notes of a pending proposal owned by the proposer.
    */
   updateProposal: async (
     proposalId: string,
@@ -64,13 +64,14 @@ export const p2pChallengesService = {
   ) => {
     const response = await api.put(`/challenges/proposals/${proposalId}`, {
       slot_datetimes: slotDatetimes,
-      ...(notes ? { notes } : {}),
+      // Send null when the field is cleared so the backend removes old notes.
+      notes: notes || null,
     });
     return response.data;
   },
 
   /**
-   * Get a specific P2P proposal
+   * Fetch a proposal visible to the authenticated proposer or challenged player.
    */
   getProposal: async (proposalId: string) => {
     const response = await api.get(`/challenges/proposals/${proposalId}`);
@@ -78,7 +79,7 @@ export const p2pChallengesService = {
   },
 
   /**
-   * List all P2P proposals for the current user
+   * List proposals visible to the current user, optionally by direction.
    */
   listProposals: async (mode: 'incoming' | 'outgoing' | 'all' = 'all') => {
     const response = await api.get('/challenges/proposals', {
@@ -88,10 +89,16 @@ export const p2pChallengesService = {
   },
 
   /**
-   * Get participants availability for a challenge proposal
+   * Find active P2P and tournament slots that should be blocked in a grid.
    */
-  getParticipantsAvailability: async (proposalId: string) => {
-    const response = await api.get(`/challenges/proposals/${proposalId}/participants-availability`);
+  getOccupiedSlots: async (userIds: string[], excludeProposalId?: string) => {
+    const response = await api.get('/challenges/occupied-slots', {
+      params: {
+        user_ids: userIds.join(','),
+        ...(excludeProposalId ? { exclude_proposal_id: excludeProposalId } : {}),
+      },
+    });
     return response.data;
   },
+
 };

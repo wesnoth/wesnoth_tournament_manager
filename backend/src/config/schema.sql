@@ -290,7 +290,7 @@ CREATE TABLE `match_schedule_proposals` (
   `tournament_match_id` char(36) DEFAULT NULL COMMENT 'Reference to tournament_matches.id (game-level)',
   `proposed_by_user_id` char(36) NOT NULL COMMENT 'User who made the proposal',
   `proposed_at` datetime NOT NULL,
-  `status` varchar(20) NOT NULL DEFAULT 'active' COMMENT 'active | superseded | resolved',
+  `status` varchar(20) NOT NULL DEFAULT 'active' COMMENT 'pending | confirmed | rejected | cancelled | expired | active | superseded (legacy) | resolved',
   `expires_at` datetime DEFAULT NULL COMMENT 'Calculated when proposal created: max(slot_datetime) + 7 days. Used to auto-expire stale proposals',
   `cancelled_at` datetime DEFAULT NULL COMMENT 'Timestamp when proposal was cancelled or expired. After 7 days in cancelled state, proposal is purged',
   `user_id` char(36) DEFAULT NULL COMMENT 'FK→users_extension.id. For future P2P proposals without tournament context. NULL if tournament-based.',

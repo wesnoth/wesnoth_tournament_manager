@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import { p2pChallengesService } from '../services/p2pChallengesService';
 import { groupSlotsIntoRanges, type GroupedTimeRange } from '../utils/slotGrouping';
 
+/** Inputs required to render and operate the P2P scheduling workflow. */
 interface ScheduleProposalModalP2PProps {
   isOpen: boolean;
   opponentId: string;
@@ -18,6 +19,7 @@ interface ScheduleProposalModalP2PProps {
   onSuccess?: () => void;
 }
 
+/** Public profile and availability data used by the free/busy grid. */
 interface Participant {
   id: string;
   nickname: string;
@@ -26,6 +28,7 @@ interface Participant {
   availability_schedule?: Record<string, Array<{ start: string; end: string }>>;
 }
 
+/** Proposal detail returned by the challenge API. */
 interface ProposalData {
   id: string;
   proposed_by_user_id: string;
@@ -40,6 +43,7 @@ interface ProposalData {
   confirmations: Array<{ user_id: string; confirmed_at: string }>;
 }
 
+/** Defer range grouping so large slot selections do not block grid interaction. */
 const useAsyncGroupedRanges = (slotDatetimes: string[]): GroupedTimeRange[] => {
   const deferredSlotDatetimes = useDeferredValue(slotDatetimes);
   const [ranges, setRanges] = useState<GroupedTimeRange[]>([]);
@@ -77,6 +81,7 @@ const useAsyncGroupedRanges = (slotDatetimes: string[]): GroupedTimeRange[] => {
   return ranges;
 };
 
+/** Render proposal, confirmation, counter-proposal, edit, and cancellation actions. */
 export default function ScheduleProposalModalP2P({
   isOpen,
   opponentId,
@@ -93,6 +98,7 @@ export default function ScheduleProposalModalP2P({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [participants, setParticipants] = useState<Participant[]>(initialParticipants || []);
+  const [reservedSlots, setReservedSlots] = useState<Record<string, 'p2p' | 'tournament'>>({});
   const [viewingTimezone, setViewingTimezone] = useState(initialViewingTimezone || 'UTC');
   const [proposal, setProposal] = useState<ProposalData | null>(initialProposal || null);
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
@@ -130,12 +136,40 @@ export default function ScheduleProposalModalP2P({
     
     if (initialProposal) {
       setProposal(initialProposal);
+      setNotes(initialProposal.notes || '');
     } else {
       // Clear proposal data when opening modal for new schedule (no existing proposal)
       setProposal(null);
       setSelectedSlots(new Set());
+      setNotes('');
     }
   }, [isOpen, initialParticipants, initialProposal, initialViewingTimezone, initialDisplayDateStart, initialScrollToHour]);
+
+  // Load conflicts shared by both players so the grid blocks overlapping P2P
+  // and tournament proposals. The current proposal is excluded when editing.
+  useEffect(() => {
+    if (!isOpen || participants.length === 0) return;
+    let cancelled = false;
+
+    p2pChallengesService
+      .getOccupiedSlots(participants.map((participant) => participant.id), proposal?.id)
+      .then((response) => {
+        if (cancelled) return;
+        const next: Record<string, 'p2p' | 'tournament'> = {};
+        for (const conflict of response.conflicts || []) {
+          next[new Date(conflict.slot_datetime).toISOString()] = conflict.source;
+        }
+        setReservedSlots(next);
+      })
+      .catch((error) => {
+        console.error('Error loading occupied scheduling slots:', error);
+        if (!cancelled) setReservedSlots({});
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, participants, proposal?.id]);
 
   // Initialize mode based on preloaded proposal data
   useEffect(() => {
@@ -153,9 +187,7 @@ export default function ScheduleProposalModalP2P({
           setSelectedSlots(new Set());
         }
         // Load existing notes for editing
-        if (proposal.notes) {
-          setNotes(proposal.notes);
-        }
+        setNotes(proposal.notes || '');
         // Reset edit selection flag - show original slots in blue
         hasStartedEditSelectionRef.current = false;
         setHasStartedEditSelection(false);
@@ -178,7 +210,7 @@ export default function ScheduleProposalModalP2P({
     }
   }, [isOpen, proposal, userId]);
 
-  const handleSlotToggle = (slotDatetime: string, selected: boolean) => {
+  const handleSlotToggle = useCallback((slotDatetime: string, selected: boolean) => {
     // In edit_proposal mode, first click triggers showing only selected slots
     if (mode === 'edit_proposal' && !hasStartedEditSelectionRef.current) {
       hasStartedEditSelectionRef.current = true;
@@ -194,13 +226,13 @@ export default function ScheduleProposalModalP2P({
       }
       return nextSelected;
     });
-  };
+  }, [mode]);
 
   /**
    * In confirm mode: first click deselects all others and keeps only this one
    * Subsequent clicks: normal toggle
    */
-  const handleConfirmSlotToggle = (slotDatetime: string, selected: boolean) => {
+  const handleConfirmSlotToggle = useCallback((slotDatetime: string, selected: boolean) => {
     if (!hasStartedConfirmationSelectionRef.current) {
       // First click: clear all and select only this one
       hasStartedConfirmationSelectionRef.current = true;
@@ -218,7 +250,7 @@ export default function ScheduleProposalModalP2P({
         return nextConfirmed;
       });
     }
-  };
+  }, []);
 
   const handleProposeSlots = async () => {
     if (selectedSlots.size === 0) {
@@ -380,11 +412,17 @@ export default function ScheduleProposalModalP2P({
   // Memoize formatted slot data to avoid expensive date calculations on every render
   if (!isOpen) return null;
 
-  const dateEnd = new Date(displayDateStart);
-  dateEnd.setDate(dateEnd.getDate() + 14); // 14-day window
+  const dateEnd = useMemo(() => {
+    const end = new Date(displayDateStart);
+    end.setDate(end.getDate() + 14);
+    return end;
+  }, [displayDateStart]);
 
-  const proposedSlotDatetimes = proposal?.slots?.map(s => s.slot_datetime) || [];
-  const confirmedSlotsMap: Record<string, string[]> = {};
+  const proposedSlotDatetimes = useMemo(
+    () => proposal?.slots?.map((slot) => slot.slot_datetime) || [],
+    [proposal]
+  );
+  const confirmedSlotsMap = useMemo<Record<string, string[]>>(() => ({}), []);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -448,6 +486,7 @@ export default function ScheduleProposalModalP2P({
                   readOnly={false}
                   proposedSlots={mode === 'edit_proposal' && !hasStartedEditSelection ? proposedSlotDatetimes : []}
                   confirmedSlots={confirmedSlotsMap}
+                  reservedSlots={reservedSlots}
                   viewingTimezone={viewingTimezone}
                   scrollToHour={scrollToHour}
                   confirmMode={mode === 'confirm'}
