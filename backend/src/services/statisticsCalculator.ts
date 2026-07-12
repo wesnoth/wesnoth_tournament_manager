@@ -45,13 +45,25 @@ export interface BalanceEventImpact {
   faction_name: string;
   opponent_faction_id: string;
   opponent_faction_name: string;
+  games_before: number;
+  wins_before: number;
+  losses_before: number;
   winrate_before: number;
+  side1_games_before: number;
+  side1_wins_before: number;
+  side2_games_before: number;
+  side2_wins_before: number;
+  games_after: number;
+  wins_after: number;
+  losses_after: number;
   winrate_after: number;
+  side1_games_after: number;
+  side1_wins_after: number;
+  side2_games_after: number;
+  side2_wins_after: number;
   winrate_change: number;
   sample_size_before: number;
   sample_size_after: number;
-  games_before: number;
-  games_after: number;
 }
 
 export interface BalanceTrendPoint {
@@ -365,80 +377,30 @@ export async function checkTeamMemberPositions(
 // ============================================================================
 
 /**
- * Create BEFORE snapshot for balance event
+ * Create the cumulative snapshot immediately before a balance event.
+ * The date is derived from the event, and the snapshot is rebuilt from all
+ * eligible matches recorded up to that date.
  */
 export async function createBalanceEventBeforeSnapshot(
   eventId: string
 ): Promise<number> {
   try {
-    const beforeDate = new Date();
-    beforeDate.setDate(beforeDate.getDate() - 1); // Yesterday
+    const eventResult = await query('SELECT event_date FROM balance_events WHERE id = ?', [eventId]);
+    if (eventResult.rows.length === 0) throw new Error('Balance event not found');
+
+    const beforeDate = new Date(eventResult.rows[0].event_date);
+    beforeDate.setUTCDate(beforeDate.getUTCDate() - 1);
     const dateStr = beforeDate.toISOString().split('T')[0];
+    const snapshotResult = await createFactionMapStatisticsSnapshot(beforeDate);
 
-    // Get existing snapshots for this date to avoid duplicates
-    const existingResult = await query(
-      `SELECT COUNT(*) as count FROM faction_map_statistics_history WHERE snapshot_date = ?`,
-      [dateStr]
-    );
-    
-    if (existingResult.rows[0].count > 0) {
-      // Snapshot already exists for this date, skip
-      return existingResult.rows[0].count;
-    }
-
-    const result = await query(
-      `INSERT INTO faction_map_statistics_history (
-        id,
-        snapshot_date,
-        snapshot_timestamp,
-        map_id,
-        faction_id,
-        opponent_faction_id,
-        faction_side,
-        total_games,
-        wins,
-        losses,
-        winrate,
-        sample_size_category,
-        confidence_level
-      )
-      SELECT
-        UUID(),
-        ?,
-        CURRENT_TIMESTAMP,
-        fms.map_id,
-        fms.faction_id,
-        fms.opponent_faction_id,
-        fms.faction_side,
-        fms.total_games,
-        fms.wins,
-        fms.losses,
-        fms.winrate,
-        CASE
-          WHEN fms.total_games < 10 THEN 'small'
-          WHEN fms.total_games < 50 THEN 'medium'
-          ELSE 'large'
-        END,
-        CASE
-          WHEN fms.total_games < 10 THEN 25.0
-          WHEN fms.total_games < 30 THEN 50.0
-          WHEN fms.total_games < 50 THEN 75.0
-          ELSE 95.0
-        END
-      FROM faction_map_statistics fms
-      WHERE fms.total_games > 0`,
-      [dateStr]
-    );
-
-    // Update balance_events to record snapshot date
     await query(
       `UPDATE balance_events
        SET snapshot_before_date = ?
        WHERE id = ?`,
-      [beforeDate.toISOString().split('T')[0], eventId]
+      [dateStr, eventId]
     );
 
-    return result.rowCount || 0;
+    return snapshotResult.snapshots_created;
   } catch (error) {
     console.error('Error creating balance event before snapshot:', error);
     throw error;
@@ -446,13 +408,14 @@ export async function createBalanceEventBeforeSnapshot(
 }
 
 /**
- * Create faction/map statistics snapshot
+ * Create a cumulative faction/map statistics snapshot for a date.
+ * The scheduled job uses this for normal daily history; administrators may
+ * also call it through the protected backfill endpoint when correcting data.
  */
 export async function createFactionMapStatisticsSnapshot(
   snapshotDate: Date = new Date()
 ): Promise<{ snapshots_created: number; snapshots_skipped: number }> {
   try {
-    const { randomUUID } = await import('crypto');
     const dateStr = snapshotDate.toISOString().split('T')[0];
 
     // Check if snapshot already exists for this date
@@ -469,111 +432,88 @@ export async function createFactionMapStatisticsSnapshot(
       };
     }
 
-    const result = await query(
-      `INSERT INTO faction_map_statistics_history (
-        id,
-        snapshot_date,
-        snapshot_timestamp,
-        map_id,
-        faction_id,
-        opponent_faction_id,
-        faction_side,
-        total_games,
-        wins,
-        losses,
-        winrate,
-        sample_size_category,
-        confidence_level
-      )
-      SELECT
-        UUID(),
-        ?,
-        CURRENT_TIMESTAMP,
-        fms.map_id,
-        fms.faction_id,
-        fms.opponent_faction_id,
-        fms.faction_side,
-        fms.total_games,
-        fms.wins,
-        fms.losses,
-        fms.winrate,
-        CASE
-          WHEN fms.total_games < 10 THEN 'small'
-          WHEN fms.total_games < 50 THEN 'medium'
-          ELSE 'large'
-        END,
-        CASE
-          WHEN fms.total_games < 10 THEN 25.0
-          WHEN fms.total_games < 30 THEN 50.0
-          WHEN fms.total_games < 50 THEN 75.0
-          ELSE 95.0
-        END
-      FROM faction_map_statistics fms
-      WHERE fms.total_games > 0`,
+    // Build the snapshot from matches up to the requested date. Reading the current
+    // aggregate table here would make every historical snapshot identical to today.
+    const matchesResult = await query(
+      `SELECT
+         gm.id AS map_id,
+         f_w.id AS winner_faction_id,
+         f_l.id AS loser_faction_id,
+         m.winner_side
+       FROM matches m
+       JOIN game_maps gm ON gm.name = m.map
+       JOIN factions f_w ON f_w.name = m.winner_faction
+       JOIN factions f_l ON f_l.name = m.loser_faction
+       WHERE m.status != 'cancelled'
+         AND m.created_at IS NOT NULL
+         AND DATE(m.created_at) <= ?`,
       [dateStr]
     );
 
+    type SnapshotEntry = {
+      map_id: string;
+      faction_id: string;
+      opponent_faction_id: string;
+      faction_side: number;
+      total_games: number;
+      wins: number;
+      losses: number;
+    };
+
+    const aggregated = new Map<string, SnapshotEntry>();
+    const addEntry = (mapId: string, factionId: string, opponentFactionId: string, factionSide: number, isWin: boolean) => {
+      const key = `${mapId}|${factionId}|${opponentFactionId}|${factionSide}`;
+      const entry = aggregated.get(key);
+      if (entry) {
+        entry.total_games += 1;
+        if (isWin) entry.wins += 1;
+        else entry.losses += 1;
+        return;
+      }
+      aggregated.set(key, {
+        map_id: mapId,
+        faction_id: factionId,
+        opponent_faction_id: opponentFactionId,
+        faction_side: factionSide,
+        total_games: 1,
+        wins: isWin ? 1 : 0,
+        losses: isWin ? 0 : 1,
+      });
+    };
+
+    for (const row of matchesResult.rows) {
+      const winnerSide = row.winner_side ?? 1;
+      const loserSide = winnerSide === 1 ? 2 : winnerSide === 2 ? 1 : 0;
+      addEntry(row.map_id, row.winner_faction_id, row.loser_faction_id, winnerSide, true);
+      addEntry(row.map_id, row.loser_faction_id, row.winner_faction_id, loserSide, false);
+    }
+
+    const { randomUUID } = await import('crypto');
+    let snapshotsCreated = 0;
+    for (const entry of aggregated.values()) {
+      const winrate = Math.round((entry.wins / entry.total_games) * 10000) / 100;
+      const sampleSizeCategory = entry.total_games < 10 ? 'small' : entry.total_games < 50 ? 'medium' : 'large';
+      const confidenceLevel = entry.total_games < 10 ? 25.0 : entry.total_games < 30 ? 50.0 : entry.total_games < 50 ? 75.0 : 95.0;
+
+      await query(
+        `INSERT INTO faction_map_statistics_history (
+          id, snapshot_date, snapshot_timestamp, map_id, faction_id,
+          opponent_faction_id, faction_side, total_games, wins, losses,
+          winrate, sample_size_category, confidence_level
+        ) VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [randomUUID(), dateStr, entry.map_id, entry.faction_id, entry.opponent_faction_id,
+          entry.faction_side, entry.total_games, entry.wins, entry.losses,
+          winrate, sampleSizeCategory, confidenceLevel]
+      );
+      snapshotsCreated += 1;
+    }
+
     return {
-      snapshots_created: result.rowCount || 0,
+      snapshots_created: snapshotsCreated,
       snapshots_skipped: 0
     };
   } catch (error) {
     console.error('Error creating faction/map statistics snapshot:', error);
-    throw error;
-  }
-}
-
-/**
- * Get balance event impact (before vs after)
- */
-export async function getBalanceEventImpact(
-  eventId: string,
-  daysBefore: number = 30,
-  daysAfter: number = 30
-): Promise<BalanceEventImpact[]> {
-  try {
-    // Get event details
-    const eventResult = await query(
-      'SELECT snapshot_before_date, event_date FROM balance_events WHERE id = ?',
-      [eventId]
-    );
-
-    if (eventResult.rows.length === 0) {
-      return [];
-    }
-
-    const { snapshot_before_date, event_date } = eventResult.rows[0];
-    const afterDate = new Date(event_date);
-    afterDate.setDate(afterDate.getDate() + daysAfter);
-
-    const result = await query(
-      `SELECT
-        COALESCE(gm.id, '') as map_id,
-        COALESCE(gm.name, '') as map_name,
-        COALESCE(f1.id, '') as faction_id,
-        COALESCE(f1.name, '') as faction_name,
-        COALESCE(f2.id, '') as opponent_faction_id,
-        COALESCE(f2.name, '') as opponent_faction_name,
-        COALESCE(AVG(CASE WHEN fmsh.snapshot_date < ? THEN fmsh.winrate ELSE NULL END), 0) as winrate_before,
-        COALESCE(AVG(CASE WHEN fmsh.snapshot_date >= ? THEN fmsh.winrate ELSE NULL END), 0) as winrate_after,
-        COALESCE(AVG(CASE WHEN fmsh.snapshot_date >= ? THEN fmsh.winrate ELSE NULL END), 0) -
-          COALESCE(AVG(CASE WHEN fmsh.snapshot_date < ? THEN fmsh.winrate ELSE NULL END), 0) as winrate_change,
-        COUNT(DISTINCT CASE WHEN fmsh.snapshot_date < ? THEN fmsh.map_id END) as sample_size_before,
-        COUNT(DISTINCT CASE WHEN fmsh.snapshot_date >= ? THEN fmsh.map_id END) as sample_size_after,
-        COALESCE(SUM(CASE WHEN fmsh.snapshot_date < ? THEN fmsh.total_games ELSE 0 END), 0) as games_before,
-        COALESCE(SUM(CASE WHEN fmsh.snapshot_date >= ? THEN fmsh.total_games ELSE 0 END), 0) as games_after
-      FROM faction_map_statistics_history fmsh
-      LEFT JOIN game_maps gm ON gm.id = fmsh.map_id
-      LEFT JOIN factions f1 ON f1.id = fmsh.faction_id
-      LEFT JOIN factions f2 ON f2.id = fmsh.opponent_faction_id
-      WHERE fmsh.snapshot_date BETWEEN ? AND ?
-      GROUP BY gm.id, gm.name, f1.id, f1.name, f2.id, f2.name`,
-      [eventId, snapshot_before_date, event_date, afterDate.toISOString().split('T')[0]]
-    );
-
-    return result.rows as BalanceEventImpact[];
-  } catch (error) {
-    console.error('Error getting balance event impact:', error);
     throw error;
   }
 }
@@ -610,50 +550,6 @@ export async function getBalanceTrend(
     return result.rows as BalanceTrendPoint[];
   } catch (error) {
     console.error('Error getting balance trend:', error);
-    throw error;
-  }
-}
-
-/**
- * Manage faction/map statistics snapshots (cleanup old, create new)
- */
-export async function manageFactionMapStatisticsSnapshots(): Promise<{
-  snapshots_deleted: number;
-  snapshot_after_created: boolean;
-}> {
-  try {
-    // Find last balance event
-    const eventResult = await query(
-      `SELECT id, event_date FROM balance_events
-       ORDER BY event_date DESC LIMIT 1`
-    );
-
-    if (eventResult.rows.length === 0) {
-      return {
-        snapshots_deleted: 0,
-        snapshot_after_created: false
-      };
-    }
-
-    const lastEvent = eventResult.rows[0];
-    const lastEventDate = new Date(lastEvent.event_date);
-
-    // Delete snapshots after last event
-    const deleteResult = await query(
-      `DELETE FROM faction_map_statistics_history
-       WHERE snapshot_date > ?`,
-      [lastEventDate]
-    );
-
-    // Create today's snapshot
-    const snapshotResult = await createFactionMapStatisticsSnapshot(new Date());
-
-    return {
-      snapshots_deleted: deleteResult.rowCount || 0,
-      snapshot_after_created: snapshotResult.snapshots_created > 0
-    };
-  } catch (error) {
-    console.error('Error managing faction/map statistics snapshots:', error);
     throw error;
   }
 }
@@ -1295,7 +1191,8 @@ export async function getTournamentSnapshot(
 }
 
 /**
- * Create balance event after snapshot
+ * Create the cumulative snapshot immediately after a balance event.
+ * The date is derived from the event and is never supplied by a regular user.
  */
 export async function createBalanceEventAfterSnapshot(
   eventId: string
@@ -1311,72 +1208,11 @@ export async function createBalanceEventAfterSnapshot(
       throw new Error('Balance event not found');
     }
 
-    const { randomUUID } = await import('crypto');
     const eventDate = new Date(eventResult.rows[0].event_date);
     const afterDate = new Date(eventDate);
-    afterDate.setDate(afterDate.getDate() + 1); // One day after
+    afterDate.setUTCDate(afterDate.getUTCDate() + 1); // One day after
     const dateStr = afterDate.toISOString().split('T')[0];
-
-    // Check if snapshot already exists for this date
-    const existingResult = await query(
-      `SELECT COUNT(*) as count FROM faction_map_statistics_history WHERE snapshot_date = ?`,
-      [dateStr]
-    );
-    
-    if (existingResult.rows[0].count > 0) {
-      // Snapshot already exists, skip and just update the after_date
-      await query(
-        `UPDATE balance_events
-         SET snapshot_after_date = ?
-         WHERE id = ?`,
-        [dateStr, eventId]
-      );
-      return 0;
-    }
-
-    const result = await query(
-      `INSERT INTO faction_map_statistics_history (
-        id,
-        snapshot_date,
-        snapshot_timestamp,
-        map_id,
-        faction_id,
-        opponent_faction_id,
-        faction_side,
-        total_games,
-        wins,
-        losses,
-        winrate,
-        sample_size_category,
-        confidence_level
-      )
-      SELECT
-        UUID(),
-        ?,
-        CURRENT_TIMESTAMP,
-        fms.map_id,
-        fms.faction_id,
-        fms.opponent_faction_id,
-        fms.faction_side,
-        fms.total_games,
-        fms.wins,
-        fms.losses,
-        fms.winrate,
-        CASE
-          WHEN fms.total_games < 10 THEN 'small'
-          WHEN fms.total_games < 50 THEN 'medium'
-          ELSE 'large'
-        END,
-        CASE
-          WHEN fms.total_games < 10 THEN 25.0
-          WHEN fms.total_games < 30 THEN 50.0
-          WHEN fms.total_games < 50 THEN 75.0
-          ELSE 95.0
-        END
-      FROM faction_map_statistics fms
-      WHERE fms.total_games > 0`,
-      [dateStr]
-    );
+    const snapshotResult = await createFactionMapStatisticsSnapshot(afterDate);
 
     // Update balance_events to record snapshot date
     await query(
@@ -1386,7 +1222,7 @@ export async function createBalanceEventAfterSnapshot(
       [afterDate.toISOString().split('T')[0], eventId]
     );
 
-    return result.rowCount || 0;
+    return snapshotResult.snapshots_created;
   } catch (error) {
     console.error('Error creating balance event after snapshot:', error);
     throw error;
@@ -1529,6 +1365,97 @@ export async function getBalanceEventForwardImpact(
     }));
   } catch (error) {
     console.error('Error getting balance event impact from matches:', error);
+    throw error;
+  }
+}
+
+/**
+ * Read the cumulative snapshots associated with a balance event.
+ * This is the statistics-page representation of before/after data; it does not
+ * recalculate matches and therefore reflects the repaired snapshot history.
+ */
+export async function getBalanceEventSnapshotImpact(
+  eventId: string
+): Promise<BalanceEventImpact[]> {
+  try {
+    const eventResult = await query(
+      'SELECT snapshot_before_date, snapshot_after_date FROM balance_events WHERE id = ?',
+      [eventId]
+    );
+    if (eventResult.rows.length === 0) return [];
+
+    const { snapshot_before_date: beforeDate, snapshot_after_date: afterDate } = eventResult.rows[0];
+    // Older events may not have snapshot markers yet. Keep the legacy match
+    // calculation as a compatibility fallback until maintenance rebuilds them.
+    if (!beforeDate || !afterDate) return getBalanceEventForwardImpact(eventId);
+
+    const result = await query(
+      `SELECT
+        gm.id AS map_id, gm.name AS map_name,
+        f1.id AS faction_id, f1.name AS faction_name,
+        f2.id AS opponent_faction_id, f2.name AS opponent_faction_name,
+        SUM(CASE WHEN h.snapshot_date = ? THEN h.total_games ELSE 0 END) AS games_before,
+        SUM(CASE WHEN h.snapshot_date = ? THEN h.wins ELSE 0 END) AS wins_before,
+        SUM(CASE WHEN h.snapshot_date = ? THEN h.losses ELSE 0 END) AS losses_before,
+        SUM(CASE WHEN h.snapshot_date = ? AND h.faction_side = 1 THEN h.total_games ELSE 0 END) AS side1_games_before,
+        SUM(CASE WHEN h.snapshot_date = ? AND h.faction_side = 1 THEN h.wins ELSE 0 END) AS side1_wins_before,
+        SUM(CASE WHEN h.snapshot_date = ? AND h.faction_side = 2 THEN h.total_games ELSE 0 END) AS side2_games_before,
+        SUM(CASE WHEN h.snapshot_date = ? AND h.faction_side = 2 THEN h.wins ELSE 0 END) AS side2_wins_before,
+        SUM(CASE WHEN h.snapshot_date = ? THEN h.total_games ELSE 0 END) AS games_after,
+        SUM(CASE WHEN h.snapshot_date = ? THEN h.wins ELSE 0 END) AS wins_after,
+        SUM(CASE WHEN h.snapshot_date = ? THEN h.losses ELSE 0 END) AS losses_after,
+        SUM(CASE WHEN h.snapshot_date = ? AND h.faction_side = 1 THEN h.total_games ELSE 0 END) AS side1_games_after,
+        SUM(CASE WHEN h.snapshot_date = ? AND h.faction_side = 1 THEN h.wins ELSE 0 END) AS side1_wins_after,
+        SUM(CASE WHEN h.snapshot_date = ? AND h.faction_side = 2 THEN h.total_games ELSE 0 END) AS side2_games_after,
+        SUM(CASE WHEN h.snapshot_date = ? AND h.faction_side = 2 THEN h.wins ELSE 0 END) AS side2_wins_after
+      FROM faction_map_statistics_history h
+      JOIN game_maps gm ON gm.id = h.map_id
+      JOIN factions f1 ON f1.id = h.faction_id
+      JOIN factions f2 ON f2.id = h.opponent_faction_id
+      WHERE h.snapshot_date IN (?, ?)
+      GROUP BY gm.id, gm.name, f1.id, f1.name, f2.id, f2.name
+      HAVING games_before > 0 OR games_after > 0
+      ORDER BY gm.name, f1.name, f2.name`,
+      [beforeDate, beforeDate, beforeDate, beforeDate, beforeDate, beforeDate, beforeDate,
+       afterDate, afterDate, afterDate, afterDate, afterDate, afterDate, afterDate,
+       beforeDate, afterDate]
+    );
+
+    const number = (value: unknown): number => Number(value) || 0;
+    const winrate = (wins: number, games: number): number => games > 0 ? Math.round((wins / games) * 10000) / 100 : 0;
+
+    if (result.rows.length === 0) return getBalanceEventForwardImpact(eventId);
+
+    return result.rows.map(row => {
+      const gamesBefore = number(row.games_before);
+      const winsBefore = number(row.wins_before);
+      const gamesAfter = number(row.games_after);
+      const winsAfter = number(row.wins_after);
+      return {
+        map_id: row.map_id, map_name: row.map_name,
+        faction_id: row.faction_id, faction_name: row.faction_name,
+        opponent_faction_id: row.opponent_faction_id,
+        opponent_faction_name: row.opponent_faction_name,
+        games_before: gamesBefore, wins_before: winsBefore,
+        losses_before: number(row.losses_before),
+        winrate_before: winrate(winsBefore, gamesBefore),
+        side1_games_before: number(row.side1_games_before),
+        side1_wins_before: number(row.side1_wins_before),
+        side2_games_before: number(row.side2_games_before),
+        side2_wins_before: number(row.side2_wins_before),
+        games_after: gamesAfter, wins_after: winsAfter,
+        losses_after: number(row.losses_after),
+        winrate_after: winrate(winsAfter, gamesAfter),
+        side1_games_after: number(row.side1_games_after),
+        side1_wins_after: number(row.side1_wins_after),
+        side2_games_after: number(row.side2_games_after),
+        side2_wins_after: number(row.side2_wins_after),
+        winrate_change: winrate(winsAfter, gamesAfter) - winrate(winsBefore, gamesBefore),
+        sample_size_before: gamesBefore, sample_size_after: gamesAfter,
+      };
+    });
+  } catch (error) {
+    console.error('Error getting balance event impact from snapshots:', error);
     throw error;
   }
 }
@@ -1698,9 +1625,7 @@ export default {
   checkTeamMemberPositions,
   createBalanceEventBeforeSnapshot,
   createFactionMapStatisticsSnapshot,
-  getBalanceEventImpact,
   getBalanceTrend,
-  manageFactionMapStatisticsSnapshots,
   recalculatePlayerMatchStatistics,
   recalculateFactionMapStatistics,
   updateFactionMapStatistics,
@@ -1713,6 +1638,7 @@ export default {
   getTournamentSnapshot,
   createBalanceEventAfterSnapshot,
   getBalanceEventForwardImpact,
+  getBalanceEventSnapshotImpact,
   recalculateBalanceEventSnapshots,
   recalculatePlayerEloSequential
 };

@@ -173,8 +173,7 @@
 - `[GET] /api/statistics/history/events/:eventId/impact` — Public — Impact analysis for a balance event.
 - `[GET] /api/statistics/history/trend` — Public — query: `mapId, factionId, opponentFactionId, dateFrom, dateTo` — Win rate trend.
 - `[GET] /api/statistics/history/snapshot` — Public — query: `date, minGames` — Historical statistics snapshot.
-- `[POST] /api/statistics/history/snapshot` — Private (admin) — Create a snapshot.
-- `[POST] /api/statistics/history/recalculate-snapshots` — Private (admin) — Recalculate all snapshots.
+- `[POST] /api/statistics/history/snapshot` — Private (admin) — Create or backfill one cumulative snapshot date for historical correction.
 
 ---
 
@@ -237,7 +236,7 @@
 
 ### Statistics & Debug
 - `[POST] /api/admin/recalculate-all-stats` — Private (admin) — Recalculate all player statistics.
-- `[POST] /api/admin/recalculate-snapshots` — Private (admin) — Recalculate all balance statistics snapshots.
+- `[POST] /api/admin/recalculate-snapshots` — Private (admin) — Clear and rebuild the complete cumulative balance snapshot history; maintenance/recovery operation.
 - `[GET] /api/admin/debug/faction-map-stats` — Private (admin) — Debug: raw faction/map stats data.
 - `[GET] /api/admin/player-of-month` — Private (admin) — Get player of the month data.
 - `[POST] /api/admin/calculate-player-of-month` — Private (admin) — Recalculate player of the month.

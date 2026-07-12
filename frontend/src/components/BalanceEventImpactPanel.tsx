@@ -19,21 +19,6 @@ interface BalanceEvent {
   created_by_name?: string;
 }
 
-interface ImpactData {
-  map_id: string;
-  map_name: string;
-  faction_id: string;
-  faction_name: string;
-  opponent_faction_id: string;
-  opponent_faction_name: string;
-  winrate: number;
-  total_games: number;
-  wins: number;
-  losses: number;
-  snapshot_date: string;
-  days_since_event: number;
-}
-
 interface AggregatedData {
   map_id?: string;
   map_name: string;
@@ -55,7 +40,6 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
   const { t } = useTranslation();
   const [events, setEvents] = useState<BalanceEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<BalanceEvent | null>(null);
-  const [impactData, setImpactData] = useState<ImpactData[]>([]);
   const [beforeData, setBeforeData] = useState<AggregatedData[]>([]);
   const [afterData, setAfterData] = useState<AggregatedData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -82,7 +66,6 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
       loadEventImpact(selectedEvent.id);
       onEventChange?.(selectedEvent.id);
     } else {
-      setImpactData([]);
       onEventChange?.(null);
     }
   }, [selectedEvent]);
@@ -91,9 +74,7 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
     setLoading(true);
     setError('');
     try {
-      console.log(`[BalanceEventImpactPanel] Loading impact for event: ${id}`);
       const data = await statisticsService.getEventImpact(id);
-      console.log(`[BalanceEventImpactPanel] Received ${data.length} rows from backend`);
 
       const beforeAgg: AggregatedData[] = data.map((item: any) => {
         const gamesBefore   = typeof item.games_before   === 'string' ? parseInt(item.games_before)   : (item.games_before   || 0);
@@ -141,20 +122,6 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
         };
       }).filter((d: AggregatedData) => d.total_games > 0);
 
-      console.log(`[BalanceEventImpactPanel] Before: ${beforeAgg.length} records, After: ${afterAgg.length} records`);
-
-      // Also store raw impact data for the detailed table view (use after fields as primary)
-      const convertedData: ImpactData[] = data.map((item: any) => ({
-        ...item,
-        winrate: typeof item.winrate_after === 'string' ? parseFloat(item.winrate_after) : (item.winrate_after || 0),
-        total_games: typeof item.games_after === 'string' ? parseInt(item.games_after) : (item.games_after || 0),
-        wins: 0,
-        losses: 0,
-        snapshot_date: '',
-        days_since_event: 0,
-      }));
-      setImpactData(convertedData);
-
       setBeforeData(beforeAgg);
       setAfterData(afterAgg);
 
@@ -163,7 +130,6 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
     } catch (err: any) {
       console.error(`[BalanceEventImpactPanel] Error loading impact:`, err);
       setError(err.response?.data?.error || t('error_loading_impact') || 'Error loading impact data');
-      setImpactData([]);
       setBeforeData([]);
       setAfterData([]);
     } finally {
@@ -171,46 +137,8 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
     }
   };
 
-  const aggregateData = (snapshots: ImpactData[]): AggregatedData[] => {
-    // Take the LATEST snapshot for each combination (don't sum historical snapshots)
-    // Each snapshot already contains cumulative stats
-    const aggregated = new Map<string, ImpactData>();
-    
-    snapshots.forEach(snapshot => {
-      const key = `${snapshot.map_id}|${snapshot.faction_id}|${snapshot.opponent_faction_id}`;
-      const current = aggregated.get(key);
-      
-      // Keep the one with most games (latest snapshot in the period)
-      if (!current || snapshot.total_games > current.total_games) {
-        aggregated.set(key, snapshot);
-      }
-    });
-    
-    console.log(`[BalanceEventImpactPanel.aggregateData] Received ${snapshots.length} snapshots, aggregated to ${aggregated.size} unique matchups`);
-    console.log(`   Date range: ${snapshots.length > 0 ? snapshots[0].snapshot_date + ' to ' + snapshots[snapshots.length - 1].snapshot_date : 'N/A'}`);
-    
-    return Array.from(aggregated.values()).map(snapshot => ({
-      map_id: snapshot.map_id,
-      map_name: snapshot.map_name,
-      faction_id: snapshot.faction_id,
-      faction_name: snapshot.faction_name,
-      opponent_faction_id: snapshot.opponent_faction_id,
-      opponent_faction_name: snapshot.opponent_faction_name,
-      winrate: snapshot.winrate,
-      total_games: snapshot.total_games,
-      wins: snapshot.wins,
-      losses: snapshot.losses,
-    })).sort((a, b) => b.total_games - a.total_games);
-  };
-
   const handleEventSelect = (event: BalanceEvent | null) => {
     setSelectedEvent(event);
-  };
-
-  const getChangeColorClass = (winrate: number) => {
-    if (winrate > 55) return 'high';
-    if (winrate < 45) return 'low';
-    return 'balanced';
   };
 
   const eventTypeColor: { [key: string]: string } = {

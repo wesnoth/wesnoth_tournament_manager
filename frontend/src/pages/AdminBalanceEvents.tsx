@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { statisticsService } from '../services/statisticsService';
 import api from '../services/api';
 import UserProfileNav from '../components/UserProfileNav';
+import { useAuthStore } from '../store/authStore';
 
 interface Faction {
   id: string;
@@ -14,8 +16,28 @@ interface GameMap {
   name: string;
 }
 
+interface BalanceEvent {
+  id: string;
+  event_date: string;
+  event_type: string;
+  description: string;
+  faction_id?: string | null;
+  faction_name?: string | null;
+  map_id?: string | null;
+  map_name?: string | null;
+  patch_version?: string | null;
+  notes?: string | null;
+}
+
+const formatEventDate = (value: string): string => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+};
+
 const AdminBalanceEvents: React.FC = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { isAuthenticated, isAdmin } = useAuthStore();
   const [formData, setFormData] = useState({
     event_date: new Date().toISOString().split('T')[0],
     event_type: 'NERF' as const,
@@ -31,7 +53,7 @@ const AdminBalanceEvents: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
-  const [events, setEvents] = useState<any[]>([]);
+  const [events, setEvents] = useState<BalanceEvent[]>([]);
   const [recalculatingSnapshots, setRecalculatingSnapshots] = useState(false);
   const [snapshotSuccess, setSnapshotSuccess] = useState('');
   const [snapshotError, setSnapshotError] = useState('');
@@ -39,6 +61,11 @@ const AdminBalanceEvents: React.FC = () => {
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!isAuthenticated || !isAdmin) {
+      navigate('/');
+      return;
+    }
+
     const loadData = async () => {
       try {
         const [factionsResponse, mapsResponse, eventsData] = await Promise.all([
@@ -55,7 +82,7 @@ const AdminBalanceEvents: React.FC = () => {
       }
     };
     loadData();
-  }, []);
+  }, [isAuthenticated, isAdmin, navigate]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -157,25 +184,17 @@ const AdminBalanceEvents: React.FC = () => {
         recreateAll: true
       });
       
-      const { totalSnapshotsCreated, beforeSnapshots, afterSnapshots } = response.data;
+      const { totalSnapshotsCreated } = response.data;
       
       setSnapshotSuccess(
         t('snapshots_recalculated_success') || 
-        `Historical snapshots recalculated successfully.\nSnapshots created: ${totalSnapshotsCreated}\nMatches before: ${beforeSnapshots}\nMatches after: ${afterSnapshots}`
+        `Historical snapshots recalculated successfully.\nSnapshots created: ${totalSnapshotsCreated}`
       );
     } catch (err: any) {
       setSnapshotError(err.response?.data?.error || t('error_recalculating_snapshots') || 'Error recalculating snapshots');
     } finally {
       setRecalculatingSnapshots(false);
     }
-  };
-
-  const eventTypeColors: { [key: string]: string } = {
-    BUFF: 'buff',
-    NERF: 'nerf',
-    REWORK: 'rework',
-    HOTFIX: 'hotfix',
-    GENERAL_BALANCE_CHANGE: 'general',
   };
 
   return (
@@ -235,7 +254,7 @@ const AdminBalanceEvents: React.FC = () => {
               <tbody>
                 {events.map(event => (
                   <tr key={event.id} className="border-b border-gray-200 hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-700">{new Date(event.event_date).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-gray-700">{formatEventDate(event.event_date)}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
                         event.event_type === 'BUFF' ? 'bg-green-100 text-green-800' :

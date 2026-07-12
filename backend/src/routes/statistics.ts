@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../config/database.js';
+import { adminMiddleware, authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { getUserIP, getUserAgent, logAuditEvent } from '../middleware/audit.js';
 import {
   getBalanceTrend,
-  getBalanceEventForwardImpact,
+  getBalanceEventSnapshotImpact,
   createFactionMapStatisticsSnapshot,
 } from '../services/statisticsCalculator.js';
 import {
@@ -13,6 +15,24 @@ import {
 } from '../services/globalStatisticsService.js';
 
 const router = Router();
+
+const BALANCE_EVENT_TYPES = new Set(['BUFF', 'NERF', 'REWORK', 'HOTFIX', 'GENERAL_BALANCE_CHANGE']);
+
+/** Validate an ISO calendar date without allowing MariaDB to normalize invalid input. */
+function parseBalanceDate(value: unknown): string | null {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(value) ? value : null;
+}
+
+/** Parse bounded pagination values used by public balance-history lists. */
+function parseBalancePagination(limitValue: unknown, offsetValue: unknown): { limit: number; offset: number } | null {
+  const limit = limitValue === undefined ? 50 : Number(limitValue);
+  const offset = offsetValue === undefined ? 0 : Number(offsetValue);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 1000) return null;
+  if (!Number.isInteger(offset) || offset < 0 || offset > 10_000_000) return null;
+  return { limit, offset };
+}
 
 /**
  * Get global site statistics (public endpoint)
@@ -94,16 +114,10 @@ router.get('/faction-by-map', async (req, res) => {
  */
 router.get('/matchups', async (req, res) => {
   try {
-    const minGames = parseInt(req.query.minGames as string) || 5;
-    console.log(`[MATCHUPS] Request received with minGames=${minGames}`);
-    
-    // First check how many rows we have in faction_map_statistics
-    const countResult = await query(
-      `SELECT COUNT(*) as total_rows, SUM(total_games) as total_games_sum
-       FROM faction_map_statistics`
-    );
-    console.log(`[MATCHUPS] Total rows in faction_map_statistics: ${countResult.rows[0].total_rows}, Total games: ${countResult.rows[0].total_games_sum}`);
-    
+    const minGames = req.query.minGames === undefined ? 5 : Number(req.query.minGames);
+    if (!Number.isInteger(minGames) || minGames < 1 || minGames > 1000000) {
+      return res.status(400).json({ error: 'minGames must be a positive integer' });
+    }
     // Get matchups - including both non-mirror (faction_id < opponent_faction_id) and mirror matchups
     // Aggregate across faction_side dimension, but also expose per-side winrates for bias analysis
     const queryText = `SELECT 
@@ -137,19 +151,7 @@ router.get('/matchups', async (req, res) => {
     HAVING SUM(fms.total_games) >= ?
     ORDER BY imbalance DESC, gm.name, f1.name`;
     
-    console.log('[MATCHUPS] Executing query with minGames=', minGames);
     const result = await query(queryText, [minGames]);
-    
-    console.log(`[MATCHUPS] Aggregated matchups found: ${result.rows.length}`);
-    if (result.rows.length > 0) {
-      console.log('[MATCHUPS] Sample rows:', JSON.stringify(result.rows.slice(0, 2), null, 2));
-    } else {
-      console.log('[MATCHUPS] ⚠️  No matchups returned. Checking data distribution...');
-      const distResult = await query(
-        `SELECT total_games, COUNT(*) as count FROM faction_map_statistics GROUP BY total_games ORDER BY total_games DESC`
-      );
-      console.log('[MATCHUPS] Games distribution:', JSON.stringify(distResult.rows, null, 2));
-    }
     
     res.json(result.rows);
   } catch (error) {
@@ -171,8 +173,8 @@ router.get('/faction-global', async (req, res) => {
         f.id as faction_id,
         f.name as faction_name,
         SUM(fms.total_games) as total_games,
-        SUM(fms.wins) as total_wins,
-        SUM(fms.losses) as total_losses,
+        SUM(fms.wins) as wins,
+        SUM(fms.losses) as losses,
         ROUND(100.0 * SUM(fms.wins) / SUM(fms.total_games), 2) as global_winrate,
         COUNT(DISTINCT fms.map_id) as maps_played,
         SUM(CASE WHEN fms.faction_side = 1 THEN fms.total_games ELSE 0 END) as side1_games,
@@ -207,28 +209,6 @@ router.get('/faction-global', async (req, res) => {
  */
 router.get('/map-balance', async (req, res) => {
   try {
-    // First get raw data to show what we're calculating
-    const rawResult = await query(
-      `SELECT 
-        gm.id as map_id,
-        gm.name as map_name,
-        f.id as faction_id,
-        f.name as faction_name,
-        fms.winrate,
-        fms.total_games,
-        fms.wins,
-        fms.losses
-      FROM faction_map_statistics fms
-      JOIN game_maps gm ON fms.map_id = gm.id
-      JOIN factions f ON fms.faction_id = f.id
-      ORDER BY gm.name, fms.winrate`
-    );
-    console.log('\n=== MAP-BALANCE RAW DATA ===');
-    console.log(`Total rows: ${rawResult.rows.length}`);
-    rawResult.rows.forEach((row, idx) => {
-      console.log(`[${idx}] ${row.map_name} | ${row.faction_name}: WR=${row.winrate}% | Games=${row.total_games} | W=${row.wins} L=${row.losses}`);
-    });
-    
     const result = await query(
       `SELECT 
         gm.id as map_id,
@@ -246,11 +226,6 @@ router.get('/map-balance', async (req, res) => {
       HAVING SUM(fms.total_games) >= 10
       ORDER BY avg_imbalance ASC`
     );
-    console.log('\n=== MAP-BALANCE CALCULATED RESULTS ===');
-    result.rows.forEach((row, idx) => {
-      console.log(`[${idx}] ${row.map_name}: ${row.factions_used} factions, ${row.total_games} games, STDDEV=${row.stddev_full_precision}`);
-    });
-    console.log('');
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching map balance statistics:', error);
@@ -357,6 +332,13 @@ router.get('/history/trend', async (req, res) => {
 router.get('/history/events', async (req, res) => {
   try {
     const { factionId, mapId, eventType, limit = '50', offset = '0' } = req.query;
+    const pagination = parseBalancePagination(limit, offset);
+    if (!pagination) {
+      return res.status(400).json({ error: 'limit must be 1-1000 and offset must be a non-negative integer' });
+    }
+    if (eventType && (typeof eventType !== 'string' || !BALANCE_EVENT_TYPES.has(eventType))) {
+      return res.status(400).json({ error: 'Invalid eventType' });
+    }
     
     let whereClause = '';
     const params: any[] = [];
@@ -380,8 +362,8 @@ router.get('/history/events', async (req, res) => {
     
     if (whereClause) whereClause = 'WHERE ' + whereClause;
     
-    params.push(parseInt(limit as string));
-    params.push(parseInt(offset as string));
+    params.push(pagination.limit);
+    params.push(pagination.offset);
     
     const result = await query(
       `SELECT 
@@ -417,7 +399,6 @@ router.get('/history/events', async (req, res) => {
 router.get('/history/events/:eventId/impact', async (req, res) => {
   try {
     const { eventId } = req.params;
-    console.log(`\n=== EVENT IMPACT REQUEST === EventID: ${eventId}`);
     
     // First, verify the event exists
     const eventCheck = await query(
@@ -427,53 +408,10 @@ router.get('/history/events/:eventId/impact', async (req, res) => {
     );
     
     if (eventCheck.rows.length === 0) {
-      console.log(`❌ ERROR: Event not found with ID: ${eventId}`);
       return res.status(404).json({ error: 'Balance event not found' });
     }
-    
-    const event = eventCheck.rows[0];
-    console.log(`✅ Event found: Date=${event.event_date}, Type=${event.event_type}`);
-    
-    // Check how many snapshots exist for this date range
-    const countCheck = await query(
-      `SELECT COUNT(*) as total_snapshots, 
-              MIN(snapshot_date) as earliest_date,
-              MAX(snapshot_date) as latest_date
-       FROM faction_map_statistics_history`
-    );
-    
-    console.log(`📊 Total snapshots in DB: ${countCheck.rows[0].total_snapshots}`);
-    console.log(`   Date range: ${countCheck.rows[0].earliest_date} to ${countCheck.rows[0].latest_date}`);
-    
-    // Now get the actual impact data
-    const impactRows = await getBalanceEventForwardImpact(eventId);
-    
-    console.log(`⚡ Event impact function returned: ${impactRows.length} rows`);
-    if (impactRows.length > 0) {
-      console.log(`   First row: ${JSON.stringify(impactRows[0])}`);
-      console.log(`   Last row: ${JSON.stringify(impactRows[impactRows.length - 1])}`);
-    } else {
-      console.log(`   ⚠️  WARNING: No data returned from function for event ${eventId}`);
-      
-      // Debug: Check what the function would do manually
-      const eventDates = await query(
-        `SELECT 
-          e1.event_date as current_event_date,
-          (SELECT e2.event_date FROM balance_events e2 
-           WHERE e2.event_date > e1.event_date 
-           ORDER BY e2.event_date ASC LIMIT 1) as next_event_date
-         FROM balance_events e1 WHERE e1.id = ?`,
-        [eventId]
-      );
-      
-      if (eventDates.rows.length > 0) {
-        console.log(`   Debug: Event date logic:`);
-        console.log(`   - Current event date: ${eventDates.rows[0].current_event_date}`);
-        console.log(`   - Next event date: ${eventDates.rows[0].next_event_date}`);
-      }
-    }
-    console.log('');
-    
+
+    const impactRows = await getBalanceEventSnapshotImpact(eventId);
     res.json(impactRows);
   } catch (error) {
     console.error('Error fetching event impact:', error);
@@ -482,15 +420,20 @@ router.get('/history/events/:eventId/impact', async (req, res) => {
 });
 
 /**
- * Get snapshot data for a specific date (admin only)
+ * Get snapshot data for a specific date (public endpoint)
  * Shows all faction/map combinations as they were on that date
  */
 router.get('/history/snapshot', async (req, res) => {
   try {
     const { date, minGames = '2' } = req.query;
     
-    if (!date) {
+    const snapshotDate = parseBalanceDate(date);
+    const parsedMinGames = Number(minGames);
+    if (!snapshotDate) {
       return res.status(400).json({ error: 'Missing required parameter: date' });
+    }
+    if (!Number.isInteger(parsedMinGames) || parsedMinGames < 1 || parsedMinGames > 1000000) {
+      return res.status(400).json({ error: 'minGames must be a positive integer' });
     }
     
     const result = await query(
@@ -515,7 +458,7 @@ router.get('/history/snapshot', async (req, res) => {
       WHERE fms.snapshot_date = CAST(? AS DATE)
       AND fms.total_games >= ?
       ORDER BY gm.name, fms.winrate DESC`,
-      [date, parseInt(minGames as string)]
+      [snapshotDate, parsedMinGames]
     );
     
     res.json(result.rows);
@@ -526,27 +469,28 @@ router.get('/history/snapshot', async (req, res) => {
 });
 
 /**
- * Create a new balance event (admin only)
+ * Create a new balance event (admin only).
  * Records a patch or balance change
  */
-router.post('/history/events', async (req, res) => {
+router.post('/history/events', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
   try {
     const { event_date, patch_version, event_type, description, faction_id, map_id, notes } = req.body;
-    const userId = (req as any).userId;
+    const userId = req.userId;
     
-    if (!event_date || !event_type || !description) {
+    if (!parseBalanceDate(event_date) || !event_type || typeof description !== 'string' || !description.trim()) {
       return res.status(400).json({ error: 'Missing required fields: event_date, event_type, description' });
     }
     
-    if (!['BUFF', 'NERF', 'REWORK', 'HOTFIX', 'GENERAL_BALANCE_CHANGE'].includes(event_type)) {
+    if (typeof event_type !== 'string' || !BALANCE_EVENT_TYPES.has(event_type)) {
       return res.status(400).json({ error: 'Invalid event_type' });
+    }
+    if (patch_version !== undefined && patch_version !== null && String(patch_version).length > 20) {
+      return res.status(400).json({ error: 'patch_version must be at most 20 characters' });
     }
     
     const eventId = uuidv4();
     
-    // Debug: log all parameters to identify which is undefined
-    const params = [eventId, event_date, patch_version ?? null, event_type, description, faction_id ?? null, map_id ?? null, notes ?? null, userId ?? null];
-    console.log('Balance event insert params:', params.map((p, i) => `[${i}] ${typeof p} = ${JSON.stringify(p)}`));
+    const params = [eventId, event_date, patch_version ?? null, event_type, description.trim(), faction_id ?? null, map_id ?? null, notes ?? null, userId ?? null];
     
     await query(
       `INSERT INTO balance_events (id, event_date, patch_version, event_type, description, faction_id, map_id, notes, created_by)
@@ -557,6 +501,15 @@ router.post('/history/events', async (req, res) => {
       'SELECT id, event_date, patch_version, event_type, description, created_at FROM balance_events WHERE id = ?',
       [eventId]
     );
+
+    await logAuditEvent({
+      event_type: 'ADMIN_ACTION',
+      user_id: req.userId,
+      username: req.username,
+      ip_address: getUserIP(req),
+      user_agent: getUserAgent(req),
+      details: { action: 'BALANCE_EVENT_CREATED', event_id: eventId, event_type },
+    });
     
     res.status(201).json(inserted.rows[0]);
   } catch (error) {
@@ -569,24 +522,27 @@ router.post('/history/events', async (req, res) => {
  * Update a balance event (admin only)
  * Edit an existing balance event
  */
-router.put('/history/events/:eventId', async (req, res) => {
+router.put('/history/events/:eventId', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
   try {
     const { eventId } = req.params;
     const { event_date, patch_version, event_type, description, faction_id, map_id, notes } = req.body;
     
-    if (!event_date || !event_type || !description) {
+    if (!parseBalanceDate(event_date) || !event_type || typeof description !== 'string' || !description.trim()) {
       return res.status(400).json({ error: 'Missing required fields: event_date, event_type, description' });
     }
     
-    if (!['BUFF', 'NERF', 'REWORK', 'HOTFIX', 'GENERAL_BALANCE_CHANGE'].includes(event_type)) {
+    if (typeof event_type !== 'string' || !BALANCE_EVENT_TYPES.has(event_type)) {
       return res.status(400).json({ error: 'Invalid event_type' });
+    }
+    if (patch_version !== undefined && patch_version !== null && String(patch_version).length > 20) {
+      return res.status(400).json({ error: 'patch_version must be at most 20 characters' });
     }
     
     const updateResult = await query(
       `UPDATE balance_events 
        SET event_date = ?, patch_version = ?, event_type = ?, description = ?, faction_id = ?, map_id = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [event_date, patch_version ?? null, event_type, description, faction_id ?? null, map_id ?? null, notes ?? null, eventId]
+      [event_date, patch_version ?? null, event_type, description.trim(), faction_id ?? null, map_id ?? null, notes ?? null, eventId]
     );
     
     if (updateResult.rowCount === 0) {
@@ -596,6 +552,15 @@ router.put('/history/events/:eventId', async (req, res) => {
       'SELECT id, event_date, patch_version, event_type, description, updated_at FROM balance_events WHERE id = ?',
       [eventId]
     );
+
+    await logAuditEvent({
+      event_type: 'ADMIN_ACTION',
+      user_id: req.userId,
+      username: req.username,
+      ip_address: getUserIP(req),
+      user_agent: getUserAgent(req),
+      details: { action: 'BALANCE_EVENT_UPDATED', event_id: eventId, event_type },
+    });
     
     res.json(updated.rows[0]);
   } catch (error) {
@@ -608,20 +573,31 @@ router.put('/history/events/:eventId', async (req, res) => {
  * Manually create a snapshot for a specific date (admin only)
  * Useful for backfilling historical data
  */
-router.post('/history/snapshot', async (req, res) => {
+router.post('/history/snapshot', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
   try {
     const { date } = req.body;
     
-    if (!date) {
+    const snapshotDate = parseBalanceDate(date);
+    if (!snapshotDate) {
       return res.status(400).json({ error: 'Missing required field: date' });
     }
     
-    const { snapshots_created, snapshots_skipped } = await createFactionMapStatisticsSnapshot(new Date(date as string));
+    const { snapshots_created, snapshots_skipped } = await createFactionMapStatisticsSnapshot(new Date(`${snapshotDate}T00:00:00Z`));
+
+    await logAuditEvent({
+      event_type: 'ADMIN_ACTION',
+      user_id: req.userId,
+      username: req.username,
+      ip_address: getUserIP(req),
+      user_agent: getUserAgent(req),
+      details: { action: 'BALANCE_SNAPSHOT_BACKFILLED', snapshot_date: snapshotDate, snapshots_created, snapshots_skipped },
+    });
+
     res.json({ 
       message: 'Snapshot created successfully',
       snapshots_created,
       snapshots_skipped,
-      date
+      date: snapshotDate
     });
   } catch (error) {
     console.error('Error creating snapshot:', error);
@@ -634,57 +610,4 @@ router.post('/history/snapshot', async (req, res) => {
  * Creates snapshots for all dates from earliest match to today
  * Useful when adding balance events retroactively
  */
-router.post('/history/recalculate-snapshots', async (req, res) => {
-  try {
-    // First, get the date range from matches
-    const dateRangeResult = await query(
-      `SELECT 
-        MIN(DATE(created_at)) as earliest_date,
-        MAX(DATE(created_at)) as latest_date
-      FROM matches
-      WHERE created_at IS NOT NULL`
-    );
-    
-    if (!dateRangeResult.rows[0]?.earliest_date) {
-      return res.status(400).json({ error: 'No matches found to calculate snapshots' });
-    }
-    
-    const { earliest_date, latest_date } = dateRangeResult.rows[0];
-    
-    // Generate snapshots for each date in the range
-    let totalSnapshots = 0;
-    let totalSkipped = 0;
-    const currentDate = new Date(earliest_date);
-    const endDate = new Date(latest_date);
-    
-    while (currentDate <= endDate) {
-      const dateStr = currentDate.toISOString().split('T')[0];
-      
-      try {
-        const snapResult = await createFactionMapStatisticsSnapshot(new Date(dateStr));
-        totalSnapshots += snapResult.snapshots_created || 0;
-        totalSkipped += snapResult.snapshots_skipped || 0;
-      } catch (err) {
-        console.error(`Error creating snapshot for ${dateStr}:`, err);
-        // Continue with next date even if one fails
-      }
-      
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-    
-    res.json({
-      message: 'Historical snapshots recalculated successfully',
-      totalSnapshots,
-      totalSkipped,
-      dateRange: {
-        from: earliest_date,
-        to: latest_date
-      }
-    });
-  } catch (error) {
-    console.error('Error recalculating snapshots:', error);
-    res.status(500).json({ error: 'Failed to recalculate snapshots' });
-  }
-});
-
 export default router;

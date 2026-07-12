@@ -1385,16 +1385,27 @@ router.post('/recalculate-snapshots', authMiddleware, async (req: AuthRequest, r
       return res.status(403).json({ error: 'Only admins can access this resource' });
     }
 
-    const { eventId, recreateAll } = req.body;
+    const { recreateAll } = req.body;
 
-    console.log('🟡 Starting balance event snapshots recalculation');
-    console.log('Parameters:', { eventId, recreateAll });
+    console.log('Starting balance event snapshots recalculation', { recreateAll });
 
     // Call TypeScript function to recalculate snapshots
     const { recalculateBalanceEventSnapshots } = await import('../services/statisticsCalculator.js');
     const tsResult = await recalculateBalanceEventSnapshots(recreateAll === true);
 
-    console.log('🟢 Balance event snapshots recalculated');
+    await logAuditEvent({
+      event_type: 'ADMIN_ACTION',
+      user_id: req.userId,
+      username: req.username,
+      ip_address: getUserIP(req),
+      user_agent: getUserAgent(req),
+      details: {
+        action: 'BALANCE_SNAPSHOTS_RECALCULATED',
+        recreate_all: recreateAll === true,
+        events_processed: tsResult.balance_events_updated,
+        snapshots_created: tsResult.snapshots_created,
+      },
+    });
 
     res.json({
       success: true,
