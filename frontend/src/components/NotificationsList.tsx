@@ -6,8 +6,8 @@ import { useNavigate } from 'react-router-dom';
 interface Notification {
   id: string;
   user_id: string;
-  tournament_id: string;
-  match_id: string;
+  tournament_id: string | null;
+  match_id: string | null;
   type:
     | 'schedule_proposal'
     | 'schedule_confirmed'
@@ -27,7 +27,7 @@ interface Notification {
   created_at: string;
 }
 
-/** Callbacks and filter options for the full-page notification list. */
+/** Filter options for the full-page notification list. */
 interface NotificationsListProps {
   filter?: 'all' | 'pending' | 'accepted';
 }
@@ -36,7 +36,7 @@ interface NotificationsListProps {
 const NotificationsList: React.FC<NotificationsListProps> = ({
   filter = 'all',
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,6 +47,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkMarking, setBulkMarking] = useState(false);
+  const [actionError, setActionError] = useState('');
   const ITEMS_PER_PAGE = 20;
 
   useEffect(() => {
@@ -75,6 +76,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
 
   const handleBulkMarkAsRead = async () => {
     if (selectedIds.size === 0) return;
+    setActionError('');
     setBulkMarking(true);
     try {
       const token = localStorage.getItem('token');
@@ -89,20 +91,16 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
       );
 
       const responses = await Promise.all(promises);
-      const allSuccess = responses.every(r => r.ok);
-      
-      if (allSuccess) {
-        setNotifications(
-          notifications.map(n =>
-            selectedIds.has(n.id) ? { ...n, is_read: true } : n
-          )
-        );
-        setSelectedIds(new Set());
-      } else {
-        console.error('Some notifications failed to mark as read:', responses.map(r => r.status));
+      const successfulIds = Array.from(selectedIds).filter((_, index) => responses[index].ok);
+      setNotifications(notifications.map(n =>
+        successfulIds.includes(n.id) ? { ...n, is_read: true } : n
+      ));
+      setSelectedIds(new Set(Array.from(selectedIds).filter(id => !successfulIds.includes(id))));
+      if (successfulIds.length !== selectedIds.size) {
+        setActionError(t('notifications_partial_action', 'Some notifications could not be updated.'));
       }
     } catch (err) {
-      console.error('Error marking notifications as read:', err);
+      setActionError(t('notifications_action_error', 'The notification action could not be completed.'));
     } finally {
       setBulkMarking(false);
     }
@@ -110,6 +108,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
 
   const handleBulkMarkAsUnread = async () => {
     if (selectedIds.size === 0) return;
+    setActionError('');
     setBulkMarking(true);
     try {
       const token = localStorage.getItem('token');
@@ -124,20 +123,16 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
       );
 
       const responses = await Promise.all(promises);
-      const allSuccess = responses.every(r => r.ok);
-      
-      if (allSuccess) {
-        setNotifications(
-          notifications.map(n =>
-            selectedIds.has(n.id) ? { ...n, is_read: false } : n
-          )
-        );
-        setSelectedIds(new Set());
-      } else {
-        console.error('Some notifications failed to mark as unread:', responses.map(r => r.status));
+      const successfulIds = Array.from(selectedIds).filter((_, index) => responses[index].ok);
+      setNotifications(notifications.map(n =>
+        successfulIds.includes(n.id) ? { ...n, is_read: false } : n
+      ));
+      setSelectedIds(new Set(Array.from(selectedIds).filter(id => !successfulIds.includes(id))));
+      if (successfulIds.length !== selectedIds.size) {
+        setActionError(t('notifications_partial_action', 'Some notifications could not be updated.'));
       }
     } catch (err) {
-      console.error('Error marking notifications as unread:', err);
+      setActionError(t('notifications_action_error', 'The notification action could not be completed.'));
     } finally {
       setBulkMarking(false);
     }
@@ -145,6 +140,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
 
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
+    setActionError('');
     setBulkDeleting(true);
     try {
       const token = localStorage.getItem('token');
@@ -158,14 +154,15 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
         })
       );
 
-      await Promise.all(promises);
-      
-      setNotifications(
-        notifications.filter(n => !selectedIds.has(n.id))
-      );
-      setSelectedIds(new Set());
+      const responses = await Promise.all(promises);
+      const successfulIds = Array.from(selectedIds).filter((_, index) => responses[index].ok);
+      setNotifications(notifications.filter(n => !successfulIds.includes(n.id)));
+      setSelectedIds(new Set(Array.from(selectedIds).filter(id => !successfulIds.includes(id))));
+      if (successfulIds.length !== selectedIds.size) {
+        setActionError(t('notifications_partial_action', 'Some notifications could not be updated.'));
+      }
     } catch (err) {
-      console.error('Error deleting notifications:', err);
+      setActionError(t('notifications_action_error', 'The notification action could not be completed.'));
     } finally {
       setBulkDeleting(false);
     }
@@ -235,11 +232,10 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
           )
         );
       } else {
-        const errorData = await response.json();
-        console.error(`Error marking notification as read: ${response.status}`, errorData);
+        setActionError(t('notifications_action_error', 'The notification action could not be completed.'));
       }
     } catch (err) {
-      console.error('Error marking notification as read:', err);
+      setActionError(t('notifications_action_error', 'The notification action could not be completed.'));
     }
   };
 
@@ -261,11 +257,10 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
           )
         );
       } else {
-        const errorData = await response.json();
-        console.error(`Error marking notification as unread: ${response.status}`, errorData);
+        setActionError(t('notifications_action_error', 'The notification action could not be completed.'));
       }
     } catch (err) {
-      console.error('Error marking notification as unread:', err);
+      setActionError(t('notifications_action_error', 'The notification action could not be completed.'));
     }
   };
 
@@ -282,9 +277,11 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
 
       if (response.ok) {
         setNotifications(notifications.filter(n => n.id !== notificationId));
+      } else {
+        setActionError(t('notifications_action_error', 'The notification action could not be completed.'));
       }
     } catch (err) {
-      console.error('Error deleting notification:', err);
+      setActionError(t('notifications_action_error', 'The notification action could not be completed.'));
     }
   };
 
@@ -305,7 +302,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
   /** Format API timestamps for the user's local display. */
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleString('es-ES', {
+    return date.toLocaleString(i18n.language, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -317,7 +314,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
   if (loading) {
     return (
       <div className="flex justify-center items-center py-12">
-        <div className="text-gray-600">Loading notifications...</div>
+        <div className="text-gray-600">{t('notifications_loading', 'Loading notifications...')}</div>
       </div>
     );
   }
@@ -325,7 +322,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
   if (error) {
     return (
       <div className="bg-red-50 border border-red-200 rounded-md p-4">
-        <div className="text-red-800">❌ {error}</div>
+        <div className="text-red-800">❌ {t('notifications_load_error', error)}</div>
       </div>
     );
   }
@@ -358,9 +355,9 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
 
         <div className="bg-gray-50 border border-gray-200 rounded-md p-8 text-center">
           <div className="text-gray-600">
-            {currentFilter === 'pending' && 'No pending notifications'}
-            {currentFilter === 'accepted' && 'No accepted notifications'}
-            {currentFilter === 'all' && 'No notifications'}
+            {currentFilter === 'pending' && t('notifications_empty_pending', 'No pending notifications')}
+            {currentFilter === 'accepted' && t('notifications_empty_accepted', 'No accepted notifications')}
+            {currentFilter === 'all' && t('notifications_empty', 'No notifications')}
           </div>
         </div>
       </>
@@ -369,6 +366,12 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
 
   return (
     <div className="space-y-4">
+      {actionError && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3 text-yellow-800 text-sm">
+          {actionError}
+        </div>
+      )}
+
       {/* Filter Tabs */}
       <div className="mb-6 flex gap-2 border-b border-gray-200">
         {['all', 'pending', 'accepted'].map((filterOption) => (
@@ -396,7 +399,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
       {selectedIds.size > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex gap-4 items-center justify-between">
           <div className="text-sm text-gray-700">
-            {selectedIds.size} selected
+            {t('notifications_selected', { count: selectedIds.size, defaultValue: `${selectedIds.size} selected` })}
           </div>
           <div className="flex gap-2">
             <button
@@ -404,21 +407,21 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
               disabled={bulkMarking || bulkDeleting}
               className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {bulkMarking ? 'Marking...' : '✓ Mark as Read'}
+              {bulkMarking ? t('notifications_working', 'Working...') : t('notifications_mark_read', '✓ Mark as Read')}
             </button>
             <button
               onClick={handleBulkMarkAsUnread}
               disabled={bulkMarking || bulkDeleting}
               className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {bulkMarking ? 'Marking...' : '↩️ Mark as Unread'}
+              {bulkMarking ? t('notifications_working', 'Working...') : t('notifications_mark_unread', '↩️ Mark as Unread')}
             </button>
             <button
               onClick={handleBulkDelete}
               disabled={bulkDeleting || bulkMarking}
               className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {bulkDeleting ? 'Deleting...' : '🗑️ Delete'}
+              {bulkDeleting ? t('notifications_working', 'Working...') : t('notifications_delete', '🗑️ Delete')}
             </button>
           </div>
         </div>
@@ -472,7 +475,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
               {notification.message_extra && (
                 <div className="bg-gray-100 rounded p-3 mb-2 border-l-4 border-blue-500">
                   <p className="text-sm text-gray-700 italic">
-                    <strong>Message:</strong> {notification.message_extra}
+                    <strong>{t('message', 'Message')}:</strong> {notification.message_extra}
                   </p>
                 </div>
               )}

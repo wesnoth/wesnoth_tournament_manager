@@ -5,8 +5,6 @@ import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
-console.log(`🔧 Registering notifications routes`);
-
 // Notifications are persisted and served over authenticated HTTP; this router
 // intentionally contains no WebSocket or push-transport integration.
 
@@ -30,8 +28,6 @@ router.get('/unread-count', authMiddleware, async (req: AuthRequest, res: Respon
     );
 
     const count = (result.rows && result.rows[0]) ? result.rows[0].count : 0;
-    console.log(`✅ Unread count for user ${userId}: ${count}`);
-
     res.json({
       success: true,
       unreadCount: count,
@@ -81,8 +77,6 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     const notifications = result.rows || [];
     const total = (countResult.rows && countResult.rows[0]) ? countResult.rows[0].total : 0;
 
-    console.log(`✅ Retrieved ${notifications.length}/${total} notifications for user ${userId}`);
-
     res.json({
       success: true,
       notifications,
@@ -119,8 +113,6 @@ router.get('/pending', authMiddleware, async (req: AuthRequest, res: Response) =
     );
 
     const notifications = result.rows || [];
-    console.log(`✅ Retrieved ${notifications.length} pending notifications for user ${userId}`);
-
     res.json({
       success: true,
       notifications,
@@ -152,8 +144,6 @@ router.get('/accepted', authMiddleware, async (req: AuthRequest, res: Response) 
     );
 
     const notifications = result.rows || [];
-    console.log(`✅ Retrieved ${notifications.length} accepted notifications for user ${userId}`);
-
     res.json({
       success: true,
       notifications,
@@ -196,8 +186,6 @@ router.post('/:notificationId/mark-read', authMiddleware, async (req: AuthReques
       'UPDATE user_notifications SET is_read = true WHERE id = ?',
       [notificationId]
     );
-
-    console.log(`✅ Marked notification ${notificationId} as read`);
 
     res.json({
       success: true,
@@ -242,8 +230,6 @@ router.post('/:notificationId/mark-unread', authMiddleware, async (req: AuthRequ
       [notificationId]
     );
 
-    console.log(`✅ Marked notification ${notificationId} as unread`);
-
     res.json({
       success: true,
       message: 'Notification marked as unread',
@@ -287,8 +273,6 @@ router.post('/:notificationId/delete', authMiddleware, async (req: AuthRequest, 
       [notificationId]
     );
 
-    console.log(`✅ Deleted notification ${notificationId}`);
-
     res.json({
       success: true,
       message: 'Notification deleted',
@@ -317,8 +301,6 @@ router.post('/mark-all-read', authMiddleware, async (req: AuthRequest, res: Resp
     );
 
     const affectedRows = (result as any).affectedRows || 0;
-    console.log(`✅ Marked ${affectedRows} notifications as read for user ${userId}`);
-
     res.json({
       success: true,
       message: `Marked ${affectedRows} notifications as read`,
@@ -347,8 +329,6 @@ router.post('/delete-all', authMiddleware, async (req: AuthRequest, res: Respons
     );
 
     const affectedRows = (result as any).affectedRows || 0;
-    console.log(`✅ Deleted ${affectedRows} notifications for user ${userId}`);
-
     res.json({
       success: true,
       message: `Deleted ${affectedRows} notifications`,

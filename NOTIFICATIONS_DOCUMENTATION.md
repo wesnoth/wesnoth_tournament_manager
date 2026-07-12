@@ -16,6 +16,15 @@ The application does not use Socket.IO or any other WebSocket notification chann
 | Full-page UI | `frontend/src/components/NotificationsList.tsx` | Fetch, filter, paginate, read, unread, and delete notifications. |
 | Navbar UI | `frontend/src/components/Navbar.tsx` | Poll unread count and show a recent pending-notification dropdown. |
 
+## User interfaces
+
+The authenticated notification experience has two entry points:
+
+- **Notification bell:** The global `Navbar` shows the persisted unread count as a badge. Opening the bell loads recent unread notifications, displays their message and timestamp, and provides a `View All` action to `/notifications` even when there are no recent items in the dropdown.
+- **My Notifications:** The authenticated `/notifications` page renders `NotificationsList`. It supports All, Pending, and Accepted views, page navigation for the full history, single or bulk read/unread changes, soft deletion, and contextual navigation. Challenge notifications link to `/events`; tournament notifications with both tournament and match identifiers link to the corresponding round match.
+
+The bell uses HTTP polling for the unread count because the application has no push channel. The full page remains the authoritative place for reading, filtering, and deleting notifications. UI actions only update local state after successful HTTP responses; partial bulk failures keep unsuccessful items selected and visible.
+
 ## Data flow
 
 1. A scheduling or challenge action changes application state.
@@ -24,6 +33,8 @@ The application does not use Socket.IO or any other WebSocket notification chann
 4. The full notification page retrieves notification data through the API.
 5. Users can mark notifications read/unread or soft-delete them.
 6. The scheduled cleanup job removes records older than the retention threshold.
+
+The navbar dropdown and full page use the same persisted records. The dropdown is intentionally limited to unread items and acts as a shortcut; it does not replace the full notification history.
 
 Discord publishing is an optional parallel side effect for relevant events. It does not replace database notifications and does not provide the in-app notification transport.
 

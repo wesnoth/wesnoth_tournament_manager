@@ -10,8 +10,11 @@ import { getHelpSlugFromPath } from '../utils/helpNavigation';
 interface NavbarNotification {
   id: string;
   type: string;
+  tournament_id?: string | null;
+  match_id?: string | null;
   title: string;
   message: string;
+  message_extra?: string | null;
   created_at: string;
   is_read: boolean;
 }
@@ -38,9 +41,7 @@ const Navbar: React.FC = () => {
   // Helper function to get translation safely
   const getTranslation = (key: string, fallback: string): string => {
     const result = t(key);
-    // If t() returns the key itself (untranslated), use fallback
     if (result === key) {
-      console.warn(`Translation key not found: ${key}, using fallback: ${fallback}`);
       return fallback;
     }
     return result || fallback;
@@ -170,16 +171,6 @@ const Navbar: React.FC = () => {
       return () => document.removeEventListener('click', handleClickOutside);
     }
   }, [dropdownOpen, languageDropdownOpen, notificationsDropdownOpen]);
-
-  // Debug: Log auth state on mount and when it changes
-  useEffect(() => {
-    console.log('=== Navbar Auth Debug ===');
-    console.log('isAuthenticated:', isAuthenticated);
-    console.log('isAdmin:', isAdmin);
-    console.log('token in localStorage:', localStorage.getItem('token'));
-    console.log('userId in localStorage:', localStorage.getItem('userId'));
-    console.log('================================');
-  }, [isAuthenticated, isAdmin]);
 
   const changeLanguage = (lang: string) => {
     i18n.changeLanguage(lang);
@@ -360,18 +351,16 @@ const Navbar: React.FC = () => {
                     )}
                   </div>
 
-                  {/* View All Link */}
-                  {recentNotifications.length > 0 && (
-                    <button
-                      onClick={() => {
-                        navigate('/notifications');
-                        setNotificationsDropdownOpen(false);
-                      }}
-                      className="w-full px-4 py-2 text-center text-blue-600 hover:bg-blue-50 border-t border-gray-200 text-sm font-semibold transition-colors"
-                    >
-                      {getTranslation('notifications_view_all', 'View All')}
-                    </button>
-                  )}
+                  {/* Always provide a route to the full notification history. */}
+                  <button
+                    onClick={() => {
+                      navigate('/notifications');
+                      setNotificationsDropdownOpen(false);
+                    }}
+                    className="w-full px-4 py-2 text-center text-blue-600 hover:bg-blue-50 border-t border-gray-200 text-sm font-semibold transition-colors"
+                  >
+                    {getTranslation('notifications_view_all', 'View All')}
+                  </button>
                 </div>,
                 document.body
               )}
