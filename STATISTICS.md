@@ -18,11 +18,11 @@ The balance statistics describe match outcomes by:
 
 The current aggregate table is used for live faction, map, and matchup views. The statistics page presents these views as faction balance, map balance, matchup analysis, and faction-versus-faction analysis.
 
-Balance-history snapshots are cumulative: a snapshot for a date includes eligible, non-cancelled matches recorded up to that date. The scheduled job creates the daily snapshot. Balance events provide before/after anchors, and the administrator maintenance action can clear and rebuild those anchors when historical data needs correction.
+Balance-history snapshots are cumulative: a snapshot for a date includes eligible, non-cancelled matches recorded up to that date. The scheduled job creates the daily snapshot. Balance-event comparisons derive non-overlapping before/after intervals by subtracting the cumulative snapshot at the previous event boundary from the current and next boundary snapshots.
 
 ## Balance events
 
-Administrators record buffs, nerfs, reworks, hotfixes, and general balance changes. Public statistics users can select an event to compare the cumulative snapshot immediately before and after it. If an older event has not yet been assigned snapshot markers, the system can temporarily use the legacy match-based calculation until the history is rebuilt.
+Administrators record buffs, nerfs, reworks, hotfixes, and general balance changes. Public statistics users can select an event to compare the interval since the previous event with the interval until the next event. The administrator maintenance action can clear and rebuild the event boundary snapshots when historical data needs correction.
 
 ## Player statistics
 

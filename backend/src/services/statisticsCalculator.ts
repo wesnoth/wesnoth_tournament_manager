@@ -376,6 +376,49 @@ export async function checkTeamMemberPositions(
 // BALANCE EVENT SNAPSHOTS
 // ============================================================================
 
+type BalanceEventBoundaryDates = {
+  eventDate: string;
+  previousEventDate: string | null;
+  nextBoundaryDate: string;
+};
+
+/** Resolve event-to-event snapshot boundaries using ranked matches as the data source. */
+async function getBalanceEventBoundaryDates(eventId: string): Promise<BalanceEventBoundaryDates> {
+  const eventsResult = await query(
+    `SELECT id, event_date
+     FROM balance_events
+     ORDER BY event_date ASC`
+  );
+  const eventIndex = eventsResult.rows.findIndex(row => row.id === eventId);
+  if (eventIndex < 0) throw new Error('Balance event not found');
+
+  const toDateString = (value: unknown): string => {
+    const date = value instanceof Date ? value : new Date(String(value));
+    return date.toISOString().split('T')[0];
+  };
+
+  const eventDate = toDateString(eventsResult.rows[eventIndex].event_date);
+  const previousEventDate = eventIndex > 0
+    ? toDateString(eventsResult.rows[eventIndex - 1].event_date)
+    : null;
+  let nextBoundaryDate = eventIndex + 1 < eventsResult.rows.length
+    ? toDateString(eventsResult.rows[eventIndex + 1].event_date)
+    : null;
+
+  if (!nextBoundaryDate) {
+    const latestMatchResult = await query(
+      `SELECT MAX(DATE(created_at)) AS latest_date
+       FROM matches
+       WHERE status != 'cancelled'`
+    );
+    nextBoundaryDate = latestMatchResult.rows[0]?.latest_date
+      ? toDateString(latestMatchResult.rows[0].latest_date)
+      : eventDate;
+  }
+
+  return { eventDate, previousEventDate, nextBoundaryDate };
+}
+
 /**
  * Create the cumulative snapshot immediately before a balance event.
  * The date is derived from the event, and the snapshot is rebuilt from all
@@ -385,19 +428,14 @@ export async function createBalanceEventBeforeSnapshot(
   eventId: string
 ): Promise<number> {
   try {
-    const eventResult = await query('SELECT event_date FROM balance_events WHERE id = ?', [eventId]);
-    if (eventResult.rows.length === 0) throw new Error('Balance event not found');
-
-    const beforeDate = new Date(eventResult.rows[0].event_date);
-    beforeDate.setUTCDate(beforeDate.getUTCDate() - 1);
-    const dateStr = beforeDate.toISOString().split('T')[0];
-    const snapshotResult = await createFactionMapStatisticsSnapshot(beforeDate);
+    const { eventDate } = await getBalanceEventBoundaryDates(eventId);
+    const snapshotResult = await createFactionMapStatisticsSnapshot(new Date(`${eventDate}T00:00:00Z`));
 
     await query(
       `UPDATE balance_events
        SET snapshot_before_date = ?
        WHERE id = ?`,
-      [dateStr, eventId]
+      [eventDate, eventId]
     );
 
     return snapshotResult.snapshots_created;
@@ -1198,28 +1236,15 @@ export async function createBalanceEventAfterSnapshot(
   eventId: string
 ): Promise<number> {
   try {
-    // Find the event
-    const eventResult = await query(
-      'SELECT event_date FROM balance_events WHERE id = ?',
-      [eventId]
-    );
-
-    if (eventResult.rows.length === 0) {
-      throw new Error('Balance event not found');
-    }
-
-    const eventDate = new Date(eventResult.rows[0].event_date);
-    const afterDate = new Date(eventDate);
-    afterDate.setUTCDate(afterDate.getUTCDate() + 1); // One day after
-    const dateStr = afterDate.toISOString().split('T')[0];
-    const snapshotResult = await createFactionMapStatisticsSnapshot(afterDate);
+    const { nextBoundaryDate } = await getBalanceEventBoundaryDates(eventId);
+    const snapshotResult = await createFactionMapStatisticsSnapshot(new Date(`${nextBoundaryDate}T00:00:00Z`));
 
     // Update balance_events to record snapshot date
     await query(
       `UPDATE balance_events
        SET snapshot_after_date = ?
        WHERE id = ?`,
-      [afterDate.toISOString().split('T')[0], eventId]
+      [nextBoundaryDate, eventId]
     );
 
     return snapshotResult.snapshots_created;
@@ -1461,6 +1486,138 @@ export async function getBalanceEventSnapshotImpact(
 }
 
 /**
+ * Compare the periods between consecutive balance events using cumulative
+ * snapshots. The current event day belongs to the before period; the next
+ * event day belongs to the after period of the previous event.
+ */
+export async function getBalanceEventIntervalImpact(
+  eventId: string
+): Promise<BalanceEventImpact[]> {
+  const boundaries = await getBalanceEventBoundaryDates(eventId);
+
+  type Aggregate = {
+    map_id: string;
+    map_name: string;
+    faction_id: string;
+    faction_name: string;
+    opponent_faction_id: string;
+    opponent_faction_name: string;
+    games: number;
+    wins: number;
+    losses: number;
+    side1_games: number;
+    side1_wins: number;
+    side2_games: number;
+    side2_wins: number;
+  };
+
+  const readSnapshot = async (date: string): Promise<Map<string, Aggregate>> => {
+    const result = await query(
+      `SELECT
+        gm.id AS map_id, gm.name AS map_name,
+        f1.id AS faction_id, f1.name AS faction_name,
+        f2.id AS opponent_faction_id, f2.name AS opponent_faction_name,
+        h.faction_side, h.total_games, h.wins, h.losses
+      FROM faction_map_statistics_history h
+      JOIN game_maps gm ON gm.id = h.map_id
+      JOIN factions f1 ON f1.id = h.faction_id
+      JOIN factions f2 ON f2.id = h.opponent_faction_id
+      WHERE h.snapshot_date = ?`,
+      [date]
+    );
+    const number = (value: unknown): number => Number(value) || 0;
+    const snapshots = new Map<string, Aggregate>();
+
+    for (const row of result.rows) {
+      const key = `${row.map_id}|${row.faction_id}|${row.opponent_faction_id}`;
+      const entry = snapshots.get(key) || {
+        map_id: row.map_id,
+        map_name: row.map_name,
+        faction_id: row.faction_id,
+        faction_name: row.faction_name,
+        opponent_faction_id: row.opponent_faction_id,
+        opponent_faction_name: row.opponent_faction_name,
+        games: 0, wins: 0, losses: 0,
+        side1_games: 0, side1_wins: 0,
+        side2_games: 0, side2_wins: 0,
+      };
+      const games = number(row.total_games);
+      const wins = number(row.wins);
+      const losses = number(row.losses);
+      entry.games += games;
+      entry.wins += wins;
+      entry.losses += losses;
+      if (Number(row.faction_side) === 1) {
+        entry.side1_games += games;
+        entry.side1_wins += wins;
+      } else if (Number(row.faction_side) === 2) {
+        entry.side2_games += games;
+        entry.side2_wins += wins;
+      }
+      snapshots.set(key, entry);
+    }
+    return snapshots;
+  };
+
+  const previous = boundaries.previousEventDate
+    ? await readSnapshot(boundaries.previousEventDate)
+    : new Map<string, Aggregate>();
+  const current = await readSnapshot(boundaries.eventDate);
+  const after = await readSnapshot(boundaries.nextBoundaryDate);
+  const keys = new Set([...previous.keys(), ...current.keys(), ...after.keys()]);
+  const rate = (wins: number, games: number) => games > 0 ? Math.round((wins / games) * 10000) / 100 : 0;
+  const result: BalanceEventImpact[] = [];
+
+  for (const key of keys) {
+    const currentEntry = current.get(key);
+    const previousEntry = previous.get(key);
+    const afterEntry = after.get(key);
+    const beforeGames = (currentEntry?.games || 0) - (previousEntry?.games || 0);
+    const beforeWins = (currentEntry?.wins || 0) - (previousEntry?.wins || 0);
+    const afterGames = (afterEntry?.games || 0) - (currentEntry?.games || 0);
+    const afterWins = (afterEntry?.wins || 0) - (currentEntry?.wins || 0);
+    if (beforeGames <= 0 && afterGames <= 0) continue;
+
+    const base = currentEntry || afterEntry || previousEntry!;
+    const beforeSide1Games = (currentEntry?.side1_games || 0) - (previousEntry?.side1_games || 0);
+    const beforeSide1Wins = (currentEntry?.side1_wins || 0) - (previousEntry?.side1_wins || 0);
+    const beforeSide2Games = (currentEntry?.side2_games || 0) - (previousEntry?.side2_games || 0);
+    const beforeSide2Wins = (currentEntry?.side2_wins || 0) - (previousEntry?.side2_wins || 0);
+    const afterSide1Games = (afterEntry?.side1_games || 0) - (currentEntry?.side1_games || 0);
+    const afterSide1Wins = (afterEntry?.side1_wins || 0) - (currentEntry?.side1_wins || 0);
+    const afterSide2Games = (afterEntry?.side2_games || 0) - (currentEntry?.side2_games || 0);
+    const afterSide2Wins = (afterEntry?.side2_wins || 0) - (currentEntry?.side2_wins || 0);
+    const beforeRate = rate(beforeWins, beforeGames);
+    const afterRate = rate(afterWins, afterGames);
+
+    result.push({
+      ...base,
+      games_before: beforeGames,
+      wins_before: beforeWins,
+      losses_before: beforeGames - beforeWins,
+      winrate_before: beforeRate,
+      side1_games_before: beforeSide1Games,
+      side1_wins_before: beforeSide1Wins,
+      side2_games_before: beforeSide2Games,
+      side2_wins_before: beforeSide2Wins,
+      games_after: afterGames,
+      wins_after: afterWins,
+      losses_after: afterGames - afterWins,
+      winrate_after: afterRate,
+      side1_games_after: afterSide1Games,
+      side1_wins_after: afterSide1Wins,
+      side2_games_after: afterSide2Games,
+      side2_wins_after: afterSide2Wins,
+      winrate_change: afterRate - beforeRate,
+      sample_size_before: beforeGames,
+      sample_size_after: afterGames,
+    });
+  }
+
+  return result;
+}
+
+/**
  * Recalculate balance event snapshots and impacts
  */
 export async function recalculateBalanceEventSnapshots(recreateAll: boolean = false): Promise<{
@@ -1639,6 +1796,7 @@ export default {
   createBalanceEventAfterSnapshot,
   getBalanceEventForwardImpact,
   getBalanceEventSnapshotImpact,
+  getBalanceEventIntervalImpact,
   recalculateBalanceEventSnapshots,
   recalculatePlayerEloSequential
 };

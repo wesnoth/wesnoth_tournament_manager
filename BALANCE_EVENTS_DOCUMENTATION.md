@@ -6,10 +6,12 @@ Balance events record changes to the game balance, such as buffs, nerfs, reworks
 
 - The scheduled statistics job creates the daily cumulative snapshot used by trend and impact views.
 - A snapshot represents all eligible, non-cancelled matches recorded up to its snapshot date.
-- The admin recalculation action is a maintenance operation. It clears the balance-event snapshot markers and historical snapshot table, then rebuilds the complete history from the recorded matches and balance events.
+- The admin recalculation action is a maintenance operation. It clears the balance-event snapshot markers and historical snapshot table, then rebuilds the event boundary snapshots from the recorded matches and balance events.
 - Creating or editing an event does not expose arbitrary snapshot generation to regular users.
 
 Balance-event write endpoints and the full-history recalculation endpoint require an authenticated administrator. Read-only event and statistics endpoints remain public where listed in `API_ENDPOINTS.md`.
+
+For an event comparison, the before period is the interval after the previous event through the current event date. The after period is the interval after the current event through the next event date, or through the latest available match when there is no later event. The UI derives these periods by subtracting cumulative snapshots.
 
 No forum database tables are written by this feature. The snapshot rebuild reads the application match, faction, and map data and stores derived rows in `faction_map_statistics_history`.
 

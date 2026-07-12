@@ -170,7 +170,7 @@
 - `[GET] /api/statistics/history/events` — Public — query: `factionId, mapId, eventType, limit, offset` — Balance events list.
 - `[POST] /api/statistics/history/events` — Private (admin) — body: event data — Create balance event.
 - `[PUT] /api/statistics/history/events/:eventId` — Private (admin) — body: event data — Update balance event.
-- `[GET] /api/statistics/history/events/:eventId/impact` — Public — Impact analysis for a balance event.
+- `[GET] /api/statistics/history/events/:eventId/impact` — Public — Impact analysis for the non-overlapping interval before and after a balance event.
 - `[GET] /api/statistics/history/trend` — Public — query: `mapId, factionId, opponentFactionId, dateFrom, dateTo` — Win rate trend.
 - `[GET] /api/statistics/history/snapshot` — Public — query: `date, minGames` — Historical statistics snapshot.
 - `[POST] /api/statistics/history/snapshot` — Private (admin) — Create or backfill one cumulative snapshot date for historical correction.

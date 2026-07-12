@@ -6,6 +6,7 @@ import { getUserIP, getUserAgent, logAuditEvent } from '../middleware/audit.js';
 import {
   getBalanceTrend,
   getBalanceEventSnapshotImpact,
+  getBalanceEventIntervalImpact,
   createFactionMapStatisticsSnapshot,
 } from '../services/statisticsCalculator.js';
 import {
@@ -411,7 +412,7 @@ router.get('/history/events/:eventId/impact', async (req, res) => {
       return res.status(404).json({ error: 'Balance event not found' });
     }
 
-    const impactRows = await getBalanceEventSnapshotImpact(eventId);
+    const impactRows = await getBalanceEventIntervalImpact(eventId);
     res.json(impactRows);
   } catch (error) {
     console.error('Error fetching event impact:', error);
