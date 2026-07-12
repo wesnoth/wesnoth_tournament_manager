@@ -20,7 +20,7 @@ const CONTEXTUAL_HELP_ROUTES: Record<string, string> = {
   '/my-matches': 'my-matches',
   '/my-stats': 'my-stats',
   '/faq': 'faq',
-  '/admin/audit': 'admin',
+  '/admin/audit': 'admin-audit',
 };
 
 export const getHelpSlugFromPath = (pathname: string): string => {

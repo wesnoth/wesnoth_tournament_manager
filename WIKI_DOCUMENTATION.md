@@ -8,7 +8,7 @@ Authenticated and anonymous users can browse published articles through `/help` 
 
 The Help/Wiki article collection is the canonical user-facing documentation for the application. The legacy `User_Manual_en.md` document has been retired; new workflows and product guidance belong in published Wiki articles, with localized translations where appropriate.
 
-The `/help` landing page always opens the `getting-started` article. The global Help control uses an explicit route-to-article map for stable public sections and falls back to `getting-started` for private, administrative, or otherwise undocumented routes. A missing contextual article is also redirected to that landing article, so broad route prefixes such as `/admin` cannot accidentally select an unrelated article.
+The `/help` landing page always opens the `getting-started` article. The global Help control uses an explicit route-to-article map for stable public sections and falls back to `getting-started` for private, administrative, or otherwise undocumented routes. The documented audit page maps `/admin/audit` to the `admin-audit` article. A missing contextual article is also redirected to that landing article, so broad route prefixes such as `/admin` cannot accidentally select an unrelated article.
 
 When the requested language is unavailable, the backend returns the English translation. The response includes the language actually returned so the UI does not claim to display a translation that does not exist.
 
