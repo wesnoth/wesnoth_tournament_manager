@@ -249,28 +249,37 @@ const MatchupBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ be
                     <td className="px-4 py-3 text-center">
                       <div className="flex flex-col gap-0.5">
                         <span className="font-semibold text-gray-800">{item.after?.games ?? '—'}</span>
-                        {item.before && <span className="text-xs text-gray-400">{item.before.games}</span>}
+                        <span className="text-xs text-gray-400">{item.before?.games ?? '—'}</span>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center bg-amber-50">
                       <div className="flex flex-col gap-0.5">
-                        {item.after  && <span className={`font-semibold text-sm ${wrColor(item.after.side1_winrate)}`}>{item.after.side1_winrate.toFixed(1)}%</span>}
-                        {item.before && <span className={`text-xs ${wrColor(item.before.side1_winrate)}`}>{item.before.side1_winrate.toFixed(1)}%</span>}
-                        {!item.after && <span className="text-gray-400">—</span>}
+                        <span className={`font-semibold text-sm ${item.after ? wrColor(item.after.side1_winrate) : 'text-gray-400'}`}>
+                          {item.after ? `${item.after.side1_winrate.toFixed(1)}%` : '—'}
+                        </span>
+                        <span className={`text-xs ${item.before ? wrColor(item.before.side1_winrate) : 'text-gray-400'}`}>
+                          {item.before ? `${item.before.side1_winrate.toFixed(1)}%` : '—'}
+                        </span>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center bg-purple-50">
                       <div className="flex flex-col gap-0.5">
-                        {item.after  && <span className={`font-semibold text-sm ${wrColor(100 - item.after.side1_winrate)}`}>{(100 - item.after.side1_winrate).toFixed(1)}%</span>}
-                        {item.before && <span className={`text-xs ${wrColor(100 - item.before.side1_winrate)}`}>{(100 - item.before.side1_winrate).toFixed(1)}%</span>}
-                        {!item.after && <span className="text-gray-400">—</span>}
+                        <span className={`font-semibold text-sm ${item.after ? wrColor(100 - item.after.side1_winrate) : 'text-gray-400'}`}>
+                          {item.after ? `${(100 - item.after.side1_winrate).toFixed(1)}%` : '—'}
+                        </span>
+                        <span className={`text-xs ${item.before ? wrColor(100 - item.before.side1_winrate) : 'text-gray-400'}`}>
+                          {item.before ? `${(100 - item.before.side1_winrate).toFixed(1)}%` : '—'}
+                        </span>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex flex-col gap-0.5">
-                        {item.after  && <span className={`px-2 py-0.5 rounded text-sm font-semibold ${getImbalanceColor(item.after.imbalance)}`}>{item.after.imbalance.toFixed(1)}%</span>}
-                        {item.before && <span className={`px-2 py-0.5 rounded text-xs font-semibold ${getImbalanceColor(item.before.imbalance)}`}>{item.before.imbalance.toFixed(1)}%</span>}
-                        {!item.after && <span className="text-gray-400">—</span>}
+                        <span className={`px-2 py-0.5 rounded text-sm font-semibold ${item.after ? getImbalanceColor(item.after.imbalance) : 'text-gray-400'}`}>
+                          {item.after ? `${item.after.imbalance.toFixed(1)}%` : '—'}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${item.before ? getImbalanceColor(item.before.imbalance) : 'text-gray-400'}`}>
+                          {item.before ? `${item.before.imbalance.toFixed(1)}%` : '—'}
+                        </span>
                       </div>
                     </td>
                   </tr>
