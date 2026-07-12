@@ -115,12 +115,6 @@
   },
   {
     "schema": "public",
-    "table_name": "faq",
-    "row_count": 7,
-    "migrate": true
-  },
-  {
-    "schema": "public",
     "table_name": "password_history",
     "row_count": 4,
     "migrate": true

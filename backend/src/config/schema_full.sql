@@ -30,18 +30,6 @@ CREATE TABLE IF NOT EXISTS factions (
   PRIMARY KEY (id)
 );
 
--- faq table
-CREATE TABLE IF NOT EXISTS faq (
-  id uuid DEFAULT gen_random_uuid() NOT NULL,
-  question character varying(500) NOT NULL,
-  answer text NOT NULL,
-  translations jsonb DEFAULT '{"de": {}, "en": {}, "es": {}, "zh": {}}'::jsonb,
-  created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-  language_code character varying(10) DEFAULT 'en'::character varying,
-  PRIMARY KEY (id)
-);
-
 -- game_maps table
 CREATE TABLE IF NOT EXISTS game_maps (
   id uuid DEFAULT gen_random_uuid() NOT NULL,

@@ -64,7 +64,7 @@ router.get('/users/all', authMiddleware, async (req: AuthRequest, res) => {
   }
 });
 
-// Block user (duplicate removed — canonical endpoint below, after FAQ)
+// Block user (canonical endpoint)
 
 router.post('/users/:id/unlock', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
   try {

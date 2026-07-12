@@ -178,26 +178,6 @@ CREATE TABLE `factions` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `faq`
---
-
-DROP TABLE IF EXISTS `faq`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
-CREATE TABLE `faq` (
-  `id` char(36) NOT NULL,
-  `question` varchar(500) NOT NULL,
-  `answer` text NOT NULL,
-  `translations` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT '{"de": {}, "en": {}, "es": {}, "zh": {}}' CHECK (json_valid(`translations`)),
-  `created_at` datetime DEFAULT current_timestamp(),
-  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  `language_code` varchar(10) DEFAULT 'en',
-  `order` int(11) DEFAULT 0,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
 -- Table structure for table `game_maps`
 --
 

@@ -90,21 +90,6 @@ export interface News {
   updated_at: Date;
 }
 
-export interface FAQ {
-  id: string;
-  question: string;
-  answer: string;
-  translations: {
-    en: { question: string; answer: string };
-    es: { question: string; answer: string };
-    zh: { question: string; answer: string };
-    de: { question: string; answer: string };
-    ru: { question: string; answer: string };
-  };
-  created_at: Date;
-  updated_at: Date;
-}
-
 export interface Faction {
   id: string;
   name: string;

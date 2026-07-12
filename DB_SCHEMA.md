@@ -814,23 +814,6 @@ Site news articles with multi-language support.
 
 ---
 
-### `faq`
-
-FAQ entries with multi-language support.
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | char(36) PK | UUID |
-| `question` | varchar(500) | Default question text |
-| `answer` | text | Default answer text |
-| `translations` | JSON | Translations keyed by language code |
-| `language_code` | varchar(10) | Primary language |
-| `order` | int | Display order |
-| `created_at` | datetime | |
-| `updated_at` | datetime | |
-
----
-
 ### `player_of_month`
 
 Monthly player recognition records.
@@ -983,7 +966,7 @@ User confirmations of proposed schedules. Records agreement to the schedule prop
 
 ### `wiki_articles`
 
-Help system articles with multi-language support (JSON translations model, aligned with FAQ/News).
+Help system articles with multi-language support (JSON translations model). The public FAQ is the Wiki article with slug `faq`.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -1048,6 +1031,7 @@ Junction table linking wiki articles to images (N:M relationship).
 - All tables use `utf8mb4` / `utf8mb4_general_ci` unless noted otherwise.
 
 ### Multi-language content
-- `news` and `faq` use a `translations` JSON column: `{"en": {"title": "...", "content": "..."}, "es": {...}, "de": {...}, "zh": {...}}`.
+- `news` uses a `translations` JSON column: `{"en": {"title": "...", "content": "..."}, "es": {...}, "de": {...}, "zh": {...}}`.
+- Wiki articles, including the FAQ, use the `wiki_articles.translations` JSON column with `content_markdown`.
 - Map and faction translations use dedicated `map_translations` / `faction_translations` tables.
 - UI language preference is stored in `users_extension.language`.
