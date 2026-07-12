@@ -11,46 +11,43 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const router = Router();
 
-// Serve wiki images with proper content-type
-// This is a fallback in case /uploads/wiki is not served correctly by the reverse proxy
+// Serve wiki images with proper content-type as a fallback for reverse proxies.
 router.get('/wiki/images/:filename', (req, res) => {
   try {
     const filename = req.params.filename;
-    
-    // Security: prevent directory traversal
-    if (filename.includes('..') || filename.includes('/')) {
+
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(filename) || filename.includes('..')) {
       return res.status(400).json({ error: 'Invalid filename' });
     }
-    
+
     const filePath = path.join(__dirname, '..', '..', 'uploads', 'wiki', filename);
-    console.log(`[WIKI-IMAGE] Request: ${filename}, Full path: ${filePath}`);
-    
-    // Check if file exists
+
     if (!fs.existsSync(filePath)) {
-      console.log(`[WIKI-IMAGE] File not found: ${filePath}`);
       return res.status(404).json({ error: 'Image not found' });
     }
-    
-    // Determine content type based on extension
+
     const ext = path.extname(filename).toLowerCase();
+    if (!['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
+      return res.status(400).json({ error: 'Unsupported image format' });
+    }
+
     let contentType = 'image/png';
     if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
     else if (ext === '.gif') contentType = 'image/gif';
     else if (ext === '.webp') contentType = 'image/webp';
     
-    console.log(`[WIKI-IMAGE] Serving ${filename} with Content-Type: ${contentType}`);
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'public, max-age=86400');
     
     const fileStream = fs.createReadStream(filePath);
     fileStream.on('error', (err) => {
-      console.error(`[WIKI-IMAGE] Stream error for ${filename}:`, err);
+      console.error(`Wiki image stream error for ${filename}:`, err);
       res.status(500).json({ error: 'Error reading file' });
     });
     
     fileStream.pipe(res);
   } catch (error) {
-    console.error('[WIKI-IMAGE] Error:', error);
+    console.error('Error serving wiki image:', error);
     res.status(500).json({ error: 'Failed to serve image' });
   }
 });

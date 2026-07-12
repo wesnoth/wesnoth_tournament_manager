@@ -62,11 +62,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Serve uploaded files (replays, wiki images)
 const uploadsPath = path.join(__dirname, '..', 'uploads');
-app.use('/uploads', (req, res, next) => {
-  console.log(`[UPLOADS] GET ${req.path} → Full path: ${path.join(uploadsPath, req.path)}`);
-  next();
-}, express.static(uploadsPath));
-console.log(`📁 Serving uploads from: ${uploadsPath}`);
+app.use('/uploads', express.static(uploadsPath));
 
 // Apply general rate limiting to all API routes (except specific endpoints with stricter limits)
 app.use('/api/', generalLimiter);

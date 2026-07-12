@@ -230,8 +230,8 @@ export const updateArticle = async (slug: string, params: UpdateArticleParams): 
     }
 
     // Ensure English translation exists
-    if (!updatedTranslations.en || !updatedTranslations.en.title) {
-      throw new Error('English (en) translation with title is required');
+    if (!updatedTranslations.en?.title?.trim() || !updatedTranslations.en.content_markdown?.trim()) {
+      throw new Error('English (en) translation with title and content is required');
     }
 
     // Update article

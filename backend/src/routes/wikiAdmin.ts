@@ -15,7 +15,10 @@ import * as wikiAdminService from '../services/wikiAdminService.js';
 import * as wikiExportImportService from '../services/wikiExportImportService.js';
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
 
 /**
  * ==================== IMAGE ROUTES (specific - come first!) ====================

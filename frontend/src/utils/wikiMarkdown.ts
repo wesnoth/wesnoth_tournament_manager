@@ -65,7 +65,10 @@ export function renderWikiMarkdown(markdown: string): RenderedWikiMarkdown {
       .replace(/<li>(\s*)<p>/g, '<li class="text-gray-700">$1')
       .replace(/<\/p>(\s*)<\/li>/g, '$1</li>')
       .replace(/<li>(?!.*class)/g, '<li class="text-gray-700">')
-      .replace(/<a /g, '<a class="text-blue-600 underline hover:text-blue-800 hover:no-underline transition-colors" ')
+      .replace(/<a([^>]*)>/g, (_match, attributes) => {
+        const rel = /\brel\s*=/.test(attributes) ? '' : ' rel="noopener noreferrer"';
+        return `<a${attributes}${rel} class="text-blue-600 underline hover:text-blue-800 hover:no-underline transition-colors">`;
+      })
       .replace(/<img src="\/uploads\/wiki\//g, '<img src="' + (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api') + '/public/wiki/images/')
       .replace(/<img /g, '<img class="max-w-full h-auto rounded-lg my-2 block" ');
 

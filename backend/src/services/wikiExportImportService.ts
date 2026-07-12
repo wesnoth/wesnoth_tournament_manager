@@ -89,7 +89,7 @@ async function readImageFromDisk(filename: string): Promise<Buffer | null> {
     const realpath = await fs.realpath(filepath);
     const realUploadDir = await fs.realpath(uploadDir);
 
-    if (!realpath.startsWith(realUploadDir)) {
+    if (!realpath.startsWith(`${realUploadDir}${path.sep}`)) {
       console.warn(`Security: attempted to read file outside upload directory: ${filename}`);
       return null;
     }
@@ -300,6 +300,27 @@ export async function importArticle(
     // Validate slug
     if (!/^[a-z0-9_-]+$/.test(slug)) {
       throw new Error('Invalid slug format');
+    }
+
+    if (!Array.isArray(articles) || articles.length === 0) {
+      throw new Error('No valid language translations found in import');
+    }
+
+    // Validate all translation metadata before writing images or database rows.
+    // Invalid ZIPs must not leave uploaded files orphaned on disk.
+    const languages = new Set<string>();
+    for (const article of articles) {
+      if (!/^[a-z]{2,5}$/.test(article.language || '') || languages.has(article.language)) {
+        throw new Error('Invalid or duplicate language translation in import');
+      }
+      if (!article.title?.trim() || !article.content?.trim()) {
+        throw new Error(`Translation for language "${article.language}" must have title and content`);
+      }
+      languages.add(article.language);
+    }
+
+    if (!articles.some(article => article.language === 'en')) {
+      throw new Error('English (en) translation with title and content is required');
     }
 
     // Check if article exists

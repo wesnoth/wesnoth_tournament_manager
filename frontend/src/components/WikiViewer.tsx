@@ -1,8 +1,3 @@
-/**
- * WikiViewer Component
- * Displays wiki articles with Markdown rendering and HTML sanitization
- */
-
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -36,7 +31,6 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Use provided language, fallback to i18n language, then to 'en'
   const language = languageProp || i18n.language || 'en';
 
   useEffect(() => {
@@ -59,8 +53,8 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
 
         if (!response.ok) {
           if (response.status === 404) {
-            // Help links are derived from page names, so missing articles must use
-            // the stable getting-started article instead of leaving the user at an error page.
+            // Contextual links may target unpublished or not-yet-created articles.
+            // Redirect those links to the stable landing article instead of exposing an error page.
             if (slug !== 'getting-started') {
               navigate('/help/getting-started', { replace: true });
             } else {
@@ -122,7 +116,6 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
 
   return (
     <article className="wiki-viewer max-w-4xl mx-auto py-8">
-      {/* Header */}
       <header className="mb-8 pb-6 border-b border-gray-200">
         <h1 className="text-4xl font-bold text-gray-900 mb-2">{article.title}</h1>
         <div className="flex gap-4 text-sm text-gray-600">
@@ -130,12 +123,11 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
             {t('common.language')}: <span className="font-semibold uppercase">{article.language}</span>
           </span>
           <span>
-            {t('common.updated')}: <span className="font-semibold">{new Date(article.updated_at).toLocaleDateString()}</span>
+            {t('common.updated')}: <span className="font-semibold">{new Date(article.updated_at).toLocaleDateString(language)}</span>
           </span>
         </div>
       </header>
 
-      {/* Table of Contents */}
       {headings.length > 0 && (
         <nav className="mb-8 p-4 bg-gray-50 rounded-lg border border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('common.table_of_contents')}</h2>
@@ -154,7 +146,6 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
         </nav>
       )}
 
-      {/* Content */}
       <div
         className="wiki-content prose prose-sm max-w-none
           prose-headings:font-bold prose-headings:text-gray-900
@@ -173,9 +164,8 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
         dangerouslySetInnerHTML={{ __html: htmlContent }}
       />
 
-      {/* Footer */}
       <footer className="mt-12 pt-6 border-t border-gray-200 text-sm text-gray-600">
-        <p>{t('common.last_updated')}: {new Date(article.updated_at).toLocaleString()}</p>
+        <p>{t('common.last_updated')}: {new Date(article.updated_at).toLocaleString(language)}</p>
       </footer>
     </article>
   );

@@ -1,8 +1,3 @@
-/**
- * Help/Wiki Page
- * Displays wiki articles with navigation
- */
-
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -26,7 +21,6 @@ const HelpPage: React.FC = () => {
   const [errorList, setErrorList] = useState<string | null>(null);
   const [viewerLoading, setViewerLoading] = useState(false);
 
-  // Load articles list for navigation
   useEffect(() => {
     const fetchArticlesList = async () => {
       setLoadingList(true);
@@ -46,7 +40,6 @@ const HelpPage: React.FC = () => {
         }
       } catch (err) {
         setErrorList('Error loading articles list');
-        console.error(err);
       } finally {
         setLoadingList(false);
       }
@@ -55,21 +48,19 @@ const HelpPage: React.FC = () => {
     fetchArticlesList();
   }, [language]);
 
-  // Default to first article if no slug provided
-  const displaySlug = slug || (articles.length > 0 ? articles[0].slug : null);
+  // Keep the landing page stable even if article ordering changes in the database.
+  const displaySlug = slug || 'getting-started';
 
   return (
     <MainLayout>
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 py-8">
-          {/* Header */}
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-gray-900 mb-2">{t('common.help')}</h1>
             <p className="text-gray-600">{t('common.help_description')}</p>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            {/* Sidebar Navigation */}
             <aside className="lg:col-span-1">
               <div className="sticky top-20 bg-white rounded-lg border border-gray-200 shadow-sm">
                 <div className="p-4 border-b border-gray-200">
@@ -106,7 +97,6 @@ const HelpPage: React.FC = () => {
               </div>
             </aside>
 
-            {/* Main Content */}
             <main className="lg:col-span-3">
               {viewerLoading && !displaySlug ? (
                 <div className="flex justify-center items-center py-20">
@@ -117,7 +107,6 @@ const HelpPage: React.FC = () => {
                   slug={displaySlug}
                   language={language}
                   isLoading={setViewerLoading}
-                  onError={(error) => console.error(error)}
                 />
               ) : (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
