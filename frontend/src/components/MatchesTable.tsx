@@ -6,8 +6,6 @@ import StarDisplay from './StarDisplay';
 import ReplayConfirmationModal from './ReplayConfirmationModal';
 import { useAuthStore } from '../store/authStore';
 
-// Get API URL for direct backend calls
-
 interface MatchesTableProps {
   matches: any[];
   currentPlayerId?: string;
@@ -85,7 +83,6 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
     setSelectedReplay(match);
     setModalChoice(winner_choice);
     setShowConfirmationModal(true);
-    console.log(`🎯 Opening confirmation modal for replay ${match.id}: "${winner_choice}"`);
   };
 
   const handleReplayReportSuccess = () => {
@@ -201,7 +198,11 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
               const player2Name = match.loser_nickname || 'Player 2';
               const side1 = match.winner_side || 1;
               const side2 = match.loser_side || 2;
-              const date = new Date(match.created_at).toLocaleDateString();
+              const date = new Date(match.created_at).toLocaleDateString(undefined, {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+              });
               const isDueReplay = match.source_type === 'replay_confidence_1_due';
                
               // Determine opponent for logged-in user (for correct tooltip display)
@@ -326,15 +327,19 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                         </>
                       ) : null}
                       <div className={`mt-2 pt-2 ${isDueReplay ? 'border-t border-red-200' : 'border-t border-yellow-200'}`}>
-                        <a
-                          href={match.replay_url || match.replay_file_path || '#'}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-block px-3 py-1 rounded text-xs font-semibold bg-blue-500 text-white hover:bg-blue-600 transition"
-                          title={t('replay_download')}
-                        >
-                          {t('replay_download')}
-                        </a>
+                        {(match.replay_url || match.replay_file_path) ? (
+                          <a
+                            href={match.replay_url || match.replay_file_path}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-block px-3 py-1 rounded text-xs font-semibold bg-blue-500 text-white hover:bg-blue-600 transition"
+                            title={t('replay_download')}
+                          >
+                            {t('replay_download')}
+                          </a>
+                        ) : (
+                          <span className="text-xs text-gray-500">{t('no_replay')}</span>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -350,7 +355,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
 
             return (
               <tr key={match.id} className={`border-b ${matchRowBorderColor} ${matchRowHoverColor} ${matchRowBgColor}`}>
-              <td className="px-4 py-3 text-sm text-gray-700">{new Date(match.created_at).toLocaleDateString()}</td>
+              <td className="px-4 py-3 text-sm text-gray-700">{new Date(match.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</td>
 
               <td className="px-4 py-3 text-sm">
                 <div className="space-y-2">
@@ -490,10 +495,6 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                     <button
                       className="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition"
                       onClick={() => {
-                        if (import.meta.env.VITE_DEBUG_LOGS === 'true') {
-                          console.log('Details button clicked for match:', match);
-                          console.log('onViewDetails prop exists:', !!onViewDetails);
-                        }
                         if (onViewDetails) {
                           onViewDetails(match);
                         }

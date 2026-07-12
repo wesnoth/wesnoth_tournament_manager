@@ -648,7 +648,8 @@ router.get('/players', async (req, res) => {
 // Get all confirmed matches (public endpoint)
 router.get('/matches', async (req, res) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
+    const requestedPage = parseInt(req.query.page as string, 10);
+    const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
     const pageSize = 20;
     const offset = (page - 1) * pageSize;
 
@@ -658,8 +659,6 @@ router.get('/matches', async (req, res) => {
     const status = req.query.status ? (req.query.status as string).trim() : null;
     const confirmed = req.query.confirmed ? (req.query.confirmed as string).trim() : null;
     const faction = req.query.faction ? (req.query.faction as string).trim() : null;
-
-    console.log('🔍 GET /api/public/matches - Filters received:', { player, map, status, confirmed, faction });
 
     // Build WHERE conditions
     const whereConditions: string[] = [];
@@ -688,7 +687,6 @@ router.get('/matches', async (req, res) => {
     }
 
     if (faction) {
-      console.log('🔍 Faction filter applied:', faction);
       whereConditions.push(`(m.winner_faction = ? OR m.loser_faction = ?)`);
       params.push(faction);
       params.push(faction);
@@ -723,8 +721,6 @@ router.get('/matches', async (req, res) => {
 
     const result = await query(dataQuery, params);
 
-    console.log('All matches query result:', result.rows.length, 'rows found');
-
     // Get current user info from token if authenticated
     let currentUserNickname = '';
     let currentUserIsAdmin = false;
@@ -742,11 +738,9 @@ router.get('/matches', async (req, res) => {
           if (userResult.rows.length > 0) {
             currentUserNickname = userResult.rows[0].nickname?.toLowerCase() || '';
             currentUserIsAdmin = !!(userResult.rows[0].is_admin);
-            console.log(`✅ [PUBLIC/MATCHES] Authenticated user: ${userResult.rows[0].nickname} isAdmin=${currentUserIsAdmin}`);
           }
         }
       } catch (tokenError) {
-        console.log(`⚠️ [PUBLIC/MATCHES] Token parsing failed (non-authenticated request)`);
       }
     }
 
@@ -773,8 +767,6 @@ router.get('/matches', async (req, res) => {
         ORDER BY r.created_at DESC`
       );
 
-      console.log(`📋 [PUBLIC/MATCHES] Found ${replayResult.rows?.length || 0} confidence=1 replays`);
-
       for (const r of replayResult.rows) {
         try {
           const parseSummary = typeof r.parse_summary === 'string' 
@@ -792,16 +784,28 @@ router.get('/matches', async (req, res) => {
             : false;
 
           // Extract map - USE resolvedMap from parse_summary
-          const map = parseSummary.resolvedMap 
+          const replayMap = parseSummary.resolvedMap
             || parseSummary.parsedMap 
             || parseSummary.map 
             || parseSummary.forumMap 
             || parseSummary.scenario
             || 'Unknown Map';
-
-          // Extract factions - look up by player name → side_number → resolvedFactions
-          // This ensures correct faction assignment regardless of who won/lost
           const resolvedFactions = parseSummary.resolvedFactions || {};
+
+          // Pending replays are merged with ranked matches below, so apply the same
+          // public filters here before they affect the combined pagination.
+          const normalizedPlayer = player?.toLowerCase() || '';
+          const normalizedMap = String(replayMap).toLowerCase();
+          const replayPlayers = [player1Name, player2Name];
+          const replayFactions = Object.values(resolvedFactions).map((value) => String(value).toLowerCase());
+          const matchesPlayer = !normalizedPlayer || replayPlayers.some((name) => name.includes(normalizedPlayer));
+          const matchesMap = !map || normalizedMap.includes(map.toLowerCase());
+          const matchesStatus = !status || status === 'unconfirmed' || status === 'pending_report';
+          const matchesConfirmation = !confirmed || confirmed.toLowerCase() === 'false' || confirmed === '0';
+          const matchesFaction = !faction || replayFactions.includes(faction.toLowerCase());
+          if (!matchesPlayer || !matchesMap || !matchesStatus || !matchesConfirmation || !matchesFaction) {
+            continue;
+          }
 
           const winnerName = parseSummary.replayVictory?.winner_name || players[0]?.user_name || 'Unknown';
           const loserName  = parseSummary.replayVictory?.loser_name  || players[1]?.user_name || 'Unknown';
@@ -824,7 +828,7 @@ router.get('/matches', async (req, res) => {
             loser_faction: loser_faction,
             winner_side: winner_side,
             loser_side: loser_side,
-            map: map,
+            map: replayMap,
             status: 'pending_report',
             winner_elo_before: null,
             winner_elo_after: null,
@@ -852,7 +856,6 @@ router.get('/matches', async (req, res) => {
             is_participant: isInvolved
           };
 
-          console.log(`📋 [REPLAY] ${replayData.winner_nickname} (${winner_faction}) vs ${replayData.loser_nickname} (${loser_faction}) on ${map}`);
           formattedReplays.push(replayData);
         } catch (formatError) {
           console.error('Error formatting replay:', formatError);
