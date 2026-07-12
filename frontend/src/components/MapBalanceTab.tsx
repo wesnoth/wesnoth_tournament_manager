@@ -254,6 +254,7 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
                 <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('factions_used') || 'Factions'}</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('winrate_range') || 'WR Range'}</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('imbalance') || 'Imbalance'}</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('change') || 'Change'}</th>
               </tr>
             </thead>
             <tbody>
@@ -305,6 +306,20 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
                       </span>
                     </div>
                   </td>
+                  <td className="px-4 py-3">
+                    {item.before && item.after ? (() => {
+                      const change = item.after.avg_imbalance - item.before.avg_imbalance;
+                      return (
+                        <span className={`px-2 py-0.5 rounded font-semibold text-sm ${
+                          change < -2 ? 'bg-green-100 text-green-700' :
+                          change > 2 ? 'bg-red-100 text-red-700' :
+                          'bg-gray-100 text-gray-600'
+                        }`}>
+                          {change > 0 ? '+' : ''}{change.toFixed(1)}%
+                        </span>
+                      );
+                    })() : <span className="text-gray-400">—</span>}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -331,6 +346,7 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
               <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('factions_used') || 'Factions'}</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('winrate_range') || 'WR Range'}</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('imbalance') || 'Imbalance'}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('change') || 'Change'}</th>
             </tr>
           </thead>
           <tbody>
@@ -349,6 +365,7 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
                     {stat.avg_imbalance.toFixed(1)}%
                   </span>
                 </td>
+                <td className="px-4 py-3 text-gray-400">—</td>
               </tr>
             ))}
           </tbody>

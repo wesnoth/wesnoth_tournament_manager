@@ -224,6 +224,7 @@ const FactionVsFactionTab: React.FC<{ beforeData?: any[] | null; afterData?: any
         <th className="px-4 py-3 text-center font-semibold text-amber-700 bg-amber-50">{t('side_1_wr') || 'S1 WR'}</th>
         <th className="px-4 py-3 text-center font-semibold text-purple-700 bg-purple-50">{t('side_2_wr') || 'S2 WR'}</th>
         <th className="px-4 py-3 text-center font-semibold text-gray-800">{t('imbalance') || 'Imbalance'}</th>
+        <th className="px-4 py-3 text-center font-semibold text-gray-800">{t('change') || 'Change'}</th>
       </tr>
     </thead>
   );
@@ -312,6 +313,20 @@ const FactionVsFactionTab: React.FC<{ beforeData?: any[] | null; afterData?: any
                           {item.before ? `${item.before.imbalance.toFixed(1)}%` : '—'}
                         </span>
                       </div>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {item.before && item.after ? (() => {
+                        const change = item.after.side1_winrate - item.before.side1_winrate;
+                        return (
+                          <span className={`px-2 py-0.5 rounded font-semibold text-sm ${
+                            change > 2 ? 'bg-green-100 text-green-700' :
+                            change < -2 ? 'bg-red-100 text-red-700' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>
+                            {change > 0 ? '+' : ''}{change.toFixed(1)}%
+                          </span>
+                        );
+                      })() : <span className="text-gray-400">—</span>}
                     </td>
                   </tr>
                 );
