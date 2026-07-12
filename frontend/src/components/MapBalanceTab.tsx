@@ -252,8 +252,8 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
                 <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('map') || 'Map'}</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('total_games') || 'Games'}</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('factions_used') || 'Factions'}</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('imbalance') || 'Imbalance'}</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('winrate_range') || 'WR Range'}</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('imbalance') || 'Imbalance'}</th>
               </tr>
             </thead>
             <tbody>
@@ -278,10 +278,20 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
                     </div>
                   </td>
                   <td className="px-4 py-3">
+                    <div className="flex flex-col gap-2 text-sm">
+                      <span className="font-semibold text-gray-800">
+                        {item.after ? `${item.after.lowest_winrate.toFixed(1)}% - ${item.after.highest_winrate.toFixed(1)}%` : '—'}
+                      </span>
+                      <span className="text-xs text-gray-600">
+                        {item.before ? `${item.before.lowest_winrate.toFixed(1)}% - ${item.before.highest_winrate.toFixed(1)}%` : '—'}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
                     <div className="flex flex-col gap-2">
                       <span className={`px-3 py-1 rounded-lg font-semibold inline-block w-fit text-sm ${
-                        (item.after?.avg_imbalance || 0) < 5 ? 'bg-green-100 text-green-700' : 
-                        (item.after?.avg_imbalance || 0) < 10 ? 'bg-blue-100 text-blue-700' : 
+                        (item.after?.avg_imbalance || 0) < 5 ? 'bg-green-100 text-green-700' :
+                        (item.after?.avg_imbalance || 0) < 10 ? 'bg-blue-100 text-blue-700' :
                         'bg-yellow-100 text-yellow-700'
                       }`}>
                         {item.after ? `${item.after.avg_imbalance.toFixed(1)}%` : '—'}
@@ -292,16 +302,6 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
                         'bg-yellow-100 text-yellow-700') : 'text-gray-400'
                       }`}>
                         {item.before ? `${item.before.avg_imbalance.toFixed(1)}%` : '—'}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col gap-2 text-sm">
-                      <span className="font-semibold text-gray-800">
-                        {item.after ? `${item.after.lowest_winrate.toFixed(1)}% - ${item.after.highest_winrate.toFixed(1)}%` : '—'}
-                      </span>
-                      <span className="text-xs text-gray-600">
-                        {item.before ? `${item.before.lowest_winrate.toFixed(1)}% - ${item.before.highest_winrate.toFixed(1)}%` : '—'}
                       </span>
                     </div>
                   </td>
@@ -329,8 +329,8 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
               <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('map') || 'Map'}</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('total_games') || 'Games'}</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('factions_used') || 'Factions'}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('imbalance') || 'Imbalance'}</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('winrate_range') || 'WR Range'}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('imbalance') || 'Imbalance'}</th>
             </tr>
           </thead>
           <tbody>
@@ -339,16 +339,16 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
                 <td className="px-4 py-3 font-semibold text-gray-800">{stat.map_name}</td>
                 <td className="px-4 py-3 text-gray-700">{stat.total_games}</td>
                 <td className="px-4 py-3 text-gray-700">{stat.factions_used}</td>
+                <td className="px-4 py-3 text-gray-700">{stat.lowest_winrate.toFixed(1)}% - {stat.highest_winrate.toFixed(1)}%</td>
                 <td className="px-4 py-3">
                   <span className={`px-3 py-1 rounded-lg font-semibold inline-block ${
-                    stat.avg_imbalance < 5 ? 'bg-green-100 text-green-700' : 
-                    stat.avg_imbalance < 10 ? 'bg-blue-100 text-blue-700' : 
+                    stat.avg_imbalance < 5 ? 'bg-green-100 text-green-700' :
+                    stat.avg_imbalance < 10 ? 'bg-blue-100 text-blue-700' :
                     'bg-yellow-100 text-yellow-700'
                   }`}>
                     {stat.avg_imbalance.toFixed(1)}%
                   </span>
                 </td>
-                <td className="px-4 py-3 text-gray-700">{stat.lowest_winrate.toFixed(1)}% - {stat.highest_winrate.toFixed(1)}%</td>
               </tr>
             ))}
           </tbody>

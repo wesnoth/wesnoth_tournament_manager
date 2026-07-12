@@ -405,12 +405,13 @@ const FactionBalanceTab: React.FC<FactionBalanceTabProps> = ({ beforeData = null
                 </td>
                 <td className="px-4 py-3 text-gray-700">{stat.maps_played}</td>
                 <td className="px-4 py-3">
-                  <div className="w-full h-6 bg-gray-200 rounded-lg overflow-hidden border border-gray-300">
-                    <div 
-                      className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300"
-                      style={{ width: `${stat.global_winrate}%` }}
-                    ></div>
-                  </div>
+                  <span className={`px-3 py-1 rounded-lg font-semibold inline-block min-w-fit ${
+                    stat.global_winrate > 55 ? 'bg-green-100 text-green-700' :
+                    stat.global_winrate < 45 ? 'bg-red-100 text-red-700' :
+                    'bg-blue-100 text-blue-700'
+                  }`}>
+                    {stat.global_winrate.toFixed(1)}%
+                  </span>
                 </td>
               </tr>
             ))}
