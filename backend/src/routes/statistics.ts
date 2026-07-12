@@ -169,6 +169,10 @@ router.get('/matchups', async (req, res) => {
  */
 router.get('/faction-global', async (req, res) => {
   try {
+    const minGames = req.query.minGames === undefined ? 5 : Number(req.query.minGames);
+    if (!Number.isInteger(minGames) || minGames < 1 || minGames > 1000000) {
+      return res.status(400).json({ error: 'minGames must be a positive integer' });
+    }
     const result = await query(
       `SELECT 
         f.id as faction_id,
@@ -194,8 +198,9 @@ router.get('/faction-global', async (req, res) => {
       FROM faction_map_statistics fms
       JOIN factions f ON fms.faction_id = f.id
       GROUP BY f.id, f.name
-      HAVING SUM(fms.total_games) >= 5
-      ORDER BY global_winrate DESC`
+      HAVING SUM(fms.total_games) >= ?
+      ORDER BY global_winrate DESC`,
+      [minGames]
     );
     res.json(result.rows);
   } catch (error) {
@@ -210,6 +215,10 @@ router.get('/faction-global', async (req, res) => {
  */
 router.get('/map-balance', async (req, res) => {
   try {
+    const minGames = req.query.minGames === undefined ? 5 : Number(req.query.minGames);
+    if (!Number.isInteger(minGames) || minGames < 1 || minGames > 1000000) {
+      return res.status(400).json({ error: 'minGames must be a positive integer' });
+    }
     const result = await query(
       `SELECT 
         gm.id as map_id,
@@ -224,8 +233,9 @@ router.get('/map-balance', async (req, res) => {
       FROM faction_map_statistics fms
       JOIN game_maps gm ON fms.map_id = gm.id
       GROUP BY gm.id, gm.name
-      HAVING SUM(fms.total_games) >= 10
-      ORDER BY avg_imbalance ASC`
+      HAVING SUM(fms.total_games) >= ?
+      ORDER BY avg_imbalance ASC`,
+      [minGames * 2]
     );
     res.json(result.rows);
   } catch (error) {
@@ -373,6 +383,18 @@ router.get('/history/events', async (req, res) => {
         be.patch_version,
         be.event_type,
         be.description,
+        be.snapshot_before_date,
+        be.snapshot_after_date,
+        (
+          SELECT MAX(previous_event.event_date)
+          FROM balance_events previous_event
+          WHERE previous_event.event_date < be.event_date
+        ) AS previous_event_date,
+        (
+          SELECT MIN(next_event.event_date)
+          FROM balance_events next_event
+          WHERE next_event.event_date > be.event_date
+        ) AS next_event_date,
         f.name as faction_name,
         gm.name as map_name,
         u.nickname as created_by_name

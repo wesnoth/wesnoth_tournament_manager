@@ -1,18 +1,5 @@
 # Balance events
 
-Balance events record changes to the game balance, such as buffs, nerfs, reworks, and hotfixes. Administrators can create and edit events from the admin interface. Public statistics pages can use the event timeline to compare cumulative faction and map results before and after a change.
+Balance-event behavior is documented as part of the statistics architecture. See [STATISTICS.md](STATISTICS.md), especially the balance statistics, snapshot, and balance-event sections.
 
-## Responsibilities
-
-- The scheduled statistics job creates the daily cumulative snapshot used by trend and impact views.
-- A snapshot represents all eligible, non-cancelled matches recorded up to its snapshot date.
-- The admin recalculation action is a maintenance operation. It clears the balance-event snapshot markers and historical snapshot table, then rebuilds the event boundary snapshots from the recorded matches and balance events.
-- Creating or editing an event does not expose arbitrary snapshot generation to regular users.
-
-Balance-event write endpoints and the full-history recalculation endpoint require an authenticated administrator. Read-only event and statistics endpoints remain public where listed in `API_ENDPOINTS.md`.
-
-For an event comparison, the before period is the interval after the previous event through the current event date. The after period is the interval after the current event through the next event date, or through the latest available match when there is no later event. The UI derives these periods by subtracting cumulative snapshots.
-
-No forum database tables are written by this feature. The snapshot rebuild reads the application match, faction, and map data and stores derived rows in `faction_map_statistics_history`.
-
-Implementation comments and JSDoc beside the source code are the detailed source of truth for validation, side effects, and operational behavior.
+This file is retained as a stable entry point for existing references. `STATISTICS.md` is the single source of truth; implementation comments and JSDoc beside the source code remain the detailed source of truth for validation, side effects, and operational behavior.

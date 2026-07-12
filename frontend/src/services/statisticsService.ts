@@ -22,14 +22,14 @@ export const statisticsService = {
   },
 
   // Get global faction winrates
-  getGlobalFactionStats: async () => {
-    const response = await api.get('/statistics/faction-global');
+  getGlobalFactionStats: async (minGames = 5) => {
+    const response = await api.get('/statistics/faction-global', { params: { minGames } });
     return response.data;
   },
 
   // Get map balance statistics
-  getMapBalanceStats: async () => {
-    const response = await api.get('/statistics/map-balance');
+  getMapBalanceStats: async (minGames = 5) => {
+    const response = await api.get('/statistics/map-balance', { params: { minGames } });
     return response.data;
   },
 

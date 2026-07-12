@@ -38,14 +38,17 @@ interface ComparisonData {
 interface FactionBalanceTabProps {
   beforeData?: ComparisonData[] | null;
   afterData?: ComparisonData[] | null;
+  beforeLabel?: string;
+  afterLabel?: string;
 }
 
-const FactionBalanceTab: React.FC<FactionBalanceTabProps> = ({ beforeData = null, afterData = null }) => {
+const FactionBalanceTab: React.FC<FactionBalanceTabProps> = ({ beforeData = null, afterData = null, beforeLabel, afterLabel }) => {
   const { t } = useTranslation();
   const [stats, setStats] = useState<FactionStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [minGamesThreshold, setMinGamesThreshold] = useState(5); // Default value
+  const [minGamesThreshold, setMinGamesThreshold] = useState(5);
+  const [pendingMinGames, setPendingMinGames] = useState(5);
 
   useEffect(() => {
     const fetchConfig = async () => {
@@ -53,6 +56,7 @@ const FactionBalanceTab: React.FC<FactionBalanceTabProps> = ({ beforeData = null
         const config = await statisticsService.getConfig();
         if (config.minGamesThreshold) {
           setMinGamesThreshold(config.minGamesThreshold);
+          setPendingMinGames(config.minGamesThreshold);
         }
       } catch (err) {
         console.warn('Could not load config, using default threshold');
@@ -67,7 +71,7 @@ const FactionBalanceTab: React.FC<FactionBalanceTabProps> = ({ beforeData = null
     const fetchStats = async () => {
       try {
         setLoading(true);
-        const data = await statisticsService.getGlobalFactionStats();
+        const data = await statisticsService.getGlobalFactionStats(minGamesThreshold);
         // Convert string winrates to numbers and calculate wins/losses if not present
         const converted = data.map((item: any) => {
           const winrate = typeof item.global_winrate === 'string' ? parseFloat(item.global_winrate) : item.global_winrate;
@@ -103,7 +107,26 @@ const FactionBalanceTab: React.FC<FactionBalanceTabProps> = ({ beforeData = null
     } else {
       setLoading(false);
     }
-  }, [beforeData, afterData]);
+  }, [beforeData, afterData, minGamesThreshold]);
+
+  const applyMinGames = () => {
+    setMinGamesThreshold(Math.max(1, Math.min(1000000, pendingMinGames || 1)));
+  };
+
+  const minimumGamesControl = (
+    <div className="bg-gray-100 p-4 rounded-lg mb-6 border border-gray-200 flex items-center gap-4">
+      <label className="flex items-center gap-2 font-semibold text-gray-800">
+        {t('minimum_games') || 'Minimum games'}:
+        <input type="number" min="1" max="1000000" value={pendingMinGames}
+          onChange={e => setPendingMinGames(Math.max(1, parseInt(e.target.value) || 1))}
+          className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 w-24" />
+      </label>
+      <button type="button" onClick={applyMinGames}
+        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+        {t('refresh') || 'Refresh'}
+      </button>
+    </div>
+  );
 
   const getWinrateColorClass = (winrate: number) => {
     if (winrate > 55) return 'high';
@@ -205,9 +228,10 @@ const FactionBalanceTab: React.FC<FactionBalanceTabProps> = ({ beforeData = null
       <div className="bg-white rounded-lg p-6 shadow-md">
         <h3 className="text-xl font-semibold text-gray-800 mb-3">{t('faction_balance_comparison') || 'Faction Balance - Before & After'}</h3>
         <p className="text-blue-600 text-sm mb-6 p-3 bg-blue-50 rounded border-l-4 border-blue-500">
-          {t('before_event') || 'Before'}: {beforeAgg.reduce((s, f) => s + f.total_games, 0)} {t('matches_evaluated') || 'matches'} | 
-          {t('after_event') || 'After'}: {afterAgg.reduce((s, f) => s + f.total_games, 0)} {t('matches_evaluated') || 'matches'}
+          {t('before_event') || 'Before'}: {beforeAgg.reduce((s, f) => s + f.total_games, 0)} faction-games ({Math.round(beforeAgg.reduce((s, f) => s + f.total_games, 0) / 2)} matches){beforeLabel ? ` · ${beforeLabel}` : ''} |{' '}
+          {t('after_event') || 'After'}: {afterAgg.reduce((s, f) => s + f.total_games, 0)} faction-games ({Math.round(afterAgg.reduce((s, f) => s + f.total_games, 0) / 2)} matches){afterLabel ? ` · ${afterLabel}` : ''}
         </p>
+        {minimumGamesControl}
         <div className="overflow-x-auto border border-gray-200 rounded-lg">
           <table className="w-full border-collapse bg-white">
             <thead className="bg-gray-100 border-b-2 border-gray-300">
@@ -319,6 +343,7 @@ const FactionBalanceTab: React.FC<FactionBalanceTabProps> = ({ beforeData = null
     <div className="bg-white rounded-lg p-6 shadow-md">
       <h3 className="text-xl font-semibold text-gray-800 mb-3">{t('faction_balance_title') || 'Global Faction Balance'}</h3>
       <p className="text-gray-600 text-sm mb-6 pb-3 px-3 bg-blue-50 border-l-4 border-blue-500 rounded">{t('faction_balance_explanation') || 'Detailed analysis of faction balance across all tournaments'}</p>
+      {minimumGamesControl}
       <div className="overflow-x-auto border border-gray-200 rounded-lg">
         <table className="w-full border-collapse bg-white">
           <thead className="bg-gray-100 border-b-2 border-gray-300">

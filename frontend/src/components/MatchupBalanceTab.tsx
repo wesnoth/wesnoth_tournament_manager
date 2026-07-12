@@ -117,10 +117,14 @@ const MatchupBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ be
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState('');
   const [minGames, setMinGames]       = useState(5);
+  const [pendingMinGames, setPendingMinGames] = useState(5);
 
   useEffect(() => {
     statisticsService.getConfig().then(cfg => {
-      if (cfg.minGamesThreshold) setMinGames(cfg.minGamesThreshold);
+      if (cfg.minGamesThreshold) {
+        setMinGames(cfg.minGamesThreshold);
+        setPendingMinGames(cfg.minGamesThreshold);
+      }
     }).catch(() => {});
   }, []);
 
@@ -131,6 +135,25 @@ const MatchupBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ be
       .catch(() => setError('Error loading matchup statistics'))
       .finally(() => setLoading(false));
   }, [minGames]);
+
+  const applyMinGames = () => {
+    setMinGames(Math.max(1, Math.min(1000000, pendingMinGames || 1)));
+  };
+
+  const minimumGamesControl = (
+    <div className="bg-gray-100 p-4 rounded-lg mb-6 border border-gray-200 flex items-center gap-4">
+      <label className="flex items-center gap-2 font-semibold text-gray-800">
+        {t('minimum_games') || 'Minimum games'}:
+        <input type="number" min="1" max="1000000" value={pendingMinGames}
+          onChange={e => setPendingMinGames(Math.max(1, parseInt(e.target.value) || 1))}
+          className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 w-24" />
+      </label>
+      <button type="button" onClick={applyMinGames}
+        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+        {t('refresh') || 'Refresh'}
+      </button>
+    </div>
+  );
 
   useEffect(() => {
     setBeforeStats(beforeData?.length > 0 ? comparisonToSideRows(beforeData) : []);
@@ -191,14 +214,7 @@ const MatchupBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ be
           {t('before_event') || 'Before'}: {beforeStats.reduce((s, r) => s + r.games, 0)}g |{' '}
           {t('after_event')  || 'After'}:  {afterStats.reduce((s, r)  => s + r.games, 0)}g
         </p>
-        <div className="bg-gray-100 p-4 rounded-lg mb-6 border border-gray-200 flex items-center gap-4">
-          <label className="flex items-center gap-2 font-semibold text-gray-800">
-            {t('minimum_games') || 'Minimum Games'}:
-            <input type="number" min="1" max="100" value={minGames}
-              onChange={e => setMinGames(Math.max(1, parseInt(e.target.value) || 1))}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 w-24" />
-          </label>
-        </div>
+        {minimumGamesControl}
         <div className="overflow-x-auto border border-gray-200 rounded-lg">
           <table className="w-full border-collapse bg-white text-sm">
             <TableHead />
@@ -257,13 +273,8 @@ const MatchupBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ be
       <p className="text-gray-600 text-sm mb-6 pb-3 px-3 bg-blue-50 border-l-4 border-blue-500 rounded">
         {t('matchup_balance_explanation') || 'Win rate per faction per side per map'}
       </p>
-      <div className="bg-gray-100 p-4 rounded-lg mb-6 border border-gray-200 flex items-center gap-4">
-        <label className="flex items-center gap-2 font-semibold text-gray-800">
-          {t('minimum_games') || 'Minimum Games'}:
-          <input type="number" min="1" max="100" value={minGames}
-            onChange={e => setMinGames(Math.max(1, parseInt(e.target.value) || 1))}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 w-24" />
-        </label>
+      <div>
+        {minimumGamesControl}
         <span className="text-sm text-gray-500">{filtered.length} {t('matchups') || 'matchups'}</span>
       </div>
 

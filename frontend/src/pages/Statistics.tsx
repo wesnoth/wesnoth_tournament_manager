@@ -27,6 +27,8 @@ const Statistics: React.FC = () => {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [beforeData, setBeforeData] = useState<ComparisonData[]>([]);
   const [afterData, setAfterData] = useState<ComparisonData[]>([]);
+  const [beforeInterval, setBeforeInterval] = useState('');
+  const [afterInterval, setAfterInterval] = useState('');
 
   const handleComparisonDataChange = (before: ComparisonData[], after: ComparisonData[]) => {
     setBeforeData(before);
@@ -44,6 +46,10 @@ const Statistics: React.FC = () => {
         eventId={selectedEventId ?? undefined} 
         onEventChange={setSelectedEventId}
         onComparisonDataChange={handleComparisonDataChange}
+        onIntervalChange={(before, after) => {
+          setBeforeInterval(before);
+          setAfterInterval(after);
+        }}
       />
 
       <div className="flex gap-4 border-b border-gray-300 mb-6 overflow-x-auto">
@@ -74,7 +80,7 @@ const Statistics: React.FC = () => {
       </div>
 
       <div className="mt-8">
-        {activeTab === 'faction' && <FactionBalanceTab beforeData={selectedEventId ? beforeData : null} afterData={selectedEventId ? afterData : null} />}
+        {activeTab === 'faction' && <FactionBalanceTab beforeData={selectedEventId ? beforeData : null} afterData={selectedEventId ? afterData : null} beforeLabel={selectedEventId ? beforeInterval : undefined} afterLabel={selectedEventId ? afterInterval : undefined} />}
         {activeTab === 'map' && <MapBalanceTab beforeData={selectedEventId ? beforeData : null} afterData={selectedEventId ? afterData : null} />}
         {activeTab === 'matchups' && <MatchupBalanceTab beforeData={selectedEventId ? beforeData : null} afterData={selectedEventId ? afterData : null} />}
         {activeTab === 'faction-vs-faction' && <FactionVsFactionTab beforeData={selectedEventId ? beforeData : null} afterData={selectedEventId ? afterData : null} />}

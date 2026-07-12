@@ -6,11 +6,16 @@ interface BalanceEventImpactProps {
   eventId?: string;
   onEventChange?: (eventId: string | null) => void;
   onComparisonDataChange?: (before: AggregatedData[], after: AggregatedData[]) => void;
+  onIntervalChange?: (before: string, after: string) => void;
 }
 
 interface BalanceEvent {
   id: string;
   event_date: string;
+  snapshot_before_date?: string | null;
+  snapshot_after_date?: string | null;
+  previous_event_date?: string | null;
+  next_event_date?: string | null;
   patch_version?: string;
   event_type: string;
   description: string;
@@ -18,6 +23,18 @@ interface BalanceEvent {
   map_name?: string;
   created_by_name?: string;
 }
+
+const formatDate = (value?: string | null): string => {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+};
+
+const addDays = (value: string): string => {
+  const date = new Date(`${value.slice(0, 10)}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+};
 
 interface AggregatedData {
   map_id?: string;
@@ -36,7 +53,7 @@ interface AggregatedData {
   side2_wins?: number;
 }
 
-const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, onEventChange, onComparisonDataChange }) => {
+const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, onEventChange, onComparisonDataChange, onIntervalChange }) => {
   const { t } = useTranslation();
   const [events, setEvents] = useState<BalanceEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<BalanceEvent | null>(null);
@@ -67,6 +84,7 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
       onEventChange?.(selectedEvent.id);
     } else {
       onEventChange?.(null);
+      onIntervalChange?.('', '');
     }
   }, [selectedEvent]);
 
@@ -125,6 +143,13 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
       setBeforeData(beforeAgg);
       setAfterData(afterAgg);
 
+      onIntervalChange?.(
+        selectedEvent.previous_event_date
+          ? `${formatDate(addDays(selectedEvent.previous_event_date))} – ${formatDate(selectedEvent.event_date)}`
+          : '—',
+        `${formatDate(addDays(selectedEvent.event_date))} – ${formatDate(selectedEvent.next_event_date || selectedEvent.snapshot_after_date)}`
+      );
+
       // Notify parent component
       onComparisonDataChange?.(beforeAgg, afterAgg);
     } catch (err: any) {
@@ -132,6 +157,7 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
       setError(err.response?.data?.error || t('error_loading_impact') || 'Error loading impact data');
       setBeforeData([]);
       setAfterData([]);
+      onIntervalChange?.('', '');
     } finally {
       setLoading(false);
     }
@@ -169,7 +195,7 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
           <option value="">{t('all_accumulated') || 'All (Accumulated)'}</option>
           {events.map(event => (
             <option key={event.id} value={event.id}>
-              {new Date(event.event_date).toLocaleDateString()} - {event.event_type}
+              {formatDate(event.event_date)} - {event.event_type}
               {event.patch_version ? ` [${event.patch_version}]` : ''}
               {event.description ? ` - ${event.description.substring(0, 30)}${event.description.length > 30 ? '...' : ''}` : ''}
             </option>
@@ -212,7 +238,20 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
             )}
             <div className="flex flex-col">
               <span className="text-sm font-semibold text-gray-600">{t('date') || 'Date'}:</span>
-              <span className="text-gray-800">{new Date(selectedEvent.event_date).toLocaleDateString()}</span>
+              <span className="text-gray-800">{formatDate(selectedEvent.event_date)}</span>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-md bg-blue-50 border-l-4 border-blue-500 px-4 py-3 text-sm text-blue-800">
+            <div>
+              {t('before_event') || 'Before'}:{' '}
+              {selectedEvent.previous_event_date
+                ? `${formatDate(addDays(selectedEvent.previous_event_date))} – ${formatDate(selectedEvent.event_date)}`
+                : '—'}
+            </div>
+            <div>
+              {t('after_event') || 'After'}:{' '}
+              {`${formatDate(addDays(selectedEvent.event_date))} – ${formatDate(selectedEvent.next_event_date || selectedEvent.snapshot_after_date)}`}
             </div>
           </div>
 

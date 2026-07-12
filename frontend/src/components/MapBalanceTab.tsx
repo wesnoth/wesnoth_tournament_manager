@@ -32,12 +32,10 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
   const [afterStats, setAfterStats] = useState<MapBalanceStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [minGamesThreshold, setMinGamesThreshold] = useState(5); // Default value
+  const [minGamesThreshold, setMinGamesThreshold] = useState(5);
+  const [pendingMinGames, setPendingMinGames] = useState(5);
 
   const aggregateMapData = (data: ComparisonData[]): MapBalanceStats[] => {
-    console.log('[MapBalanceTab.aggregateMapData] Input data count:', data.length);
-    console.log('[MapBalanceTab.aggregateMapData] Raw input:', JSON.stringify(data.slice(0, 3), null, 2));
-    
     // Group by map and aggregate faction stats
     const mapMap = new Map<string, {
       map_id: string;
@@ -102,8 +100,6 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
         .filter(f => f.total > 0)
         .map(f => (f.wins / f.total) * 100);
       
-      console.log(`[MapBalanceTab] Map ${mapData.map_name}: winrates = [${winrates.map(w => w.toFixed(1)).join(', ')}]`);
-      
       // Calculate SAMPLE standard deviation (like PostgreSQL STDDEV uses n-1)
       const avgWinrate = winrates.length > 0 ? winrates.reduce((sum, wr) => sum + wr, 0) / winrates.length : 50;
       const variance = winrates.length > 1 
@@ -111,8 +107,6 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
         : 0;
       const avgImbalance = Math.sqrt(variance);
       
-      console.log(`[MapBalanceTab] Map ${mapData.map_name}: avgWinrate=${avgWinrate.toFixed(2)}, variance=${variance.toFixed(2)}, stddev=${avgImbalance.toFixed(2)} (sample STDDEV with n-1)`);
-
       
       return {
         map_id: mapData.map_id,
@@ -127,7 +121,6 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
     .filter(map => map.total_games >= minGamesThreshold) // Apply minimum games filter
     .sort((a, b) => b.total_games - a.total_games);
     
-    console.log('[MapBalanceTab.aggregateMapData] Final result:', JSON.stringify(result, null, 2));
     return result;
   };
 
@@ -137,6 +130,7 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
         const config = await statisticsService.getConfig();
         if (config.minGamesThreshold) {
           setMinGamesThreshold(config.minGamesThreshold);
+          setPendingMinGames(config.minGamesThreshold);
         }
       } catch (err) {
         console.warn('Could not load config, using default threshold');
@@ -150,8 +144,7 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
     const fetchStats = async () => {
       try {
         setLoading(true);
-        const data = await statisticsService.getMapBalanceStats();
-        console.log('[MapBalanceTab] Backend data received:', JSON.stringify(data, null, 2));
+        const data = await statisticsService.getMapBalanceStats(minGamesThreshold);
         // Convert string numbers to actual numbers
         const converted = data.map((item: any) => ({
           ...item,
@@ -159,7 +152,6 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
           lowest_winrate: typeof item.lowest_winrate === 'string' ? parseFloat(item.lowest_winrate) : item.lowest_winrate,
           highest_winrate: typeof item.highest_winrate === 'string' ? parseFloat(item.highest_winrate) : item.highest_winrate,
         }));
-        console.log('[MapBalanceTab] Backend data converted:', JSON.stringify(converted, null, 2));
         setStats(converted);
       } catch (err) {
         console.error('Error fetching map balance stats:', err);
@@ -170,29 +162,44 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
     };
 
     fetchStats();
-  }, []);
+  }, [minGamesThreshold]);
 
   useEffect(() => {
     if (beforeData && beforeData.length > 0) {
-      console.log('[MapBalanceTab] Before data received, item count:', beforeData.length);
-      console.log('[MapBalanceTab] Before data sample:', JSON.stringify(beforeData.slice(0, 2), null, 2));
       const aggregated = aggregateMapData(beforeData);
       setBeforeStats(aggregated);
     } else {
       setBeforeStats([]);
     }
-  }, [beforeData]);
+  }, [beforeData, minGamesThreshold]);
 
   useEffect(() => {
     if (afterData && afterData.length > 0) {
-      console.log('[MapBalanceTab] After data received, item count:', afterData.length);
-      console.log('[MapBalanceTab] After data sample:', JSON.stringify(afterData.slice(0, 2), null, 2));
       const aggregated = aggregateMapData(afterData);
       setAfterStats(aggregated);
     } else {
       setAfterStats([]);
     }
-  }, [afterData]);
+  }, [afterData, minGamesThreshold]);
+
+  const applyMinGames = () => {
+    setMinGamesThreshold(Math.max(1, Math.min(1000000, pendingMinGames || 1)));
+  };
+
+  const minimumGamesControl = (
+    <div className="bg-gray-100 p-4 rounded-lg mb-6 border border-gray-200 flex items-center gap-4">
+      <label className="flex items-center gap-2 font-semibold text-gray-800">
+        {t('minimum_games') || 'Minimum games'}:
+        <input type="number" min="1" max="1000000" value={pendingMinGames}
+          onChange={e => setPendingMinGames(Math.max(1, parseInt(e.target.value) || 1))}
+          className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 w-24" />
+      </label>
+      <button type="button" onClick={applyMinGames}
+        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+        {t('refresh') || 'Refresh'}
+      </button>
+    </div>
+  );
 
   if (loading) return <div className="p-8 text-center text-gray-600 bg-gray-50 rounded-lg">{t('loading')}</div>;
   if (error) return <div className="p-8 text-center text-red-600 bg-red-50 rounded-lg border-l-4 border-red-500">{error}</div>;
@@ -232,9 +239,10 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
       <div className="bg-white rounded-lg p-6 shadow-md">
         <h3 className="text-xl font-semibold text-gray-800 mb-3">{t('map_balance_comparison') || 'Map Balance - Before & After'}</h3>
         <p className="text-blue-600 text-sm mb-3 p-3 bg-blue-50 rounded border-l-4 border-blue-500">
-          {t('before_event') || 'Before'}: {beforeData ? beforeData.length : 0} {t('matches_evaluated') || 'matches'} | 
-          {t('after_event') || 'After'}: {afterData ? afterData.length : 0} {t('matches_evaluated') || 'matches'}
+          {t('before_event') || 'Before'}: {beforeStats.reduce((sum, map) => sum + map.total_games, 0)} {t('matches') || 'matches'} |
+          {t('after_event') || 'After'}: {afterStats.reduce((sum, map) => sum + map.total_games, 0)} {t('matches') || 'matches'}
         </p>
+        {minimumGamesControl}
         <p className="text-gray-500 text-xs mb-6 italic">{t('balance_lower_better') || '(Lower imbalance = better balance)'}</p>
         
         <div className="overflow-x-auto border border-gray-200 rounded-lg">
@@ -339,6 +347,7 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
     <div className="bg-white rounded-lg p-6 shadow-md">
       <h3 className="text-xl font-semibold text-gray-800 mb-3">{t('map_balance_title') || 'Map Balance Analysis'}</h3>
       <p className="text-gray-600 text-sm mb-6 pb-3 px-3 bg-blue-50 border-l-4 border-blue-500 rounded">{t('map_balance_explanation') || 'Analysis of map balance across all factions'}</p>
+      {minimumGamesControl}
       <p className="text-gray-500 text-xs mb-6 italic">{t('balance_lower_better') || '(Lower imbalance = better balance)'}</p>
       
       <div className="overflow-x-auto border border-gray-200 rounded-lg">
