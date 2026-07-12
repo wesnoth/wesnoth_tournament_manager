@@ -29,6 +29,8 @@ Admin panel is accessible at `/admin` for users with `is_admin = 1` in `users_ex
 
 The authenticated area is documented at [PLAYERS_AND_USERS_DOCUMENTATION.md](PLAYERS_AND_USERS_DOCUMENTATION.md). Its shared navigation includes `/profile`, `/my-tournaments`, `/notifications`, and `/help`; moderator and administrator links are added according to the authenticated user's role.
 
+The editable profile page is documented separately in [PROFILE_DOCUMENTATION.md](PROFILE_DOCUMENTATION.md).
+
 ---
 
 ## Pages

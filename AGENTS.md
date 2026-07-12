@@ -14,3 +14,8 @@
 - Keep Markdown documentation high-level and stable: describe architecture, responsibilities, configuration, workflows, and policies.
 - Do not duplicate function inventories, line numbers, signatures, or volatile implementation details in Markdown when the source code already documents them.
 - When implementation behavior changes, update the source comments/JSDoc first. Update Markdown only when a stable architectural, configuration, workflow, identity, formatting, or failure-policy change also occurred.
+
+## Dependency safety
+
+- Before installing a new package or dependency, verify that its release is at least one month old.
+- Do not install a package released less than one month ago without explicit user approval.

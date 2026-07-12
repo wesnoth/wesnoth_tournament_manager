@@ -13,7 +13,7 @@ import AvailabilityRangeEditor, { AvailabilitySchedule } from '../components/Ava
 const Profile: React.FC = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const { isAuthenticated, user, setEnableRanked: setStoreEnableRanked } = useAuthStore();
+  const { isAuthenticated, setEnableRanked: setStoreEnableRanked } = useAuthStore();
   
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -21,8 +21,8 @@ const Profile: React.FC = () => {
   const [selectedCountry, setSelectedCountry] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState('');
   const [discordId, setDiscordId] = useState('');
-  const [discordMessage, setDiscordMessage] = useState('');
-  const [discordError, setDiscordError] = useState('');
+  const [profileMessage, setProfileMessage] = useState('');
+  const [profileError, setProfileError] = useState('');
   const [updatingDiscord, setUpdatingDiscord] = useState(false);
   const [validatingDiscord, setValidatingDiscord] = useState(false);
   const [discordValidationMessage, setDiscordValidationMessage] = useState('');
@@ -59,37 +59,18 @@ const Profile: React.FC = () => {
 
     const fetchData = async () => {
       try {
-        // Fetch profile data
         const profileRes = await userService.getProfile();
-        console.log('Profile data:', profileRes.data);
-        console.log('Country from API:', profileRes.data.country);
-        console.log('Avatar from API:', profileRes.data.avatar);
-        console.log('Language from API:', profileRes.data.language);
-        
         setProfile(profileRes.data);
-        
-        // Initialize selectors with values from profile
-        if (profileRes.data.country) {
-          setSelectedCountry(profileRes.data.country);
-        }
-        if (profileRes.data.avatar) {
-          setSelectedAvatar(profileRes.data.avatar);
-        }
-        
-        // Set language from profile
+
+        setSelectedCountry(profileRes.data.country || '');
+        setSelectedAvatar(profileRes.data.avatar || '');
         const langFromDB = profileRes.data.language || 'en';
-        console.log('Setting selectedLanguage to:', langFromDB);
         setSelectedLanguage(langFromDB);
         setDiscordId(profileRes.data.discord_id || '');
         setEnableRanked(!!profileRes.data.enable_ranked);
-        
-        // Set timezone and availability from profile
         setTimezone(profileRes.data.timezone || 'UTC');
         setAvailabilitySchedule(profileRes.data.availability_schedule || null);
-        
-        console.log('Discord ID from API:', profileRes.data.discord_id);
-        
-        // Change i18n if different
+
         if (langFromDB !== i18n.language) {
           i18n.changeLanguage(langFromDB);
         }
@@ -104,67 +85,65 @@ const Profile: React.FC = () => {
   }, [isAuthenticated, navigate, i18n]);
 
   const handleLanguageChange = useCallback(async (lang: string) => {
-    setSelectedLanguage(lang);
-    i18n.changeLanguage(lang);
-    localStorage.setItem('language', lang);
-    setLanguageDropdownOpen(false);
-    setDiscordMessage(t('profile_language_updated') || 'Language updated');
-    setTimeout(() => setDiscordMessage(''), 3000);
+    setProfileError('');
+    try {
+      await userService.updateProfile({ language: lang });
+      setSelectedLanguage(lang);
+      i18n.changeLanguage(lang);
+      localStorage.setItem('language', lang);
+      setLanguageDropdownOpen(false);
+      setProfileMessage(t('profile_language_updated') || 'Language updated');
+      setTimeout(() => setProfileMessage(''), 3000);
+    } catch (err: any) {
+      setProfileError(err?.response?.data?.error || t('profile.error_language_update', 'Error updating language'));
+    }
   }, [t, i18n]);
 
   const handleCountryChange = useCallback(async (countryCode: string) => {
-    setSelectedCountry(countryCode);
+    setProfileError('');
     try {
       const res = await userService.updateProfile({ country: countryCode });
+      setSelectedCountry(countryCode);
       setProfile(res.data);
-      setDiscordMessage(t('profile.country_updated') || 'Country updated');
-      setTimeout(() => setDiscordMessage(''), 3000);
+      setProfileMessage(t('profile.country_updated') || 'Country updated');
+      setTimeout(() => setProfileMessage(''), 3000);
     } catch (err: any) {
-      console.error('Error updating country:', err);
-      setDiscordError(err.response?.data?.error || t('profile.error_update_country_failed'));
+      setProfileError(err?.response?.data?.error || t('profile.error_update_country_failed'));
     }
   }, [t]);
 
   const handleAvatarChange = useCallback(async (avatarId: string) => {
-    setSelectedAvatar(avatarId);
+    setProfileError('');
     try {
       const res = await userService.updateProfile({ avatar: avatarId });
+      setSelectedAvatar(avatarId);
       setProfile(res.data);
-      setDiscordMessage(t('profile.avatar_updated') || 'Avatar updated');
-      setTimeout(() => setDiscordMessage(''), 3000);
+      setProfileMessage(t('profile.avatar_updated') || 'Avatar updated');
+      setTimeout(() => setProfileMessage(''), 3000);
     } catch (err: any) {
-      console.error('Error updating avatar:', err);
-      setDiscordError(err.response?.data?.error || t('profile.error_update_avatar_failed'));
+      setProfileError(err?.response?.data?.error || t('profile.error_update_avatar_failed'));
     }
   }, [t]);
 
   const handleDiscordUpdate = useCallback(async () => {
     if (!discordId.trim()) {
-      setDiscordError(t('profile.error_discord_empty'));
+      setProfileError(t('profile.error_discord_empty'));
       return;
     }
 
     setUpdatingDiscord(true);
-    setDiscordError('');
-    setDiscordMessage('');
+    setProfileError('');
+    setProfileMessage('');
 
     try {
-      // Debug: show payload and token presence
-      console.log('Attempting Discord ID update, payload:', { discordId });
-      const token = localStorage.getItem('token');
-      console.log('Auth token present:', !!token);
-
       const res = await userService.updateDiscordId(discordId);
-      console.log('Discord update response:', res);
       setProfile(res.data);
-      setDiscordMessage(t('discord_id_updated'));
-      setTimeout(() => setDiscordMessage(''), 3000);
+      setProfileMessage(t('discord_id_updated'));
+      setTimeout(() => setProfileMessage(''), 3000);
     } catch (err: any) {
-      console.error('Error updating Discord ID:', err);
-      // Prefer server message, then axios message, then generic
       const serverMsg = err?.response?.data?.error;
       const axiosMsg = err?.message;
-      setDiscordError(serverMsg || axiosMsg || t('profile.error_update_discord_failed'));
+      setProfileError(serverMsg || axiosMsg || t('profile.error_update_discord_failed'));
     } finally {
       setUpdatingDiscord(false);
     }
@@ -176,17 +155,17 @@ const Profile: React.FC = () => {
 
   const handleValidateDiscordId = useCallback(async () => {
     if (!discordId.trim()) {
-      setDiscordError(t('profile.error_discord_empty'));
+      setProfileError(t('profile.error_discord_empty'));
       return;
     }
 
     if (!isValidDiscordIdFormat(discordId)) {
-      setDiscordError(t('profile.error_discord_invalid'));
+      setProfileError(t('profile.error_discord_invalid'));
       return;
     }
 
     setValidatingDiscord(true);
-    setDiscordError('');
+    setProfileError('');
     setDiscordValidationMessage('');
 
     try {
@@ -196,14 +175,13 @@ const Profile: React.FC = () => {
       setTimeout(() => setDiscordValidationMessage(''), 5000);
     } catch (err: any) {
       const serverMsg = err?.response?.data?.error;
-      setDiscordError(serverMsg || t('profile.discord_validation_failed'));
+      setProfileError(serverMsg || t('profile.discord_validation_failed'));
     } finally {
       setValidatingDiscord(false);
     }
   }, [discordId, isValidDiscordIdFormat, t]);
 
-   const handleRankedToggle = useCallback(async (newValue: boolean) => {
-    // Prevent disabling if already enabled
+  const handleRankedToggle = useCallback(async (newValue: boolean) => {
     if (!newValue && enableRanked) {
       setRankedMessage(t('profile.ranked_cannot_disable', 'Ranked matches cannot be disabled once enabled'));
       setTimeout(() => setRankedMessage(''), 3000);
@@ -262,9 +240,9 @@ const Profile: React.FC = () => {
 
               <section className="bg-white rounded-lg shadow-md p-8 mb-8">
                 <h2 className="text-2xl font-semibold text-gray-800 mb-6 pb-4 border-b-2 border-gray-200">{t('profile.discord_title')}</h2>
-                {discordMessage && <p className="bg-green-100 text-green-800 px-4 py-3 rounded-lg mb-4 border-l-4 border-green-600">{discordMessage}</p>}
+                {profileMessage && <p className="bg-green-100 text-green-800 px-4 py-3 rounded-lg mb-4 border-l-4 border-green-600">{profileMessage}</p>}
                 {discordValidationMessage && <p className="bg-blue-100 text-blue-800 px-4 py-3 rounded-lg mb-4 border-l-4 border-blue-600">{discordValidationMessage}</p>}
-                {discordError && <p className="bg-red-100 text-red-800 px-4 py-3 rounded-lg mb-4 border-l-4 border-red-600">{discordError}</p>}
+                {profileError && <p className="bg-red-100 text-red-800 px-4 py-3 rounded-lg mb-4 border-l-4 border-red-600">{profileError}</p>}
                 <div className="flex gap-3 max-md:flex-col">
                   <input
                     type="text"

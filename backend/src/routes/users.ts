@@ -452,8 +452,6 @@ router.get('/search/:searchQuery', searchLimiter, async (req, res) => {
 router.put('/profile/discord', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { discord_id } = req.body;
-    console.log('Update Discord ID request:', { discord_id, userId: req.userId });
-
     if (typeof discord_id !== 'string' || discord_id.trim() === '') {
       return res.status(400).json({ error: 'Discord ID cannot be empty' });
     }
@@ -481,7 +479,6 @@ router.put('/profile/discord', authMiddleware, async (req: AuthRequest, res) => 
       return res.status(404).json({ error: 'User not found' });
     }
 
-    console.log('Discord ID updated successfully:', result.rows[0]);
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error updating Discord ID:', error);
@@ -516,12 +513,12 @@ router.post('/profile/discord/validate', authMiddleware, async (req: AuthRequest
   }
 });
 
-// Update user profile (country and avatar)
+// Update mutable user preferences owned by the authenticated profile.
 router.put('/profile/update', authMiddleware, async (req: AuthRequest, res) => {
   try {
-    const { country, avatar, timezone, availability_schedule } = req.body;
+    const { country, avatar, language, timezone, availability_schedule } = req.body;
 
-    if (!country && !avatar && !timezone && !availability_schedule) {
+    if (!country && !avatar && !language && !timezone && !availability_schedule) {
       return res.status(400).json({ error: 'At least one field is required' });
     }
 
@@ -536,6 +533,16 @@ router.put('/profile/update', authMiddleware, async (req: AuthRequest, res) => {
     if (avatar) {
       updateFields.push(`avatar = ?`);
       params.push(avatar);
+    }
+
+    if (language) {
+      // Keep the stored preference aligned with the locales shipped by the frontend.
+      const supportedLanguages = new Set(['en', 'es', 'zh', 'de', 'ru']);
+      if (!supportedLanguages.has(language)) {
+        return res.status(400).json({ error: 'Unsupported language' });
+      }
+      updateFields.push(`language = ?`);
+      params.push(language);
     }
 
     // Validate and update timezone

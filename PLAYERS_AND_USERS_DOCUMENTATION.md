@@ -45,6 +45,7 @@ The UI visibility is not the authorization boundary. Protected routes and backen
 ## Related documentation
 
 - [NOTIFICATIONS_DOCUMENTATION.md](NOTIFICATIONS_DOCUMENTATION.md): notification persistence, delivery, UI, and retention.
+- [PROFILE_DOCUMENTATION.md](PROFILE_DOCUMENTATION.md): authenticated profile-management settings and persistence policy.
 - [WIKI_DOCUMENTATION.md](WIKI_DOCUMENTATION.md): public Help/wiki rendering and administrative article management.
 - [P2P_CHALLENGES_DOCUMENTATION.md](P2P_CHALLENGES_DOCUMENTATION.md): player-to-player challenge scheduling.
 - [NAV_INDEX_EN.md](NAV_INDEX_EN.md): navigation-oriented page and API index.
