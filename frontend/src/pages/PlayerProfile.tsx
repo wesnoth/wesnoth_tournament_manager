@@ -34,7 +34,7 @@ const PlayerProfile: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { user: currentUser } = useAuthStore();
+  const { isAuthenticated, user: currentUser } = useAuthStore();
   
   const [opponentSide, setOpponentSide] = useState(0);
   const [matchDetailsModal, setMatchDetailsModal] = useState<any>(null);
@@ -197,7 +197,7 @@ const PlayerProfile: React.FC = () => {
             
             <div className="mb-8">
               <div className="mb-3 flex justify-end">
-                {currentUser?.id !== id && (
+                {isAuthenticated && currentUser?.id !== id && (
                   <button
                     onClick={() => setShowChallengeModal(true)}
                     className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors font-semibold"

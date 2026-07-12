@@ -6,6 +6,7 @@ This index is organized following the app navigation (Navbar as entry point). Fo
 - Routes registered in `frontend/src/App.tsx` (React Router `Routes`/`Route`).
 - Navbar links in `frontend/src/components/Navbar.tsx`.
 - Frontend ↔ backend mapping in `frontend/src/services/api.ts` (main service) and `frontend/src/services/statisticsService.ts`, `frontend/src/services/playerStatisticsService.ts`.
+- High-level player and authenticated-area responsibilities: [PLAYERS_AND_USERS_DOCUMENTATION.md](PLAYERS_AND_USERS_DOCUMENTATION.md).
 
 ---
 
@@ -25,6 +26,8 @@ This index is organized following the app navigation (Navbar as entry point). Fo
 | Register *(unauth)* | `/register` | `pages/Register.tsx` (→ wesnoth.org) |
 
 Admin panel is accessible at `/admin` for users with `is_admin = 1` in `users_extension`.
+
+The authenticated area is documented at [PLAYERS_AND_USERS_DOCUMENTATION.md](PLAYERS_AND_USERS_DOCUMENTATION.md). Its shared navigation includes `/profile`, `/my-tournaments`, `/notifications`, and `/help`; moderator and administrator links are added according to the authenticated user's role.
 
 ---
 
