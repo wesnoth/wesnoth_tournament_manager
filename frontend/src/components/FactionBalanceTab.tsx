@@ -356,7 +356,7 @@ const FactionBalanceTab: React.FC<FactionBalanceTabProps> = ({ beforeData = null
               <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('side1_winrate') || 'Side 1 WR'}</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('side2_winrate') || 'Side 2 WR'}</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('maps_played') || 'Maps'}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('balance_indicator') || 'Balance'}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('imbalance') || 'Imbalance'}</th>
             </tr>
           </thead>
           <tbody>
@@ -405,13 +405,18 @@ const FactionBalanceTab: React.FC<FactionBalanceTabProps> = ({ beforeData = null
                 </td>
                 <td className="px-4 py-3 text-gray-700">{stat.maps_played}</td>
                 <td className="px-4 py-3">
-                  <span className={`px-3 py-1 rounded-lg font-semibold inline-block min-w-fit ${
-                    stat.global_winrate > 55 ? 'bg-green-100 text-green-700' :
-                    stat.global_winrate < 45 ? 'bg-red-100 text-red-700' :
-                    'bg-blue-100 text-blue-700'
-                  }`}>
-                    {stat.global_winrate.toFixed(1)}%
-                  </span>
+                  {(() => {
+                    // Express faction imbalance as the distance from an even
+                    // 50% winrate, matching the matchup views.
+                    const imbalance = Math.abs(stat.global_winrate - 50) * 2;
+                    return <span className={`px-3 py-1 rounded-lg font-semibold inline-block min-w-fit ${
+                      imbalance > 20 ? 'bg-red-100 text-red-700' :
+                      imbalance > 10 ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-blue-100 text-blue-700'
+                    }`}>
+                      {imbalance.toFixed(1)}%
+                    </span>;
+                  })()}
                 </td>
               </tr>
             ))}
