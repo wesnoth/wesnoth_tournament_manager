@@ -52,22 +52,6 @@ router.get('/wiki/images/:filename', (req, res) => {
   }
 });
 
-// Get FAQ (public endpoint) - returns all language versions
-// Frontend will handle language selection with fallback to English
-router.get('/faq', async (req, res) => {
-  try {
-    const result = await query(
-      `SELECT id, question, answer, language_code, created_at, \`order\`
-       FROM faq
-       ORDER BY \`order\` ASC, created_at DESC, language_code ASC`
-    );
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching FAQ:', error);
-    res.status(500).json({ error: 'Failed to fetch FAQ' });
-  }
-});
-
 // Get all tournaments (public endpoint)
 router.get('/tournaments', optionalAuthMiddleware, async (req, res) => {
   try {

@@ -29,14 +29,12 @@ const Rankings = React.lazy(() => import('./pages/Rankings'));
 const Statistics = React.lazy(() => import('./pages/Statistics'));
 const Players = React.lazy(() => import('./pages/Players'));
 const AdminAnnouncements = React.lazy(() => import('./pages/AdminAnnouncements'));
-const AdminFAQ = React.lazy(() => import('./pages/AdminFAQ'));
 const AdminTournaments = React.lazy(() => import('./pages/AdminTournaments'));
 const AdminDisputes = React.lazy(() => import('./pages/AdminDisputes'));
 const AdminAudit = React.lazy(() => import('./pages/AdminAudit'));
 const AdminReplays = React.lazy(() => import('./pages/AdminReplays'));
 const AdminMapsAndFactions = React.lazy(() => import('./pages/AdminMapsAndFactions'));
 const AdminBalanceEvents = React.lazy(() => import('./pages/AdminBalanceEvents'));
-const FAQ = React.lazy(() => import('./pages/FAQ'));
 const Tournaments = React.lazy(() => import('./pages/Tournaments'));
 const TournamentDetail = React.lazy(() => import('./pages/TournamentDetail'));
 const Events = React.lazy(() => import('./pages/Events'));
@@ -111,7 +109,7 @@ const App: React.FC = () => {
               <Route path="/players" element={<Players />} />
               <Route path="/rankings" element={<Rankings />} />
               <Route path="/statistics" element={<Statistics />} />
-              <Route path="/faq" element={<FAQ />} />
+              <Route path="/faq" element={<Navigate to="/help/faq" replace />} />
               <Route path="/help" element={<Help />} />
               <Route path="/help/:slug" element={<Help />} />
               <Route path="/tournaments" element={<Tournaments />} />
@@ -121,7 +119,7 @@ const App: React.FC = () => {
               <Route path="/my-tournaments" element={<MyTournaments />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/admin/announcements" element={<AdminAnnouncements />} />
-              <Route path="/admin/faq" element={<AdminFAQ />} />
+              <Route path="/admin/faq" element={<Navigate to="/admin/wiki" replace />} />
               <Route path="/admin/tournaments" element={<AdminTournaments />} />
               <Route path="/admin/wiki" element={<AdminWiki />} />
               <Route path="/admin/rule-templates" element={<AdminRuleTemplates />} />

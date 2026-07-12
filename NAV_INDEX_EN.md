@@ -20,7 +20,7 @@ This index is organized following the app navigation (Navbar as entry point). Fo
 | Statistics | `/statistics` | `pages/Statistics.tsx` |
 | Tournaments | `/tournaments` | `pages/Tournaments.tsx` |
 | Matches | `/matches` | `pages/Matches.tsx` |
-| FAQ | `/faq` | `pages/FAQ.tsx` |
+| FAQ | `/faq` → `/help/faq` | Wiki article with slug `faq` |
 | User menu → Profile *(auth)* | `/user` | `pages/User.tsx` |
 | Login *(unauth)* | `/login` | `pages/Login.tsx` |
 | Register *(unauth)* | `/register` | `pages/Register.tsx` (→ wesnoth.org) |
@@ -130,8 +130,9 @@ Actions:
 ### My Stats (`/my-stats`) — `pages/MyStats.tsx`
 - `playerStatisticsService.*` — same endpoints as `/player/:id/stats` but scoped to current user.
 
-### FAQ (`/faq`) — `pages/FAQ.tsx`
-- `publicService.getFaq()` → `GET /api/public/faq` — all FAQ entries, frontend applies language fallback.
+### FAQ (`/faq` → `/help/faq`) — Wiki article
+- The navbar keeps `/faq` as a stable entry point and redirects to the published Wiki article with slug `faq`.
+- The article is rendered by `pages/Help.tsx` and managed from `/admin/wiki`.
 
 ### Login (`/login`) — `pages/Login.tsx`
 - `authService.login(nickname, password)` → `POST /api/auth/login`.
@@ -163,11 +164,8 @@ All admin routes require `is_admin = 1` in `users_extension`.
 - `adminService.updateNews(id, data)` → `PUT /api/admin/news/:id`.
 - `adminService.deleteNews(id)` → `DELETE /api/admin/news/:id`.
 
-### `/admin/faq` — `pages/AdminFAQ.tsx`
-- `adminService.getFaq()` → `GET /api/admin/faq`.
-- `adminService.createFaq(data)` → `POST /api/admin/faq`.
-- `adminService.updateFaq(id, data)` → `PUT /api/admin/faq/:id`.
-- `adminService.deleteFaq(id)` → `DELETE /api/admin/faq/:id`.
+### `/admin/faq` → `/admin/wiki`
+- The legacy admin URL redirects to Wiki management. FAQ content is edited as the `faq` article using the shared Markdown editor.
 
 ### `/admin/tournaments` — `pages/AdminTournaments.tsx`
 - `publicService.getTournaments()` → `GET /api/public/tournaments` — list all tournaments.

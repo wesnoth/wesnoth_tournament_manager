@@ -19,7 +19,7 @@
 
 ## Public API (no auth)
 
-- `[GET] /api/public/faq` — Public — none — All FAQ entries (all languages). Frontend applies language fallback.
+- FAQ content is served by the published Wiki article at `/help/faq`; `/faq` is the stable navbar redirect.
 - `[GET] /api/public/tournaments` — Public — query: `page, name, status, type` — List tournaments.
 - `[GET] /api/public/tournaments/:id` — Public — Tournament details.
 - `[GET] /api/public/tournaments/:id/participants` — Public — Tournament participant list.
@@ -246,10 +246,7 @@
 - `[POST] /api/admin/news` — Private (admin) — body: `{title, content, language, ...}` — Create news item.
 - `[PUT] /api/admin/news/:id` — Private (admin) — Update news item.
 - `[DELETE] /api/admin/news/:id` — Private (admin) — Delete news item.
-- `[GET] /api/admin/faq` — Private (admin) — List all FAQ entries.
-- `[POST] /api/admin/faq` — Private (admin) — body: `{question, answer, language, ...}` — Create FAQ entry.
-- `[PUT] /api/admin/faq/:id` — Private (admin) — Update FAQ entry.
-- `[DELETE] /api/admin/faq/:id` — Private (admin) — Delete FAQ entry.
+- FAQ content is managed as the published Wiki article with slug `faq`; use the Wiki endpoints documented below.
 
 ### Maps & Factions
 - `[GET] /api/admin/maps` — Private (admin) — List all maps.

@@ -263,12 +263,6 @@ export const adminService = {
   updateNews: (id: string, data: any) => api.put(`/admin/news/${id}`, data),
   deleteNews: (id: string) => api.delete(`/admin/news/${id}`),
   
-  // FAQ
-  getFaq: () => api.get('/admin/faq'),
-  createFaq: (data: any) => api.post('/admin/faq', data),
-  updateFaq: (id: string, data: any) => api.put(`/admin/faq/${id}`, data),
-  deleteFaq: (id: string) => api.delete(`/admin/faq/${id}`),
-
   // Tournament rule templates
   getRuleTemplates: () => api.get('/admin/rule-templates'),
   createRuleTemplate: (data: { title: string; content_markdown: string; is_active?: boolean }) =>
@@ -280,8 +274,6 @@ export const adminService = {
 
 // Public API endpoints (no auth required)
 export const publicService = {
-  getFaqByLanguage: (language: string) => api.get(`/public/faq`), // Now returns all languages, frontend handles fallback
-  getFaq: () => api.get('/public/faq'), // Get all FAQ items (all languages)
   getNews: () => api.get('/public/news'),
   getRecentMatches: () => api.get('/public/matches/recent'),
   getPlayerProfile: (id: string) => api.get(`/public/players/${id}`),
