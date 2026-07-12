@@ -223,8 +223,8 @@ const FactionVsFactionTab: React.FC<{ beforeData?: any[] | null; afterData?: any
         <th className="px-4 py-3 text-center font-semibold text-gray-800">{t('total_games') || 'G'}</th>
         <th className="px-4 py-3 text-center font-semibold text-amber-700 bg-amber-50">{t('side_1_wr') || 'S1 WR'}</th>
         <th className="px-4 py-3 text-center font-semibold text-purple-700 bg-purple-50">{t('side_2_wr') || 'S2 WR'}</th>
-        <th className="px-4 py-3 text-center font-semibold text-gray-800">{t('imbalance') || 'Imbalance'}</th>
         <th className="px-4 py-3 text-center font-semibold text-gray-800">{t('change') || 'Change'}</th>
+        <th className="px-4 py-3 text-center font-semibold text-gray-800">{t('imbalance') || 'Imbalance'}</th>
       </tr>
     </thead>
   );
@@ -305,16 +305,6 @@ const FactionVsFactionTab: React.FC<{ beforeData?: any[] | null; afterData?: any
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <div className="flex flex-col gap-0.5">
-                        <span className={`px-2 py-0.5 rounded text-sm font-semibold ${item.after ? getImbalanceColor(item.after.imbalance) : 'text-gray-400'}`}>
-                          {item.after ? `${item.after.imbalance.toFixed(1)}%` : '—'}
-                        </span>
-                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${item.before ? getImbalanceColor(item.before.imbalance) : 'text-gray-400'}`}>
-                          {item.before ? `${item.before.imbalance.toFixed(1)}%` : '—'}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-center">
                       {item.before && item.after ? (() => {
                         const change = item.after.side1_winrate - item.before.side1_winrate;
                         return (
@@ -327,6 +317,16 @@ const FactionVsFactionTab: React.FC<{ beforeData?: any[] | null; afterData?: any
                           </span>
                         );
                       })() : <span className="text-gray-400">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <div className="flex flex-col gap-0.5">
+                        <span className={`px-2 py-0.5 rounded text-sm font-semibold ${item.after ? getImbalanceColor(item.after.imbalance) : 'text-gray-400'}`}>
+                          {item.after ? `${item.after.imbalance.toFixed(1)}%` : '—'}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${item.before ? getImbalanceColor(item.before.imbalance) : 'text-gray-400'}`}>
+                          {item.before ? `${item.before.imbalance.toFixed(1)}%` : '—'}
+                        </span>
+                      </div>
                     </td>
                   </tr>
                 );
