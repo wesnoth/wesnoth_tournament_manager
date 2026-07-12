@@ -99,6 +99,11 @@ export async function createMatch(input: CreateMatchInput): Promise<CreateMatchR
 
     const matchId = uuidv4();
 
+    // Keep the column list and positional values aligned explicitly. This
+    // insert is used by replay and manual reporting paths, so a new column or
+    // value must be added in the same position on both sides. The legacy
+    // tournament_type/tournament_mode values are retained for compatibility
+    // until their writers and readers are removed in a separate migration.
     await query(
       `INSERT INTO matches (
          id, winner_id, loser_id, winner_faction, loser_faction, map,

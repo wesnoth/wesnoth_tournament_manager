@@ -11,6 +11,7 @@ interface SideFactionRow {
   games: number;
   side1_wins: number;
   side1_winrate: number;
+  // Difference between Side 1 and Side 2 winrates in percentage points.
   imbalance: number; // |s1_winrate - 50| * 2
 }
 
@@ -32,15 +33,15 @@ function globalToSideFactionRows(data: any[], minGames: number): SideFactionRow[
 
   data.forEach((item: any) => {
     const s1g  = parseInt(String(item.side1_games), 10) || 0;
-    const s1wr = parseFloat(item.f1_side1_winrate)      || 0;
     const s2g  = parseInt(String(item.side2_games), 10) || 0;
-    const s2wr = parseFloat(item.f1_side2_winrate)      || 0;
+    const s1w  = parseInt(String(item.side1_wins), 10) || 0;
+    const s2w  = parseInt(String(item.side2_wins), 10) || 0;
 
     // faction_1 as side 1
     if (s1g > 0) {
       const key = `${item.faction_1_id}|${item.faction_2_id}`;
       const existing = accum.get(key);
-      const wins = Math.round(s1wr * s1g / 100);
+      const wins = s1w;
       if (existing) {
         existing.games      += s1g;
         existing.side1_wins += wins;
@@ -57,11 +58,11 @@ function globalToSideFactionRows(data: any[], minGames: number): SideFactionRow[
 
     // faction_2 as side 1
     if (s2g > 0) {
+      const f2s1w = s2g - s2w;
       const key = `${item.faction_2_id}|${item.faction_1_id}`;
       const existing = accum.get(key);
-      // faction_2's WR as side 1 = 100 - faction_1's WR as side 2
-      const f2s1wr = 100 - s2wr;
-      const wins = Math.round(f2s1wr * s2g / 100);
+      // faction_2's wins as side 1 are faction_1's losses as side 2.
+      const wins = f2s1w;
       if (existing) {
         existing.games      += s2g;
         existing.side1_wins += wins;
@@ -94,37 +95,51 @@ function comparisonToSideFactionRows(data: any[]): SideFactionRow[] {
   const rowMap = new Map<string, SideFactionAccum>();
 
   data.forEach((item: any) => {
+    // Each match is represented by both faction perspectives. Use one
+    // canonical direction per faction pair and aggregate that direction
+    // across all maps in the selected interval. Without this canonical
+    // selection, the same match would be counted once for each faction.
+    const factionId = item.faction_id || '';
+    const opponentId = item.opponent_faction_id || '';
+    if (factionId > opponentId) return;
+
     const s1g = parseInt(String(item.side1_games), 10) || 0;
     const s1w = parseInt(String(item.side1_wins),  10) || 0;
     const s2g = parseInt(String(item.side2_games), 10) || 0;
     const s2w = parseInt(String(item.side2_wins),  10) || 0;
 
+    const addRow = (key: string, row: SideFactionAccum) => {
+      const existing = rowMap.get(key);
+      if (existing) {
+        existing.games += row.games;
+        existing.side1_wins += row.side1_wins;
+      } else {
+        rowMap.set(key, row);
+      }
+    };
+
     // faction played as side 1
     if (s1g > 0) {
-      const key = `${item.faction_id}|${item.opponent_faction_id}`;
-      if (!rowMap.has(key)) {
-        rowMap.set(key, {
-          side1_faction_id:   item.faction_id || '',
+      const key = `${factionId}|${opponentId}`;
+      addRow(key, {
+          side1_faction_id:   factionId,
           side1_faction_name: item.faction_name || '',
-          side2_faction_id:   item.opponent_faction_id || '',
+          side2_faction_id:   opponentId,
           side2_faction_name: item.opponent_faction_name || '',
           games: s1g, side1_wins: s1w,
-        });
-      }
+      });
     }
 
     // opponent played as side 1 (faction was side 2)
     if (s2g > 0) {
-      const key = `${item.opponent_faction_id}|${item.faction_id}`;
-      if (!rowMap.has(key)) {
-        rowMap.set(key, {
-          side1_faction_id:   item.opponent_faction_id || '',
+      const key = `${opponentId}|${factionId}`;
+      addRow(key, {
+          side1_faction_id:   opponentId,
           side1_faction_name: item.opponent_faction_name || '',
-          side2_faction_id:   item.faction_id || '',
+          side2_faction_id:   factionId,
           side2_faction_name: item.faction_name || '',
           games: s2g, side1_wins: s2g - s2w,
-        });
-      }
+      });
     }
   });
 

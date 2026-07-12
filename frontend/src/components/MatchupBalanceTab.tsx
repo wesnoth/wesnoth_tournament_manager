@@ -13,6 +13,8 @@ interface SideMatchupRow {
   games: number;
   side1_wins: number;
   side1_winrate: number;
+  // Difference between Side 1 and Side 2 winrates, expressed in percentage
+  // points. A perfectly even matchup has an imbalance of 0.
   imbalance: number; // |s1_winrate - 50| * 2
 }
 
@@ -21,11 +23,12 @@ function globalToSideRows(data: any[], minGames: number): SideMatchupRow[] {
   const rows: SideMatchupRow[] = [];
   data.forEach((item: any) => {
     const s1g  = parseInt(String(item.side1_games), 10) || 0;
-    const s1wr = parseFloat(item.f1_side1_winrate)      || 0;
     const s2g  = parseInt(String(item.side2_games), 10) || 0;
-    const s2wr = parseFloat(item.f1_side2_winrate)      || 0;
+    const s1w  = parseInt(String(item.side1_wins), 10) || 0;
+    const s2w  = parseInt(String(item.side2_wins), 10) || 0;
 
     if (s1g >= minGames) {
+      const s1wr = (s1w / s1g) * 100;
       rows.push({
         map_id: item.map_id, map_name: item.map_name,
         side1_faction_id:   item.faction_1_id,
@@ -33,14 +36,15 @@ function globalToSideRows(data: any[], minGames: number): SideMatchupRow[] {
         side2_faction_id:   item.faction_2_id,
         side2_faction_name: item.faction_2_name,
         games: s1g,
-        side1_wins: Math.round(s1wr * s1g / 100),
+        side1_wins: s1w,
         side1_winrate: s1wr,
         imbalance: Math.abs(s1wr - 50) * 2,
       });
     }
     if (s2g >= minGames) {
-      // faction_2 plays as side 1 → their WR = 100 - faction_1's WR as side 2
-      const f2s1wr = 100 - s2wr;
+      // faction_2 plays as side 1, so its wins are faction_1's losses.
+      const f2s1w = s2g - s2w;
+      const f2s1wr = (f2s1w / s2g) * 100;
       rows.push({
         map_id: item.map_id, map_name: item.map_name,
         side1_faction_id:   item.faction_2_id,
@@ -48,7 +52,7 @@ function globalToSideRows(data: any[], minGames: number): SideMatchupRow[] {
         side2_faction_id:   item.faction_1_id,
         side2_faction_name: item.faction_1_name,
         games: s2g,
-        side1_wins: Math.round(f2s1wr * s2g / 100),
+        side1_wins: f2s1w,
         side1_winrate: f2s1wr,
         imbalance: Math.abs(f2s1wr - 50) * 2,
       });
@@ -65,44 +69,59 @@ function comparisonToSideRows(data: any[]): SideMatchupRow[] {
   const rowMap = new Map<string, SideMatchupRow>();
 
   data.forEach((item: any) => {
+    // Each match is represented by both faction perspectives. Use one
+    // canonical direction per map/pair, then derive both side assignments.
+    // This prevents the same games from being counted once for each faction.
+    const factionId = item.faction_id || '';
+    const opponentId = item.opponent_faction_id || '';
+    if (factionId > opponentId) return;
+
     const s1g = parseInt(String(item.side1_games), 10) || 0;
     const s1w = parseInt(String(item.side1_wins),  10) || 0;
     const s2g = parseInt(String(item.side2_games), 10) || 0;
     const s2w = parseInt(String(item.side2_wins),  10) || 0;
 
+    const addRow = (key: string, row: SideMatchupRow) => {
+      const existing = rowMap.get(key);
+      if (!existing) {
+        rowMap.set(key, row);
+        return;
+      }
+      existing.games += row.games;
+      existing.side1_wins += row.side1_wins;
+      existing.side1_winrate = (existing.side1_wins / existing.games) * 100;
+      existing.imbalance = Math.abs(existing.side1_winrate - 50) * 2;
+    };
+
     // faction played as side 1
     if (s1g > 0) {
-      const key = `${item.map_id}|${item.faction_id}|${item.opponent_faction_id}`;
-      if (!rowMap.has(key)) {
-        const wr = (s1w / s1g) * 100;
-        rowMap.set(key, {
+      const key = `${item.map_id}|${factionId}|${opponentId}`;
+      const wr = (s1w / s1g) * 100;
+      addRow(key, {
           map_id: item.map_id || '', map_name: item.map_name || '',
-          side1_faction_id:   item.faction_id || '',
+          side1_faction_id:   factionId,
           side1_faction_name: item.faction_name || '',
-          side2_faction_id:   item.opponent_faction_id || '',
+          side2_faction_id:   opponentId,
           side2_faction_name: item.opponent_faction_name || '',
           games: s1g, side1_wins: s1w,
           side1_winrate: wr, imbalance: Math.abs(wr - 50) * 2,
-        });
-      }
+      });
     }
 
     // opponent played as side 1 (faction was side 2)
     if (s2g > 0) {
-      const key = `${item.map_id}|${item.opponent_faction_id}|${item.faction_id}`;
-      if (!rowMap.has(key)) {
+      const key = `${item.map_id}|${opponentId}|${factionId}`;
         const oppWins = s2g - s2w;
         const wr = (oppWins / s2g) * 100;
-        rowMap.set(key, {
+        addRow(key, {
           map_id: item.map_id || '', map_name: item.map_name || '',
-          side1_faction_id:   item.opponent_faction_id || '',
+          side1_faction_id:   opponentId,
           side1_faction_name: item.opponent_faction_name || '',
-          side2_faction_id:   item.faction_id || '',
+          side2_faction_id:   factionId,
           side2_faction_name: item.faction_name || '',
           games: s2g, side1_wins: oppWins,
           side1_winrate: wr, imbalance: Math.abs(wr - 50) * 2,
         });
-      }
     }
   });
 

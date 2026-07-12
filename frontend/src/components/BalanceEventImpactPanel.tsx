@@ -143,6 +143,9 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
       setBeforeData(beforeAgg);
       setAfterData(afterAgg);
 
+      // The API returns event boundaries, while the UI displays the actual
+      // non-overlapping match intervals: the event day belongs to Before and
+      // the following day starts After.
       onIntervalChange?.(
         selectedEvent.previous_event_date
           ? `${formatDate(addDays(selectedEvent.previous_event_date))} – ${formatDate(selectedEvent.event_date)}`

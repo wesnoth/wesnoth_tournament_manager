@@ -8,6 +8,7 @@
 ## Documentation
 
 - Write all source-code comments and JSDoc in English.
+- Add explanatory comments or JSDoc for non-trivial logic, especially statistical calculations, data transformations, compatibility decisions, and boundary conditions. Explain the reasoning and invariants, not merely what the syntax does.
 - Write all Markdown documentation in English.
 - Treat comments and JSDoc beside the source code as the detailed source of truth for functions, parameters, return values, limits, side effects, and implementation behavior.
 - Keep Markdown documentation high-level and stable: describe architecture, responsibilities, configuration, workflows, and policies.

@@ -1387,6 +1387,9 @@ router.post('/recalculate-snapshots', authMiddleware, async (req: AuthRequest, r
 
     const { recreateAll } = req.body;
 
+    // A full rebuild is deliberately explicit because it truncates historical
+    // derived rows and recreates them from matches. Audit the operation after
+    // the service succeeds so the audit record reflects a completed rebuild.
     console.log('Starting balance event snapshots recalculation', { recreateAll });
 
     // Call TypeScript function to recalculate snapshots

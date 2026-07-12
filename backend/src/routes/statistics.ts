@@ -119,8 +119,10 @@ router.get('/matchups', async (req, res) => {
     if (!Number.isInteger(minGames) || minGames < 1 || minGames > 1000000) {
       return res.status(400).json({ error: 'minGames must be a positive integer' });
     }
-    // Get matchups - including both non-mirror (faction_id < opponent_faction_id) and mirror matchups
-    // Aggregate across faction_side dimension, but also expose per-side winrates for bias analysis
+    // Keep one canonical faction direction per pair to avoid returning the same
+    // matchup twice. The exact side win counts are returned alongside the
+    // percentages so the frontend never has to reconstruct counts from rounded
+    // winrates.
     const queryText = `SELECT 
       fms.map_id,
       gm.name as map_name,
@@ -138,9 +140,11 @@ router.get('/matchups', async (req, res) => {
       ABS(SUM(fms.wins) - SUM(fms.losses)) as imbalance,
       -- Side 1 breakdown (faction_1 playing as side 1)
       SUM(CASE WHEN fms.faction_side = 1 THEN fms.total_games ELSE 0 END) as side1_games,
+      SUM(CASE WHEN fms.faction_side = 1 THEN fms.wins ELSE 0 END) as side1_wins,
       ROUND(100.0 * SUM(CASE WHEN fms.faction_side = 1 THEN fms.wins ELSE 0 END) / NULLIF(SUM(CASE WHEN fms.faction_side = 1 THEN fms.total_games ELSE 0 END), 0), 2) as f1_side1_winrate,
       -- Side 2 breakdown (faction_1 playing as side 2)
       SUM(CASE WHEN fms.faction_side = 2 THEN fms.total_games ELSE 0 END) as side2_games,
+      SUM(CASE WHEN fms.faction_side = 2 THEN fms.wins ELSE 0 END) as side2_wins,
       ROUND(100.0 * SUM(CASE WHEN fms.faction_side = 2 THEN fms.wins ELSE 0 END) / NULLIF(SUM(CASE WHEN fms.faction_side = 2 THEN fms.total_games ELSE 0 END), 0), 2) as f1_side2_winrate,
       CURRENT_TIMESTAMP as last_updated
     FROM faction_map_statistics fms
@@ -219,21 +223,36 @@ router.get('/map-balance', async (req, res) => {
     if (!Number.isInteger(minGames) || minGames < 1 || minGames > 1000000) {
       return res.status(400).json({ error: 'minGames must be a positive integer' });
     }
+    // First aggregate every faction across all of its opponents on a map.
+    // The map imbalance metric is the sample standard deviation of those
+    // faction-level winrates. Calculating STDDEV on raw matchup rows would give
+    // small, noisy matchups the same weight as well-sampled ones and would not
+    // describe overall faction balance on the map.
     const result = await query(
       `SELECT 
-        gm.id as map_id,
-        gm.name as map_name,
-        COUNT(DISTINCT fms.faction_id) as factions_used,
-        ROUND(SUM(fms.total_games) / 2) as total_games,
-        ROUND(STDDEV(fms.winrate), 2) as avg_imbalance,
-        MIN(fms.winrate) as lowest_winrate,
-        MAX(fms.winrate) as highest_winrate,
-        MAX(fms.last_updated) as last_updated,
-        STDDEV(fms.winrate) as stddev_full_precision
-      FROM faction_map_statistics fms
-      JOIN game_maps gm ON fms.map_id = gm.id
-      GROUP BY gm.id, gm.name
-      HAVING SUM(fms.total_games) >= ?
+        map_id,
+        map_name,
+        COUNT(*) as factions_used,
+        ROUND(SUM(faction_games) / 2) as total_games,
+        ROUND(STDDEV(faction_winrate), 2) as avg_imbalance,
+        MIN(faction_winrate) as lowest_winrate,
+        MAX(faction_winrate) as highest_winrate,
+        MAX(last_updated) as last_updated,
+        STDDEV(faction_winrate) as stddev_full_precision
+      FROM (
+        SELECT
+          gm.id as map_id,
+          gm.name as map_name,
+          fms.faction_id,
+          SUM(fms.total_games) as faction_games,
+          ROUND(100.0 * SUM(fms.wins) / NULLIF(SUM(fms.total_games), 0), 2) as faction_winrate,
+          MAX(fms.last_updated) as last_updated
+        FROM faction_map_statistics fms
+        JOIN game_maps gm ON fms.map_id = gm.id
+        GROUP BY gm.id, gm.name, fms.faction_id
+      ) faction_map_totals
+      GROUP BY map_id, map_name
+      HAVING SUM(faction_games) >= ?
       ORDER BY avg_imbalance ASC`,
       [minGames * 2]
     );
