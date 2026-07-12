@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../store/authStore';
 import WikiEditor from '../components/WikiEditor';
+import MainLayout from '../components/MainLayout';
 import JSZip from 'jszip';
 
 interface WikiTranslation {
@@ -447,18 +448,21 @@ const AdminWiki: React.FC = () => {
 
   if (showEditor) {
     return (
-      <WikiEditor
-        editingArticle={editingArticle || undefined}
-        onSave={handleSaveArticle}
-        onCancel={() => setShowEditor(false)}
-        token={token}
-        userId={userId || ''}
-      />
+      <MainLayout>
+        <WikiEditor
+          editingArticle={editingArticle || undefined}
+          onSave={handleSaveArticle}
+          onCancel={() => setShowEditor(false)}
+          token={token}
+          userId={userId || ''}
+        />
+      </MainLayout>
     );
   }
 
   return (
-    <div className="admin-wiki p-6 max-w-7xl mx-auto">
+    <MainLayout>
+      <div className="admin-wiki p-6 max-w-7xl mx-auto">
       <h1 className="text-4xl font-bold text-gray-900 mb-6">Wiki Management</h1>
 
       {error && (
@@ -748,7 +752,8 @@ const AdminWiki: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </MainLayout>
   );
 };
 

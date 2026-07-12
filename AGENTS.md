@@ -25,3 +25,9 @@
 - Text and numeric list filters must not trigger a request on every keystroke.
 - Enter and the page's Refresh action must apply the current typed filter values and produce the same refresh behavior.
 - Select, checkbox, and other non-text filters may apply immediately when changed.
+
+## Navigation persistence
+
+- Every page reached through the user or admin navigation must render inside the shared authenticated layout so the `UserProfileNav` remains visible for all user and administrative actions.
+- The admin navigation is shown by that shared layout only when the authenticated user has the required permissions.
+- New user or admin navigation entries must use the shared layout; page-specific layouts must not replace or hide either navigation bar.
