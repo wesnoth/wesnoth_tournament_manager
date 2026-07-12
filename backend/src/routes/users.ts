@@ -12,8 +12,6 @@ const router = Router();
 // Get user profile
 router.get('/profile', authMiddleware, async (req: AuthRequest, res) => {
   try {
-    console.log(`[PROFILE] Fetching profile for userId: ${req.userId}`);
-    
     const userResult = await query(
       `SELECT 
         u.id, 
@@ -25,9 +23,9 @@ router.get('/profile', authMiddleware, async (req: AuthRequest, res) => {
         u.is_admin, 
         u.created_at, 
         u.is_rated, 
-        u.matches_played, 
-        u.total_wins, 
-        u.total_losses, 
+        COALESCE(pms.total_games, u.matches_played) AS matches_played,
+        COALESCE(pms.wins, u.total_wins) AS total_wins,
+        COALESCE(pms.losses, u.total_losses) AS total_losses,
         u.trend,
         u.is_active,
         u.country,
@@ -41,14 +39,12 @@ router.get('/profile', authMiddleware, async (req: AuthRequest, res) => {
         AND pms.opponent_id IS NULL 
         AND pms.map_id IS NULL 
         AND pms.faction_id IS NULL
+        AND pms.player_side = 0
       WHERE u.id = ?`,
       [req.userId]
     );
 
-    console.log(`[PROFILE] Query returned ${userResult.rows.length} rows for userId: ${req.userId}`);
-    
     if (userResult.rows.length === 0) {
-      console.log(`[PROFILE] User not found in users_extension with ID: ${req.userId}`);
       return res.status(404).json({ error: 'User not found' });
     }
 
@@ -60,8 +56,6 @@ router.get('/profile', authMiddleware, async (req: AuthRequest, res) => {
       [req.userId, req.userId]
     );
 
-    console.log(`[User ${req.userId}] Last activity query result:`, lastActivityResult.rows);
-
     // Parse JSON fields
     if (user.availability_schedule && typeof user.availability_schedule === 'string') {
       user.availability_schedule = JSON.parse(user.availability_schedule);
@@ -71,8 +65,6 @@ router.get('/profile', authMiddleware, async (req: AuthRequest, res) => {
       ...user,
       last_activity: lastActivityResult.rows[0]?.created_at || null
     };
-
-    console.log(`[User ${req.userId}] Final result:`, result);
 
     res.json(result);
   } catch (error) {
@@ -86,12 +78,12 @@ router.get('/:id/stats', async (req, res) => {
     const { id } = req.params;
 
     const matchesResult = await query(
-      `SELECT COUNT(*) as total FROM matches WHERE (winner_id = ? OR loser_id = ?) AND status = 'confirmed'`,
+      `SELECT COUNT(*) as total FROM matches WHERE (winner_id = ? OR loser_id = ?) AND status != 'cancelled'`,
       [id, id]
     );
 
-    const winsResult = await query("SELECT COUNT(*) as wins FROM matches WHERE winner_id = ? AND status = 'confirmed'", [id]);
-    const lossesResult = await query("SELECT COUNT(*) as losses FROM matches WHERE loser_id = ? AND status = 'confirmed'", [id]);
+    const winsResult = await query("SELECT COUNT(*) as wins FROM matches WHERE winner_id = ? AND status != 'cancelled'", [id]);
+    const lossesResult = await query("SELECT COUNT(*) as losses FROM matches WHERE loser_id = ? AND status != 'cancelled'", [id]);
 
     const userResult = await query('SELECT elo_rating, level FROM users_extension WHERE id = ?', [id]);
 
@@ -200,8 +192,9 @@ router.get('/:id/matches', async (req, res) => {
     const mapFilter = (req.query.map as string)?.trim() || '';
     const statusFilter = (req.query.status as string)?.trim() || '';
     const factionFilter = (req.query.faction as string)?.trim() || '';
+    const includePending = req.query.include_pending === 'true';
 
-    console.log('🔍 GET /users/:id/matches - Filters received:', { playerFilter, mapFilter, statusFilter, factionFilter });
+    console.log('GET /users/:id/matches filters:', { playerFilter, mapFilter, statusFilter, factionFilter, includePending });
 
     // Get user nickname to match against replay participants
     const userResult = await query(
@@ -216,14 +209,14 @@ router.get('/:id/matches', async (req, res) => {
     let params: any[] = [id, id];  // id appears twice in WHERE clause
 
     if (playerFilter) {
-      whereConditions.push(`(w.nickname LIKE ? OR l.nickname LIKE ?)`);
-      params.push(`%${playerFilter}%`);
-      params.push(`%${playerFilter}%`);
+      whereConditions.push(`(LOWER(w.nickname) LIKE ? OR LOWER(l.nickname) LIKE ?)`);
+      params.push(`%${playerFilter.toLowerCase()}%`);
+      params.push(`%${playerFilter.toLowerCase()}%`);
     }
 
     if (mapFilter) {
-      whereConditions.push(`m.map LIKE ?`);
-      params.push(`%${mapFilter}%`);
+      whereConditions.push(`LOWER(m.map) LIKE ?`);
+      params.push(`%${mapFilter.toLowerCase()}%`);
     }
 
     if (statusFilter) {
@@ -240,9 +233,6 @@ router.get('/:id/matches', async (req, res) => {
 
     const whereClause = whereConditions.join(' AND ');
 
-    console.log('🔍 WHERE clause:', whereClause);
-    console.log('🔍 Query params (matches):', params);
-
     // Get total count of filtered matches
     const countQuery = `SELECT COUNT(*) as total FROM matches m 
                         JOIN users_extension w ON m.winner_id = w.id 
@@ -253,8 +243,10 @@ router.get('/:id/matches', async (req, res) => {
 
     // Get matches for current page with filters
     const matchParams = [...params];
-    matchParams.push(limit);
-    matchParams.push(offset);
+    if (!includePending) {
+      matchParams.push(limit);
+      matchParams.push(offset);
+    }
     const result = await query(
       `SELECT 
         m.*,
@@ -264,16 +256,14 @@ router.get('/:id/matches', async (req, res) => {
        JOIN users_extension w ON m.winner_id = w.id
        JOIN users_extension l ON m.loser_id = l.id
        WHERE ${whereClause}
-       ORDER BY m.created_at DESC
-       LIMIT ? OFFSET ?`,
+       ORDER BY m.created_at DESC, m.id DESC
+       ${includePending ? '' : 'LIMIT ? OFFSET ?'}`,
       matchParams
     );
 
-    console.log('🔍 Query returned', result.rows.length, 'matches');
-
     // Get pending replays for this user with confidence=1
     let formattedReplays: any[] = [];
-    if (userNickname) {
+    if (includePending && userNickname) {
       try {
         const replayResult = await query(
           `SELECT 
@@ -323,6 +313,10 @@ router.get('/:id/matches', async (req, res) => {
               || 'Unknown Map';
 
             if (mapFilter && !map.toLowerCase().includes(mapFilter.toLowerCase())) {
+              continue;
+            }
+
+            if (statusFilter && statusFilter !== 'pending_report') {
               continue;
             }
 
@@ -409,11 +403,14 @@ router.get('/:id/matches', async (req, res) => {
     allResults.sort((a: any, b: any) => {
       const aTime = new Date(a.created_at).getTime();
       const bTime = new Date(b.created_at).getTime();
-      return bTime - aTime;
+      return bTime - aTime || String(b.id).localeCompare(String(a.id));
     });
 
-    // Paginate combined results
-    const paginatedResults = allResults.slice(0, limit);
+    // Pending replays are merged in memory only for the authenticated profile;
+    // public profiles use SQL pagination and never scan the replay queue.
+    const paginatedResults = includePending
+      ? allResults.slice(offset, offset + limit)
+      : allResults;
     const combinedTotal = total + formattedReplays.length;
     const totalPages = Math.ceil(combinedTotal / limit);
 

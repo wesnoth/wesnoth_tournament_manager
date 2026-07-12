@@ -52,7 +52,7 @@ router.get('/player/:playerId/global', async (req, res) => {
 router.get('/player/:playerId/by-map', async (req, res) => {
   try {
     const { playerId } = req.params;
-    const minGames = parseInt(req.query.minGames as string) || 2;
+    const minGames = Math.min(100, Math.max(1, parseInt(req.query.minGames as string) || 2));
     const side = parseSide(req.query.side);
 
     const result = await query(
@@ -90,7 +90,7 @@ router.get('/player/:playerId/by-map', async (req, res) => {
 router.get('/player/:playerId/by-faction', async (req, res) => {
   try {
     const { playerId } = req.params;
-    const minGames = parseInt(req.query.minGames as string) || 2;
+    const minGames = Math.min(100, Math.max(1, parseInt(req.query.minGames as string) || 2));
     const side = parseSide(req.query.side);
 
     const result = await query(
@@ -128,7 +128,7 @@ router.get('/player/:playerId/by-faction', async (req, res) => {
 router.get('/player/:playerId/by-matchup', async (req, res) => {
   try {
     const { playerId } = req.params;
-    const minGames = parseInt(req.query.minGames as string) || 2;
+    const minGames = Math.min(100, Math.max(1, parseInt(req.query.minGames as string) || 2));
     const side = parseSide(req.query.side);
 
     const result = await query(
@@ -319,7 +319,7 @@ router.get('/player/:playerId/map/:mapId/faction/:factionId', async (req, res) =
 router.get('/player/:playerId/recent-opponents', async (req, res) => {
   try {
     const { playerId } = req.params;
-    const limit = parseInt(req.query.limit as string) || 10;
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 10));
     const side = parseSide(req.query.side);
 
     const result = await query(

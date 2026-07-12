@@ -39,24 +39,6 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
   const [selectedReplay, setSelectedReplay] = React.useState<any>(null);
   const [modalChoice, setModalChoice] = React.useState<'I won' | 'I lost' | 'cancel'>('I won');
 
-  React.useEffect(() => {
-    console.log(`🔍 [MatchesTable] Received ${matches.length} matches`);
-    matches.forEach((m, i) => {
-      if (m.source_type === 'replay_confidence_1') {
-        console.log(
-          `  [${i}] REPLAY confidence=1: ${m.id}`,
-          { 
-            winner: m.winner_nickname, 
-            loser: m.loser_nickname, 
-            map: m.map, 
-            winner_faction: m.winner_faction,
-            loser_faction: m.loser_faction
-          }
-        );
-      }
-    });
-  }, [matches]);
-
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
       setSortDirection(prev => (prev === 'desc' ? 'asc' : 'desc'));

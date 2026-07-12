@@ -899,17 +899,15 @@ router.get('/matches', async (req, res) => {
 router.get('/players/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    console.log(`🔍 [PLAYERS] Fetching player: ${id}`);
-
     const playerResult = await query(
       `SELECT 
         u.id, 
         u.nickname, 
         u.elo_rating, 
         u.is_rated, 
-        u.matches_played, 
-        u.total_wins, 
-        u.total_losses, 
+        COALESCE(pms.total_games, u.matches_played) AS matches_played,
+        COALESCE(pms.wins, u.total_wins) AS total_wins,
+        COALESCE(pms.losses, u.total_losses) AS total_losses,
         u.level, 
         u.country,
         u.avatar,
@@ -925,14 +923,12 @@ router.get('/players/:id', async (req, res) => {
         AND pms.opponent_id IS NULL 
         AND pms.map_id IS NULL 
         AND pms.faction_id IS NULL
+        AND pms.player_side = 0
       WHERE u.id = ? AND u.is_blocked = 0`,
       [id]
     );
 
-    console.log(`🔍 [PLAYERS] Query returned: ${playerResult?.rows?.length || 0} rows`);
-
     if (playerResult.rows.length === 0) {
-      console.log(`⚠️  [PLAYERS] Player not found with ID: ${id}`);
       return res.status(404).json({ error: 'Player not found' });
     }
 
@@ -954,14 +950,10 @@ router.get('/players/:id', async (req, res) => {
       [id, id]
     );
 
-    console.log(`[Player ${id}] Last activity query result:`, lastActivityResult.rows);
-
     const result = {
       ...player,
       last_activity: lastActivityResult.rows[0]?.created_at || null
     };
-
-    console.log(`[Player ${id}] Final result:`, result);
 
     res.json(result);
   } catch (error) {

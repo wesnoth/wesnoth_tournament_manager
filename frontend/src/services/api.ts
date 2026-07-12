@@ -108,7 +108,17 @@ export const userService = {
   getUserStats: (id: string) => api.get(`/users/${id}/stats`),
   getUserMonthlyStats: (id: string) => api.get(`/users/${id}/stats/month`),
   getEloHistory: (id: string) => api.get(`/users/${id}/elo-history`),
-  getRecentMatches: (id: string) => api.get(`/users/${id}/matches`),
+  getRecentMatches: (id: string, page = 1, filters?: any) => {
+    const params: any = { page };
+    if (filters) {
+      if (filters.player) params.player = filters.player;
+      if (filters.map) params.map = filters.map;
+      if (filters.status) params.status = filters.status;
+      if (filters.faction) params.faction = filters.faction;
+      if (filters.include_pending) params.include_pending = true;
+    }
+    return api.get(`/users/${id}/matches`, { params });
+  },
   getMatches: () => api.get('/matches'),
   searchUsers: (query: string) => api.get(`/users/search/${query}`),
   getGlobalRanking: (page: number = 1, filters?: any, sortBy?: string, sortOrder?: string) => {

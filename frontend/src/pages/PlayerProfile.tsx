@@ -1,8 +1,8 @@
-import React, { useEffect, useState, Suspense, lazy } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router-dom';
-import { userService, publicService } from '../services/api';
-import { playerStatisticsService } from '../services/playerStatisticsService';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { matchService } from '../services/api';
+import { usePlayerProfileData } from '../hooks/usePlayerProfileData';
 import ProfileStats from '../components/ProfileStats';
 import MatchesTable from '../components/MatchesTable';
 import MatchDetailsModal from '../components/MatchDetailsModal';
@@ -11,6 +11,7 @@ import RouteLoader from '../components/RouteLoader';
 import ScheduleDisplay from '../components/ScheduleDisplay';
 import ChallengeFromPlayerModal from '../components/ChallengeFromPlayerModal';
 import { useAuthStore } from '../store/authStore';
+import ProfileMatchesPagination from '../components/ProfileMatchesPagination';
 
 // Lazy-load heavy chart and statistics components
 const EloChart = lazy(() => import('../components/EloChart'));
@@ -32,107 +33,38 @@ const PlayerProfile: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user: currentUser } = useAuthStore();
   
-  const [profile, setProfile] = useState<any>(null);
-  const [matches, setMatches] = useState<any[]>([]);
-  const [eloHistoryMatches, setEloHistoryMatches] = useState<any[]>([]);
-  const [opponentStats, setOpponentStats] = useState<any[]>([]);
-  const [opponentStatsLoading, setOpponentStatsLoading] = useState(false);
-  const [opponentStatsError, setOpponentStatsError] = useState('');
   const [opponentSide, setOpponentSide] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [matchDetailsModal, setMatchDetailsModal] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<ProfileTab>('overall');
+  const [activeTab, setActiveTab] = useState<ProfileTab>((searchParams.get('tab') as ProfileTab) || 'overall');
   const [sortColumn, setSortColumn] = useState<string>('');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [filterOpponent, setFilterOpponent] = useState<string>('');
-  const [availableFactions, setAvailableFactions] = useState<any[]>([]);
   const [filters, setFilters] = useState<FilterState>({
     player: '',
     map: '',
     status: '',
     faction: '',
   });
+  const [appliedMatchFilters, setAppliedMatchFilters] = useState<FilterState>({
+    player: '', map: '', status: '', faction: '',
+  });
+  const [matchPage, setMatchPage] = useState(1);
   const [showChallengeModal, setShowChallengeModal] = useState(false);
 
-  useEffect(() => {
-    if (!id) {
-      navigate('/players');
-      return;
-    }
-
-    const fetchData = async () => {
-      try {
-        // Fetch player profile
-        const profileRes = await publicService.getPlayerProfile(id);
-        console.log('Player profile response:', profileRes.data);
-        setProfile(profileRes.data);
-
-        // Fetch recent matches for the user
-        const [matchesRes, eloHistoryRes] = await Promise.all([
-          userService.getRecentMatches(id),
-          userService.getEloHistory(id),
-        ]);
-        const matchesData = matchesRes.data?.data || matchesRes.data || [];
-        setMatches(matchesData);
-        setEloHistoryMatches(eloHistoryRes.data || []);
-
-        // Fetch factions
-        const factionsRes = await publicService.getFactions();
-        setAvailableFactions(factionsRes.data || []);
-      } catch (err) {
-        console.error('Error fetching data:', err);
-        setError('Error loading profile');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [id, navigate]);
-
-  // Fetch opponent stats when opponents tab is selected
-  useEffect(() => {
-    if (activeTab === 'opponents' && !opponentStatsLoading) {
-      const fetchOpponents = async () => {
-        try {
-          setOpponentStatsLoading(true);
-          setOpponentStatsError('');
-          console.log('Fetching recent opponents for player:', id);
-          const opponentsRes = await playerStatisticsService.getRecentOpponents(id || '', 100, opponentSide);
-          console.log('Opponents data received:', opponentsRes);
-          
-          // Normalize API response to match expected format
-          const normalized = opponentsRes?.map((opponent: any) => ({
-            opponent_id: opponent.opponent_id,
-            opponent_name: opponent.opponent_name,
-            total_matches: opponent.total_games,
-            total_games: opponent.total_games,
-            wins: opponent.wins,
-            losses: opponent.losses,
-            winrate: typeof opponent.winrate === 'string' ? parseFloat(opponent.winrate) : opponent.winrate,
-            current_elo: opponent.current_elo,
-            elo_gained: typeof opponent.elo_gained === 'string' ? parseFloat(opponent.elo_gained) : opponent.elo_gained,
-            elo_lost: typeof opponent.elo_lost === 'string' ? parseFloat(opponent.elo_lost) : opponent.elo_lost,
-            last_elo_against_me: typeof opponent.last_elo_against_me === 'string' ? parseFloat(opponent.last_elo_against_me) : opponent.last_elo_against_me,
-            last_match_date: opponent.last_match_date
-          })) || [];
-          
-          console.log('Normalized opponents data:', normalized);
-          setOpponentStats(normalized);
-        } catch (err) {
-          console.error('Error fetching opponents:', err);
-          setOpponentStatsError('Error loading opponent data');
-        } finally {
-          setOpponentStatsLoading(false);
-        }
-      };
-
-      fetchOpponents();
-    }
-  }, [activeTab, id, opponentSide]);
+  const {
+    profile, matches, eloHistoryMatches, availableFactions, opponentStats,
+    loading, error, opponentStatsLoading, opponentStatsError, matchPagination,
+  } = usePlayerProfileData({
+    playerId: id,
+    mode: 'public-player',
+    activeTab,
+    opponentSide,
+    matchPage,
+    matchFilters: appliedMatchFilters,
+  });
 
   const openMatchDetails = (match: any) => {
     setMatchDetailsModal(match);
@@ -174,31 +106,21 @@ const PlayerProfile: React.FC = () => {
   };
 
   const resetFilters = () => {
-    setFilters({
+    const emptyFilters = {
       player: '',
       map: '',
       status: '',
       faction: '',
-    });
+    };
+    setFilters(emptyFilters);
+    setAppliedMatchFilters(emptyFilters);
+    setMatchPage(1);
   };
 
-  // Filter matches based on active filters
-  const filteredMatches = matches.filter(match => {
-    if (filters.player && !match.winner_nickname?.toLowerCase().includes(filters.player.toLowerCase()) && 
-        !match.loser_nickname?.toLowerCase().includes(filters.player.toLowerCase())) {
-      return false;
-    }
-    if (filters.map && !match.map?.toLowerCase().includes(filters.map.toLowerCase())) {
-      return false;
-    }
-    if (filters.status && match.status !== filters.status) {
-      return false;
-    }
-    if (filters.faction && match.winner_faction !== filters.faction && match.loser_faction !== filters.faction) {
-      return false;
-    }
-    return true;
-  });
+  const applyMatchFilters = () => {
+    setAppliedMatchFilters(filters);
+    setMatchPage(1);
+  };
 
   // Filter and sort opponent stats
   const filteredOpponentStats = opponentStats
@@ -303,6 +225,7 @@ const PlayerProfile: React.FC = () => {
                   }`}
                   onClick={() => {
                     setActiveTab(tab.id);
+                    setSearchParams({ tab: tab.id });
                     setSortColumn('');
                     setFilterOpponent('');
                   }}
@@ -406,6 +329,7 @@ const PlayerProfile: React.FC = () => {
                         <option value="confirmed">{t('match_status_confirmed')}</option>
                         <option value="disputed">{t('match_status_disputed')}</option>
                         <option value="cancelled">{t('match_status_cancelled')}</option>
+                        <option value="reported">{t('match_status_reported') || 'Reported'}</option>
                       </select>
                     </div>
 
@@ -427,7 +351,13 @@ const PlayerProfile: React.FC = () => {
                       </select>
                     </div>
 
-                    <button 
+                    <button type="button"
+                      className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-semibold flex-shrink-0 h-fit"
+                      onClick={applyMatchFilters}
+                    >
+                      {t('refresh') || 'Refresh'}
+                    </button>
+                    <button type="button"
                       className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-semibold flex-shrink-0 h-fit"
                       onClick={resetFilters}
                     >
@@ -437,7 +367,7 @@ const PlayerProfile: React.FC = () => {
                 </div>
 
                 <MatchesTable 
-                  matches={filteredMatches}
+                  matches={matches}
                   currentPlayerId={id || ''}
                   onViewDetails={openMatchDetails}
                   onDownloadReplay={async (matchId, replayFilePath) => {
@@ -464,6 +394,7 @@ const PlayerProfile: React.FC = () => {
                     }
                   }}
                 />
+                <ProfileMatchesPagination {...matchPagination} onPageChange={setMatchPage} />
               </div>
             )}
 

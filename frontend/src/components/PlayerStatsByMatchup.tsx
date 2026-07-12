@@ -48,13 +48,14 @@ const PlayerStatsByMatchup: React.FC<Props> = ({ playerId }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [minGames, setMinGames] = useState(2);
+  const [appliedMinGames, setAppliedMinGames] = useState(2);
   const [side, setSide] = useState(0);
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
         setLoading(true);
-        const data = await playerStatisticsService.getStatsByMatchup(playerId, minGames, side);
+        const data = await playerStatisticsService.getStatsByMatchup(playerId, appliedMinGames, side);
         const converted = data.map((item: any) => ({
           ...item,
           winrate: typeof item.winrate === 'string' ? parseFloat(item.winrate) : item.winrate,
@@ -70,7 +71,12 @@ const PlayerStatsByMatchup: React.FC<Props> = ({ playerId }) => {
     };
 
     fetchStats();
-  }, [playerId, minGames, side]);
+  }, [playerId, appliedMinGames, side]);
+
+  // Do not query while the threshold is being edited; refresh applies it once.
+  const applyFilters = () => {
+    setAppliedMinGames(minGames);
+  };
 
   if (loading) return <div className="max-w-6xl mx-auto p-8 bg-white rounded-lg shadow-md"><p className="text-gray-600">{t('loading')}</p></div>;
   if (error) return <div className="max-w-6xl mx-auto p-8 bg-white rounded-lg shadow-md border border-red-200"><p className="text-red-600">{error}</p></div>;
@@ -89,6 +95,13 @@ const PlayerStatsByMatchup: React.FC<Props> = ({ playerId }) => {
             className="px-2 py-1 border border-gray-300 rounded w-20"
           />
         </label>
+        <button
+          type="button"
+          onClick={applyFilters}
+          className="px-3 py-1 bg-gray-200 text-gray-700 font-semibold rounded hover:bg-gray-300 transition-colors"
+        >
+          {t('refresh') || 'Refresh'}
+        </button>
         <SideToggle side={side} onChange={setSide} />
       </div>
 

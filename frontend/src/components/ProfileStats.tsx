@@ -28,12 +28,6 @@ const ProfileStats: React.FC<ProfileStatsProps> = ({ player }) => {
   const decidedMatches = (player.total_wins || 0) + (player.total_losses || 0);
   const winPercentage = decidedMatches > 0 ? Math.round(((player.total_wins || 0) / decidedMatches) * 100) : 0;
 
-  // Debug: log player data
-  console.log('ProfileStats player data:', player);
-  if (player.last_activity) {
-    console.log('last_activity value:', player.last_activity, 'type:', typeof player.last_activity);
-  }
-
   return (
     <div className="max-w-4xl mx-auto p-8 max-md:p-4">
       <div className="flex justify-between items-start gap-8 max-md:gap-4 max-md:flex-col mb-8">
