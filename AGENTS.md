@@ -19,3 +19,9 @@
 
 - Before installing a new package or dependency, verify that its release is at least one month old.
 - Do not install a package released less than one month ago without explicit user approval.
+
+## Filter interaction
+
+- Text and numeric list filters must not trigger a request on every keystroke.
+- Enter and the page's Refresh action must apply the current typed filter values and produce the same refresh behavior.
+- Select, checkbox, and other non-text filters may apply immediately when changed.

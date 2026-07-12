@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
@@ -80,8 +80,6 @@ const TournamentList: React.FC<TournamentListProps> = ({
     my_tournaments: false,
   });
 
-  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const handleFilterInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, type, value, checked } = e.target as HTMLInputElement;
     const newValue = type === 'checkbox' ? checked : value;
@@ -91,16 +89,21 @@ const TournamentList: React.FC<TournamentListProps> = ({
       [name]: newValue,
     }));
 
-    if (debounceTimer.current) {
-      clearTimeout(debounceTimer.current);
+    const nextFilters = { ...inputFilters, [name]: newValue };
+    if (type !== 'text') {
+      onFilterChange?.(nextFilters);
     }
+  };
 
-    debounceTimer.current = setTimeout(() => {
-      onFilterChange?.({
-        ...inputFilters,
-        [name]: newValue,
-      });
-    }, 500);
+  const applyFilters = () => {
+    onFilterChange?.(inputFilters);
+  };
+
+  const handleFilterKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      applyFilters();
+    }
   };
 
   const handleResetFilters = () => {
@@ -257,6 +260,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
                 placeholder={t('filter_by_tournament_name')}
                 value={inputFilters.name}
                 onChange={handleFilterInputChange}
+                onKeyDown={handleFilterKeyDown}
                 className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
               />
             </div>

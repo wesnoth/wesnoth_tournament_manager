@@ -122,6 +122,13 @@ const PlayerProfile: React.FC = () => {
     setMatchPage(1);
   };
 
+  const handleTextFilterKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      applyMatchFilters();
+    }
+  };
+
   // Filter and sort opponent stats
   const filteredOpponentStats = opponentStats
     .filter(stat => !filterOpponent || stat.opponent_name.toLowerCase().includes(filterOpponent.toLowerCase()))
@@ -298,6 +305,7 @@ const PlayerProfile: React.FC = () => {
                         placeholder={t('filter_by_player')}
                         value={filters.player}
                         onChange={handleFilterChange}
+                        onKeyDown={handleTextFilterKeyDown}
                         className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
                       />
                     </div>
@@ -311,6 +319,7 @@ const PlayerProfile: React.FC = () => {
                         placeholder={t('filter_by_map')}
                         value={filters.map}
                         onChange={handleFilterChange}
+                        onKeyDown={handleTextFilterKeyDown}
                         className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
                       />
                     </div>

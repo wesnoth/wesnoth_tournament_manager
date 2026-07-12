@@ -48,6 +48,7 @@ const MyMatches: React.FC = () => {
     confirmed: '',
     faction: '',
   });
+  const [appliedFilters, setAppliedFilters] = useState<FilterState>(filters);
   const [availableFactions, setAvailableFactions] = useState<any[]>([]);
 
   useEffect(() => {
@@ -74,7 +75,7 @@ const MyMatches: React.FC = () => {
     const fetchMatches = async () => {
       try {
         console.log('Fetching user matches for page:', currentPage, 'with filters:', filters);
-        const res = await matchService.getUserMatches(userId!, currentPage, filters);
+        const res = await matchService.getUserMatches(userId!, currentPage, appliedFilters);
         console.log('Full response:', res);
         console.log('Response data:', res.data);
         
@@ -98,28 +99,48 @@ const MyMatches: React.FC = () => {
     if (isAuthenticated && userId) {
       fetchMatches();
     }
-  }, [currentPage, filters, isAuthenticated, userId, refreshKey]);
+  }, [currentPage, appliedFilters, isAuthenticated, userId, refreshKey]);
 
-  const handleRefresh = () => setRefreshKey(k => k + 1);
+  const applyFilters = () => {
+    setAppliedFilters(filters);
+    setCurrentPage(1);
+  };
+
+  const handleRefresh = () => {
+    applyFilters();
+    setRefreshKey(k => k + 1);
+  };
 
   const handleFilterChangeWithReset = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    console.log(`🔍 MyMatches Filter changed: ${name} = ${value}`);
     setFilters(prev => ({
       ...prev,
       [name]: value,
     }));
-    setCurrentPage(1);
+    if (name !== 'player' && name !== 'map') {
+      setAppliedFilters(prev => ({ ...prev, [name]: value }));
+      setCurrentPage(1);
+    }
+  };
+
+  const handleTextFilterKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      applyFilters();
+    }
   };
 
   const resetFilters = () => {
-    setFilters({
+    const emptyFilters = {
       player: '',
       map: '',
       status: '',
       confirmed: '',
       faction: '',
-    });
+    };
+    setFilters(emptyFilters);
+    setAppliedFilters(emptyFilters);
+    setCurrentPage(1);
   };
 
   const handlePageChange = (newPage: number) => {
@@ -191,7 +212,7 @@ const MyMatches: React.FC = () => {
     // Refetch matches to update the status
     const fetchMatches = async () => {
       try {
-        const res = await matchService.getUserMatches(userId!, currentPage, filters);
+        const res = await matchService.getUserMatches(userId!, currentPage, appliedFilters);
         const matchesData = res.data?.data || [];
         setAllMatches(matchesData);
       } catch (err) {
@@ -268,6 +289,7 @@ const MyMatches: React.FC = () => {
               placeholder={t('filter_by_player')}
               value={filters.player}
               onChange={handleFilterChangeWithReset}
+              onKeyDown={handleTextFilterKeyDown}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-all"
             />
           </div>
@@ -281,6 +303,7 @@ const MyMatches: React.FC = () => {
               placeholder={t('filter_by_map')}
               value={filters.map}
               onChange={handleFilterChangeWithReset}
+              onKeyDown={handleTextFilterKeyDown}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-all"
             />
           </div>

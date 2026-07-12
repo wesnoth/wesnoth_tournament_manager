@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
@@ -74,7 +74,7 @@ const AdminReplays: React.FC = () => {
     map: '',
     player: '',
   });
-  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [discarding, setDiscarding] = useState<string | null>(null);
   const [reprocessing, setReprocessing] = useState<string | null>(null);
   const [summaryModal, setSummaryModal] = useState<{ open: boolean; json: string; filename: string }>({ open: false, json: '', filename: '' });
@@ -95,15 +95,11 @@ const AdminReplays: React.FC = () => {
       return;
     }
     fetchReplays();
-  }, [isAuthenticated, isAdmin, isTournamentModerator, navigate, statusFilter, currentPage, appliedFilters]);
+  }, [isAuthenticated, isAdmin, isTournamentModerator, navigate, statusFilter, currentPage, appliedFilters, refreshKey]);
 
   useEffect(() => {
     if (isAuthenticated && isAdmin) fetchSystemSettings();
   }, [isAuthenticated, isAdmin]);
-
-  useEffect(() => () => {
-    if (debounceTimer.current) clearTimeout(debounceTimer.current);
-  }, []);
 
   const fetchReplays = async () => {
     try {
@@ -127,7 +123,6 @@ const AdminReplays: React.FC = () => {
     }
   };
 
-  // Debounce filter changes
   const handleFilterInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     
@@ -136,19 +131,23 @@ const AdminReplays: React.FC = () => {
       [name]: value,
     }));
     
-    // Clear previous timer
-    if (debounceTimer.current) {
-      clearTimeout(debounceTimer.current);
+  };
+
+  const applyFilters = () => {
+    setAppliedFilters(inputFilters);
+    setCurrentPage(1);
+  };
+
+  const handleFilterKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      applyFilters();
     }
-    
-    // Set new timer to apply filters after 500ms
-    debounceTimer.current = setTimeout(() => {
-      setAppliedFilters(prev => ({
-        ...prev,
-        [name]: value,
-      }));
-      setCurrentPage(1);
-    }, 500);
+  };
+
+  const handleRefresh = () => {
+    applyFilters();
+    setRefreshKey(key => key + 1);
   };
 
   const handleForceDiscard = async (replayId: string, filename: string) => {
@@ -347,6 +346,7 @@ const AdminReplays: React.FC = () => {
                 placeholder="Filter by game ID"
                 value={inputFilters.gameId}
                 onChange={handleFilterInputChange}
+                onKeyDown={handleFilterKeyDown}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
               />
             </div>
@@ -359,6 +359,7 @@ const AdminReplays: React.FC = () => {
                 placeholder="Filter by map name"
                 value={inputFilters.map}
                 onChange={handleFilterInputChange}
+                onKeyDown={handleFilterKeyDown}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
               />
             </div>
@@ -371,6 +372,7 @@ const AdminReplays: React.FC = () => {
                 placeholder="Filter by player nickname"
                 value={inputFilters.player}
                 onChange={handleFilterInputChange}
+                onKeyDown={handleFilterKeyDown}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
               />
             </div>
@@ -383,7 +385,7 @@ const AdminReplays: React.FC = () => {
             </button>
 
             <button
-              onClick={fetchReplays}
+              onClick={handleRefresh}
               className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-semibold"
               title="Refresh"
             >

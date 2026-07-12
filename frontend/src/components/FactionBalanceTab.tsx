@@ -48,7 +48,7 @@ const FactionBalanceTab: React.FC<FactionBalanceTabProps> = ({ beforeData = null
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [minGamesThreshold, setMinGamesThreshold] = useState(5);
-  const [pendingMinGames, setPendingMinGames] = useState(5);
+  const [pendingMinGames, setPendingMinGames] = useState('5');
 
   useEffect(() => {
     const fetchConfig = async () => {
@@ -56,7 +56,7 @@ const FactionBalanceTab: React.FC<FactionBalanceTabProps> = ({ beforeData = null
         const config = await statisticsService.getConfig();
         if (config.minGamesThreshold) {
           setMinGamesThreshold(config.minGamesThreshold);
-          setPendingMinGames(config.minGamesThreshold);
+          setPendingMinGames(String(config.minGamesThreshold));
         }
       } catch (err) {
         console.warn('Could not load config, using default threshold');
@@ -110,7 +110,15 @@ const FactionBalanceTab: React.FC<FactionBalanceTabProps> = ({ beforeData = null
   }, [beforeData, afterData, minGamesThreshold]);
 
   const applyMinGames = () => {
-    setMinGamesThreshold(Math.max(1, Math.min(1000000, pendingMinGames || 1)));
+    const parsed = Number.parseInt(pendingMinGames, 10);
+    setMinGamesThreshold(Number.isFinite(parsed) ? Math.max(1, Math.min(1000000, parsed)) : 1);
+  };
+
+  const handleMinGamesKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      applyMinGames();
+    }
   };
 
   const minimumGamesControl = (
@@ -118,7 +126,8 @@ const FactionBalanceTab: React.FC<FactionBalanceTabProps> = ({ beforeData = null
       <label className="flex items-center gap-2 font-semibold text-gray-800">
         {t('minimum_games') || 'Minimum games'}:
         <input type="number" min="1" max="1000000" value={pendingMinGames}
-          onChange={e => setPendingMinGames(Math.max(1, parseInt(e.target.value) || 1))}
+          onChange={e => setPendingMinGames(e.target.value)}
+          onKeyDown={handleMinGamesKeyDown}
           className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 w-24" />
       </label>
       <button type="button" onClick={applyMinGames}

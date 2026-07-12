@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { publicService } from '../services/api';
@@ -51,6 +51,7 @@ const Players: React.FC = () => {
   };
 
   const handleRefresh = () => {
+    setAppliedFilters(inputFilters);
     setRefreshKey(k => k + 1);
   };
 
@@ -70,7 +71,7 @@ const Players: React.FC = () => {
     ranked_only: false,
   });
   
-  // Applied filters state (updates with debounce)
+  // Applied filters state changes only when a filter is submitted or refreshed.
   const [appliedFilters, setAppliedFilters] = useState<FilterState>({
     nickname: '',
     min_elo: '',
@@ -80,9 +81,6 @@ const Players: React.FC = () => {
     ranked_only: false,
   });
   
-  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Debounce filter changes
   const handleFilterInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
     const newValue = type === 'checkbox' ? checked : value;
@@ -92,19 +90,22 @@ const Players: React.FC = () => {
       [name]: newValue,
     }));
     
-    // Clear previous timer
-    if (debounceTimer.current) {
-      clearTimeout(debounceTimer.current);
-    }
-    
-    // Set new timer to apply filters after 500ms
-    debounceTimer.current = setTimeout(() => {
-      setAppliedFilters(prev => ({
-        ...prev,
-        [name]: newValue,
-      }));
+    if (type === 'checkbox') {
+      setAppliedFilters(prev => ({ ...prev, [name]: newValue }));
       setCurrentPage(1);
-    }, 500);
+    }
+  };
+
+  const applyFilters = () => {
+    setAppliedFilters(inputFilters);
+    setCurrentPage(1);
+  };
+
+  const handleFilterKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      applyFilters();
+    }
   };
 
   useEffect(() => {
@@ -255,6 +256,7 @@ const Players: React.FC = () => {
               placeholder={t('filter_by_nickname')}
               value={inputFilters.nickname}
               onChange={handleFilterInputChange}
+              onKeyDown={handleFilterKeyDown}
               className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -268,6 +270,7 @@ const Players: React.FC = () => {
               placeholder={t('filter_min_elo_placeholder')}
               value={inputFilters.min_elo}
               onChange={handleFilterInputChange}
+              onKeyDown={handleFilterKeyDown}
               className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -281,6 +284,7 @@ const Players: React.FC = () => {
               placeholder={t('filter_max_elo_placeholder')}
               value={inputFilters.max_elo}
               onChange={handleFilterInputChange}
+              onKeyDown={handleFilterKeyDown}
               className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -294,6 +298,7 @@ const Players: React.FC = () => {
               placeholder={t('filter_min_matches_placeholder')}
               value={inputFilters.min_matches}
               onChange={handleFilterInputChange}
+              onKeyDown={handleFilterKeyDown}
               className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>

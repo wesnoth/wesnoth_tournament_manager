@@ -46,7 +46,7 @@ const PlayerStatsByFaction: React.FC<Props> = ({ playerId }) => {
   const [stats, setStats] = useState<FactionStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [minGames, setMinGames] = useState(2);
+  const [minGames, setMinGames] = useState('2');
   const [appliedMinGames, setAppliedMinGames] = useState(2);
   const [side, setSide] = useState(0);
 
@@ -75,7 +75,15 @@ const PlayerStatsByFaction: React.FC<Props> = ({ playerId }) => {
   // Apply the typed threshold only on demand, keeping the API request stable
   // while the user edits the input field.
   const applyFilters = () => {
-    setAppliedMinGames(minGames);
+    const parsed = Number.parseInt(minGames, 10);
+    setAppliedMinGames(Number.isFinite(parsed) ? Math.max(1, Math.min(100, parsed)) : 1);
+  };
+
+  const handleMinGamesKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      applyFilters();
+    }
   };
 
   if (loading) return <div className="max-w-4xl mx-auto p-8 bg-white rounded-lg shadow-md"><p className="text-gray-600">{t('loading')}</p></div>;
@@ -91,7 +99,8 @@ const PlayerStatsByFaction: React.FC<Props> = ({ playerId }) => {
           {t('minimum_games') || 'Minimum Games'}:
           <input
             type="number" min="1" max="100" value={minGames}
-            onChange={(e) => setMinGames(Math.max(1, parseInt(e.target.value) || 1))}
+            onChange={(e) => setMinGames(e.target.value)}
+            onKeyDown={handleMinGamesKeyDown}
             className="px-2 py-1 border border-gray-300 rounded w-20"
           />
         </label>
