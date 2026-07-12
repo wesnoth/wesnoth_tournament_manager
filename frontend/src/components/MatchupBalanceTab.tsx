@@ -290,7 +290,7 @@ const MatchupBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ be
     <div className="bg-white rounded-lg p-6 shadow-md">
       <h3 className="text-xl font-semibold text-gray-800 mb-3">{t('unbalanced_matchups') || 'Matchup Analysis'}</h3>
       <p className="text-gray-600 text-sm mb-6 pb-3 px-3 bg-blue-50 border-l-4 border-blue-500 rounded">
-        {t('matchup_balance_explanation') || 'Win rate per faction per side per map'}
+        {t('matchup_balance_explanation') || 'Shows all faction matchups that meet the minimum number of games, ordered by imbalance. Higher imbalance indicates a larger difference between Side 1 and Side 2 win rates.'}
       </p>
       <div>
         {minimumGamesControl}

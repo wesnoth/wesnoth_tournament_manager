@@ -241,7 +241,17 @@ const FactionVsFactionTab: React.FC<{ beforeData?: any[] | null; afterData?: any
 
     const combined = Array.from(allKeys)
       .map(key => ({ before: beforeMap.get(key), after: afterMap.get(key) }))
-      .filter(item => ((item.after?.games || 0) + (item.before?.games || 0)) >= minGames)
+      // A comparison is meaningful only when both available periods meet the
+      // threshold. If a matchup exists in only one period, apply the threshold
+      // to that period so the first/last event does not hide valid data.
+      .filter(item => {
+        const beforeGames = item.before?.games || 0;
+        const afterGames = item.after?.games || 0;
+        if (beforeGames > 0 && afterGames > 0) {
+          return beforeGames >= minGames && afterGames >= minGames;
+        }
+        return Math.max(beforeGames, afterGames) >= minGames;
+      })
       .sort((a, b) => {
         const aI = Math.max(a.after?.imbalance || 0, a.before?.imbalance || 0);
         const bI = Math.max(b.after?.imbalance || 0, b.before?.imbalance || 0);

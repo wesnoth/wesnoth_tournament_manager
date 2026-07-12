@@ -239,8 +239,8 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
       <div className="bg-white rounded-lg p-6 shadow-md">
         <h3 className="text-xl font-semibold text-gray-800 mb-3">{t('map_balance_comparison') || 'Map Balance - Before & After'}</h3>
         <p className="text-blue-600 text-sm mb-3 p-3 bg-blue-50 rounded border-l-4 border-blue-500">
-          {t('before_event') || 'Before'}: {beforeStats.reduce((sum, map) => sum + map.total_games, 0)} {t('matches') || 'matches'} |
-          {t('after_event') || 'After'}: {afterStats.reduce((sum, map) => sum + map.total_games, 0)} {t('matches') || 'matches'}
+          {t('before_event') || 'Before'}: {beforeStats.reduce((sum, map) => sum + map.total_games, 0)} {t('matches_evaluated') || 'matches'} |
+          {t('after_event') || 'After'}: {afterStats.reduce((sum, map) => sum + map.total_games, 0)} {t('matches_evaluated') || 'matches'}
         </p>
         {minimumGamesControl}
         <p className="text-gray-500 text-xs mb-6 italic">{t('balance_lower_better') || '(Lower imbalance = better balance)'}</p>
@@ -267,6 +267,7 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-2">
+                      {/* After is shown first; the smaller line underneath is Before. */}
                       <span className="font-semibold text-gray-800">{item.after?.total_games || '-'}</span>
                       {item.before && <span className="text-xs text-gray-600">{item.before.total_games}</span>}
                     </div>
