@@ -669,8 +669,10 @@ router.get('/ranking/global', async (req, res) => {
 
     // Get filter params from query
     const nicknameFilter = (req.query.nickname as string)?.trim() || '';
-    const minElo = req.query.min_elo ? parseInt(req.query.min_elo as string) : null;
-    const maxElo = req.query.max_elo ? parseInt(req.query.max_elo as string) : null;
+    const parsedMinElo = req.query.min_elo ? Number.parseInt(req.query.min_elo as string, 10) : NaN;
+    const parsedMaxElo = req.query.max_elo ? Number.parseInt(req.query.max_elo as string, 10) : NaN;
+    const minElo = Number.isFinite(parsedMinElo) ? parsedMinElo : null;
+    const maxElo = Number.isFinite(parsedMaxElo) ? parsedMaxElo : null;
 
     // Build WHERE clause dynamically
     let whereConditions: string[] = [
@@ -683,8 +685,8 @@ router.get('/ranking/global', async (req, res) => {
     let params: any[] = [];
 
     if (nicknameFilter) {
-      whereConditions.push(`u.nickname LIKE ?`);
-      params.push(`%${nicknameFilter}%`);
+      whereConditions.push(`LOWER(u.nickname) LIKE ?`);
+      params.push(`%${nicknameFilter.toLowerCase()}%`);
     }
 
     if (minElo !== null) {
@@ -712,7 +714,7 @@ router.get('/ranking/global', async (req, res) => {
       `SELECT u.id, u.nickname, u.elo_rating, u.level, u.is_rated, u.matches_played, u.total_wins, u.total_losses, u.country, u.avatar, COALESCE(u.trend, '-') as trend 
        FROM users_extension u
        WHERE ${whereClause}
-       ORDER BY ${sortByExpr} ${sortOrder}
+       ORDER BY ${sortByExpr} ${sortOrder}, u.id ASC
        LIMIT ? OFFSET ?`,
       params
     );

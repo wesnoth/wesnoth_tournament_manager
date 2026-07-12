@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { userService } from '../services/api';
 import { useAuthStore } from '../store/authStore';
-import PlayerLink from '../components/PlayerLink';
 import UserBadge from '../components/UserBadge';
 
 interface PlayerStats {
@@ -26,13 +25,13 @@ interface FilterState {
   max_elo: string;
 }
 
-type SortColumn = 'nickname' | 'elo_rating' | 'matches_played' | 'total_wins' | 'total_losses' | 'winPercentage' | 'trend' | '';
+type SortColumn = 'nickname' | 'elo_rating' | 'matches_played' | 'total_wins' | 'total_losses' | 'win_percentage' | 'trend' | '';
 type SortDirection = 'asc' | 'desc';
 
 const Rankings: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { isAuthenticated, userId } = useAuthStore();
+  const { userId } = useAuthStore();
   const [players, setPlayers] = useState<PlayerStats[]>([]);
   const [sortColumn, setSortColumn] = useState<SortColumn>('elo_rating');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -50,6 +49,7 @@ const Rankings: React.FC = () => {
 
   const handleRefresh = () => {
     setAppliedFilters(inputFilters);
+    setCurrentPage(1);
     setRefreshKey(k => k + 1);
   };
 
@@ -147,7 +147,7 @@ const Rankings: React.FC = () => {
         }
       } catch (err) {
         console.error('Error fetching rankings:', err);
-        setError('Error loading rankings');
+        setError(t('error_loading_rankings', 'Error loading rankings'));
       } finally {
         setLoading(false);
       }
@@ -174,6 +174,8 @@ const Rankings: React.FC = () => {
     }
   };
 
+  const handleRetry = () => setRefreshKey(key => key + 1);
+
   if (loading) {
     return <div className="w-full max-w-6xl mx-auto px-4 py-8"><p>{t('loading')}</p></div>;
   }
@@ -190,7 +192,14 @@ const Rankings: React.FC = () => {
 
       {/* Rankings Content */}
       <div className="w-full">
-          {error && <p className="bg-red-100 border border-red-300 text-red-700 p-4 rounded-lg mb-6">{error}</p>}
+          {error && (
+            <div className="bg-red-100 border border-red-300 text-red-700 p-4 rounded-lg mb-6">
+              <p>{error}</p>
+              <button className="mt-3 font-semibold underline" onClick={handleRetry}>
+                {t('retry', 'Retry')}
+              </button>
+            </div>
+          )}
 
           {/* Pagination Controls - Top */}
           {totalPages > 1 && (
@@ -223,6 +232,8 @@ const Rankings: React.FC = () => {
           </button>
           <button 
             className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => handlePageChange(totalPages)}
+            disabled={currentPage === totalPages}
           >
             {t('pagination_last')}
           </button>
@@ -279,8 +290,8 @@ const Rankings: React.FC = () => {
               <button className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors font-semibold" onClick={handleResetFilters}>
                 {t('reset_filters')}
               </button>
-              <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded transition-colors" onClick={handleRefresh} title="Refresh">
-                🔄
+              <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded transition-colors" onClick={handleRefresh} title={t('refresh')} aria-label={t('refresh')}>
+                {t('refresh')}
               </button>
             </div>
           </div>
@@ -317,9 +328,9 @@ const Rankings: React.FC = () => {
                   {t('label_losses')}
                   {sortColumn === 'total_losses' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                 </th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-300 transition-colors" onClick={() => handleSort('winPercentage')}>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-300 transition-colors" onClick={() => handleSort('win_percentage')}>
                   {t('label_win_pct')}
-                  {sortColumn === 'winPercentage' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
+                  {sortColumn === 'win_percentage' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-300 transition-colors" onClick={() => handleSort('trend')}>
                   {t('label_trend')}
@@ -405,11 +416,9 @@ const Rankings: React.FC = () => {
           >
             {t('pagination_prev')}
           </button>
-          
           <div className="text-sm text-gray-600">
             {t('pagination_page_info', { page: currentPage, totalPages })}
           </div>
-          
           <button 
             className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => handlePageChange(currentPage + 1)}
