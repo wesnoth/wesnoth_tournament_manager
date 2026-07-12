@@ -11,7 +11,7 @@ The public `/matches` page is the global match history for ranked games. It is a
 
 ## Filtering and pagination
 
-The page supports player, map, status and faction filters. Pending replays are evaluated against the same filters as persisted matches before the combined result set is paginated, so the displayed count and page boundaries describe what the user can actually see.
+The page supports player, map, status and faction filters. Player and map text searches are applied on Enter or Refresh rather than on every keystroke. Status and faction selectors apply immediately. Pending replays are evaluated against the same filters as persisted matches before the combined result set is paginated, so the displayed count and page boundaries describe what the user can actually see.
 
 Sorting in the table is local to the current page. The API remains responsible for the global date order and page selection.
 

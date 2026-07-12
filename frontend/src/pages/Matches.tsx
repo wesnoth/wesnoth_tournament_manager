@@ -44,6 +44,7 @@ const Matches: React.FC = () => {
     status: '',
     faction: '',
   });
+  const [appliedFilters, setAppliedFilters] = useState<FilterState>(filters);
   const [availableFactions, setAvailableFactions] = useState<any[]>([]);
 
   useEffect(() => {
@@ -63,7 +64,7 @@ const Matches: React.FC = () => {
       setLoading(true);
       setError(false);
       try {
-        const res = await publicService.getAllMatches(currentPage, filters);
+        const res = await publicService.getAllMatches(currentPage, appliedFilters);
         const matchesData = res.data?.data || [];
         setAllMatches(matchesData);
         if (res.data?.pagination) {
@@ -80,9 +81,17 @@ const Matches: React.FC = () => {
     };
 
     fetchMatches();
-  }, [currentPage, filters, refreshKey]);
+  }, [currentPage, appliedFilters, refreshKey]);
 
-  const handleRefresh = () => setRefreshKey(k => k + 1);
+  const applyFilters = () => {
+    setAppliedFilters(filters);
+    setCurrentPage(1);
+  };
+
+  const handleRefresh = () => {
+    applyFilters();
+    setRefreshKey(k => k + 1);
+  };
 
   const handleFilterChangeWithReset = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -90,17 +99,33 @@ const Matches: React.FC = () => {
       ...prev,
       [name]: value,
     }));
-    // Reset to page 1 when filters change
-    setCurrentPage(1);
+
+    if (name !== 'player' && name !== 'map') {
+      setAppliedFilters(prev => ({
+        ...prev,
+        [name]: value,
+      }));
+      setCurrentPage(1);
+    }
+  };
+
+  const handleTextFilterKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      applyFilters();
+    }
   };
 
   const resetFilters = () => {
-    setFilters({
+    const emptyFilters = {
       player: '',
       map: '',
       status: '',
       faction: '',
-    });
+    };
+    setFilters(emptyFilters);
+    setAppliedFilters(emptyFilters);
+    setCurrentPage(1);
   };
 
   const handlePageChange = (newPage: number) => {
@@ -256,6 +281,7 @@ const Matches: React.FC = () => {
               placeholder={t('filter_by_player')}
               value={filters.player}
               onChange={handleFilterChangeWithReset}
+              onKeyDown={handleTextFilterKeyDown}
               className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
             />
           </div>
@@ -269,6 +295,7 @@ const Matches: React.FC = () => {
               placeholder={t('filter_by_map')}
               value={filters.map}
               onChange={handleFilterChangeWithReset}
+              onKeyDown={handleTextFilterKeyDown}
               className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
             />
           </div>
