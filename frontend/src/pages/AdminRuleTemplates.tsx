@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import MainLayout from '../components/MainLayout';
@@ -22,6 +23,7 @@ const emptyForm = {
 };
 
 const AdminRuleTemplates: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { isAuthenticated, isAdmin, isTournamentModerator } = useAuthStore();
   const [templates, setTemplates] = useState<RuleTemplate[]>([]);
@@ -56,7 +58,7 @@ const AdminRuleTemplates: React.FC = () => {
 
   const handleSave = async () => {
     if (!form.title.trim() || !form.content_markdown.trim()) {
-      setError('Title and markdown content are required');
+      setError(t('admin.rule_templates_required'));
       return;
     }
 
@@ -69,14 +71,14 @@ const AdminRuleTemplates: React.FC = () => {
           content_markdown: form.content_markdown,
           is_active: form.is_active,
         });
-        setSuccess('Rule template updated');
+        setSuccess(t('admin.rule_templates_updated'));
       } else {
         await adminService.createRuleTemplate({
           title: form.title.trim(),
           content_markdown: form.content_markdown,
           is_active: form.is_active,
         });
-        setSuccess('Rule template created');
+        setSuccess(t('admin.rule_templates_created'));
       }
       resetForm();
       await fetchTemplates();
@@ -98,12 +100,12 @@ const AdminRuleTemplates: React.FC = () => {
   };
 
   const handleDelete = async (templateId: string) => {
-    if (!window.confirm('Delete this rule template?')) return;
+    if (!window.confirm(t('admin.rule_templates_confirm_delete'))) return;
     try {
       setError('');
       await adminService.deleteRuleTemplate(templateId);
       await fetchTemplates();
-      setSuccess('Rule template deleted');
+      setSuccess(t('admin.rule_templates_deleted'));
       setTimeout(() => setSuccess(''), 2500);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to delete rule template');
@@ -113,22 +115,22 @@ const AdminRuleTemplates: React.FC = () => {
   return (
     <MainLayout>
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-6">Tournament Rule Templates</h1>
+        <h1 className="text-3xl font-bold text-gray-800 mb-6">{t('admin.rule_templates_title')}</h1>
 
         {error && <p className="bg-red-100 border border-red-300 text-red-700 px-4 py-3 rounded mb-4">{error}</p>}
         {success && <p className="bg-green-100 border border-green-300 text-green-700 px-4 py-3 rounded mb-4">{success}</p>}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <section className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold mb-4">{form.id ? 'Edit template' : 'New template'}</h2>
+            <h2 className="text-xl font-semibold mb-4">{form.id ? t('admin.rule_templates_edit') : t('admin.rule_templates_new')}</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('title', 'Title')}</label>
                 <input
                   value={form.title}
                   onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
                   className="w-full border border-gray-300 rounded px-3 py-2"
-                  placeholder="e.g. Standard 1v1 Rules"
+                  placeholder={t('admin.rule_templates_title_placeholder')}
                 />
               </div>
               <div className="flex items-center gap-2">
@@ -138,15 +140,15 @@ const AdminRuleTemplates: React.FC = () => {
                   checked={form.is_active}
                   onChange={(e) => setForm((prev) => ({ ...prev, is_active: e.target.checked }))}
                 />
-                <label htmlFor="template-active" className="text-sm text-gray-700">Active template</label>
+                <label htmlFor="template-active" className="text-sm text-gray-700">{t('admin.rule_templates_active')}</label>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Rules markdown</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.rule_templates_content')}</label>
                 <textarea
                   value={form.content_markdown}
                   onChange={(e) => setForm((prev) => ({ ...prev, content_markdown: e.target.value }))}
                   className="w-full min-h-[280px] border border-gray-300 rounded px-3 py-2 font-mono text-sm"
-                  placeholder="# Rules&#10;&#10;- Rule 1&#10;- Rule 2"
+                  placeholder={t('admin.rule_templates_content_placeholder')}
                 />
               </div>
               <div className="flex gap-3">
@@ -155,11 +157,11 @@ const AdminRuleTemplates: React.FC = () => {
                   disabled={saving}
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {saving ? 'Saving...' : form.id ? 'Update template' : 'Create template'}
+                  {saving ? t('saving', 'Saving...') : form.id ? t('admin.rule_templates_update') : t('admin.rule_templates_create')}
                 </button>
                 {form.id && (
                   <button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">
-                    Cancel edit
+                    {t('admin.rule_templates_cancel_edit')}
                   </button>
                 )}
               </div>
@@ -167,46 +169,46 @@ const AdminRuleTemplates: React.FC = () => {
           </section>
 
           <section className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold mb-4">Preview</h2>
-            <MarkdownPreview markdown={form.content_markdown} emptyMessage="Write markdown to preview the rendered rules." />
+            <h2 className="text-xl font-semibold mb-4">{t('preview', 'Preview')}</h2>
+            <MarkdownPreview markdown={form.content_markdown} emptyMessage={t('admin.rule_templates_preview_empty')} />
           </section>
         </div>
 
         <section className="bg-white rounded-lg shadow p-6 mt-6">
-          <h2 className="text-xl font-semibold mb-4">Existing templates</h2>
+          <h2 className="text-xl font-semibold mb-4">{t('admin.rule_templates_existing')}</h2>
           {loading ? (
-            <p className="text-gray-600">Loading templates...</p>
+            <p className="text-gray-600">{t('loading')}</p>
           ) : templates.length === 0 ? (
-            <p className="text-gray-600">No templates yet.</p>
+            <p className="text-gray-600">{t('admin.rule_templates_none')}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left py-2">Title</th>
-                    <th className="text-left py-2">Status</th>
-                    <th className="text-left py-2">Updated</th>
-                    <th className="text-left py-2">Actions</th>
+                    <th className="text-left py-2">{t('title', 'Title')}</th>
+                    <th className="text-left py-2">{t('label_status')}</th>
+                    <th className="text-left py-2">{t('updated', 'Updated')}</th>
+                    <th className="text-left py-2">{t('actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {templates.map((tpl) => (
                     <tr key={tpl.id} className="border-b">
                       <td className="py-2">{tpl.title}</td>
-                      <td className="py-2">{tpl.is_active === 1 ? 'Active' : 'Disabled'}</td>
+                      <td className="py-2">{tpl.is_active === 1 ? t('admin.rule_templates_active') : t('admin.rule_templates_disabled')}</td>
                       <td className="py-2">{new Date(tpl.updated_at).toLocaleString()}</td>
                       <td className="py-2">
                         <button
                           onClick={() => handleEdit(tpl)}
                           className="mr-3 text-blue-600 hover:text-blue-800"
                         >
-                          Edit
+                          {t('edit')}
                         </button>
                         <button
                           onClick={() => handleDelete(tpl.id)}
                           className="text-red-600 hover:text-red-800"
                         >
-                          Delete
+                          {t('delete')}
                         </button>
                       </td>
                     </tr>
@@ -222,4 +224,3 @@ const AdminRuleTemplates: React.FC = () => {
 };
 
 export default AdminRuleTemplates;
-

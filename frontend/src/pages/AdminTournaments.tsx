@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { publicService, tournamentService } from '../services/api';
 import MainLayout from '../components/MainLayout';
-import TournamentList, { Tournament } from '../components/TournamentList';
+import TournamentList, { FilterState, Tournament } from '../components/TournamentList';
 
 const AdminTournaments: React.FC = () => {
   const { t } = useTranslation();
@@ -17,6 +17,12 @@ const AdminTournaments: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [appliedFilters, setAppliedFilters] = useState<FilterState>({
+    name: '',
+    status: '',
+    type: '',
+    my_tournaments: false,
+  });
 
   useEffect(() => {
     if (!isAuthenticated || !isAdmin) {
@@ -25,14 +31,18 @@ const AdminTournaments: React.FC = () => {
     }
 
     fetchTournaments();
-  }, [isAuthenticated, isAdmin, navigate, currentPage]);
+  }, [isAuthenticated, isAdmin, navigate, currentPage, appliedFilters]);
+
+  const handleFilterChange = (filters: FilterState) => {
+    setAppliedFilters(filters);
+    setCurrentPage(1);
+  };
 
   const fetchTournaments = async () => {
     try {
       setLoading(true);
       setError('');
-      // Fetch ALL tournaments (admin view)
-      const res = await publicService.getTournaments(currentPage, {});
+      const res = await publicService.getTournaments(currentPage, appliedFilters);
       setTournaments(res.data?.data || []);
       
       if (res.data?.pagination) {
@@ -64,7 +74,7 @@ const AdminTournaments: React.FC = () => {
       setLoading(true);
       await tournamentService.deleteTournament(tournamentId);
       setError('');
-      fetchTournaments();
+      await fetchTournaments();
     } catch (err: any) {
       console.error('Error deleting tournament:', err);
       setError(err.response?.data?.error || 'Failed to delete tournament');
@@ -105,6 +115,7 @@ const AdminTournaments: React.FC = () => {
             total={total}
             showFilters={true}
             showCreateButton={false}
+            onFilterChange={handleFilterChange}
             onPageChange={handlePageChange}
             onViewDetails={handleViewDetails}
             onDelete={handleDeleteTournament}

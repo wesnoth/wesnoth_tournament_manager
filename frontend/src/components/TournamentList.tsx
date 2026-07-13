@@ -151,10 +151,10 @@ const TournamentList: React.FC<TournamentListProps> = ({
 
   const getTournamentModeLabel = (mode?: string) => {
     if (!mode) return '-';
-    const modeMap: { [key: string]: string } = {
-      'ranked': 'Ranked (1v1)',
-      'unranked': 'Unranked (1v1)',
-      'team': 'Unranked (2v2)'
+    const modeMap: Record<string, string> = {
+      ranked: t('tournament.ranked', 'Ranked (1v1)'),
+      unranked: t('tournament.unranked', 'Unranked (1v1)'),
+      team: t('tournament.team', 'Team (2v2)'),
     };
     return modeMap[mode] || mode;
   };
@@ -325,6 +325,9 @@ const TournamentList: React.FC<TournamentListProps> = ({
 
             <button className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors flex-shrink-0 h-fit self-end" onClick={handleResetFilters}>
               {t('reset_filters')}
+            </button>
+            <button className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors flex-shrink-0 h-fit self-end" onClick={applyFilters}>
+              {t('common.refresh')}
             </button>
           </div>
         </div>

@@ -5,6 +5,14 @@ import { AuthRequest, moderatorOrAdminMiddleware } from '../middleware/auth.js';
 
 const router = Router();
 
+function validateTemplateText(title: unknown, contentMarkdown: unknown): string | null {
+  if (typeof title !== 'string' || !title.trim()) return 'Title is required';
+  if (typeof contentMarkdown !== 'string' || !contentMarkdown.trim()) {
+    return 'Markdown content is required';
+  }
+  return null;
+}
+
 router.get('/', moderatorOrAdminMiddleware, async (_req, res) => {
   try {
     const result = await query(
@@ -23,8 +31,9 @@ router.post('/', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
   try {
     const { title, content_markdown, is_active } = req.body;
 
-    if (!title || !content_markdown) {
-      return res.status(400).json({ error: 'Missing required fields: title, content_markdown' });
+    const validationError = validateTemplateText(title, content_markdown);
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
     }
 
     const templateId = randomUUID();
@@ -58,11 +67,17 @@ router.put('/:id', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => 
     const values: any[] = [];
 
     if (title !== undefined) {
+      if (typeof title !== 'string' || !title.trim()) {
+        return res.status(400).json({ error: 'Title cannot be empty' });
+      }
       updates.push('title = ?');
       values.push(String(title).trim());
     }
 
     if (content_markdown !== undefined) {
+      if (typeof content_markdown !== 'string' || !content_markdown.trim()) {
+        return res.status(400).json({ error: 'Markdown content cannot be empty' });
+      }
       updates.push('content_markdown = ?');
       values.push(content_markdown);
     }
@@ -134,4 +149,3 @@ router.delete('/:id', moderatorOrAdminMiddleware, async (req, res) => {
 });
 
 export default router;
-

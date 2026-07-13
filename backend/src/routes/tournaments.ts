@@ -697,7 +697,9 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
   }
 });
 
-// Delete tournament (organizer only, not in progress or finished)
+// Delete tournament before it starts. Administrators can remove any eligible
+// tournament from Manage Tournaments; regular users remain limited to their
+// own tournaments or tournaments where they are organizers.
 router.delete('/:id', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
@@ -713,9 +715,15 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res) => {
 
     const tournament = tournamentCheck.rows[0];
 
-    // Verify user is tournament organizer
-    if (!(await isTournamentOrganizer(id, req.userId!))) {
-      return res.status(403).json({ error: 'Only tournament organizers can cancel tournament' });
+    const isOrganizer = await isTournamentOrganizer(id, req.userId!);
+    const adminResult = await query(
+      'SELECT is_admin FROM users_extension WHERE id = ?',
+      [req.userId]
+    );
+    const isAdmin = !!adminResult.rows[0]?.is_admin;
+
+    if (!isOrganizer && !isAdmin) {
+      return res.status(403).json({ error: 'Only tournament organizers or admins can cancel tournament' });
     }
 
     // Verify tournament is not in progress or finished

@@ -172,8 +172,14 @@ All admin routes require `is_admin = 1` in `users_extension`.
 - The legacy admin URL redirects to Wiki management. FAQ content is edited as the `faq` article using the shared Markdown editor.
 
 ### `/admin/tournaments` — `pages/AdminTournaments.tsx`
-- `publicService.getTournaments()` → `GET /api/public/tournaments` — list all tournaments.
+- `publicService.getTournaments(page, filters)` → `GET /api/public/tournaments` — list all tournaments with name, status, type, and ownership filters.
 - `tournamentService.deleteTournament(id)` → `DELETE /api/tournaments/:id`.
+
+### `/admin/rule-templates` — `pages/AdminRuleTemplates.tsx`
+- `adminService.getRuleTemplates()` → `GET /api/admin/rule-templates` — list active and inactive reusable tournament rule templates.
+- `adminService.createRuleTemplate(data)` → `POST /api/admin/rule-templates`.
+- `adminService.updateRuleTemplate(id, data)` → `PUT /api/admin/rule-templates/:id`.
+- `adminService.deleteRuleTemplate(id)` → `DELETE /api/admin/rule-templates/:id` — only when no tournament references the template.
 
 ### `/admin/disputes` — `pages/AdminDisputes.tsx`
 - `matchService.getAllDisputedMatches()` → `GET /api/matches/disputed/all`.
