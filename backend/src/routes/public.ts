@@ -127,6 +127,7 @@ router.get('/tournaments', optionalAuthMiddleware, async (req, res) => {
         t.auto_advance_round,
         t.created_at, 
         t.updated_at,
+        t.scheduled_start_at,
         t.started_at,
         t.finished_at,
         t.approved_at
@@ -205,6 +206,7 @@ router.get('/tournaments/:id', async (req, res) => {
         t.auto_advance_round,
         t.created_at, 
         t.updated_at,
+        t.scheduled_start_at,
         t.started_at,
         t.finished_at,
         t.approved_at
@@ -1121,7 +1123,7 @@ router.get('/tournaments/:id/teams', async (req, res) => {
         tt.status,
         COUNT(tp.id) as member_count
       FROM tournament_teams tt
-      LEFT JOIN tournament_participants tp ON tt.id = tp.team_id AND tp.participation_status IN ('pending', 'unconfirmed', 'accepted')
+      LEFT JOIN tournament_participants tp ON tt.id = tp.team_id AND tp.participation_status IN ('pending', 'unconfirmed', 'accepted', 'pending_replacement')
       WHERE tt.tournament_id = ?
       GROUP BY tt.id, tt.name, tt.tournament_wins, tt.tournament_losses, tt.tournament_points, tt.status
       ORDER BY tt.name`,
@@ -1134,7 +1136,7 @@ router.get('/tournaments/:id/teams', async (req, res) => {
         `SELECT tp.id as participant_id, u.id, u.nickname, tp.team_position, tp.participation_status
          FROM tournament_participants tp
          LEFT JOIN users_extension u ON tp.user_id = u.id
-         WHERE tp.team_id = ? AND tp.participation_status IN ('pending', 'unconfirmed', 'accepted')
+         WHERE tp.team_id = ? AND tp.participation_status IN ('pending', 'unconfirmed', 'accepted', 'pending_replacement')
          ORDER BY tp.team_position`,
         [team.id]
       );

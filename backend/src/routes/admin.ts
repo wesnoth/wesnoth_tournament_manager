@@ -1,16 +1,12 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { query } from '../config/database.js';
+import { pool, query } from '../config/database.js';
 import { queryPhpbb } from '../config/phpbbDatabase.js';
 import { adminMiddleware, authMiddleware, moderatorOrAdminMiddleware, AuthRequest } from '../middleware/auth.js';
 import { calculateNewRating, calculateTrend } from '../utils/elo.js';
 import { unlockAccount } from '../services/accountLockout.js';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
 import { performGlobalStatsRecalculation } from './matches.js';
-import {
-  calculateTeamSwissTiebreakers,
-  calculateLeagueTiebreakers,
-} from '../services/statisticsCalculator.js';
 import { isTournamentOrganizer } from '../services/tournamentAuthorizationService.js';
 
 const router = Router();
@@ -1749,119 +1745,6 @@ router.delete('/unranked-maps/:id', authMiddleware, async (req: AuthRequest, res
   }
 });
 
-// Update tournament unranked assets (factions and maps)
-router.put('/tournaments/:id/unranked-assets', authMiddleware, async (req: AuthRequest, res) => {
-  try {
-    const { id } = req.params;
-    const { faction_ids, map_ids } = req.body;
-
-    // Get tournament
-    const tournamentResult = await query(
-      `SELECT id, creator_id, tournament_mode, status
-       FROM tournaments WHERE id = ?`,
-      [id]
-    );
-
-    if (tournamentResult.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Tournament not found' });
-    }
-
-    const tournament = tournamentResult.rows[0];
-
-    // Check authorization (must be organizer)
-    if (!(await isTournamentOrganizer(id, req.userId!))) {
-      const userResult = await query(
-        'SELECT is_admin FROM users_extension WHERE id = ?',
-        [req.userId]
-      );
-      if (userResult.rows.length === 0 || !userResult.rows[0].is_admin) {
-        return res.status(403).json({ success: false, error: 'Not authorized to modify this tournament' });
-      }
-    }
-
-    // Validate tournament status
-    if (!['CREATED', 'REGISTRATION_OPEN'].includes(tournament.status)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Cannot modify assets after tournament starts'
-      });
-    }
-
-    // Validate faction_ids
-    if (!faction_ids || !Array.isArray(faction_ids) || faction_ids.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'At least one faction must be selected'
-      });
-    }
-
-    // Validate map_ids
-    if (!map_ids || !Array.isArray(map_ids) || map_ids.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'At least one map must be selected'
-      });
-    }
-
-    // Verify all factions exist (can be ranked or unranked)
-    for (const factionId of faction_ids) {
-      const faction = await query(
-        'SELECT id FROM factions WHERE id = ?',
-        [factionId]
-      );
-      if (faction.rows.length === 0) {
-        return res.status(400).json({
-          success: false,
-          error: `Faction ${factionId} not found`
-        });
-      }
-    }
-
-    // Verify all maps exist and are unranked
-    for (const mapId of map_ids) {
-      const map = await query(
-        'SELECT id FROM game_maps WHERE id = ?',
-        [mapId]
-      );
-      if (map.rows.length === 0) {
-        return res.status(400).json({
-          success: false,
-          error: `Map ${mapId} not found`
-        });
-      }
-    }
-
-    // Delete existing associations
-    await query('DELETE FROM tournament_unranked_factions WHERE tournament_id = ?', [id]);
-    await query('DELETE FROM tournament_unranked_maps WHERE tournament_id = ?', [id]);
-
-    // Insert new associations
-    for (const factionId of faction_ids) {
-      await query(
-        `INSERT IGNORE INTO tournament_unranked_factions (tournament_id, faction_id)
-         VALUES (?, ?)`,
-        [id, factionId]
-      );
-    }
-
-    for (const mapId of map_ids) {
-      await query(
-        `INSERT IGNORE INTO tournament_unranked_maps (tournament_id, map_id)
-         VALUES (?, ?)`,
-        [id, mapId]
-      );
-    }
-
-    res.json({
-      success: true,
-      message: 'Tournament unranked assets updated successfully'
-    });
-  } catch (error) {
-    console.error('Error updating tournament unranked assets:', error);
-    res.status(500).json({ success: false, error: 'Failed to update tournament unranked assets' });
-  }
-});
-
 // ============================================================================
 // TEAM TOURNAMENT ENDPOINTS
 // ============================================================================
@@ -2224,72 +2107,6 @@ router.delete('/tournaments/:id/teams/:teamId', authMiddleware, async (req: Auth
   }
 });
 
-// Calculate tiebreakers (OMP, GWP, OGP) for tournament participants
-// Call this after a round completes, before generating next round pairings
-router.post('/tournaments/:id/calculate-tiebreakers', authMiddleware, async (req: AuthRequest, res) => {
-  try {
-    const { id } = req.params;
-    console.log(`\n🎲 [CALCULATE TIEBREAKERS] Starting tiebreaker calculation for tournament ${id}`);
-
-    // Check if user is tournament organizer
-    const tournamentResult = await query(
-      'SELECT id, creator_id, tournament_mode, tournament_type FROM tournaments WHERE id = ?',
-      [id]
-    );
-
-    if (tournamentResult.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Tournament not found' });
-    }
-
-    const tournament = tournamentResult.rows[0];
-    if (!(await isTournamentOrganizer(id, req.userId!))) {
-      return res.status(403).json({ success: false, error: 'Only tournament organizers can calculate tiebreakers' });
-    }
-
-    // Calculate tiebreakers using TypeScript functions
-    let updated_count = 0;
-    if (tournament.tournament_mode === 'team') {
-      // For team tournaments, tiebreaker logic is same for league and swiss
-      console.log(`🎲 [CALCULATE TIEBREAKERS] Calculating team tournament tiebreakers`);
-      const tiebreakersResult = await calculateTeamSwissTiebreakers(id);
-      console.log(`✅ [CALCULATE TIEBREAKERS] Calculated tiebreakers for ${tiebreakersResult.length} teams`);
-      
-      // Update database with calculated tiebreakers
-      for (const tb of tiebreakersResult) {
-        await query(
-          `UPDATE tournament_teams SET omp = ?, gwp = ?, ogp = ? WHERE tournament_id = ? AND id = ?`,
-          [tb.omp, tb.gwp, tb.ogp, id, tb.team_id]
-        );
-        updated_count++;
-      }
-    } else {
-      // For individual tournaments, update participant tiebreakers
-      const tiebreakersResult = await calculateLeagueTiebreakers(id);
-      console.log(`✅ [CALCULATE TIEBREAKERS] Calculated tiebreakers for ${tiebreakersResult.length} participants`);
-      
-      // Update database with calculated tiebreakers
-      for (const tb of tiebreakersResult) {
-        await query(
-          `UPDATE tournament_participants SET omp = ?, gwp = ?, ogp = ? WHERE tournament_id = ? AND user_id = ?`,
-          [tb.omp, tb.gwp, tb.ogp, id, tb.user_id]
-        );
-        updated_count++;
-      }
-    }
-
-    console.log(`✅ [CALCULATE TIEBREAKERS] Updated ${updated_count} ${tournament.tournament_mode === 'team' ? 'teams' : 'participants'}`);
-    
-    res.json({
-      success: true,
-      message: `Tiebreakers calculated for ${updated_count} participants`,
-      updated_count
-    });
-  } catch (error) {
-    console.error('Error calculating tiebreakers:', error);
-    res.status(500).json({ success: false, error: 'Failed to calculate tiebreakers' });
-  }
-});
-
 // ============================================================================
 // MAINTENANCE MODE ENDPOINTS
 // ============================================================================
@@ -2412,35 +2229,31 @@ router.post('/tournaments/:id/teams/:teamId/replace-member', authMiddleware, asy
     const { id, teamId } = req.params;
     const { player_to_replace_id, new_player_nickname } = req.body;
 
-    console.log('🚀 [BACKEND] POST /tournaments/:id/teams/:teamId/replace-member');
-    console.log('   Params:', { id, teamId });
-    console.log('   Body:', { player_to_replace_id, new_player_nickname });
-    console.log('   User ID:', req.userId);
-
     if (!player_to_replace_id || !new_player_nickname) {
-      console.error('❌ [BACKEND] Missing required fields');
       return res.status(400).json({ success: false, error: 'player_to_replace_id and new_player_nickname are required' });
     }
 
     // Verify organizer
     const tournResult = await query(
-      'SELECT creator_id FROM tournaments WHERE id = ?',
+      'SELECT creator_id, status, tournament_mode FROM tournaments WHERE id = ?',
       [id]
     );
 
-    console.log('   Tournament query result:', tournResult.rows.length > 0 ? '✓ Found' : '✗ Not found');
-
     if (tournResult.rows.length === 0) {
-      console.error('❌ [BACKEND] Tournament not found:', id);
       return res.status(404).json({ success: false, error: 'Tournament not found' });
     }
 
-    if (!(await isTournamentOrganizer(id, req.userId!))) {
-      console.error('❌ [BACKEND] User is not organizer:', { req_userId: req.userId });
-      return res.status(403).json({ success: false, error: 'Only tournament organizers can replace team members' });
+    const tournament = tournResult.rows[0];
+    if (tournament.tournament_mode !== 'team') {
+      return res.status(400).json({ success: false, error: 'Member replacement is only available for team tournaments' });
+    }
+    if (!['registration_closed', 'prepared', 'in_progress'].includes(tournament.status)) {
+      return res.status(400).json({ success: false, error: 'Team members cannot be replaced in the current tournament status' });
     }
 
-    console.log('   ✓ User is organizer');
+    if (!(await isTournamentOrganizer(id, req.userId!))) {
+      return res.status(403).json({ success: false, error: 'Only tournament organizers can replace team members' });
+    }
 
     // Verify team belongs to tournament
     const teamResult = await query(
@@ -2448,10 +2261,7 @@ router.post('/tournaments/:id/teams/:teamId/replace-member', authMiddleware, asy
       [teamId, id]
     );
 
-    console.log('   Team query result:', teamResult.rows.length > 0 ? '✓ Found' : '✗ Not found');
-
     if (teamResult.rows.length === 0) {
-      console.error('❌ [BACKEND] Team not found:', { teamId, tournamentId: id });
       return res.status(404).json({ success: false, error: 'Team not found' });
     }
 
@@ -2462,10 +2272,7 @@ router.post('/tournaments/:id/teams/:teamId/replace-member', authMiddleware, asy
       [player_to_replace_id, teamId]
     );
 
-    console.log('   Player to replace query result:', playerToReplaceResult.rows.length > 0 ? '✓ Found' : '✗ Not found');
-
     if (playerToReplaceResult.rows.length === 0) {
-      console.error('❌ [BACKEND] Active team member not found:', player_to_replace_id);
       return res.status(404).json({ success: false, error: 'Active team member not found' });
     }
 
@@ -2475,10 +2282,7 @@ router.post('/tournaments/:id/teams/:teamId/replace-member', authMiddleware, asy
       [new_player_nickname]
     );
 
-    console.log('   New player query result:', newPlayerResult.rows.length > 0 ? '✓ Found' : '✗ Not found');
-
     if (newPlayerResult.rows.length === 0) {
-      console.error('❌ [BACKEND] Player not found:', new_player_nickname);
       return res.status(404).json({ success: false, error: 'Player not found' });
     }
 
@@ -2486,15 +2290,13 @@ router.post('/tournaments/:id/teams/:teamId/replace-member', authMiddleware, asy
 
     // Check if new player is already in tournament as active member
     const duplicateCheckResult = await query(
-      `SELECT id FROM tournament_participants 
-       WHERE tournament_id = ? AND user_id = ? AND participation_status = 'accepted'`,
+      `SELECT id FROM tournament_participants
+       WHERE tournament_id = ? AND user_id = ?
+         AND participation_status IN ('pending', 'accepted', 'unconfirmed', 'pending_replacement')`,
       [id, new_player_id]
     );
 
-    console.log('   Duplicate check result:', duplicateCheckResult.rows.length > 0 ? '✗ Already in tournament' : '✓ Not duplicated');
-
     if (duplicateCheckResult.rows.length > 0) {
-      console.error('❌ [BACKEND] Player already in tournament:', new_player_id);
       return res.status(400).json({ success: false, error: 'Player is already participating in tournament' });
     }
 
@@ -2503,28 +2305,32 @@ router.post('/tournaments/:id/teams/:teamId/replace-member', authMiddleware, asy
     const newParticipantId = uuidv4();
     const playerToReplaceParticipantId = playerToReplaceResult.rows[0].id;
     
-    await query(
-      `INSERT INTO tournament_participants 
-       (id, tournament_id, user_id, team_id, team_position, participation_status, requested_replacement_of_id, created_at)
-       VALUES (?, ?, ?, ?, NULL, 'unconfirmed', ?, NOW())`,
-      [newParticipantId, id, new_player_id, teamId, playerToReplaceParticipantId]
-    );
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [replacementUpdate] = await connection.execute<any>(
+        `UPDATE tournament_participants
+         SET participation_status = 'pending_replacement'
+         WHERE id = ? AND team_id = ? AND participation_status = 'accepted'`,
+        [playerToReplaceParticipantId, teamId]
+      );
+      if (replacementUpdate.affectedRows !== 1) {
+        throw new Error('Team member already has a pending replacement');
+      }
 
-    // Update the player being replaced to pending_replacement status
-    await query(
-      `UPDATE tournament_participants 
-       SET participation_status = 'pending_replacement' 
-       WHERE id = ?`,
-      [playerToReplaceParticipantId]
-    );
-
-    console.log('✅ [BACKEND] Member replacement initiated successfully');
-    console.log('   New participant ID:', newParticipantId);
-    console.log('   Substitute:', new_player_nickname);
-    console.log('   Replacing:', player_to_replace_id);
-
-    // TODO: Send Discord notification that substitute is pending confirmation
-    console.log(`⏳ Member replacement initiated: ${new_player_nickname} pending to replace member ${player_to_replace_id}`);
+      await connection.execute(
+        `INSERT INTO tournament_participants
+         (id, tournament_id, user_id, team_id, team_position, participation_status, requested_replacement_of_id, created_at)
+         VALUES (?, ?, ?, ?, NULL, 'unconfirmed', ?, NOW())`,
+        [newParticipantId, id, new_player_id, teamId, playerToReplaceParticipantId]
+      );
+      await connection.commit();
+    } catch (replacementError) {
+      await connection.rollback();
+      throw replacementError;
+    } finally {
+      connection.release();
+    }
 
     res.json({ 
       success: true, 
@@ -2532,137 +2338,8 @@ router.post('/tournaments/:id/teams/:teamId/replace-member', authMiddleware, asy
       participantId: newParticipantId
     });
   } catch (error) {
-    console.error('❌ [BACKEND] Error initiating member replacement:', error);
+    console.error('Error initiating member replacement:', error);
     res.status(500).json({ success: false, error: 'Failed to initiate replacement' });
-  }
-});
-
-// Confirm team member replacement (user confirmation)
-// Called when the substitute user confirms accepting the replacement
-router.post('/user/tournaments/:id/confirm-replacement/:participantId', authMiddleware, async (req: AuthRequest, res) => {
-  try {
-    const { id, participantId } = req.params;
-    const { confirmed } = req.body; // true to confirm, false to reject
-
-    // Get the unconfirmed substitute participant
-    const pendingResult = await query(
-      `SELECT p.* FROM tournament_participants p
-       WHERE p.id = ? AND p.tournament_id = ? AND p.participation_status = 'unconfirmed'`,
-      [participantId, id]
-    );
-
-    if (pendingResult.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Pending replacement not found' });
-    }
-
-    const pending = pendingResult.rows[0];
-
-    // Verify the user confirming is the substitute user
-    if (pending.user_id !== req.userId) {
-      return res.status(403).json({ success: false, error: 'Only the substitute player can confirm replacement' });
-    }
-
-    if (!confirmed) {
-      // Reject replacement - move to replaced players team instead of deleting
-      await query(
-        `UPDATE tournament_participants 
-         SET team_id = ?, participation_status = 'rejected', team_position = NULL
-         WHERE id = ?`,
-        [REPLACED_PLAYERS_TEAM_ID, participantId]
-      );
-
-      // Restore the player being replaced back to accepted status
-      if (pending.requested_replacement_of_id) {
-        await query(
-          `UPDATE tournament_participants 
-           SET participation_status = 'accepted' 
-           WHERE id = ?`,
-          [pending.requested_replacement_of_id]
-        );
-      }
-
-      return res.json({ success: true, message: 'Replacement rejected' });
-    }
-
-    // Confirmed - find the player being replaced to get their team_position
-    const playerToReplaceResult = await query(
-      `SELECT id, team_position, user_id FROM tournament_participants 
-       WHERE id = ? AND participation_status = 'pending_replacement'`,
-      [pending.requested_replacement_of_id]
-    );
-
-    if (playerToReplaceResult.rows.length === 0) {
-      return res.status(400).json({ success: false, error: 'Original team member not found' });
-    }
-
-    const playerToReplace = playerToReplaceResult.rows[0];
-    const teamPosition = playerToReplace.team_position;
-    const playerToReplaceId = playerToReplace.id;
-
-    // Update: new player becomes accepted with the team_position
-    await query(
-      `UPDATE tournament_participants 
-       SET participation_status = 'accepted', team_position = ? 
-       WHERE id = ?`,
-      [teamPosition, participantId]
-    );
-
-    // Update: old player gets marked as replaced with reference to the new player
-    await query(
-      `UPDATE tournament_participants 
-       SET participation_status = 'replaced', replaced_by_participant_id = ?, team_position = NULL
-       WHERE id = ?`,
-      [participantId, playerToReplaceId]
-    );
-
-    // Move old member to replaced players team
-    await query(
-      `UPDATE tournament_participants 
-       SET team_id = ?
-       WHERE id = ?`,
-      [REPLACED_PLAYERS_TEAM_ID, playerToReplaceId]
-    );
-
-    // UPDATE ALL PENDING MATCHES: Replace old player_id with new player_id
-    // Update tournament_round_matches
-    await query(
-      `UPDATE tournament_round_matches 
-       SET player1_id = ? 
-       WHERE player1_id = ? AND tournament_id = ?`,
-      [pending.user_id, playerToReplace.user_id, id]
-    );
-
-    await query(
-      `UPDATE tournament_round_matches 
-       SET player2_id = ? 
-       WHERE player2_id = ? AND tournament_id = ?`,
-      [pending.user_id, playerToReplace.user_id, id]
-    );
-
-    // Update tournament_matches
-    await query(
-      `UPDATE tournament_matches 
-       SET player1_id = ? 
-       WHERE player1_id = ? AND tournament_id = ?`,
-      [pending.user_id, playerToReplace.user_id, id]
-    );
-
-    await query(
-      `UPDATE tournament_matches 
-       SET player2_id = ? 
-       WHERE player2_id = ? AND tournament_id = ?`,
-      [pending.user_id, playerToReplace.user_id, id]
-    );
-
-    console.log(`✅ Member replacement confirmed: New player ${pending.user_id} replaced ${playerToReplace.user_id}`);
-
-    res.json({ 
-      success: true, 
-      message: 'Replacement confirmed. You are now an active team member.'
-    });
-  } catch (error) {
-    console.error('Error confirming member replacement:', error);
-    res.status(500).json({ success: false, error: 'Failed to confirm replacement' });
   }
 });
 

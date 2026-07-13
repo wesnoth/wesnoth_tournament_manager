@@ -199,9 +199,6 @@ export class ParseNewReplaysRefactorized {
             }
           }
 
-          // Ensure both players exist in users_extension (auto-register if needed)
-          await this.ensurePlayersExist(parseSummary.forumPlayers);
-
           // Check confidence level - only create match if confidence=2
           if (parseSummary.confidenceLevel === 1) {
             console.log(`⏳ [PARSE] Confidence=1 → Parsed but no match created (awaiting player confirmation)`);
@@ -765,36 +762,6 @@ export class ParseNewReplaysRefactorized {
       }
     }
     return null;
-  }
-
-  /**
-   * Ensure all forum players exist in users_extension.
-   * If a player is missing, auto-register them with default ELO 1400.
-   * Uses forum user_id as the source of truth for identity lookup (by nickname).
-   */
-  private async ensurePlayersExist(forumPlayers: Array<{ user_name: string; user_id?: number }>): Promise<void> {
-    for (const player of forumPlayers) {
-      if (!player.user_name) continue;
-      try {
-        const existing = await query(
-          `SELECT id FROM users_extension WHERE LOWER(nickname) = LOWER(?) LIMIT 1`,
-          [player.user_name]
-        );
-        if (((existing as any).rows || []).length > 0) continue;
-
-        const { v4: uuidv4 } = await import('uuid');
-        const newId = uuidv4();
-        await query(
-          `INSERT INTO users_extension
-             (id, nickname, is_active, is_rated, elo_rating, matches_played, total_wins, total_losses, created_at, updated_at)
-           VALUES (?, ?, 1, 0, 1400, 0, 0, 0, NOW(), NOW())`,
-          [newId, player.user_name]
-        );
-        console.log(`👤 [PARSE] Auto-registered player: ${player.user_name} (id=${newId})`);
-      } catch (err) {
-        console.warn(`⚠️  [PARSE] Failed to ensure player ${player.user_name}:`, (err as any)?.message);
-      }
-    }
   }
 
   /**

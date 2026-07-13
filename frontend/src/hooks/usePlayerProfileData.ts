@@ -10,7 +10,12 @@ interface UsePlayerProfileDataOptions {
   activeTab: string;
   opponentSide: number;
   matchPage: number;
-  matchFilters: Record<string, string>;
+  matchFilters: {
+    player: string;
+    map: string;
+    status: string;
+    faction: string;
+  };
 }
 
 interface OpponentStat {

@@ -1,12 +1,17 @@
 import { Router } from 'express';
-import { query } from '../config/database.js';
-import { authMiddleware, moderatorOrAdminMiddleware, AuthRequest } from '../middleware/auth.js';
+import type { PoolConnection } from 'mysql2/promise';
+import { pool, query } from '../config/database.js';
+import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { activateRound, checkAndCompleteRound, getWinnerAndRunnerUp, preGenerateLeagueMatches } from '../utils/tournament.js';
 import discordService from '../services/discordService.js';
 import { randomUUID } from 'crypto';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
 import { checkUserIsForumModerator } from '../services/phpbbAuth.js';
 import { isTournamentOrganizer } from '../services/tournamentAuthorizationService.js';
+import {
+  calculateLeagueTiebreakers,
+  calculateTeamSwissTiebreakers,
+} from '../services/statisticsCalculator.js';
 
 const router = Router();
 
@@ -19,6 +24,107 @@ const REJECTED_PLAYERS_TRANSLATIONS = [
   'Отклоненные игроки',    // Russian
   '被拒绝的玩家'            // Chinese
 ];
+
+const TOURNAMENT_TYPES = ['elimination', 'league', 'swiss', 'swiss_elimination'] as const;
+const TOURNAMENT_MODES = ['ranked', 'unranked', 'team'] as const;
+const MATCH_FORMATS = ['bo1', 'bo3', 'bo5'] as const;
+
+interface TournamentConfiguration {
+  tournament_type: string;
+  tournament_mode: string;
+  max_participants: number | null;
+  round_duration_days: number;
+  auto_advance_round: boolean | number;
+  general_rounds: number;
+  final_rounds: number;
+  general_rounds_format: string;
+  final_rounds_format: string;
+}
+
+/**
+ * Validate the complete persisted tournament configuration. Update requests
+ * are merged with the current row before calling this function so the same
+ * invariants apply to creation and editing.
+ */
+function validateTournamentConfiguration(config: TournamentConfiguration): string | null {
+  if (!TOURNAMENT_TYPES.includes(config.tournament_type as typeof TOURNAMENT_TYPES[number])) {
+    return 'Invalid tournament_type';
+  }
+  if (!TOURNAMENT_MODES.includes(config.tournament_mode as typeof TOURNAMENT_MODES[number])) {
+    return 'Invalid tournament_mode';
+  }
+  if (
+    config.max_participants !== null &&
+    (!Number.isInteger(config.max_participants) || config.max_participants < 2 || config.max_participants > 256)
+  ) {
+    return 'Max participants must be an integer between 2 and 256';
+  }
+  if (!Number.isInteger(config.round_duration_days) || config.round_duration_days < 1 || config.round_duration_days > 365) {
+    return 'Round duration must be an integer between 1 and 365 days';
+  }
+  if (![true, false, 0, 1].includes(config.auto_advance_round)) {
+    return 'auto_advance_round must be a boolean';
+  }
+  if (!MATCH_FORMATS.includes(config.general_rounds_format as typeof MATCH_FORMATS[number]) ||
+      !MATCH_FORMATS.includes(config.final_rounds_format as typeof MATCH_FORMATS[number])) {
+    return 'Match formats must be bo1, bo3, or bo5';
+  }
+  if (!Number.isInteger(config.general_rounds) || !Number.isInteger(config.final_rounds) ||
+      config.general_rounds < 0 || config.final_rounds < 0) {
+    return 'Round counts must be non-negative integers';
+  }
+
+  if (config.tournament_type === 'league') {
+    if (![1, 2].includes(config.general_rounds) || config.final_rounds !== 0) {
+      return 'League tournaments require one or two waves and no final rounds';
+    }
+  } else if (config.tournament_type === 'swiss') {
+    if (config.general_rounds < 1 || config.general_rounds > 10 || config.final_rounds !== 0) {
+      return 'Swiss tournaments require between 1 and 10 rounds and no final rounds';
+    }
+  } else if (config.tournament_type === 'swiss_elimination') {
+    if (config.general_rounds < 1 || config.general_rounds > 10 ||
+        config.final_rounds < 1 || config.final_rounds > 3) {
+      return 'Swiss-Elimination tournaments require 1-10 Swiss rounds and 1-3 elimination rounds';
+    }
+  } else if (config.general_rounds !== 0 || config.final_rounds !== 0) {
+    return 'Elimination round counts are calculated from the accepted field size';
+  }
+
+  return null;
+}
+
+function toMariaDbDateTime(value: string): string {
+  return new Date(value).toISOString().slice(0, 19).replace('T', ' ');
+}
+
+/** Convert persisted UTC DATETIME values and API ISO values to a comparable instant. */
+function tournamentDateTimeEpoch(value: string | Date | null | undefined): number | null {
+  if (!value) return null;
+  const normalized = typeof value === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)
+    ? `${value.replace(' ', 'T')}Z`
+    : value;
+  const epoch = new Date(normalized).getTime();
+  return Number.isNaN(epoch) ? null : epoch;
+}
+
+/** Delete the complete tournament aggregate on one database transaction. */
+async function deleteTournamentRecords(connection: PoolConnection, tournamentId: string): Promise<void> {
+  await connection.execute('DELETE FROM tournament_matches WHERE tournament_id = ?', [tournamentId]);
+  await connection.execute('DELETE FROM tournament_round_matches WHERE tournament_id = ?', [tournamentId]);
+  await connection.execute('DELETE FROM tournament_rounds WHERE tournament_id = ?', [tournamentId]);
+  await connection.execute('DELETE FROM matches WHERE tournament_id = ?', [tournamentId]);
+  await connection.execute(
+    'DELETE FROM team_substitutes WHERE team_id IN (SELECT id FROM tournament_teams WHERE tournament_id = ?)',
+    [tournamentId]
+  );
+  await connection.execute('DELETE FROM tournament_participants WHERE tournament_id = ?', [tournamentId]);
+  await connection.execute('DELETE FROM tournament_teams WHERE tournament_id = ?', [tournamentId]);
+  await connection.execute('DELETE FROM tournament_unranked_factions WHERE tournament_id = ?', [tournamentId]);
+  await connection.execute('DELETE FROM tournament_unranked_maps WHERE tournament_id = ?', [tournamentId]);
+  await connection.execute('DELETE FROM tournament_organizers WHERE tournament_id = ?', [tournamentId]);
+  await connection.execute('DELETE FROM tournaments WHERE id = ?', [tournamentId]);
+}
 
 // Check if team name is reserved
 function isReservedTeamName(teamName: string): boolean {
@@ -38,6 +144,7 @@ async function generateSafeTeamId(): Promise<string> {
 }
 
 router.post('/', authMiddleware, async (req: AuthRequest, res) => {
+  let tournamentId: string | null = null;
   try {
     const { 
       name, 
@@ -51,6 +158,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       final_rounds,
       general_rounds_format,
       final_rounds_format,
+      scheduled_start_at,
       rules_template_id,
       rules_content,
       organizer_ids,
@@ -59,8 +167,26 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     } = req.body;
 
     // Validation
-    if (!name || !description || !tournament_type) {
+    if (typeof name !== 'string' || !name.trim() || typeof description !== 'string' || !description.trim() || !tournament_type) {
       return res.status(400).json({ error: 'Missing required fields: name, description, tournament_type' });
+    }
+
+    const configurationError = validateTournamentConfiguration({
+      tournament_type,
+      tournament_mode: tournament_mode || 'ranked',
+      max_participants: max_participants ?? null,
+      round_duration_days: round_duration_days ?? 7,
+      auto_advance_round: auto_advance_round ?? false,
+      general_rounds: tournament_type === 'elimination' ? 0 : (general_rounds ?? 0),
+      final_rounds: tournament_type === 'elimination' ? 0 : (final_rounds ?? 0),
+      general_rounds_format: general_rounds_format || 'bo3',
+      final_rounds_format: final_rounds_format || 'bo5',
+    });
+    if (configurationError) {
+      return res.status(400).json({ error: configurationError });
+    }
+    if (scheduled_start_at != null && Number.isNaN(Date.parse(scheduled_start_at))) {
+      return res.status(400).json({ error: 'Invalid scheduled_start_at date' });
     }
 
     // max_participants is now optional - can be set during tournament preparation
@@ -119,6 +245,44 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       resolvedRulesContent = description;
     }
 
+    if ((unranked_factions !== undefined && !Array.isArray(unranked_factions)) ||
+        (unranked_maps !== undefined && !Array.isArray(unranked_maps))) {
+      return res.status(400).json({ error: 'Tournament factions and maps must be arrays' });
+    }
+
+    const factionIds = [...new Set((unranked_factions || []).map((item: any) => item?.id || item))]
+      .filter((id): id is string => typeof id === 'string' && id.length > 0);
+    const mapIds = [...new Set((unranked_maps || []).map((item: any) => item?.id || item))]
+      .filter((id): id is string => typeof id === 'string' && id.length > 0);
+
+    if (factionIds.length !== (unranked_factions || []).length || mapIds.length !== (unranked_maps || []).length) {
+      return res.status(400).json({ error: 'Tournament assets contain invalid or duplicate identifiers' });
+    }
+
+    if (factionIds.length > 0) {
+      const factionPlaceholders = factionIds.map(() => '?').join(', ');
+      const factionsResult = await query(
+        `SELECT id, is_ranked FROM factions WHERE id IN (${factionPlaceholders}) AND is_active = 1`,
+        factionIds
+      );
+      if (factionsResult.rows.length !== factionIds.length ||
+          (tournament_mode === 'ranked' && factionsResult.rows.some((faction: any) => !faction.is_ranked))) {
+        return res.status(400).json({ error: 'One or more selected factions are unavailable for this tournament mode' });
+      }
+    }
+
+    if (mapIds.length > 0) {
+      const mapPlaceholders = mapIds.map(() => '?').join(', ');
+      const mapsResult = await query(
+        `SELECT id, is_ranked FROM game_maps WHERE id IN (${mapPlaceholders}) AND is_active = 1`,
+        mapIds
+      );
+      if (mapsResult.rows.length !== mapIds.length ||
+          (tournament_mode === 'ranked' && mapsResult.rows.some((map: any) => !map.is_ranked))) {
+        return res.status(400).json({ error: 'One or more selected maps are unavailable for this tournament mode' });
+      }
+    }
+
     // Validate tournament type-specific configurations
     // (already validated tournamentTypeLower is declared above)
     
@@ -168,22 +332,22 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     // If elimination without max_participants, total_rounds will be calculated during close-registration
 
     // Generate UUID for tournament
-    const tournamentId = randomUUID();
+    tournamentId = randomUUID();
 
     // Create tournament
     const tournamentResult = await query(
       `INSERT INTO tournaments (
         id, name, description, rules_template_id, rules_content, creator_id, tournament_type, tournament_mode,
-        max_participants, round_duration_days, auto_advance_round, 
+        max_participants, round_duration_days, auto_advance_round, scheduled_start_at,
         total_rounds, general_rounds, final_rounds,
         general_rounds_format, final_rounds_format,
         status, current_round
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        `,
       [
         tournamentId,
-        name, 
-        description,
+        name.trim(),
+        description.trim(),
         selectedTemplateId,
         resolvedRulesContent,
         req.userId, 
@@ -192,6 +356,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
         max_participants, 
         round_duration_days || 7,
         auto_advance_round || false,
+        scheduled_start_at ? toMariaDbDateTime(scheduled_start_at) : null,
         totalRounds,
         tournamentTypeLower === 'elimination' ? 0 : (general_rounds || 0),
         tournamentTypeLower === 'elimination' ? 0 : (final_rounds || 0),
@@ -235,46 +400,17 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     }
 
     // Add allowed factions and maps for all tournament modes (ranked, unranked, team)
-    if (unranked_factions || unranked_maps) {
-      try {
-        console.log(`Adding assets to tournament ${tournamentId}:`, {
-          factions_count: unranked_factions?.length || 0,
-          maps_count: unranked_maps?.length || 0,
-          factions: unranked_factions,
-          maps: unranked_maps
-        });
-
-        // Add factions
-        if (unranked_factions && Array.isArray(unranked_factions)) {
-          for (const faction of unranked_factions) {
-            const factionId = faction.id || faction;
-            console.log(`Inserting faction ${factionId} into tournament ${tournamentId}`);
-            await query(
-              `INSERT IGNORE INTO tournament_unranked_factions (tournament_id, faction_id)
-               VALUES (?, ?)`,
-              [tournamentId, factionId]
-            );
-          }
-        }
-
-        // Add maps
-        if (unranked_maps && Array.isArray(unranked_maps)) {
-          for (const map of unranked_maps) {
-            const mapId = map.id || map;
-            console.log(`Inserting map ${mapId} into tournament ${tournamentId}`);
-            await query(
-              `INSERT IGNORE INTO tournament_unranked_maps (tournament_id, map_id)
-               VALUES (?, ?)`,
-              [tournamentId, mapId]
-            );
-          }
-        }
-        
-        console.log(`Successfully added assets to tournament ${tournamentId}`);
-      } catch (assetError) {
-        console.error('Error adding tournament assets:', assetError);
-        // Don't fail tournament creation if adding assets fails
-      }
+    for (const factionId of factionIds) {
+      await query(
+        `INSERT INTO tournament_unranked_factions (tournament_id, faction_id) VALUES (?, ?)`,
+        [tournamentId, factionId]
+      );
+    }
+    for (const mapId of mapIds) {
+      await query(
+        `INSERT INTO tournament_unranked_maps (tournament_id, map_id) VALUES (?, ?)`,
+        [tournamentId, mapId]
+      );
     }
 
     // Get organizer list (creator + co-organizers)
@@ -312,7 +448,8 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
         tournament_type,
         organizersDisplay,
         description,
-        resolvedRulesContent
+        resolvedRulesContent,
+        scheduled_start_at || null
       );
 
       // Update tournament with Discord thread ID
@@ -330,7 +467,8 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
           description,
           organizersDisplay,
           max_participants,
-          resolvedRulesContent
+          resolvedRulesContent,
+          scheduled_start_at || null
         );
       }
     } catch (discordError) {
@@ -345,20 +483,31 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     });
   } catch (error: any) {
     console.error('Tournament creation error:', error.message || error);
-    console.error('Full error:', error);
+    if (tournamentId) {
+      // Creation spans several association tables. Compensating cleanup keeps a
+      // failed request from leaving a partially configurable tournament.
+      await query('DELETE FROM tournament_unranked_factions WHERE tournament_id = ?', [tournamentId]).catch(() => undefined);
+      await query('DELETE FROM tournament_unranked_maps WHERE tournament_id = ?', [tournamentId]).catch(() => undefined);
+      await query('DELETE FROM tournament_organizers WHERE tournament_id = ?', [tournamentId]).catch(() => undefined);
+      await query('DELETE FROM tournaments WHERE id = ?', [tournamentId]).catch(() => undefined);
+    }
     res.status(500).json({ error: 'Failed to create tournament', details: error.message });
   }
 });
 
-// Get my tournaments (created by current user) - MUST be before /:id
+// Get tournaments managed by the current user - MUST be before /:id
 router.get('/my', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const userId = req.userId;
     const result = await query(
-      `SELECT * FROM tournaments 
-       WHERE creator_id = ?
+      `SELECT t.* FROM tournaments t
+       WHERE t.creator_id = ?
+          OR EXISTS (
+            SELECT 1 FROM tournament_organizers tor
+            WHERE tor.tournament_id = t.id AND tor.user_id = ?
+          )
        ORDER BY created_at DESC`,
-      [userId]
+      [userId, userId]
     );
 
     // For each tournament, if status = 'finished', fetch winner and runner-up
@@ -542,15 +691,23 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
       final_rounds,
       general_rounds_format,
       final_rounds_format,
+      scheduled_start_at,
       rules_template_id,
-      rules_content,
-      status,
-      started_at
+      rules_content
     } = req.body;
+
+    if ('status' in req.body || 'started_at' in req.body || 'tournament_mode' in req.body) {
+      return res.status(400).json({
+        error: 'Tournament mode, lifecycle status, and lifecycle timestamps cannot be changed through configuration updates'
+      });
+    }
 
     // Verify the user is the tournament creator
     const tournamentResult = await query(
-      'SELECT creator_id, status FROM tournaments WHERE id = ?',
+      `SELECT creator_id, status, name, discord_thread_id, tournament_type, tournament_mode, max_participants,
+              round_duration_days, auto_advance_round, general_rounds, final_rounds,
+              general_rounds_format, final_rounds_format, scheduled_start_at
+       FROM tournaments WHERE id = ?`,
       [id]
     );
 
@@ -563,14 +720,42 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
       return res.status(403).json({ error: 'Only tournament organizers can update this tournament' });
     }
 
-    const currentStatus = tournamentResult.rows[0].status;
+    const currentTournament = tournamentResult.rows[0];
+    const currentStatus = currentTournament.status;
 
     // Validate tournament_type change is only allowed in registration_open or registration_closed states
-    if (tournament_type !== undefined) {
+    if (tournament_type !== undefined && tournament_type !== currentTournament.tournament_type) {
       if (currentStatus !== 'registration_open' && currentStatus !== 'registration_closed') {
         return res.status(400).json({ 
           error: `Cannot change tournament format. Tournament format can only be changed when in registration_open or registration_closed state. Current status: ${currentStatus}` 
         });
+      }
+    }
+
+    if (description !== undefined && (typeof description !== 'string' || !description.trim())) {
+      return res.status(400).json({ error: 'Tournament description cannot be empty' });
+    }
+
+    const configurationError = validateTournamentConfiguration({
+      tournament_type: tournament_type ?? currentTournament.tournament_type,
+      tournament_mode: currentTournament.tournament_mode,
+      max_participants: max_participants !== undefined ? max_participants : currentTournament.max_participants,
+      round_duration_days: round_duration_days ?? currentTournament.round_duration_days,
+      auto_advance_round: auto_advance_round ?? currentTournament.auto_advance_round,
+      general_rounds: general_rounds ?? currentTournament.general_rounds,
+      final_rounds: final_rounds ?? currentTournament.final_rounds,
+      general_rounds_format: general_rounds_format ?? currentTournament.general_rounds_format,
+      final_rounds_format: final_rounds_format ?? currentTournament.final_rounds_format,
+    });
+    if (configurationError) {
+      return res.status(400).json({ error: configurationError });
+    }
+    if (scheduled_start_at !== undefined) {
+      if (currentStatus === 'in_progress' || currentStatus === 'finished') {
+        return res.status(400).json({ error: 'Scheduled start cannot be changed after the tournament starts' });
+      }
+      if (scheduled_start_at !== null && Number.isNaN(Date.parse(scheduled_start_at))) {
+        return res.status(400).json({ error: 'Invalid scheduled_start_at date' });
       }
     }
 
@@ -586,7 +771,7 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
 
     if (description !== undefined) {
       updates.push(`description = ?`);
-      values.push(description);
+      values.push(description.trim());
     }
 
     if (rules_template_id !== undefined) {
@@ -641,6 +826,11 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
       values.push(auto_advance_round);
     }
 
+    if (scheduled_start_at !== undefined) {
+      updates.push(`scheduled_start_at = ?`);
+      values.push(scheduled_start_at ? toMariaDbDateTime(scheduled_start_at) : null);
+    }
+
     if (general_rounds !== undefined) {
       updates.push(`general_rounds = ?`);
       values.push(general_rounds);
@@ -661,16 +851,6 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
       values.push(final_rounds_format);
     }
 
-    if (status !== undefined) {
-      updates.push(`status = ?`);
-      values.push(status);
-    }
-
-    if (started_at !== undefined) {
-      updates.push(`started_at = ?`);
-      values.push(started_at);
-    }
-
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No fields to update' });
     }
@@ -687,6 +867,24 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
     await query(updateQuery, values);
     const updated = await query('SELECT * FROM tournaments WHERE id = ?', [id]);
 
+    if (scheduled_start_at !== undefined) {
+      const previousTime = tournamentDateTimeEpoch(currentTournament.scheduled_start_at);
+      const updatedTime = tournamentDateTimeEpoch(scheduled_start_at);
+
+      if (previousTime !== updatedTime && currentTournament.discord_thread_id) {
+        try {
+          await discordService.postScheduledStartChanged(
+            currentTournament.discord_thread_id,
+            currentTournament.name,
+            currentTournament.scheduled_start_at,
+            scheduled_start_at || null
+          );
+        } catch (discordError) {
+          console.error('Discord planned-start notification error:', discordError);
+        }
+      }
+    }
+
     res.json({
       message: 'Tournament updated successfully',
       tournament: updated.rows[0]
@@ -694,6 +892,104 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
   } catch (error: any) {
     console.error('Update tournament error:', error.message || error);
     res.status(500).json({ error: 'Failed to update tournament', details: error.message });
+  }
+});
+
+/**
+ * Replace the allowed faction and map sets while registration is configurable.
+ * Empty arrays intentionally clear a set. The replacement is atomic so readers
+ * never observe a tournament with only half of the requested asset update.
+ */
+router.put('/:id/assets', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { faction_ids, map_ids } = req.body;
+
+    if (!Array.isArray(faction_ids) || !Array.isArray(map_ids) ||
+        faction_ids.some((assetId) => typeof assetId !== 'string') ||
+        map_ids.some((assetId) => typeof assetId !== 'string')) {
+      return res.status(400).json({ error: 'faction_ids and map_ids must be arrays of identifiers' });
+    }
+
+    const uniqueFactionIds = [...new Set<string>(faction_ids)];
+    const uniqueMapIds = [...new Set<string>(map_ids)];
+    if (uniqueFactionIds.length !== faction_ids.length || uniqueMapIds.length !== map_ids.length) {
+      return res.status(400).json({ error: 'Tournament assets cannot contain duplicate identifiers' });
+    }
+
+    const tournamentResult = await query(
+      'SELECT tournament_mode, status FROM tournaments WHERE id = ?',
+      [id]
+    );
+    if (tournamentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Tournament not found' });
+    }
+
+    const tournament = tournamentResult.rows[0];
+    const organizer = await isTournamentOrganizer(id, req.userId!);
+    const adminResult = organizer
+      ? { rows: [] }
+      : await query('SELECT is_admin FROM users_extension WHERE id = ?', [req.userId]);
+    if (!organizer && !adminResult.rows[0]?.is_admin) {
+      return res.status(403).json({ error: 'Not authorized to modify this tournament' });
+    }
+    if (!['registration_open', 'registration_closed'].includes(tournament.status)) {
+      return res.status(400).json({ error: 'Tournament assets are locked after preparation' });
+    }
+
+    if (uniqueFactionIds.length > 0) {
+      const placeholders = uniqueFactionIds.map(() => '?').join(', ');
+      const assets = await query(
+        `SELECT id, is_ranked FROM factions WHERE id IN (${placeholders}) AND is_active = 1`,
+        uniqueFactionIds
+      );
+      if (assets.rows.length !== uniqueFactionIds.length ||
+          (tournament.tournament_mode === 'ranked' && assets.rows.some((asset: any) => !asset.is_ranked))) {
+        return res.status(400).json({ error: 'One or more factions are unavailable for this tournament mode' });
+      }
+    }
+
+    if (uniqueMapIds.length > 0) {
+      const placeholders = uniqueMapIds.map(() => '?').join(', ');
+      const assets = await query(
+        `SELECT id, is_ranked FROM game_maps WHERE id IN (${placeholders}) AND is_active = 1`,
+        uniqueMapIds
+      );
+      if (assets.rows.length !== uniqueMapIds.length ||
+          (tournament.tournament_mode === 'ranked' && assets.rows.some((asset: any) => !asset.is_ranked))) {
+        return res.status(400).json({ error: 'One or more maps are unavailable for this tournament mode' });
+      }
+    }
+
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.execute('DELETE FROM tournament_unranked_factions WHERE tournament_id = ?', [id]);
+      await connection.execute('DELETE FROM tournament_unranked_maps WHERE tournament_id = ?', [id]);
+      for (const factionId of uniqueFactionIds) {
+        await connection.execute(
+          'INSERT INTO tournament_unranked_factions (tournament_id, faction_id) VALUES (?, ?)',
+          [id, factionId]
+        );
+      }
+      for (const mapId of uniqueMapIds) {
+        await connection.execute(
+          'INSERT INTO tournament_unranked_maps (tournament_id, map_id) VALUES (?, ?)',
+          [id, mapId]
+        );
+      }
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+
+    res.json({ message: 'Tournament assets updated successfully' });
+  } catch (error) {
+    console.error('Update tournament assets error:', error);
+    res.status(500).json({ error: 'Failed to update tournament assets' });
   }
 });
 
@@ -741,61 +1037,34 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res) => {
       console.warn('Could not fetch canceller nickname:', userError);
     }
 
-    // Start transaction
-    await query('BEGIN');
-
+    const connection = await pool.getConnection();
     try {
-      // Delete all related data in the correct order (respecting foreign keys)
-      
-      // Delete tournament_round_matches
-      await query('DELETE FROM tournament_round_matches WHERE round_id IN (SELECT id FROM tournament_rounds WHERE tournament_id = ?)', [id]);
-      
-      // Delete tournament_matches
-      await query('DELETE FROM tournament_matches WHERE tournament_id = ?', [id]);
-      
-      // Delete tournament_rounds
-      await query('DELETE FROM tournament_rounds WHERE tournament_id = ?', [id]);
-      
-      // Delete tournament_teams
-      await query('DELETE FROM tournament_teams WHERE tournament_id = ?', [id]);
-      
-      // Delete tournament_assets (if table exists)
-      await query('DELETE FROM tournament_assets WHERE tournament_id = ?', [id]).catch(() => {
-        // Table might not exist, that's ok
-      });
-      
-      // Delete tournament_participants
-      await query('DELETE FROM tournament_participants WHERE tournament_id = ?', [id]);
-
-      // Delete tournament organizers
-      await query('DELETE FROM tournament_organizers WHERE tournament_id = ?', [id]);
-      
-      // Delete tournament
-      await query('DELETE FROM tournaments WHERE id = ?', [id]);
-
-      // Commit transaction
-      await query('COMMIT');
-
-      if (tournament.discord_thread_id) {
-        try {
-          await discordService.postTournamentCancelled(
-            tournament.discord_thread_id,
-            tournament.name,
-            cancelledByNickname
-          );
-        } catch (discordError) {
-          console.error('Discord tournament cancel notification error:', discordError);
-        }
-      }
-
-      res.json({ 
-        message: 'Tournament cancelled successfully',
-        tournament_id: id
-      });
+      await connection.beginTransaction();
+      await deleteTournamentRecords(connection, id);
+      await connection.commit();
     } catch (innerError) {
-      await query('ROLLBACK');
+      await connection.rollback();
       throw innerError;
+    } finally {
+      connection.release();
     }
+
+    if (tournament.discord_thread_id) {
+      try {
+        await discordService.postTournamentCancelled(
+          tournament.discord_thread_id,
+          tournament.name,
+          cancelledByNickname
+        );
+      } catch (discordError) {
+        console.error('Discord tournament cancel notification error:', discordError);
+      }
+    }
+
+    res.json({
+      message: 'Tournament cancelled successfully',
+      tournament_id: id
+    });
   } catch (error: any) {
     console.error('Delete tournament error:', error.message || error);
     res.status(500).json({ error: 'Failed to cancel tournament', details: error.message });
@@ -835,55 +1104,37 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Join tournament
-router.post('/:id/join', authMiddleware, async (req: AuthRequest, res) => {
-  try {
-    const { id } = req.params;
-
-    // Check if user exists
-    const userResult = await query('SELECT id FROM users_extension WHERE id = ?', [req.userId]);
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Generate UUID for participant
-    const participantId = randomUUID();
-
-    // Insert participant with explicit UUID
-    await query(
-      `INSERT INTO tournament_participants (id, tournament_id, user_id, participation_status)
-       VALUES (?, ?, ?, 'accepted')`,
-      [participantId, id, req.userId]
-    );
-
-    res.status(201).json({ id: participantId });
-  } catch (error: any) {
-    if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(400).json({ error: 'Already joined this tournament' });
-    }
-    console.error('Join tournament error:', error);
-    res.status(500).json({ error: 'Failed to join tournament', details: error.message });
-  }
-});
-
 // Request to join tournament (creates pending participant)
 router.post('/:id/request-join', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const { team_name, teammate_name } = req.body;
-    console.log('Request to join tournament:', { id, userId: req.userId, team_name, teammate_name });
-
-    // Check if tournament exists and get tournament_mode
+    // Registration is authoritative in the backend; hiding the action in the
+    // public page is not sufficient to protect closed or full tournaments.
     const tournamentResult = await query(
-      'SELECT id, discord_thread_id, max_participants, tournament_mode, creator_id FROM tournaments WHERE id = ?',
+      `SELECT id, discord_thread_id, max_participants, tournament_mode, creator_id, status
+       FROM tournaments WHERE id = ?`,
       [id]
     );
     if (tournamentResult.rows.length === 0) {
-      console.log('Tournament not found:', id);
       return res.status(404).json({ error: 'Tournament not found' });
     }
 
     const tournament = tournamentResult.rows[0];
+    if (tournament.status !== 'registration_open') {
+      return res.status(400).json({ error: 'Tournament registration is not open' });
+    }
+
+    if (tournament.tournament_mode === 'ranked') {
+      const rankedEligibility = await query(
+        'SELECT enable_ranked FROM users_extension WHERE id = ?',
+        [req.userId]
+      );
+      if (!rankedEligibility.rows[0]?.enable_ranked) {
+        return res.status(400).json({ error: 'Enable ranked matches in your profile before joining this tournament' });
+      }
+    }
+
     const isOrganizer = await isTournamentOrganizer(id, req.userId!);
     const participationStatus = isOrganizer ? 'accepted' : 'pending';
     let teamId: string | null = null;
@@ -891,11 +1142,12 @@ router.post('/:id/request-join', authMiddleware, async (req: AuthRequest, res) =
     // If team tournament, handle team logic
     if (tournament.tournament_mode === 'team') {
       // Team name is required
-      if (!team_name) {
+      if (typeof team_name !== 'string' || !team_name.trim()) {
         return res.status(400).json({ error: 'Team name required for team tournament' });
       }
 
-      if (team_name.length < 2 || team_name.length > 50) {
+      const normalizedTeamName = team_name.trim();
+      if (normalizedTeamName.length < 2 || normalizedTeamName.length > 50) {
         return res.status(400).json({ error: 'Team name must be between 2 and 50 characters' });
       }
 
@@ -922,7 +1174,7 @@ router.post('/:id/request-join', authMiddleware, async (req: AuthRequest, res) =
       }
 
       // Check if trying to use reserved team name
-      if (isReservedTeamName(team_name)) {
+      if (isReservedTeamName(normalizedTeamName)) {
         return res.status(400).json({ error: 'Team name is reserved and cannot be used' });
       }
 
@@ -958,13 +1210,15 @@ router.post('/:id/request-join', authMiddleware, async (req: AuthRequest, res) =
          WHERE tt.tournament_id = ? AND LOWER(tt.name) = LOWER(?) AND tt.id != ?
          GROUP BY tt.id
          HAVING COUNT(tp.id) = 1`,
-        [id, team_name, REJECTED_TEAM_ID]
+        [id, normalizedTeamName, REJECTED_TEAM_ID]
       );
 
       if (existingTeamResult.rows.length > 0) {
+        if (teammateUserId) {
+          return res.status(400).json({ error: 'An existing team has only one available slot; join it without inviting another teammate' });
+        }
         // Join existing team
         teamId = existingTeamResult.rows[0].id;
-        console.log('Joining existing team:', { teamId, name: team_name });
 
         // Current user joins as Position 2
         await query(
@@ -974,15 +1228,6 @@ router.post('/:id/request-join', authMiddleware, async (req: AuthRequest, res) =
         );
         console.log('Player joined team at position 2');
 
-        // If teammate provided, add them as Position 1 (unconfirmed - needs their confirmation)
-        if (teammateUserId) {
-          await query(
-            `INSERT INTO tournament_participants (id, tournament_id, user_id, participation_status, team_id, team_position)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [randomUUID(), id, teammateUserId, 'unconfirmed', teamId, 1]
-          );
-          console.log('Teammate added to team at position 1 (unconfirmed - awaiting confirmation)');
-        }
       } else {
         // Check if team already exists with max members (excluding Rejected players team)
         const fullTeamResult = await query(
@@ -992,11 +1237,22 @@ router.post('/:id/request-join', authMiddleware, async (req: AuthRequest, res) =
            WHERE tt.tournament_id = ? AND LOWER(tt.name) = LOWER(?) AND tt.id != ?
            GROUP BY tt.id
            HAVING COUNT(tp.id) >= 2`,
-          [id, team_name, REJECTED_TEAM_ID]
+          [id, normalizedTeamName, REJECTED_TEAM_ID]
         );
 
         if (fullTeamResult.rows.length > 0) {
-          return res.status(400).json({ error: `Team "${team_name}" is already full (2/2 members)` });
+          return res.status(400).json({ error: `Team "${normalizedTeamName}" is already full (2/2 members)` });
+        }
+
+        if (tournament.max_participants) {
+          const teamCountResult = await query(
+            `SELECT COUNT(*) AS count FROM tournament_teams
+             WHERE tournament_id = ? AND id != ?`,
+            [id, REJECTED_TEAM_ID]
+          );
+          if (Number(teamCountResult.rows[0]?.count || 0) >= tournament.max_participants) {
+            return res.status(400).json({ error: 'Tournament has reached its team capacity' });
+          }
         }
 
         // Create new team with safe UUID (avoiding REJECTED_TEAM_ID collision)
@@ -1004,7 +1260,7 @@ router.post('/:id/request-join', authMiddleware, async (req: AuthRequest, res) =
         const createTeamResult = await query(
           `INSERT INTO tournament_teams (id, tournament_id, name, created_by)
            VALUES (?, ?, ?, ?)`,
-          [newTeamId, id, team_name, req.userId]
+          [newTeamId, id, normalizedTeamName, req.userId]
         );
         teamId = newTeamId;
         console.log('New team created:', { teamId, name: team_name });
@@ -1038,10 +1294,21 @@ router.post('/:id/request-join', authMiddleware, async (req: AuthRequest, res) =
 
     // For non-team tournaments, insert as pending participant (existing logic)
     if (tournament.tournament_mode !== 'team') {
+      if (tournament.max_participants) {
+        const participantCountResult = await query(
+          `SELECT COUNT(*) AS count FROM tournament_participants
+           WHERE tournament_id = ?
+             AND participation_status IN ('pending', 'unconfirmed', 'accepted')`,
+          [id]
+        );
+        if (Number(participantCountResult.rows[0]?.count || 0) >= tournament.max_participants) {
+          return res.status(400).json({ error: 'Tournament has reached its participant capacity' });
+        }
+      }
       await query(
         `INSERT INTO tournament_participants (id, tournament_id, user_id, participation_status)
          VALUES (?, ?, ?, ?)`,
-        [randomUUID(), id, req.userId, 'pending']
+        [randomUUID(), id, req.userId, participationStatus]
       );
     }
 
@@ -1216,47 +1483,42 @@ router.post('/:tournamentId/participants/:participantId/confirm', authMiddleware
 
     // Check if this is a substitute (has requested_replacement_of_id)
     if (participant.requested_replacement_of_id) {
-      // This is a substitute confirmation - apply full replacement workflow
-      // Get the player being replaced
-      const playerToReplaceResult = await query(
-        `SELECT id, team_position, user_id FROM tournament_participants 
-         WHERE id = ? AND participation_status = 'pending_replacement'`,
-        [participant.requested_replacement_of_id]
-      );
+      const connection = await pool.getConnection();
+      try {
+        await connection.beginTransaction();
+        const [replacementRows] = await connection.execute<any[]>(
+          `SELECT id, team_position FROM tournament_participants
+           WHERE id = ? AND participation_status = 'pending_replacement'
+           FOR UPDATE`,
+          [participant.requested_replacement_of_id]
+        );
 
-      if (playerToReplaceResult.rows.length === 0) {
-        return res.status(400).json({ error: 'Original team member not found' });
+        if (replacementRows.length === 0) {
+          await connection.rollback();
+          return res.status(400).json({ error: 'Original team member not found' });
+        }
+
+        const originalParticipant = replacementRows[0];
+        await connection.execute(
+          `UPDATE tournament_participants
+           SET participation_status = 'accepted', team_position = ?
+           WHERE id = ? AND participation_status = 'unconfirmed'`,
+          [originalParticipant.team_position, participantId]
+        );
+        await connection.execute(
+          `UPDATE tournament_participants
+           SET participation_status = 'replaced', replaced_by_participant_id = ?,
+               team_position = NULL, team_id = ?
+           WHERE id = ? AND participation_status = 'pending_replacement'`,
+          [participantId, REJECTED_TEAM_ID, originalParticipant.id]
+        );
+        await connection.commit();
+      } catch (replacementError) {
+        await connection.rollback();
+        throw replacementError;
+      } finally {
+        connection.release();
       }
-
-      const playerToReplace = playerToReplaceResult.rows[0];
-      const teamPosition = playerToReplace.team_position;
-      const playerToReplaceId = playerToReplace.id;
-
-      // Update: substitute becomes accepted with the team_position
-      await query(
-        `UPDATE tournament_participants 
-         SET participation_status = 'accepted', team_position = ? 
-         WHERE id = ?`,
-        [teamPosition, participantId]
-      );
-
-      // Update: original player gets marked as replaced
-      await query(
-        `UPDATE tournament_participants 
-         SET participation_status = 'replaced', replaced_by_participant_id = ?, team_position = NULL
-         WHERE id = ?`,
-        [participantId, playerToReplaceId]
-      );
-
-      // Move original member to replaced players team
-      await query(
-        `UPDATE tournament_participants 
-         SET team_id = ?
-         WHERE id = ?`,
-        [REJECTED_TEAM_ID, playerToReplaceId]
-      );
-
-      console.log(`✅ Member replacement confirmed: New player ${participant.user_id} replaced ${playerToReplace.user_id}`);
 
       return res.json({ 
         id: participantId,
@@ -1467,7 +1729,7 @@ router.post('/:id/close-registration', authMiddleware, async (req: AuthRequest, 
 
     // Verify tournament creator
     const tournamentCheck = await query(
-      'SELECT creator_id, status, discord_thread_id, name, tournament_type, tournament_mode, max_participants, total_rounds FROM tournaments WHERE id = ?', 
+      'SELECT creator_id, status, discord_thread_id, name, tournament_type, tournament_mode, max_participants, total_rounds, scheduled_start_at FROM tournaments WHERE id = ?',
       [id]
     );
     if (tournamentCheck.rows.length === 0) {
@@ -1486,39 +1748,31 @@ router.post('/:id/close-registration', authMiddleware, async (req: AuthRequest, 
     // Check participants based on tournament mode
     let participantCount = 0;
     let incompleteParticipants = false;
+    let teamRows: any[] = [];
+    let completeTeamIds: Set<string> | null = null;
     
     if (tournament.tournament_mode === 'team') {
       // For team tournaments: count complete teams (all members accepted)
       const teamsCheckResult = await query(
-        `SELECT tt.id, COUNT(tp.id) as member_count, COALESCE(SUM(CASE WHEN tp.participation_status = 'accepted' THEN 1 ELSE 0 END), 0) as accepted_count
+        `SELECT tt.id,
+                COALESCE(SUM(CASE WHEN tp.participation_status IN ('accepted', 'pending_replacement') THEN 1 ELSE 0 END), 0) as competitive_count
          FROM tournament_teams tt
          LEFT JOIN tournament_participants tp ON tt.id = tp.team_id
          WHERE tt.tournament_id = ?
          GROUP BY tt.id`,
         [id]
       );
+      teamRows = teamsCheckResult.rows;
 
-      // Debug: Log raw data
-      console.log(`[CLOSE_REGISTRATION] Raw teams data:`, JSON.stringify(teamsCheckResult.rows.slice(0, 2)));
-
-      // Count complete teams (all members accepted)
-      // Use explicit number conversion to handle potential string/number type issues
+      // During a pending substitution the outgoing member remains competitive
+      // until the replacement is confirmed; the unconfirmed substitute does not.
       const completeTeams = teamsCheckResult.rows.filter((team: any) => {
-        const memberCount = parseInt(team.member_count, 10) || 0;
-        const acceptedCount = parseInt(team.accepted_count, 10) || 0;
-        const isComplete = memberCount === acceptedCount && memberCount > 0;
-        
-        // Log first few teams for debugging
-        if (teamsCheckResult.rows.indexOf(team) < 2) {
-          console.log(`[CLOSE_REGISTRATION] Team ${team.id}: members=${memberCount}, accepted=${acceptedCount}, complete=${isComplete}`);
-        }
-        
-        return isComplete;
+        return Number(team.competitive_count) === 2;
       });
 
       participantCount = completeTeams.length;
 
-      console.log(`[CLOSE_REGISTRATION] Team mode tournament: ${completeTeams.length} complete teams out of ${teamsCheckResult.rows.length} total teams`);
+      completeTeamIds = new Set(completeTeams.map((team: any) => team.id));
 
       // For team tournaments, require at least 2 complete teams
       if (participantCount < 2) {
@@ -1561,19 +1815,31 @@ router.post('/:id/close-registration', authMiddleware, async (req: AuthRequest, 
 
     // If insufficient participants or incomplete team tournament (after confirmation)
     if (incompleteParticipants) {
-      // Delete tournament and all related data
-      await query('DELETE FROM tournament_rounds WHERE tournament_id = ?', [id]);
-      await query('DELETE FROM tournament_matches WHERE tournament_id = ?', [id]);
-      await query('DELETE FROM tournament_round_matches WHERE tournament_id = ?', [id]);
-      await query('DELETE FROM matches WHERE tournament_id = ?', [id]);
-      await query('DELETE FROM tournament_participants WHERE tournament_id = ?', [id]);
-      await query('DELETE FROM tournament_teams WHERE tournament_id = ?', [id]);
-      await query('DELETE FROM tournaments WHERE id = ?', [id]);
+      const connection = await pool.getConnection();
+      try {
+        await connection.beginTransaction();
+        await deleteTournamentRecords(connection, id);
+        await connection.commit();
+      } catch (deleteError) {
+        await connection.rollback();
+        throw deleteError;
+      } finally {
+        connection.release();
+      }
 
       return res.status(200).json({ 
         action: 'deleted',
         message: 'Tournament deleted successfully (insufficient participants)'
       });
+    }
+
+    if (completeTeamIds) {
+      for (const team of teamRows) {
+        await query(
+          'UPDATE tournament_teams SET status = ? WHERE id = ? AND tournament_id = ?',
+          [completeTeamIds.has(team.id) ? 'active' : 'eliminated', team.id, id]
+        );
+      }
     }
 
     // Calculate total_rounds for elimination tournaments if not already set
@@ -1595,7 +1861,8 @@ router.post('/:id/close-registration', authMiddleware, async (req: AuthRequest, 
       try {
         await discordService.postRegistrationClosed(
           tournament.discord_thread_id,
-          participantCount
+          participantCount,
+          tournament.scheduled_start_at
         );
       } catch (discordError) {
         console.error('Discord notification error:', discordError);
@@ -1615,63 +1882,50 @@ router.post('/:id/close-registration', authMiddleware, async (req: AuthRequest, 
 
 // Prepare tournament (generate rounds)
 router.post('/:id/prepare', authMiddleware, async (req: AuthRequest, res) => {
+  const { id } = req.params;
+  let preparationStarted = false;
   try {
-    const { id } = req.params;
-    console.log(`[PREPARE] Starting preparation for tournament ${id}`);
-
-    // Verify tournament creator
     const tournamentCheck = await query(
-      'SELECT creator_id, status, tournament_type, general_rounds, final_rounds, general_rounds_format, final_rounds_format FROM tournaments WHERE id = ?', 
+      `SELECT creator_id, status, tournament_type, tournament_mode, total_rounds,
+              general_rounds, final_rounds, general_rounds_format, final_rounds_format
+       FROM tournaments WHERE id = ?`,
       [id]
     );
     if (tournamentCheck.rows.length === 0) {
-      console.log(`[PREPARE] Tournament ${id} not found`);
       return res.status(404).json({ error: 'Tournament not found' });
     }
 
     const tournament = tournamentCheck.rows[0];
-    console.log(`[PREPARE] Tournament data:`, tournament);
-    
     const tournamentType = tournament.tournament_type?.toLowerCase() || 'elimination';
-    console.log(`[PREPARE] Tournament type: ${tournamentType}, current status: ${tournament.status}, total_rounds in DB: ${tournament.total_rounds}`);
     
     if (!(await isTournamentOrganizer(id, req.userId!))) {
-      console.log(`[PREPARE] Authorization failed - userId: ${req.userId}`);
       return res.status(403).json({ error: 'Only tournament organizers can prepare tournament' });
     }
 
     // Verify tournament is in correct status
     if (tournament.status !== 'registration_closed') {
-      console.log(`[PREPARE] Invalid status: ${tournament.status}, expected: registration_closed`);
       return res.status(400).json({ error: `Tournament must have registration closed before preparing. Current status: ${tournament.status}` });
     }
-
-    if (tournament.status !== 'registration_closed') {
-      console.log(`[PREPARE] Invalid status: ${tournament.status}, expected: registration_closed`);
-      return res.status(400).json({ error: 'Tournament must be registration_closed before preparation' });
-    }
-
-    // Get tournament_mode to determine if counting teams or individual participants
-    const tournamentModeCheck = await query(
-      'SELECT tournament_mode FROM tournaments WHERE id = ?',
-      [id]
-    );
-    const tournamentMode = tournamentModeCheck.rows[0]?.tournament_mode || 'individual';
+    const tournamentMode = tournament.tournament_mode;
 
     // Get number of accepted participants (for team tournaments: count teams; for 1v1: count individuals)
     let participantCount = 0;
     
     if (tournamentMode === 'team') {
-      // For team tournaments: count accepted teams (teams where all members are accepted)
       const teamsResult = await query(
-        `SELECT COUNT(DISTINCT tt.id) as count 
+        `SELECT COUNT(*) as count FROM (
+           SELECT tt.id
          FROM tournament_teams tt
+         JOIN tournament_participants tp ON tp.team_id = tt.id
          WHERE tt.tournament_id = ?
-         AND tt.status = 'active'`,
+           AND tt.status = 'active'
+           AND tp.participation_status IN ('accepted', 'pending_replacement')
+         GROUP BY tt.id
+         HAVING COUNT(tp.id) = 2
+       ) complete_teams`,
         [id]
       );
-      participantCount = teamsResult.rows[0]?.count || 0;
-      console.log(`[PREPARE] Team tournament: ${participantCount} active teams`);
+      participantCount = Number(teamsResult.rows[0]?.count || 0);
     } else {
       // For individual tournaments: count accepted participants
       const participantsResult = await query(
@@ -1679,9 +1933,19 @@ router.post('/:id/prepare', authMiddleware, async (req: AuthRequest, res) => {
          WHERE tournament_id = ? AND participation_status = 'accepted'`,
         [id]
       );
-      participantCount = participantsResult.rows[0]?.count || 0;
-      console.log(`[PREPARE] Individual tournament: ${participantCount} accepted participants`);
+      participantCount = Number(participantsResult.rows[0]?.count || 0);
     }
+
+    if (participantCount < 2) {
+      return res.status(400).json({ error: 'Tournament requires at least two complete participants' });
+    }
+
+    // A retry must replace, rather than append to, a schedule left by an
+    // interrupted preparation attempt.
+    preparationStarted = true;
+    await query('DELETE FROM tournament_round_matches WHERE tournament_id = ?', [id]);
+    await query('DELETE FROM tournament_matches WHERE tournament_id = ?', [id]);
+    await query('DELETE FROM tournament_rounds WHERE tournament_id = ?', [id]);
 
     // Calculate maximum rounds needed based on tournament type
     // Only elimination formats have a mathematical limit
@@ -1799,12 +2063,10 @@ router.post('/:id/prepare', authMiddleware, async (req: AuthRequest, res) => {
     // For League tournaments, calculate actual rounds based on format (1=ida, 2=ida y vuelta)
     else if (tournamentType === 'league') {
       const leagueFormat = totalGeneralRounds; // 1 or 2
-      // For round-robin: each player plays each other player once per format iteration
-      // Rounds needed = n * format, where n = number of participants
-      // With odd players: one "bye" per round, one player rests each round
-      // With even players: all players play each round
-      // In both cases, need n rounds so each participant plays all others
-      totalGeneralRounds = participantCount * leagueFormat;
+      // Berger scheduling needs N-1 rounds for an even field and N rounds for
+      // an odd field, where each wave repeats the complete round robin.
+      const roundsPerWave = participantCount % 2 === 0 ? participantCount - 1 : participantCount;
+      totalGeneralRounds = roundsPerWave * leagueFormat;
     }
 
     // Determine round classification based on tournament type
@@ -1948,14 +2210,7 @@ router.post('/:id/prepare', authMiddleware, async (req: AuthRequest, res) => {
 
     // Pre-generate all league tournament matches if league type
     if (tournamentType === 'league') {
-      try {
-        console.log(`[PREPARE] Pre-generating all league matches...`);
-        await preGenerateLeagueMatches(id);
-        console.log(`[PREPARE] League matches pre-generated successfully`);
-      } catch (preGenErr) {
-        console.error(`[PREPARE] Warning: Could not pre-generate league matches:`, preGenErr);
-        // Don't fail tournament preparation if pre-generation fails, but log it
-      }
+      await preGenerateLeagueMatches(id);
     }
 
     // Update tournament status
@@ -1977,6 +2232,13 @@ router.post('/:id/prepare', authMiddleware, async (req: AuthRequest, res) => {
     });
   } catch (error) {
     console.error(`[PREPARE] Error preparing tournament:`, error);
+    // Preparation is retryable: remove any partial schedule while preserving
+    // registration and participants.
+    if (preparationStarted) {
+      await query('DELETE FROM tournament_round_matches WHERE tournament_id = ?', [id]);
+      await query('DELETE FROM tournament_matches WHERE tournament_id = ?', [id]);
+      await query('DELETE FROM tournament_rounds WHERE tournament_id = ?', [id]);
+    }
     res.status(500).json({ error: 'Failed to prepare tournament', details: String(error) });
   }
 });
@@ -1989,7 +2251,8 @@ router.post('/:id/start', authMiddleware, async (req: AuthRequest, res) => {
 
     // Verify tournament creator
     const tournamentCheck = await query(
-      `SELECT creator_id, status, general_rounds, final_rounds, general_rounds_format, final_rounds_format, tournament_type, name, discord_thread_id
+      `SELECT creator_id, status, tournament_type, tournament_mode, name,
+              discord_thread_id, round_duration_days
        FROM tournaments WHERE id = ?`, 
       [id]
     );
@@ -2011,17 +2274,28 @@ router.post('/:id/start', authMiddleware, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Tournament must be prepared before starting' });
     }
 
-    // Verify participants before starting
-    const participantsCheck = await query(
-      `SELECT COUNT(*) as accepted_count FROM tournament_participants 
-       WHERE tournament_id = ? AND participation_status = 'accepted'`,
-      [id]
-    );
-    const acceptedParticipants = participantsCheck.rows[0].accepted_count;
-    console.log(`[START] Tournament ${id} has ${acceptedParticipants} accepted participants`);
-    
-    if (acceptedParticipants === 0) {
-      return res.status(400).json({ error: 'No accepted participants in tournament' });
+    const participantsCheck = tournament.tournament_mode === 'team'
+      ? await query(
+          `SELECT COUNT(*) as accepted_count FROM (
+             SELECT tt.id
+             FROM tournament_teams tt
+             JOIN tournament_participants tp ON tp.team_id = tt.id
+             WHERE tt.tournament_id = ? AND tt.status = 'active'
+           AND tp.participation_status IN ('accepted', 'pending_replacement')
+             GROUP BY tt.id
+             HAVING COUNT(tp.id) = 2
+           ) complete_teams`,
+          [id]
+        )
+      : await query(
+          `SELECT COUNT(*) as accepted_count FROM tournament_participants
+           WHERE tournament_id = ? AND participation_status = 'accepted'`,
+          [id]
+        );
+    const acceptedParticipants = Number(participantsCheck.rows[0].accepted_count);
+
+    if (acceptedParticipants < 2) {
+      return res.status(400).json({ error: 'Tournament requires at least two complete participants' });
     }
 
     // Check if rounds already exist
@@ -2030,137 +2304,11 @@ router.post('/:id/start', authMiddleware, async (req: AuthRequest, res) => {
        WHERE tournament_id = ?`,
       [id]
     );
-    let roundCount = parseInt(roundsCheck.rows[0].round_count) || 0;
+    const roundCount = parseInt(roundsCheck.rows[0].round_count) || 0;
     console.log(`[START] Tournament ${id} currently has ${roundCount} rounds`);
     
-    // If no rounds exist, create them now
     if (roundCount === 0) {
-      console.log(`[START] No rounds found, creating them now`);
-      
-      // Get tournament type
-      const tournamentType = tournament.tournament_type?.toLowerCase() || 'elimination';
-      console.log(`[START] Tournament type: ${tournamentType}`);
-      
-      // Calculate maximum rounds needed for elimination tournament
-      const maxRoundsNeeded = acceptedParticipants > 0 ? Math.ceil(Math.log2(acceptedParticipants)) : 0;
-      
-      // Total rounds requested - for elimination, use total_rounds if available
-      let totalRoundsRequested = (tournament.general_rounds || 0) + (tournament.final_rounds || 0);
-      if (tournamentType === 'elimination' && totalRoundsRequested === 0) {
-        totalRoundsRequested = tournament.total_rounds || maxRoundsNeeded;
-      }
-      console.log(`[START] Max rounds needed: ${maxRoundsNeeded}, Total requested: ${totalRoundsRequested}`);
-
-      if (totalRoundsRequested > maxRoundsNeeded) {
-        console.log(`[START] Validation failed: too many rounds`);
-        return res.status(400).json({ 
-          error: `Tournament has ${acceptedParticipants} participants but requested ${totalRoundsRequested} rounds. Maximum allowed: ${maxRoundsNeeded} rounds for elimination format.`
-        });
-      }
-
-      // Generate tournament rounds based on configuration
-      const roundsToCreate = [];
-      let roundNumber = 1;
-
-      // For pure elimination, generate rounds differently
-      if (tournamentType === 'elimination') {
-        const totalElimRounds = totalRoundsRequested || maxRoundsNeeded;
-        console.log(`[START] Creating ${totalElimRounds} elimination rounds`);
-        
-        for (let i = 0; i < totalElimRounds; i++) {
-          const isLastRound = (i === totalElimRounds - 1);
-          let label = '';
-          let classification = '';
-          
-          if (totalElimRounds === 1) {
-            label = 'Final';
-            classification = 'final';
-          } else if (totalElimRounds === 2) {
-            if (i === 0) {
-              label = 'Semifinals';
-              classification = 'semifinals';
-            } else {
-              label = 'Final';
-              classification = 'final';
-            }
-          } else if (totalElimRounds === 3) {
-            if (i === 0) {
-              label = 'Quarterfinals';
-              classification = 'quarterfinals';
-            } else if (i === 1) {
-              label = 'Semifinals';
-              classification = 'semifinals';
-            } else {
-              label = 'Final';
-              classification = 'final';
-            }
-          } else if (totalElimRounds === 4) {
-            if (i === 0) {
-              label = 'Round of 16';
-              classification = 'round16';
-            } else if (i === 1) {
-              label = 'Quarterfinals';
-              classification = 'quarterfinals';
-            } else if (i === 2) {
-              label = 'Semifinals';
-              classification = 'semifinals';
-            } else {
-              label = 'Final';
-              classification = 'final';
-            }
-          } else {
-            label = `Round ${i + 1}`;
-            classification = isLastRound ? 'final' : 'general';
-          }
-          
-          roundsToCreate.push({
-            roundNumber,
-            roundType: isLastRound ? 'final' : 'general',
-            matchFormat: isLastRound ? (tournament.final_rounds_format || 'bo5') : (tournament.general_rounds_format || 'bo3'),
-            label,
-            classification,
-            description: label
-          });
-          roundNumber++;
-        }
-      } else {
-        // For other tournament types, use general_rounds and final_rounds
-        // Add general rounds
-        for (let i = 0; i < (tournament.general_rounds || 0); i++) {
-          roundsToCreate.push({
-            roundNumber,
-            roundType: 'general',
-            matchFormat: tournament.general_rounds_format || 'bo3'
-          });
-          roundNumber++;
-        }
-
-        // Add final rounds
-        for (let i = 0; i < (tournament.final_rounds || 0); i++) {
-          roundsToCreate.push({
-            roundNumber,
-            roundType: 'final',
-            matchFormat: tournament.final_rounds_format || 'bo5'
-          });
-          roundNumber++;
-        }
-      }
-
-      console.log(`[START] Rounds to create:`, roundsToCreate);
-
-      // Insert generated rounds
-      for (const round of roundsToCreate) {
-        console.log(`[START] Inserting round ${round.roundNumber} (${round.roundType}): ${round.label || 'N/A'}`);
-        await query(
-          `INSERT INTO tournament_rounds (id, tournament_id, round_number, round_type, match_format, round_status, round_phase_label, round_phase_description, round_classification)
-           VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
-          [randomUUID(), id, round.roundNumber, round.roundType, round.matchFormat, round.label || '', round.description || '', round.classification || '']
-        );
-        console.log(`[START] Round ${round.roundNumber} inserted successfully`);
-      }
-
-      roundCount = roundsToCreate.length;
-      console.log(`[START] Created ${roundCount} rounds`);
+      return res.status(409).json({ error: 'Prepared tournament has no rounds; prepare it again' });
     }
 
     // Update tournament status to in_progress
@@ -2261,7 +2409,9 @@ router.post('/:id/start', authMiddleware, async (req: AuthRequest, res) => {
         // Post round started notification to Discord
         if (tournament.discord_thread_id) {
           try {
-            const estimatedEndDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+            const estimatedEndDate = new Date(
+              Date.now() + tournament.round_duration_days * 24 * 60 * 60 * 1000
+            ).toISOString();
             await discordService.postRoundStarted(
               tournament.discord_thread_id,
               1,
@@ -3475,7 +3625,7 @@ router.post('/:id/next-round', authMiddleware, async (req: AuthRequest, res) => 
 
     // Get tournament info for Discord notification
     const tournamentInfoForNotify = await query(
-      'SELECT discord_thread_id FROM tournaments WHERE id = ?',
+      'SELECT discord_thread_id, round_duration_days FROM tournaments WHERE id = ?',
       [id]
     );
 
@@ -3491,7 +3641,9 @@ router.post('/:id/next-round', authMiddleware, async (req: AuthRequest, res) => 
     // Post round started notification to Discord
     if (tournamentInfoForNotify.rows[0]?.discord_thread_id) {
       try {
-        const estimatedEndDate2 = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        const estimatedEndDate2 = new Date(
+          Date.now() + tournamentInfoForNotify.rows[0].round_duration_days * 24 * 60 * 60 * 1000
+        ).toISOString();
         await discordService.postRoundStarted(
           tournamentInfoForNotify.rows[0].discord_thread_id,
           nextRoundNum,
@@ -3830,161 +3982,52 @@ router.get('/:id/standings', async (req, res) => {
 
 
 /**
- * GET /api/tournaments/:id/swiss-pairings/:round_id
- * Get Swiss system pairings for a round
- */
-router.get('/:id/swiss-pairings/:round_id', authMiddleware, async (req: AuthRequest, res) => {
-  try {
-    const { id, round_id } = req.params;
-    
-    const pairings = await query(
-      `SELECT * FROM swiss_pairings 
-       WHERE tournament_id = ? AND tournament_round_id = ? 
-       ORDER BY pairing_number ASC`,
-      [id, round_id]
-    );
-    
-    res.json({ pairings: (pairings && pairings.rows) ? pairings.rows : [] });
-  } catch (error) {
-    console.error('Error fetching swiss pairings:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-/**
  * POST /api/tournaments/:id/calculate-tiebreakers
- * Calculate Swiss tiebreakers (OMP, GWP, OGP) for tournament participants
- * Only admins or tournament creators can call this endpoint
+ * Recalculate OMP, GWP, and OGP for the tournament's competitive units.
  */
 router.post('/:id/calculate-tiebreakers', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
-    
-    // Check if user is admin or tournament creator
-    const tournamentQuery = await query(
-      'SELECT creator_id FROM tournaments WHERE tournament_id = ?',
+    const tournamentResult = await query(
+      'SELECT tournament_mode FROM tournaments WHERE id = ?',
       [id]
     );
-    
-    if (!tournamentQuery || !tournamentQuery.rows || tournamentQuery.rows.length === 0) {
+
+    if (tournamentResult.rows.length === 0) {
       return res.status(404).json({ error: 'Tournament not found' });
     }
-    
-    const tournament = tournamentQuery.rows[0];
-    const userQuery = await query(
-      'SELECT is_admin FROM users_extension WHERE user_id = ?',
-      [req.userId]
-    );
-    
-    const isAdmin = userQuery && userQuery.rows && userQuery.rows.length > 0 && userQuery.rows[0].is_admin;
-    const isCreator = await isTournamentOrganizer(id, req.userId!);
-    
-    if (!isAdmin && !isCreator) {
-      return res.status(403).json({ error: 'Only admins or tournament creators can calculate tiebreakers' });
+
+    if (!(await isTournamentOrganizer(id, req.userId!))) {
+      return res.status(403).json({ error: 'Only tournament organizers can calculate tiebreakers' });
     }
 
-    // Determine tournament mode to use appropriate function
-    const functionName = tournament.tournament_mode === 'team' ? 'update_team_tiebreakers' : 'update_tournament_tiebreakers';
-    
-    // Execute the stored procedure
-    const result = await query(
-      `SELECT updated_count, error_message FROM ${functionName}(?)`,
-      [id]
-    );
-    
-    if (result && result.rows && result.rows.length > 0 && result.rows[0].error_message) {
-      return res.status(400).json({ 
-        error: 'Failed to calculate tiebreakers',
-        details: result.rows[0].error_message
-      });
+    const tournament = tournamentResult.rows[0];
+    const tiebreakers = tournament.tournament_mode === 'team'
+      ? await calculateTeamSwissTiebreakers(id)
+      : await calculateLeagueTiebreakers(id);
+
+    for (const tiebreaker of tiebreakers) {
+      if (tournament.tournament_mode === 'team') {
+        await query(
+          'UPDATE tournament_teams SET omp = ?, gwp = ?, ogp = ? WHERE tournament_id = ? AND id = ?',
+          [tiebreaker.omp, tiebreaker.gwp, tiebreaker.ogp, id, (tiebreaker as any).team_id]
+        );
+      } else {
+        await query(
+          'UPDATE tournament_participants SET omp = ?, gwp = ?, ogp = ? WHERE tournament_id = ? AND user_id = ?',
+          [tiebreaker.omp, tiebreaker.gwp, tiebreaker.ogp, id, (tiebreaker as any).user_id]
+        );
+      }
     }
-    
-    const updatedCount = result && result.rows && result.rows.length > 0 ? result.rows[0].updated_count : 0;
-    
-    // Fetch updated participants ordered by tiebreakers
-    const participants = await query(
-      `SELECT * FROM tournament_participants 
-       WHERE tournament_id = ? 
-       ORDER BY tournament_points DESC, omp DESC, gwp DESC, ogp DESC`,
-      [id]
-    );
-    
+
     res.json({
       success: true,
-      message: `Tiebreakers calculated for ${updatedCount} participants`,
-      updated_count: updatedCount,
-      participants: (participants && participants.rows) ? participants.rows : []
+      message: `Tiebreakers calculated for ${tiebreakers.length} participants`,
+      updated_count: tiebreakers.length
     });
   } catch (error) {
     console.error('Error calculating tiebreakers:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-/**
- * POST /api/leagues/:id/calculate-tiebreakers
- * Calculate League tiebreakers (OMP, GWP, OGP) for tournament participants (league tournaments)
- * Only admins or league creators can call this endpoint
- */
-router.post('/leagues/:id/calculate-tiebreakers', authMiddleware, async (req: AuthRequest, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Check if user is admin or tournament creator
-    const tournamentQuery = await query(
-      'SELECT creator_id FROM tournaments WHERE tournament_id = ?',
-      [id]
-    );
-    
-    if (!tournamentQuery || !tournamentQuery.rows || tournamentQuery.rows.length === 0) {
-      return res.status(404).json({ error: 'Tournament (league) not found' });
-    }
-    
-    const tournament = tournamentQuery.rows[0];
-    const userQuery = await query(
-      'SELECT is_admin FROM users_extension WHERE user_id = ?',
-      [req.userId]
-    );
-    
-    const isAdmin = userQuery && userQuery.rows && userQuery.rows.length > 0 && userQuery.rows[0].is_admin;
-    const isCreator = await isTournamentOrganizer(id, req.userId!);
-    
-    if (!isAdmin && !isCreator) {
-      return res.status(403).json({ error: 'Only admins or tournament creators can calculate tiebreakers' });
-    }
-    
-    // Execute the stored procedure (using update_tournament_tiebreakers which has identical logic)
-    const result = await query(
-      'SELECT updated_count, error_message FROM update_tournament_tiebreakers(?)',
-      [id]
-    );
-    
-    if (result && result.rows && result.rows.length > 0 && result.rows[0].error_message) {
-      return res.status(400).json({ 
-        error: 'Failed to calculate tiebreakers',
-        details: result.rows[0].error_message
-      });
-    }
-    
-    const updatedCount = result && result.rows && result.rows.length > 0 ? result.rows[0].updated_count : 0;
-    
-    // Fetch updated participants ordered by: tournament_points DESC, omp DESC, gwp DESC, ogp DESC
-    const participants = await query(
-      `SELECT * FROM tournament_participants 
-       WHERE tournament_id = ? 
-       ORDER BY tournament_points DESC, omp DESC, gwp DESC, ogp DESC`,
-      [id]
-    );
-    
-    res.json({
-      success: true,
-      message: `Tiebreakers calculated for ${updatedCount} participants`,
-      updated_count: updatedCount,
-      participants: (participants && participants.rows) ? participants.rows : []
-    });
-  } catch (error) {
-    console.error('Error calculating league tiebreakers:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Failed to calculate tiebreakers' });
   }
 });
 
@@ -4337,7 +4380,7 @@ router.delete('/:tournamentId/participants/:participantId', authMiddleware, asyn
     if (tournResult.rows.length === 0) return res.status(404).json({ error: 'Tournament not found' });
 
     const tournament = tournResult.rows[0];
-    if (['in_progress', 'completed'].includes(tournament.status)) {
+    if (['in_progress', 'finished'].includes(tournament.status)) {
       return res.status(400).json({ error: 'Cannot remove participants from a tournament that has already started' });
     }
 

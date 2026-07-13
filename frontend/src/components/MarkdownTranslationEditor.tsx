@@ -43,6 +43,7 @@ const MarkdownTranslationEditor: React.FC<MarkdownTranslationEditorProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const current = translations[currentLanguage] || { title: '', content_markdown: '' };
+  const currentMarkdown = current.content_markdown || '';
 
   const insertImage = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -64,11 +65,11 @@ const MarkdownTranslationEditor: React.FC<MarkdownTranslationEditorProps> = ({
 
       const { url } = await response.json();
       const textarea = textareaRef.current;
-      const start = textarea?.selectionStart ?? current.content_markdown.length;
-      const end = textarea?.selectionEnd ?? current.content_markdown.length;
+      const start = textarea?.selectionStart ?? currentMarkdown.length;
+      const end = textarea?.selectionEnd ?? currentMarkdown.length;
       const imageMarkdown = `![alt-text](${url})`;
       onContentChange(
-        `${current.content_markdown.slice(0, start)}${imageMarkdown}${current.content_markdown.slice(end)}`,
+        `${currentMarkdown.slice(0, start)}${imageMarkdown}${currentMarkdown.slice(end)}`,
       );
     } catch (error) {
       console.error('Markdown image upload failed:', error);
@@ -78,7 +79,7 @@ const MarkdownTranslationEditor: React.FC<MarkdownTranslationEditorProps> = ({
     }
   };
 
-  const preview = renderWikiMarkdown(current.content_markdown).html;
+  const preview = renderWikiMarkdown(currentMarkdown).html;
 
   return (
     <div className="space-y-4">

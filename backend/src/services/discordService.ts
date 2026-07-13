@@ -87,6 +87,22 @@ class DiscordService {
     return `${truncated.slice(0, safeCut).trimEnd()}…`;
   }
 
+  /** Format the UTC planned start using Discord's viewer-localized timestamp syntax. */
+  private formatScheduledStart(value: string | Date | null | undefined): string {
+    if (!value) return 'Not scheduled';
+
+    // Tournament DATETIME values are persisted in UTC even though MariaDB does
+    // not retain a timezone suffix. Add it when a raw SQL string is returned.
+    const normalized = typeof value === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)
+      ? `${value.replace(' ', 'T')}Z`
+      : value;
+    const date = new Date(normalized);
+    if (Number.isNaN(date.getTime())) return 'Not scheduled';
+
+    const unixSeconds = Math.floor(date.getTime() / 1000);
+    return `<t:${unixSeconds}:F> (<t:${unixSeconds}:R>)`;
+  }
+
   /**
    * Create the forum thread that becomes the tournament's Discord discussion space.
    * @param tournamentId Application tournament ID used for logging.
@@ -95,6 +111,7 @@ class DiscordService {
    * @param organizersDisplay Optional organizer text for the first message.
    * @param description Optional tournament description.
    * @param rulesMarkdown Optional tournament rules.
+   * @param scheduledStartAt Optional planned start, displayed in each viewer's timezone.
    * @returns The Discord thread ID, or an empty string when publishing is skipped or fails.
    */
   async createTournamentThread(
@@ -103,7 +120,8 @@ class DiscordService {
     tournamentType: string,
     organizersDisplay?: string,
     description?: string,
-    rulesMarkdown?: string
+    rulesMarkdown?: string,
+    scheduledStartAt?: string | Date | null
   ): Promise<string> {
     if (!DISCORD_ENABLED) {
       console.log(`⏭️  Discord disabled (DISCORD_ENABLED=${process.env.DISCORD_ENABLED}). Skipping thread creation.`);
@@ -119,7 +137,8 @@ class DiscordService {
       const organizers = organizersDisplay || 'Unknown';
       const combinedTournamentText = this.buildCombinedTournamentText(description, rulesMarkdown, 1150);
       const combinedLine = combinedTournamentText ? `\n\n${combinedTournamentText}` : '';
-      const content = `**🎮 ${threadName}**\n\nOrganizers: **${organizers}**${combinedLine}\n\nDiscussions and updates will be posted here.`;
+      const scheduledStart = this.formatScheduledStart(scheduledStartAt);
+      const content = `**🎮 ${threadName}**\n\nOrganizers: **${organizers}**\nPlanned start: ${scheduledStart}${combinedLine}\n\nDiscussions and updates will be posted here.`;
       const payload = {
         name: threadName,
         auto_archive_duration: 10080, // 7 days
@@ -203,7 +222,8 @@ class DiscordService {
     description: string,
     organizers: string,
     maxParticipants: number | null,
-    rulesMarkdown?: string
+    rulesMarkdown?: string,
+    scheduledStartAt?: string | Date | null
   ): Promise<boolean> {
     const combinedTournamentText = this.buildCombinedTournamentText(description, rulesMarkdown, 3800);
     const embed: DiscordEmbed = {
@@ -230,6 +250,11 @@ class DiscordService {
           name: 'Status',
           value: '🔓 Registration Open',
           inline: true,
+        },
+        {
+          name: 'Planned Start',
+          value: this.formatScheduledStart(scheduledStartAt),
+          inline: false,
         },
       ],
       footer: {
@@ -310,7 +335,8 @@ class DiscordService {
    */
   async postRegistrationClosed(
     threadId: string,
-    totalParticipants: number
+    totalParticipants: number,
+    scheduledStartAt?: string | Date | null
   ): Promise<boolean> {
     const embed: DiscordEmbed = {
       title: `🔒 Registration Closed`,
@@ -322,9 +348,46 @@ class DiscordService {
           value: `${totalParticipants}`,
           inline: true,
         },
+        {
+          name: 'Planned Start',
+          value: this.formatScheduledStart(scheduledStartAt),
+          inline: true,
+        },
       ],
       footer: {
         text: 'Registration closed',
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    return this.publishTournamentMessage(threadId, { embeds: [embed] });
+  }
+
+  /** Publish any addition, change, or removal of the planned tournament start. */
+  async postScheduledStartChanged(
+    threadId: string,
+    tournamentName: string,
+    previousStart: string | Date | null | undefined,
+    scheduledStart: string | Date | null | undefined
+  ): Promise<boolean> {
+    const embed: DiscordEmbed = {
+      title: '📅 Planned Start Updated',
+      description: `The planned start for **${tournamentName}** has changed.`,
+      color: 0x3498db,
+      fields: [
+        {
+          name: 'Previous',
+          value: this.formatScheduledStart(previousStart),
+          inline: false,
+        },
+        {
+          name: 'New',
+          value: this.formatScheduledStart(scheduledStart),
+          inline: false,
+        },
+      ],
+      footer: {
+        text: 'Tournament schedule updated',
       },
       timestamp: new Date().toISOString(),
     };

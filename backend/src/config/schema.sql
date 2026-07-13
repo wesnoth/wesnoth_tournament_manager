@@ -937,6 +937,7 @@ CREATE TABLE `tournaments` (
   `creator_id` char(36) NOT NULL,
   `status` varchar(20) DEFAULT 'pending',
   `approved_at` datetime DEFAULT NULL,
+  `scheduled_start_at` datetime DEFAULT NULL,
   `started_at` datetime DEFAULT NULL,
   `finished_at` datetime DEFAULT NULL,
   `created_at` datetime DEFAULT current_timestamp(),

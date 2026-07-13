@@ -5,24 +5,7 @@ import UnrankedMapSelect from './UnrankedMapSelect';
 import MarkdownPreview from './MarkdownPreview';
 import { tournamentService, userService } from '../services/api';
 import { useAuthStore } from '../store/authStore';
-
-interface TournamentFormData {
-  name: string;
-  description: string;
-  tournament_type: string;
-  tournament_mode: 'ranked' | 'unranked' | 'team';
-  max_participants: number | null;
-  round_duration_days: number;
-  auto_advance_round: boolean;
-  general_rounds: number;
-  final_rounds: number;
-  general_rounds_format: 'bo1' | 'bo3' | 'bo5';
-  final_rounds_format: 'bo1' | 'bo3' | 'bo5';
-  rules_template_id?: string | null;
-  rules_content?: string;
-  organizer_ids?: string[];
-  started_at?: string;
-}
+import type { MatchFormat, TournamentFormData, TournamentMode, TournamentType } from '../types/tournament';
 
 interface RuleTemplate {
   id: string;
@@ -48,6 +31,12 @@ interface TournamentFormProps {
   onCancel?: () => void;
 }
 
+const toLocalDateTimeValue = (dateValue: string): string => {
+  const date = new Date(dateValue);
+  const localTime = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return localTime.toISOString().slice(0, 16);
+};
+
 const TournamentForm: React.FC<TournamentFormProps> = ({
   mode,
   formData,
@@ -67,14 +56,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
   const [allUsers, setAllUsers] = useState<UserOption[]>([]);
   const [organizerCandidateId, setOrganizerCandidateId] = useState('');
 
-  // Determine tournament type options based on mode and status
-  const canConfigureRounds = () => {
-    if (mode === 'create') return true;
-    // In edit mode, only allow if tournament is not started
-    return true; // You can add status check if needed
-  };
-
-  const handleTournamentTypeChange = (newType: string) => {
+  const handleTournamentTypeChange = (newType: TournamentType) => {
     const updatedData = { ...formData, tournament_type: newType };
 
     // Reset round values based on new format to their creation defaults
@@ -325,7 +307,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                 type="radio"
                 value="ranked"
                 checked={formData.tournament_mode === 'ranked'}
-                onChange={(e) => onFormDataChange({ ...formData, tournament_mode: e.target.value as any })}
+                onChange={(e) => onFormDataChange({ ...formData, tournament_mode: e.target.value as TournamentMode })}
                 disabled={isLoading || mode === 'edit'}
               />
               {t('tournament.ranked', 'Ranked (1v1, ELO impact)')}
@@ -335,7 +317,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                 type="radio"
                 value="unranked"
                 checked={formData.tournament_mode === 'unranked'}
-                onChange={(e) => onFormDataChange({ ...formData, tournament_mode: e.target.value as any })}
+                onChange={(e) => onFormDataChange({ ...formData, tournament_mode: e.target.value as TournamentMode })}
                 disabled={isLoading || mode === 'edit'}
               />
               {t('tournament.unranked', 'Unranked (1v1, no ELO)')}
@@ -345,7 +327,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                 type="radio"
                 value="team"
                 checked={formData.tournament_mode === 'team'}
-                onChange={(e) => onFormDataChange({ ...formData, tournament_mode: e.target.value as any })}
+                onChange={(e) => onFormDataChange({ ...formData, tournament_mode: e.target.value as TournamentMode })}
                 disabled={isLoading || mode === 'edit'}
               />
               {t('tournament.team', 'Team (2v2, no ELO)')}
@@ -362,7 +344,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
             <label className="font-medium text-gray-700">{t('tournament.tournament_format', 'Tournament Format')}</label>
             <select
               value={formData.tournament_type}
-              onChange={(e) => handleTournamentTypeChange(e.target.value)}
+              onChange={(e) => handleTournamentTypeChange(e.target.value as TournamentType)}
               required
               disabled={isLoading}
               className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
@@ -494,22 +476,29 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
           </div>
         </div>
 
-        {/* Edit mode: Show started_at field */}
-        {mode === 'edit' && (
-          <div className="flex flex-col gap-2 mt-4">
-            <label className="font-medium text-gray-700">{t('label_tournament_start_date', 'Tournament Start Date')}</label>
-            <input
-              type="date"
-              value={formData.started_at ? new Date(formData.started_at).toISOString().split('T')[0] : ''}
-              onChange={(e) => onFormDataChange({ ...formData, started_at: e.target.value })}
-              disabled={isLoading}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-            />
-          </div>
-        )}
+        <div className="flex flex-col gap-2 mb-4">
+          <label className="font-medium text-gray-700">
+            {t('label_scheduled_start_date', 'Planned Start')}
+          </label>
+          <input
+            type="datetime-local"
+            value={formData.scheduled_start_at
+              ? toLocalDateTimeValue(formData.scheduled_start_at)
+              : ''}
+            onChange={(e) => onFormDataChange({
+              ...formData,
+              scheduled_start_at: e.target.value ? new Date(e.target.value).toISOString() : null,
+            })}
+            disabled={isLoading}
+            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+          />
+          <small className="text-gray-600">
+            {t('tournament.scheduled_start_help', 'Informational date; the actual start is recorded when the tournament is started.')}
+          </small>
+        </div>
 
         {/* ELIMINATION TOURNAMENT - Auto-calculated rounds */}
-        {canConfigureRounds() && formData.tournament_type === 'elimination' && (
+        {formData.tournament_type === 'elimination' && (
           <div className="border-t border-gray-200 pt-6">
             <h4 className="font-semibold text-gray-800 mb-2">{t('tournament.round_configuration', 'Round Configuration')}</h4>
             <p className="text-sm text-gray-600 mb-4">{t('tournament.configure_match_formats_elimination', 'Configure match formats for your elimination tournament')}</p>
@@ -525,7 +514,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                   value={formData.general_rounds_format}
                   onChange={(e) => onFormDataChange({
                     ...formData,
-                    general_rounds_format: e.target.value as 'bo1' | 'bo3' | 'bo5'
+                    general_rounds_format: e.target.value as MatchFormat
                   })}
                   disabled={isLoading}
                   className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
@@ -543,7 +532,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                   value={formData.final_rounds_format}
                   onChange={(e) => onFormDataChange({
                     ...formData,
-                    final_rounds_format: e.target.value as 'bo1' | 'bo3' | 'bo5'
+                    final_rounds_format: e.target.value as MatchFormat
                   })}
                   disabled={isLoading}
                   className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
@@ -559,7 +548,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
         )}
 
         {/* NON-ELIMINATION TOURNAMENT - Manual round configuration */}
-        {canConfigureRounds() && formData.tournament_type !== 'elimination' && (
+        {formData.tournament_type !== 'elimination' && (
           <div className="border-t border-gray-200 pt-6 space-y-6">
             {/* LEAGUE TOURNAMENT */}
             {formData.tournament_type === 'league' && (
@@ -615,10 +604,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                 <div className="space-y-4">
                   <div className="flex flex-col gap-2">
                     <label className="font-medium text-gray-700">{t('tournament.number_swiss_rounds', 'Number of Swiss Rounds')}</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="20"
+                    <select
                       value={formData.general_rounds}
                       onChange={(e) => onFormDataChange({
                         ...formData,
@@ -626,7 +612,11 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                       })}
                       disabled={isLoading}
                       className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                    />
+                    >
+                      {Array.from({ length: 10 }, (_, index) => index + 1).map((rounds) => (
+                        <option key={rounds} value={rounds}>{rounds}</option>
+                      ))}
+                    </select>
                     <small className="text-gray-600">{t('tournament.swiss_rounds_help', 'Number of Swiss system rounds to run (typically 3-7 rounds for Swiss tournaments)')}</small>
                   </div>
                   <div className="flex flex-col gap-2">
@@ -635,7 +625,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                       value={formData.general_rounds_format}
                       onChange={(e) => onFormDataChange({
                         ...formData,
-                        general_rounds_format: e.target.value as 'bo1' | 'bo3' | 'bo5'
+                        general_rounds_format: e.target.value as MatchFormat
                       })}
                       disabled={isLoading}
                       className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
@@ -668,10 +658,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="flex flex-col gap-2">
                       <label className="font-medium text-gray-700">{t('tournament.number_swiss_rounds', 'Number of Swiss Rounds')}</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="20"
+                      <select
                         value={formData.general_rounds}
                         onChange={(e) => onFormDataChange({
                           ...formData,
@@ -679,15 +666,16 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                         })}
                         disabled={isLoading}
                         className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                      />
+                      >
+                        {Array.from({ length: 10 }, (_, index) => index + 1).map((rounds) => (
+                          <option key={rounds} value={rounds}>{rounds}</option>
+                        ))}
+                      </select>
                       <small className="text-gray-600">{t('tournament.qualifying_rounds_help', 'Qualifying rounds using Swiss system')}</small>
                     </div>
                     <div className="flex flex-col gap-2">
                       <label className="font-medium text-gray-700">{t('tournament.number_elimination_rounds', 'Number of Elimination Rounds')}</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="10"
+                      <select
                         value={formData.final_rounds}
                         onChange={(e) => onFormDataChange({
                           ...formData,
@@ -695,7 +683,11 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                         })}
                         disabled={isLoading}
                         className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                      />
+                      >
+                        {[1, 2, 3].map((rounds) => (
+                          <option key={rounds} value={rounds}>{rounds}</option>
+                        ))}
+                      </select>
                       <small className="text-gray-600">{t('tournament.elimination_rounds_help', 'Total elimination rounds (includes grand final)')}</small>
                     </div>
                   </div>
@@ -711,7 +703,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                         value={formData.general_rounds_format}
                         onChange={(e) => onFormDataChange({
                           ...formData,
-                          general_rounds_format: e.target.value as 'bo1' | 'bo3' | 'bo5'
+                          general_rounds_format: e.target.value as MatchFormat
                         })}
                         disabled={isLoading}
                         className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
@@ -728,7 +720,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                         value={formData.final_rounds_format}
                         onChange={(e) => onFormDataChange({
                           ...formData,
-                          final_rounds_format: e.target.value as 'bo1' | 'bo3' | 'bo5'
+                          final_rounds_format: e.target.value as MatchFormat
                         })}
                         disabled={isLoading}
                         className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"

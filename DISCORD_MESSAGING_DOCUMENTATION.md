@@ -60,7 +60,7 @@ The tournament's Discord forum thread ID is stored in `tournaments.discord_threa
 
 ### Tournament notifications
 
-Tournament creation creates a forum thread and publishes the initial description, rules, organizers, type, and capacity. Later messages cover registration, participant acceptance, registration closure, tournament start, league start, round start, pairings, eliminations, standings, cancellation, and completion.
+Tournament creation creates a forum thread and publishes the initial description, rules, organizers, type, capacity, and planned start. Registration closure repeats the planned start so accepted participants can see it in their own Discord timezone. Adding, changing, or removing that date before the tournament starts publishes a dedicated update. Later messages cover registration, participant acceptance, tournament start, league start, round start, pairings, eliminations, standings, cancellation, and completion.
 
 Automatic tournament progression can publish completion and league standings messages. The organizer-only results endpoint is also available as an intentional manual resend mechanism for league standings and final results.
 

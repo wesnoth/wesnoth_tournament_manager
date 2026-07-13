@@ -57,6 +57,7 @@ export interface Tournament {
   general_rounds_format: 'bo1' | 'bo3' | 'bo5';
   final_rounds_format: 'bo1' | 'bo3' | 'bo5';
   approved_at?: Date;
+  scheduled_start_at?: Date;
   started_at?: Date;
   finished_at?: Date;
   created_at: Date;

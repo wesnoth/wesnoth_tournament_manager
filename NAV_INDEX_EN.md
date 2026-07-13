@@ -86,10 +86,10 @@ On load:
 - `tournamentService.getTournamentMatches(id)` → `GET /api/tournaments/:id/matches`.
 - `tournamentService.getTournamentRoundMatches(id)` → `GET /api/tournaments/:id/round-matches`.
 - `tournamentService.getTournamentRounds(id)` → `GET /api/tournaments/:id/rounds`.
+- `tournamentService.getTournamentOrganizers(id)` → `GET /api/tournaments/:id/organizers`.
 - `fetch /api/public/tournaments/:id/pending-replays` — confidence=1 replays for open matches.
 
 Actions:
-- Join → `POST /api/tournaments/:id/join`.
 - Request join → `POST /api/tournaments/:id/request-join`.
 - Accept/Reject participant → `POST /api/tournaments/:id/participants/:participantId/accept|reject`.
 - Confirm participation → `POST /api/tournaments/:id/participants/:participantId/confirm`.
@@ -101,13 +101,17 @@ Actions:
 - Determine winner (organizer) → `POST /api/tournaments/:id/matches/:matchId/determine-winner`.
 - Dispute match → `POST /api/tournaments/:id/matches/:matchId/dispute`.
 - Update tournament → `PUT /api/tournaments/:id`.
+- Replace allowed assets → `PUT /api/tournaments/:id/assets`.
+- Recalculate tiebreakers → `POST /api/tournaments/:id/calculate-tiebreakers`.
+
+See [TOURNAMENTS_DOCUMENTATION.md](TOURNAMENTS_DOCUMENTATION.md) for the shared mode, format, lifecycle, and authorization model.
 - Report a match in context → `POST /api/matches/report`.
 - Report via confidence-1 replay → `POST /api/matches/report-confidence-1-replay`.
 
 ### My Tournaments (`/my-tournaments`) — `pages/MyTournaments.tsx`
 - `tournamentService.getMyTournaments()` → `GET /api/tournaments/my`.
 - `tournamentService.createTournament(data)` → `POST /api/tournaments`.
-- `tournamentService.joinTournament(id)` → `POST /api/tournaments/:id/join`.
+- Lists tournaments where the current user is creator or co-organizer.
 
 ### Matches (`/matches`) — `pages/Matches.tsx`
 - `publicService.getAllMatches(page, filters)` → `GET /api/public/matches` — public match list.
@@ -206,6 +210,6 @@ All admin routes require `is_admin = 1` in `users_extension`.
 ## Notes
 
 - All frontend service wrappers are in `frontend/src/services/api.ts` (main), `statisticsService.ts`, and `playerStatisticsService.ts`.
-- Pages with filters (Players, Rankings, Matches, Tournaments) use client-side debounce before sending query params.
-- User accounts are auto-created on first successful login (validated against `phpbb3_users` forum table) or when a ranked replay is processed. No manual registration flow exists in the app.
+- Text and numeric list filters apply on Enter or Refresh; select and checkbox filters may apply immediately.
+- Application profiles are created only on first successful login validated against `phpbb3_users`. Replay processing does not create profiles; direct ranked matches require both existing users to enable ranked matches in their profiles.
 - Account management (password reset, email change) is handled entirely by the Wesnoth forum at `https://forum.wesnoth.org`.

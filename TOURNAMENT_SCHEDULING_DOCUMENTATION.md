@@ -2,6 +2,8 @@
 
 This document is a high-level overview of tournament match scheduling. The TypeScript source comments and JSDoc are the detailed source of truth for validation, authorization, state transitions, participant resolution, and notification payloads.
 
+Tournament creation, formats, preparation, standings, and round progression are documented in [TOURNAMENTS_DOCUMENTATION.md](TOURNAMENTS_DOCUMENTATION.md).
+
 ## Purpose
 
 Tournament scheduling lets participants negotiate one or more future UTC match slots before confirming a match. The same workflow supports:

@@ -13,7 +13,7 @@
 - `[POST] /api/auth/login` — Public — body: `{nickname, password}` — Authenticate against `phpbb3_users` forum table and return JWT token + userId + isTournamentModerator. Returns `{error: 'forum_banned', banReason, banUntil}` (401) if user has an active phpBB ban.
 - `[GET] /api/auth/validate-token` — Private — none — Validate JWT and return current user info including `isAdmin` and `isTournamentModerator`.
 
-> Account creation (registration), password reset, and email verification are handled entirely by the **Wesnoth forum** at `https://forum.wesnoth.org`. Users are auto-created in `users_extension` on first successful login or when a ranked replay is processed.
+> Forum registration, password reset, and email verification are handled by the **Wesnoth forum** at `https://forum.wesnoth.org`. The application profile in `users_extension` is created only on first successful application login. Replay processing requires existing profiles, and direct ranked matches require both players to enable ranked matches.
 
 ---
 
@@ -82,18 +82,18 @@
 
 ## Tournament Routes
 
-- `[POST] /api/tournaments` — Private — body: tournament config fields (including optional `organizer_ids: string[]`) — Create a tournament.
-- `[GET] /api/tournaments/my` — Private — Tournaments created by current user.
+- `[POST] /api/tournaments` — Private — body: tournament config fields including optional `organizer_ids: string[]` and `scheduled_start_at` — Create a tournament.
+- `[GET] /api/tournaments/my` — Private — Tournaments managed by the current user as creator or co-organizer.
 - `[GET] /api/tournaments/:id` — Public — Tournament full details.
 - `[GET] /api/tournaments/:id/organizers` — Public — List tournament organizers (creator + co-organizers).
 - `[POST] /api/tournaments/:id/organizers` — Private (organizer) — body: `{user_id}` — Add co-organizer with full organizer permissions.
 - `[DELETE] /api/tournaments/:id/organizers/:organizerUserId` — Private (organizer) — Remove co-organizer (creator cannot be removed).
-- `[PUT] /api/tournaments/:id` — Private (organizer) — body: `{tournament_type?, description?, rules_template_id?, rules_content?, max_participants?, round_duration_days?, auto_advance_round?, general_rounds?, final_rounds?, general_rounds_format?, final_rounds_format?, status?, started_at?}` — Update tournament config. `tournament_type` can only be changed when tournament status is `registration_open` or `registration_closed` (not `prepared`, `in_progress`, or `completed`). When format changes, round values are reset to format-specific defaults.
+- `[PUT] /api/tournaments/:id` — Private (organizer) — body: `{tournament_type?, description?, rules_template_id?, rules_content?, max_participants?, round_duration_days?, auto_advance_round?, scheduled_start_at?, general_rounds?, final_rounds?, general_rounds_format?, final_rounds_format?}` — Update tournament configuration. The planned start is editable before the real start; lifecycle status and `started_at` are controlled by dedicated actions.
+- `[PUT] /api/tournaments/:id/assets` — Private (organizer) — body: `{faction_ids: string[], map_ids: string[]}` — Atomically replace allowed assets before preparation; empty arrays clear a set.
 - `[DELETE] /api/tournaments/:id` — Private (organizer/admin) — Cancel/delete a tournament before it starts; administrators may manage any eligible tournament.
 - `[GET] /api/tournaments/:id/rounds` — Public — Tournament rounds list.
 - `[GET] /api/tournaments` — Public — query: `page` — All tournaments.
-- `[POST] /api/tournaments/:id/join` — Private — Join tournament (immediate acceptance).
-- `[POST] /api/tournaments/:id/request-join` — Private — body: `{team_id?}` — Request to join (creates pending participant).
+- `[POST] /api/tournaments/:id/request-join` — Private — body: `{team_name?, teammate_name?}` — Request individual entry, create a team, or join a one-member team during open registration.
 - `[POST] /api/tournaments/:id/participants/:participantId/accept` — Private (organizer) — Accept participant.
 - `[POST] /api/tournaments/:id/participants/:participantId/confirm` — Private — Participant confirms join.
 - `[POST] /api/tournaments/:id/participants/:participantId/reject` — Private (organizer) — Reject participant.
@@ -110,12 +110,10 @@
 - `[POST] /api/tournaments/:id/matches/:matchId/dispute` — Private — Dispute a tournament match.
 - `[POST] /api/tournaments/:id/next-round` — Private (organizer) — Activate next round.
 - `[GET] /api/tournaments/:id/config` — Private (organizer) — Tournament internal config.
-- `[GET] /api/tournaments/:id/swiss-pairings/:roundId` — Public — Swiss pairings for a round.
 - `[POST] /api/tournaments/:id/calculate-tiebreakers` — Private (organizer) — Calculate tiebreakers.
-- `[POST] /api/leagues/:id/calculate-tiebreakers` — Private (organizer) — Calculate league tiebreakers.
 - `[GET] /api/tournaments/suggestions/by-count` — Private — Tournament suggestions by participation count.
 - `[PUT] /api/tournaments/:tournamentId/teams/:teamId/rename` — Private (organizer/team member/admin/moderator) — body: `{name: string}` — Rename a tournament team.
-- `[DELETE] /api/tournaments/:tournamentId/participants/:participantId` — Private (self/organizer/admin/moderator) — Remove a participant (only when tournament is not started/completed). Cleans up empty teams in team tournaments.
+- `[DELETE] /api/tournaments/:tournamentId/participants/:participantId` — Private (self/organizer/admin/moderator) — Remove a participant before the tournament starts. Cleans up empty teams in team tournaments.
 
 ---
 
@@ -268,16 +266,16 @@
 - `[POST] /api/admin/unranked-maps` — Private (admin) — Add unranked map.
 - `[GET] /api/admin/unranked-maps/:id/usage` — Private (admin) — Check usage.
 - `[DELETE] /api/admin/unranked-maps/:id` — Private (admin) — Remove unranked map.
-- `[PUT] /api/admin/tournaments/:id/unranked-assets` — Private (admin) — Assign unranked assets to a tournament.
 
 ### Team Management (2v2 Tournaments)
-- `[GET] /api/admin/tournaments/:id/teams` — Private (admin) — List teams in a tournament.
-- `[POST] /api/admin/tournaments/:id/teams` — Private (admin) — Create team.
-- `[POST] /api/admin/tournaments/:id/teams/:teamId/members` — Private (admin) — Add member to team.
-- `[DELETE] /api/admin/tournaments/:id/teams/:teamId/members/:playerId` — Private (admin) — Remove member.
-- `[POST] /api/admin/tournaments/:id/teams/:teamId/substitutes` — Private (admin) — Add substitute.
-- `[DELETE] /api/admin/tournaments/:id/teams/:teamId` — Private (admin) — Delete team.
-- `[POST] /api/admin/tournaments/:id/calculate-tiebreakers` — Private (admin) — Calculate tiebreakers for a tournament.
+- `[GET] /api/admin/tournaments/:id/teams` — Private (organizer) — List teams, competitive members, and configured substitutes.
+- `[POST] /api/admin/tournaments/:id/teams` — Private (organizer) — Create team.
+- `[POST] /api/admin/tournaments/:id/teams/:teamId/members` — Private (organizer) — Add member to team.
+- `[DELETE] /api/admin/tournaments/:id/teams/:teamId/members/:playerId` — Private (organizer) — Remove member.
+- `[POST] /api/admin/tournaments/:id/teams/:teamId/substitutes` — Private (organizer) — Add substitute.
+- `[DELETE] /api/admin/tournaments/:id/teams/:teamId/substitutes/:playerId` — Private (organizer) — Remove substitute.
+- `[POST] /api/admin/tournaments/:id/teams/:teamId/replace-member` — Private (organizer) — Start an atomic member replacement during closed registration, preparation, or active play.
+- `[DELETE] /api/admin/tournaments/:id/teams/:teamId` — Private (organizer) — Delete a team without matches.
 
 ---
 

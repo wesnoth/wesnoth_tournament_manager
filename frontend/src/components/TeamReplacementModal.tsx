@@ -58,17 +58,7 @@ export const TeamReplacementModal: React.FC<TeamReplacementModalProps> = ({
         new_player_nickname: newPlayerNickname.trim()
       };
       
-      console.log('🚀 [TeamReplacementModal] Calling replace-member endpoint');
-      console.log('   URL:', url);
-      console.log('   tournamentId:', tournamentId);
-      console.log('   teamId:', teamId);
-      console.log('   participant_id:', selectedMemberId);
-      console.log('   newPlayerNickname:', newPlayerNickname);
-      console.log('   payload:', payload);
-
       const response = await api.post(url, payload);
-
-      console.log('✅ [TeamReplacementModal] Replace member response:', response.data);
 
       if (response.data.success) {
         // Reset form
@@ -82,12 +72,6 @@ export const TeamReplacementModal: React.FC<TeamReplacementModalProps> = ({
         setError(response.data.error || t('Failed to initiate replacement'));
       }
     } catch (err: any) {
-      console.error('❌ [TeamReplacementModal] Replace member error:', err);
-      console.error('   Status:', err.response?.status);
-      console.error('   Status Text:', err.response?.statusText);
-      console.error('   Data:', err.response?.data);
-      console.error('   URL:', err.config?.url);
-      console.error('   Method:', err.config?.method);
       const errorMessage = err.response?.data?.error || 
                            err.response?.data?.message || 
                            (err instanceof Error ? err.message : t('Failed to initiate replacement'));

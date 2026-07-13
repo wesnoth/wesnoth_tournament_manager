@@ -6,23 +6,7 @@ import { tournamentService } from '../services/api';
 import MainLayout from '../components/MainLayout';
 import TournamentList, { Tournament } from '../components/TournamentList';
 import TournamentForm from '../components/TournamentForm';
-
-interface TournamentFormData {
-  name: string;
-  description: string;
-  tournament_type: string;
-  tournament_mode: 'ranked' | 'unranked' | 'team';
-  max_participants: number | null;
-  round_duration_days: number;
-  auto_advance_round: boolean;
-  general_rounds: number;
-  final_rounds: number;
-  general_rounds_format: 'bo1' | 'bo3' | 'bo5';
-  final_rounds_format: 'bo1' | 'bo3' | 'bo5';
-  rules_template_id?: string | null;
-  rules_content?: string;
-  organizer_ids?: string[];
-}
+import type { TournamentCreatePayload, TournamentFormData } from '../types/tournament';
 
 const MyTournaments: React.FC = () => {
   const { t } = useTranslation();
@@ -37,10 +21,11 @@ const MyTournaments: React.FC = () => {
     name: '',
     description: '',
     tournament_type: 'elimination',
-    tournament_mode: 'ranked' as 'ranked' | 'unranked' | 'team',
-    max_participants: null as number | null,
+    tournament_mode: 'ranked',
+    max_participants: null,
     round_duration_days: 7,
     auto_advance_round: false,
+    scheduled_start_at: null,
     general_rounds: 0,
     final_rounds: 0,
     general_rounds_format: 'bo3',
@@ -69,8 +54,7 @@ const MyTournaments: React.FC = () => {
       setTournaments(res.data || []);
       setError('');
 
-    } catch (err: any) {
-      console.error('Error fetching tournaments:', err);
+    } catch {
       setError('Error loading tournaments');
       setTournaments([]);
     } finally {
@@ -87,7 +71,7 @@ const MyTournaments: React.FC = () => {
     }
 
     try {
-      const payload: any = {
+      const payload: TournamentCreatePayload = {
         ...formData,
       };
       
@@ -98,9 +82,6 @@ const MyTournaments: React.FC = () => {
         payload.unranked_maps = unrankedMaps;
       }
       
-      console.log('Creating tournament with payload:', payload);
-      console.log('Unranked Factions:', unrankedFactions);
-      console.log('Unranked Maps:', unrankedMaps);
       await tournamentService.createTournament(payload);
       setError('');
       setFormData({ 
@@ -111,6 +92,7 @@ const MyTournaments: React.FC = () => {
         max_participants: null,
         round_duration_days: 7,
         auto_advance_round: false,
+        scheduled_start_at: null,
         general_rounds: 0,
         final_rounds: 0,
         general_rounds_format: 'bo3',
@@ -122,19 +104,9 @@ const MyTournaments: React.FC = () => {
       setUnrankedFactions([]);
       setUnrankedMaps([]);
       setShowCreateForm(false);
-      fetchTournaments();
+      await fetchTournaments();
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to create tournament');
-    }
-  };
-
-  const handleJoinTournament = async (tournamentId: string) => {
-    try {
-      await tournamentService.joinTournament(tournamentId);
-      setError('');
-      fetchTournaments();
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to join tournament');
     }
   };
 

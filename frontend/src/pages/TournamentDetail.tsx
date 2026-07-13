@@ -14,6 +14,8 @@ import { ReplayConfirmationModal } from '../components/ReplayConfirmationModal';
 import ScheduleProposalModal from '../components/ScheduleProposalModal';
 import { TeamReplacementModal } from '../components/TeamReplacementModal';
 import MarkdownPreview from '../components/MarkdownPreview';
+import MainLayout from '../components/MainLayout';
+import type { TournamentFormData, TournamentUpdatePayload } from '../types/tournament';
 
 // Helper function to extract parsed replay data from JSON summary
 function parseReplaySummary(summaryJson: string | null): {
@@ -125,26 +127,9 @@ interface Tournament {
   auto_advance_round: boolean;
   max_participants: number | null;
   created_at: string;
+  scheduled_start_at?: string | null;
   started_at: string;
   finished_at: string;
-}
-
-interface TournamentFormData {
-  name: string;
-  description: string;
-  tournament_type: string;
-  tournament_mode: 'ranked' | 'unranked' | 'team';
-  max_participants: number | null;
-  round_duration_days: number;
-  auto_advance_round: boolean;
-  general_rounds: number;
-  final_rounds: number;
-  general_rounds_format: 'bo1' | 'bo3' | 'bo5';
-  final_rounds_format: 'bo1' | 'bo3' | 'bo5';
-  rules_template_id?: string | null;
-  rules_content?: string;
-  organizer_ids?: string[];
-  started_at?: string;
 }
 
 interface TournamentOrganizer {
@@ -183,7 +168,7 @@ interface TournamentMatch {
   player2_id: string;
   winner_id: string | null;
   match_id: string | null;
-  match_status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  match_status: 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'unconfirmed';
   played_at: string | null;
   created_at: string;
   updated_at?: string;
@@ -192,7 +177,7 @@ interface TournamentMatch {
   player2_nickname: string;
   winner_nickname: string | null;
   loser_nickname?: string;
-  match_status_from_matches?: 'confirmed' | 'disputed' | 'unconfirmed' | 'cancelled' | null;
+  match_status_from_matches?: 'confirmed' | 'disputed' | 'reported' | 'unconfirmed' | 'cancelled' | null;
   winner_faction?: string;
   loser_faction?: string;
   is_team_mode?: boolean;
@@ -214,6 +199,9 @@ interface TournamentMatch {
   pending_replay_filename?: string;
   pending_replay_game_name?: string;
   pending_replay_cancel_requested_by?: string | null;
+  pending_replay_parse_status?: string;
+  tournament_round_match_id?: string;
+  replay_url?: string;
   // Team members for mapping (team tournaments only)
   team1_members?: string[] | null;
   team2_members?: string[] | null;
@@ -306,7 +294,7 @@ const TournamentDetail: React.FC = () => {
     max_participants: 0,
     round_duration_days: 7,
     auto_advance_round: false,
-    started_at: '',
+    scheduled_start_at: null,
     general_rounds: 0,
     final_rounds: 0,
     general_rounds_format: 'bo3' as 'bo1' | 'bo3' | 'bo5',
@@ -422,9 +410,7 @@ const TournamentDetail: React.FC = () => {
         max_participants: tournamentRes.data.max_participants || 0,
         round_duration_days: tournamentRes.data.round_duration_days || 7,
         auto_advance_round: tournamentRes.data.auto_advance_round || false,
-        started_at: tournamentRes.data.started_at 
-          ? new Date(tournamentRes.data.started_at).toISOString().split('T')[0]
-          : '',
+        scheduled_start_at: tournamentRes.data.scheduled_start_at || null,
         general_rounds: tournamentRes.data.general_rounds || 0,
         final_rounds: tournamentRes.data.final_rounds || 0,
         general_rounds_format: tournamentRes.data.general_rounds_format || 'bo3',
@@ -452,6 +438,9 @@ const TournamentDetail: React.FC = () => {
     try {
       setIsLoadingScheduling(true);
       const targetId = roundMatchId || matchId;
+      if (!targetId) {
+        throw new Error('Match identifier is required to load scheduling data');
+      }
 
       const [availRes, proposalRes] = await Promise.all([
         isRoundMatch
@@ -790,12 +779,17 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
           editData.final_rounds !== tournament?.final_rounds ||
           editData.general_rounds_format !== tournament?.general_rounds_format ||
           editData.final_rounds_format !== tournament?.final_rounds_format ||
+          editData.round_duration_days !== tournament?.round_duration_days ||
+          editData.auto_advance_round !== tournament?.auto_advance_round ||
+          editData.scheduled_start_at !== tournament?.scheduled_start_at ||
           editData.rules_template_id !== tournament?.rules_template_id ||
           editData.rules_content !== tournament?.rules_content) {
-        // Build update object, excluding started_at if empty
-        const updateObj: any = {
+        const updateObj: TournamentUpdatePayload = {
           description: editData.description,
           max_participants: editData.max_participants,
+          round_duration_days: editData.round_duration_days,
+          auto_advance_round: editData.auto_advance_round,
+          scheduled_start_at: editData.scheduled_start_at,
           general_rounds: editData.general_rounds,
           final_rounds: editData.final_rounds,
           general_rounds_format: editData.general_rounds_format,
@@ -803,12 +797,15 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
           rules_template_id: editData.rules_template_id,
           rules_content: editData.rules_content,
         };
-        if (editData.started_at) {
-          updateObj.started_at = editData.started_at;
-        }
         await tournamentService.updateTournament(id!, updateObj);
       }
-      
+
+      await tournamentService.updateTournamentAssets(
+        id!,
+        unrankedFactions.map((faction) => faction.id),
+        unrankedMaps.map((map) => map.id)
+      );
+
       // Call backend to prepare tournament (create rounds based on type and configuration)
       await tournamentService.prepareTournament(id!);
       setSuccess(t('success_tournament_prepared'));
@@ -847,11 +844,13 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
 
   const handleSaveChanges = async () => {
     try {
-      // Build update object, excluding started_at if empty
-      const updateObj: any = {
+      const updateObj: TournamentUpdatePayload = {
         tournament_type: editData.tournament_type,
         description: editData.description,
         max_participants: editData.max_participants,
+        round_duration_days: editData.round_duration_days,
+        auto_advance_round: editData.auto_advance_round,
+        scheduled_start_at: editData.scheduled_start_at,
         general_rounds: editData.general_rounds,
         final_rounds: editData.final_rounds,
         general_rounds_format: editData.general_rounds_format,
@@ -859,26 +858,15 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
         rules_template_id: editData.rules_template_id,
         rules_content: editData.rules_content,
       };
-      if (editData.started_at) {
-        updateObj.started_at = editData.started_at;
-      }
-      
       // Save tournament configuration
       await tournamentService.updateTournament(id!, updateObj);
 
-      // Save assets if tournament mode is unranked or team
-      if ((tournament?.tournament_mode === 'unranked' || tournament?.tournament_mode === 'team') && 
-          (unrankedFactions.length > 0 || unrankedMaps.length > 0)) {
-        try {
-          await api.put(`/admin/tournaments/${id}/unranked-assets`, {
-            faction_ids: unrankedFactions.map(f => f.id),
-            map_ids: unrankedMaps.map(m => m.id)
-          });
-        } catch (assetErr) {
-          console.error('Error updating assets:', assetErr);
-          // Don't fail the whole operation if asset update fails
-        }
-      }
+      // Empty arrays intentionally clear the corresponding allowed asset set.
+      await tournamentService.updateTournamentAssets(
+        id!,
+        unrankedFactions.map((faction) => faction.id),
+        unrankedMaps.map((map) => map.id)
+      );
 
       setSuccess(t('success_tournament_configuration_updated'));
       setEditMode(false);
@@ -1012,8 +1000,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
         const currentRound = rounds.find(r => r.round_number === currentRoundNumber);
         if (currentRound && currentRound.round_type === 'general') {
           console.log('🎲 Calculating tiebreakers before generating Swiss pairings...');
-          await api.post(`/admin/tournaments/${id}/calculate-tiebreakers`);
-          console.log('✅ Tiebreakers calculated');
+          await tournamentService.calculateTournamentTiebreakers(id!);
         }
       }
 
@@ -1030,8 +1017,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
   const handleRecalculateTiebreakers = async () => {
     try {
       setError('');
-      console.log('🎲 Recalculating tiebreakers...');
-      await api.post(`/admin/tournaments/${id}/calculate-tiebreakers`);
+      await tournamentService.calculateTournamentTiebreakers(id!);
       setSuccess(t('tournaments.tiebreakers_recalculated', 'Tiebreakers recalculated successfully'));
       fetchTournamentData();
       setTimeout(() => setSuccess(''), 3000);
@@ -1128,7 +1114,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
     return '';
   };
 
-  const isCreator = userId === tournament?.creator_id;
+  const isCreator = Boolean(userId && organizers.some((organizer) => organizer.user_id === userId));
   const isAcceptedParticipant = userParticipationStatus === 'accepted';
   const canManageParticipants = isCreator || isAdmin || isTournamentModerator;
   const canRenameTeam = (team: any) =>
@@ -1362,20 +1348,20 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
   };
 
   if (loading) {
-    return <div className="w-full min-h-screen px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200"><p>{t('loading')}</p></div>;
+    return <MainLayout><div className="w-full min-h-screen px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200"><p>{t('loading')}</p></div></MainLayout>;
   }
 
   if (!tournament) {
     return (
-      <div className="w-full min-h-screen px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200">
+      <MainLayout><div className="w-full min-h-screen px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200">
         <p>{error || t('tournament_title')}</p>
         <button onClick={() => navigate('/tournaments')}>{t('tournaments.back_to_tournaments')}</button>
-      </div>
+      </div></MainLayout>
     );
   }
 
   return (
-    <div className="w-full min-h-screen px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200">
+    <MainLayout><div className="w-full min-h-screen px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200">
       <div className="flex justify-between items-center mb-8 pb-4 border-b-2 border-gray-300">
         <button onClick={handleBackButton} className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors">← {t('tournaments.back_to_tournaments')}</button>
         <div className="flex flex-col gap-2">
@@ -1409,6 +1395,9 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
           ))}
         </p>
         <p><strong>{t('tournament.col_type')}:</strong> {tournament.tournament_type}</p>
+        {tournament.scheduled_start_at && (
+          <p><strong>{t('label_scheduled_start_date', 'Planned Start')}:</strong> {formatDate(tournament.scheduled_start_at)}</p>
+        )}
         <p><strong>{t('tournament.mode', 'Tournament Mode')}:</strong> {getModeLabel(tournament.tournament_mode)}</p>
         <p><strong>{t('label_max_participants')}:</strong> {tournament.max_participants || t('unlimited')}</p>
         <p><strong>{t('label_created')}:</strong> {formatDate(tournament.created_at)}</p>
@@ -1897,7 +1886,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                     </span>
                                   )}
                                   {/* Substitute Player — organizer only, after tournament starts, team active, for accepted members */}
-                                  {isCreator && tournament?.status !== 'registration_open' && team.status === 'active' && member.participation_status === 'accepted' && (
+                                  {isCreator && ['registration_closed', 'prepared', 'in_progress'].includes(tournament?.status || '') && team.status === 'active' && member.participation_status === 'accepted' && (
                                     <button
                                       className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
                                       title="Replace this player with a substitute"
@@ -2105,7 +2094,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                         <div className="flex items-center gap-2">
                                           <strong>{match.is_team_mode ? match.player1_nickname : <PlayerLink nickname={match.player1_nickname} userId={match.player1_id} />}</strong>
                                         </div>
-                                        {match.is_team_mode === 1 && (
+                                        {Boolean(match.is_team_mode) && (
                                           <span className="text-xs text-gray-500">({getTeamMembersString(match.player1_id)})</span>
                                         )}
                                       </div>
@@ -2116,7 +2105,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                         <div className="flex items-center gap-2">
                                           <strong>{match.is_team_mode ? match.player2_nickname : <PlayerLink nickname={match.player2_nickname} userId={match.player2_id} />}</strong>
                                         </div>
-                                        {match.is_team_mode === 1 && (
+                                        {Boolean(match.is_team_mode) && (
                                           <span className="text-xs text-gray-500">({getTeamMembersString(match.player2_id)})</span>
                                         )}
                                       </div>
@@ -2208,7 +2197,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                             const isDueReplay = isPendingReplay && match.pending_replay_parse_status === 'due';
                            
                             // Extract replay data if pending
-                            let replayData = { winnerName: null, loserName: null, map: null, winnerFaction: null, loserFaction: null, winnerSide: null, winnerTeamName: null, loserTeamName: null, winnerTeamFactions: null, loserTeamFactions: null, wmlTeams: null, detectedTeams: null };
+                            let replayData: ReturnType<typeof parseReplaySummary> = { winnerName: null, loserName: null, map: null, winnerFaction: null, loserFaction: null, winnerSide: null, winnerTeamName: null, loserTeamName: null, winnerTeamFactions: null, loserTeamFactions: null, wmlTeams: null, detectedTeams: null };
                             if (isPendingReplay && match.pending_replay_summary) {
                               replayData = parseReplaySummary(match.pending_replay_summary);
                             }
@@ -2312,7 +2301,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                      <strong className={isDueReplay ? 'text-red-700' : isPendingReplay ? 'text-amber-600' : 'text-green-600'}>{match.is_team_mode ? winnerNickname : <PlayerLink nickname={winnerNickname || '-'} userId={winnerId} />}</strong>
                                      {!isPendingReplay && <StarDisplay rating={match.loser_rating} size="sm" />}
                                    </div>
-                                   {match.is_team_mode === 1 && (
+                                   {Boolean(match.is_team_mode) && (
                                      <span className="text-xs text-gray-500">({getTeamMembersString(winnerId)})</span>
                                    )}
                                    {!isPendingReplay && match.winner_comments && (
@@ -2328,7 +2317,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                      <strong className={isDueReplay ? 'text-red-700' : isPendingReplay ? 'text-amber-600' : 'text-red-600'}>{match.is_team_mode ? loserNickname : <PlayerLink nickname={loserNickname} userId={loserId} />}</strong>
                                      {!isPendingReplay && <StarDisplay rating={match.winner_rating} size="sm" />}
                                    </div>
-                                   {match.is_team_mode === 1 && (
+                                   {Boolean(match.is_team_mode) && (
                                      <span className="text-xs text-gray-500">({getTeamMembersString(loserId)})</span>
                                    )}
                                    {!isPendingReplay && match.loser_comments && (
@@ -2358,7 +2347,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                               {s1Team && (
                                                 <div className="flex flex-wrap gap-1 items-center">
                                                   <span className="inline-block px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-semibold">S1 ({s1Team.team_wml_name})</span>
-                                                  {s1Team.factions?.map((faction, idx) => (
+                                                  {s1Team.factions?.map((faction: string, idx: number) => (
                                                     <span key={idx} className="inline-block px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">{faction}</span>
                                                   ))}
                                                 </div>
@@ -2366,7 +2355,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                               {s2Team && (
                                                 <div className="flex flex-wrap gap-1 items-center">
                                                   <span className="inline-block px-1.5 py-0.5 bg-red-100 text-red-700 rounded font-semibold">S2 ({s2Team.team_wml_name})</span>
-                                                  {s2Team.factions?.map((faction, idx) => (
+                                                  {s2Team.factions?.map((faction: string, idx: number) => (
                                                     <span key={idx} className="inline-block px-1.5 py-0.5 bg-red-100 text-red-700 rounded">{faction}</span>
                                                   ))}
                                                 </div>
@@ -2695,7 +2684,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                 <div>
                                   <strong>{match.is_team_mode ? match.player1_nickname : <PlayerLink nickname={match.player1_nickname} userId={match.player1_id} />}</strong>
                                 </div>
-                                {match.is_team_mode === 1 && getTeamMembersString(match.player1_id) && (
+                                {Boolean(match.is_team_mode) && getTeamMembersString(match.player1_id) && (
                                   <span className="text-xs text-gray-500">({getTeamMembersString(match.player1_id)})</span>
                                 )}
                               </div>
@@ -2711,7 +2700,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                 <div>
                                   <strong>{match.is_team_mode ? match.player2_nickname : <PlayerLink nickname={match.player2_nickname} userId={match.player2_id} />}</strong>
                                 </div>
-                                {match.is_team_mode === 1 && getTeamMembersString(match.player2_id) && (
+                                {Boolean(match.is_team_mode) && getTeamMembersString(match.player2_id) && (
                                   <span className="text-xs text-gray-500">({getTeamMembersString(match.player2_id)})</span>
                                 )}
                               </div>
@@ -2726,14 +2715,14 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                 {match.winner_id === match.player1_id ? (
                                    <>
                                      <strong className="text-green-600">{match.is_team_mode ? match.player1_nickname : <PlayerLink nickname={match.player1_nickname} userId={match.player1_id} />}</strong>
-                                     {match.is_team_mode === 1 && getTeamMembersString(match.player1_id) && (
+                                     {Boolean(match.is_team_mode) && getTeamMembersString(match.player1_id) && (
                                        <span className="text-xs text-gray-500">({getTeamMembersString(match.player1_id)})</span>
                                      )}
                                    </>
                                  ) : match.winner_id === match.player2_id ? (
                                    <>
                                      <strong className="text-green-600">{match.is_team_mode ? match.player2_nickname : <PlayerLink nickname={match.player2_nickname} userId={match.player2_id} />}</strong>
-                                     {match.is_team_mode === 1 && getTeamMembersString(match.player2_id) && (
+                                     {Boolean(match.is_team_mode) && getTeamMembersString(match.player2_id) && (
                                        <span className="text-xs text-gray-500">({getTeamMembersString(match.player2_id)})</span>
                                      )}
                                    </>
@@ -3072,7 +3061,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
           onClose={handleCloseConfirmModal}
           onSubmit={handleConfirmSuccess}
           isTeamMode={confirmMatchData.is_team_mode}
-          currentUserTeamId={userTeamId}
+          currentUserTeamId={userTeamId || undefined}
         />
       )}
 
@@ -3238,7 +3227,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
             <div className="flex justify-end gap-3">
               <button
                 className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors"
-                onClick={() => setRenameTeamModal({ open: false, teamId: null, currentName: '' })}
+                onClick={() => setRenameTeamModal({ open: false, teamId: '', currentName: '' })}
               >
                 {t('cancel_btn') || 'Cancel'}
               </button>
@@ -3257,7 +3246,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
       {/* Schedule Proposal Modal */}
       <ScheduleProposalModal
         isOpen={scheduleProposalModal.isOpen}
-        tournamentId={scheduleProposalModal.tournamentId || id}
+        tournamentId={scheduleProposalModal.tournamentId || id!}
         roundMatchId={scheduleProposalModal.roundMatchId}
         matchId={scheduleProposalModal.matchId}
         initialParticipants={scheduleProposalModal.initialParticipants}
@@ -3271,7 +3260,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
           fetchTournamentData();
         }}
       />
-    </div>
+    </div></MainLayout>
   );
 };
 

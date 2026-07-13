@@ -453,7 +453,7 @@ const AdminWiki: React.FC = () => {
           editingArticle={editingArticle || undefined}
           onSave={handleSaveArticle}
           onCancel={() => setShowEditor(false)}
-          token={token}
+          token={token || undefined}
           userId={userId || ''}
         />
       </MainLayout>

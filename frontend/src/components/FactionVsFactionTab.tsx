@@ -198,11 +198,11 @@ const FactionVsFactionTab: React.FC<{ beforeData?: any[] | null; afterData?: any
   );
 
   useEffect(() => {
-    setBeforeStats(beforeData?.length > 0 ? comparisonToSideFactionRows(beforeData) : []);
+    setBeforeStats(beforeData && beforeData.length > 0 ? comparisonToSideFactionRows(beforeData) : []);
   }, [beforeData]);
 
   useEffect(() => {
-    setAfterStats(afterData?.length > 0 ? comparisonToSideFactionRows(afterData) : []);
+    setAfterStats(afterData && afterData.length > 0 ? comparisonToSideFactionRows(afterData) : []);
   }, [afterData]);
 
   const getImbalanceColor = (imb: number) =>

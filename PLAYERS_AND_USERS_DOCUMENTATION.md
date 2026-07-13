@@ -19,7 +19,7 @@ Authenticated pages use `MainLayout`, which renders `UserProfileNav` below the g
 | Area | Route | Responsibility |
 | --- | --- | --- |
 | My Profile | `/profile` | Edit account-facing preferences such as language, country, avatar, ranked-play preference, timezone, and availability. |
-| My Tournaments | `/my-tournaments` | View tournaments associated with the current user and create or manage tournaments according to the user's permissions. |
+| My Tournaments | `/my-tournaments` | Create tournaments and manage those where the current user is creator or co-organizer. See [TOURNAMENTS_DOCUMENTATION.md](TOURNAMENTS_DOCUMENTATION.md). |
 | My Notifications | `/notifications` | Review and manage persisted in-app notifications. |
 | Help | `/help` and `/help/:slug` | Browse the published help/wiki articles. |
 

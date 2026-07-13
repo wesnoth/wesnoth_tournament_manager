@@ -255,7 +255,7 @@ const EloChart: React.FC<EloChartProps> = ({ matches, currentPlayerId }) => {
                 padding: '8px',
               }}
               formatter={(value: number) => [`${value} ELO`, t('label_elo_rating') || 'Rating']}
-              labelFormatter={(_, payload: any[]) => payload?.[0]?.payload?.rangeLabel || ''}
+              labelFormatter={(_, payload: readonly any[]) => payload?.[0]?.payload?.rangeLabel || ''}
             />
             <Line
               type="monotone"

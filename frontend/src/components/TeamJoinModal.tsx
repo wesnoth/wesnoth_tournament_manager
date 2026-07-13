@@ -41,17 +41,13 @@ export const TeamJoinModal: React.FC<TeamJoinModalProps> = ({
   useEffect(() => {
     const fetchExistingTeams = async () => {
       try {
-        console.log('📥 Fetching teams for tournament:', tournamentId);
         const response = await api.get(`/public/tournaments/${tournamentId}/teams`);
-        console.log('✅ Teams response:', response);
         const teams = response.data?.data || [];
         // Filter teams that have only 1 member (have an available slot)
         // Note: API returns member_count in snake_case
         const availableTeams = teams.filter((team: any) => team.member_count === 1);
-        console.log('✅ Available teams (1 member):', availableTeams);
         setExistingTeams(availableTeams);
-      } catch (err: any) {
-        console.error('❌ Failed to fetch teams:', err?.response?.status, err?.response?.data || err.message);
+      } catch {
         // If fetch fails, just show create-only mode
         setExistingTeams([]);
       }
@@ -126,7 +122,7 @@ export const TeamJoinModal: React.FC<TeamJoinModalProps> = ({
 
     try {
       // Pass empty string if no teammate selected
-      onSubmit(teamName, teammateName || '');
+      onSubmit(teamName, joinMode === 'create' ? teammateName || '' : '');
     } catch (err: any) {
       setError(err.message || 'Failed to create team');
     }
@@ -147,14 +143,14 @@ export const TeamJoinModal: React.FC<TeamJoinModalProps> = ({
           <div className="flex gap-2 mb-6 border-b border-gray-200">
             <button
               className={`px-4 py-2 font-medium transition-colors ${joinMode === 'create' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900'}`}
-              onClick={() => { setJoinMode('create'); setError(null); setTeamName(''); setTeammateName(''); }}
+                onClick={() => { setJoinMode('create'); setError(null); setTeamName(''); setTeammateId(''); setTeammateName(''); }}
             >
               Create New Team
             </button>
             {existingTeams.length > 0 && (
               <button
                 className={`px-4 py-2 font-medium transition-colors ${joinMode === 'join' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900'}`}
-                onClick={() => { setJoinMode('join'); setError(null); setTeamName(''); setTeammateName(''); }}
+                onClick={() => { setJoinMode('join'); setError(null); setTeamName(''); setTeammateId(''); setTeammateName(''); }}
               >
                 Join Existing Team ({existingTeams.length})
               </button>
@@ -244,21 +240,6 @@ export const TeamJoinModal: React.FC<TeamJoinModalProps> = ({
                   <small className="text-gray-600">You will be added as Position 2</small>
                 </div>
 
-                {/* Optional: Invite a teammate */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Bring a Teammate <span className="text-gray-500 font-normal">(optional)</span></label>
-                  <OpponentSelector
-                    value={teammateId}
-                    onChange={handleTeammateChange}
-                    type="teammate"
-                  />
-                  <small className="text-gray-600">
-                    {teammateName.trim() 
-                      ? 'They will be added as Position 1 (pending confirmation)'
-                      : 'Optional - register alone or with a teammate'
-                    }
-                  </small>
-                </div>
               </>
             )}
           </div>

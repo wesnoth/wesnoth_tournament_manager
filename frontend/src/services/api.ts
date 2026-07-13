@@ -1,4 +1,5 @@
 import axios, { AxiosError } from 'axios';
+import type { TournamentCreatePayload, TournamentUpdatePayload } from '../types/tournament';
 
 // Determine API URL based on environment
 // In production/test: loaded from .env file (VITE_API_BASE_URL)
@@ -179,31 +180,28 @@ export const matchService = {
 };
 
 export const tournamentService = {
-  createTournament: (data: any) => api.post('/tournaments', data),
+  createTournament: (data: TournamentCreatePayload) => api.post('/tournaments', data),
   getRuleTemplates: () => api.get('/rule-templates'),
-  getTournament: (id: string) => api.get(`/tournaments/${id}`),
   getTournamentOrganizers: (id: string) => api.get(`/tournaments/${id}/organizers`),
   addTournamentOrganizer: (id: string, userId: string) =>
     api.post(`/tournaments/${id}/organizers`, { user_id: userId }),
   removeTournamentOrganizer: (id: string, organizerUserId: string) =>
     api.delete(`/tournaments/${id}/organizers/${organizerUserId}`),
-  updateTournament: (id: string, data: any) => api.put(`/tournaments/${id}`, data),
+  updateTournament: (id: string, data: TournamentUpdatePayload) => api.put(`/tournaments/${id}`, data),
+  updateTournamentAssets: (id: string, factionIds: string[], mapIds: string[]) =>
+    api.put(`/tournaments/${id}/assets`, { faction_ids: factionIds, map_ids: mapIds }),
   deleteTournament: (id: string) => api.delete(`/tournaments/${id}`),
   prepareTournament: (id: string) => api.post(`/tournaments/${id}/prepare`),
   startTournament: (id: string) => api.post(`/tournaments/${id}/start`),
   closeRegistration: (id: string, confirm?: boolean) => 
     api.post(`/tournaments/${id}/close-registration`, confirm ? { confirm: true } : {}),
-  getAllTournaments: () => api.get('/tournaments'),
   getMyTournaments: () => api.get('/tournaments/my'),
-  joinTournament: (id: string) => api.post(`/tournaments/${id}/join`),
   requestJoinTournament: (id: string, data?: { team_name?: string; teammate_name?: string }) => 
     api.post(`/tournaments/${id}/request-join`, data || {}),
   getTournamentRounds: (id: string) => api.get(`/tournaments/${id}/rounds`),
-  getTournamentRanking: (id: string) => api.get(`/tournaments/${id}/ranking`),
   getTournamentStandings: (id: string, roundId?: string) => 
     api.get(`/tournaments/${id}/standings`, { params: roundId ? { round_id: roundId } : {} }),
   calculateTournamentTiebreakers: (id: string) => api.post(`/tournaments/${id}/calculate-tiebreakers`, {}),
-  calculateLeagueTiebreakers: (leagueId: string) => api.post(`/leagues/${leagueId}/calculate-tiebreakers`, {}),
   getTournamentMatches: (id: string) => api.get(`/tournaments/${id}/matches`),
   getTournamentRoundMatches: (id: string) => api.get(`/tournaments/${id}/round-matches`),
   getRoundMatches: (tournamentId: string, roundId: string) => 

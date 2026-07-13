@@ -74,15 +74,17 @@ const PlayerProfile: React.FC = () => {
     setMatchDetailsModal(null);
   };
 
-  const handleDownloadReplay = async (matchId: string, replayFilePath: string) => {
+  const handleDownloadReplay = async (matchId: string | null, replayFilePath: string) => {
     try {
-      if (!matchId || !replayFilePath) return;
+      if (!replayFilePath) return;
       
       // Increment download count in the database
-      await matchService.incrementReplayDownloads(matchId);
+      if (matchId) {
+        await matchService.incrementReplayDownloads(matchId);
+      }
       
       // Extract filename from path
-      const filename = replayFilePath.split('/').pop() || `replay_${matchId}`;
+      const filename = replayFilePath.split('/').pop() || `replay_${matchId || 'match'}`;
       
       // Use the replay_file_path HTTPS URL directly
       const link = document.createElement('a');

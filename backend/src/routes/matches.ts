@@ -1755,28 +1755,13 @@ router.post('/report-confidence-1-replay', authMiddleware, async (req: AuthReque
         [primaryOpponentNickname]
       );
 
-      let otherPlayerId: string;
-
       if (otherPlayerResult.rows.length === 0) {
-        console.log(`⚠️  [CONFIDENCE-1] Player ${primaryOpponentNickname} not found in users_extension, creating with default elo=1400`);
-        
-        const newUserId = uuidv4();
-        try {
-          await query(
-            `INSERT INTO users_extension (id, nickname, is_active, is_rated, elo_rating, matches_played)
-             VALUES (?, ?, true, false, 1400, 0)`,
-            [newUserId, primaryOpponentNickname]
-          );
-          otherPlayerId = newUserId;
-          console.log(`✅ [CONFIDENCE-1] Created new player ${primaryOpponentNickname} with ID ${otherPlayerId}`);
-        } catch (createErr) {
-          console.error(`❌ [CONFIDENCE-1] Failed to create new player:`, createErr);
-          throw createErr;
-        }
-      } else {
-        otherPlayerId = otherPlayerResult.rows[0].id;
-        console.log(`✅ [CONFIDENCE-1] Found existing opponent: "${primaryOpponentNickname}" -> ${otherPlayerId}`);
+        return res.status(400).json({
+          error: `Player ${primaryOpponentNickname} must log in and create an application profile before the replay can be integrated`
+        });
       }
+
+      const otherPlayerId = otherPlayerResult.rows[0].id;
 
       winnerId = userId;
       loserId = otherPlayerId;

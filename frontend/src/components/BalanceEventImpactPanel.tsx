@@ -79,8 +79,8 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
 
   // Load impact data when event changes
   useEffect(() => {
-    if (selectedEvent?.id) {
-      loadEventImpact(selectedEvent.id);
+    if (selectedEvent) {
+      loadEventImpact(selectedEvent);
       onEventChange?.(selectedEvent.id);
     } else {
       onEventChange?.(null);
@@ -88,11 +88,11 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
     }
   }, [selectedEvent]);
 
-  const loadEventImpact = async (id: string) => {
+  const loadEventImpact = async (event: BalanceEvent) => {
     setLoading(true);
     setError('');
     try {
-      const data = await statisticsService.getEventImpact(id);
+      const data = await statisticsService.getEventImpact(event.id);
 
       const beforeAgg: AggregatedData[] = data.map((item: any) => {
         const gamesBefore   = typeof item.games_before   === 'string' ? parseInt(item.games_before)   : (item.games_before   || 0);
@@ -147,10 +147,10 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
       // non-overlapping match intervals: the event day belongs to Before and
       // the following day starts After.
       onIntervalChange?.(
-        selectedEvent.previous_event_date
-          ? `${formatDate(addDays(selectedEvent.previous_event_date))} – ${formatDate(selectedEvent.event_date)}`
+        event.previous_event_date
+          ? `${formatDate(addDays(event.previous_event_date))} – ${formatDate(event.event_date)}`
           : '—',
-        `${formatDate(addDays(selectedEvent.event_date))} – ${formatDate(selectedEvent.next_event_date || selectedEvent.snapshot_after_date)}`
+        `${formatDate(addDays(event.event_date))} – ${formatDate(event.next_event_date || event.snapshot_after_date)}`
       );
 
       // Notify parent component

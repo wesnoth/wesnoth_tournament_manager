@@ -87,7 +87,7 @@ Migrations run automatically on backend startup via `migrationRunner.ts`. Check 
 
 - User identity is sourced from `forum.phpbb3_users` (username, password hash, email).
 - On first successful login, a record is automatically created in `tournament.users_extension`.
-- Records are also auto-created when a valid ranked replay is processed (replay job or match report).
+- Replay processing never creates application users. Both players must have logged in previously; direct ranked replay integration additionally requires both to have enabled ranked matches in their profiles.
 - `users_extension` stores only app-specific data: ELO, level, role flags, brute-force protection fields, preferences.
 - Email and password management are entirely delegated to the Wesnoth forum.
 
@@ -195,7 +195,7 @@ Supplementary per-user data from the game server.
 
 Application-level user profile. One record per forum user who has interacted with the tournament system.
 
-> Records are auto-created on first successful login, or when a valid ranked replay is processed.
+> Records are created only on first successful application login. Replay processing requires existing profiles and does not register users.
 > Default: `is_active=1`, `is_blocked=0`.
 > Email and password management are **not** stored here — delegated entirely to the Wesnoth forum.
 
@@ -379,14 +379,15 @@ Tournament definitions.
 | `rules_template_id` | char(36) FK→tournament_rule_templates | Optional template reference used to bootstrap rules |
 | `rules_content` | longtext | Markdown snapshot of tournament rules; editable per tournament and decoupled from template updates |
 | `creator_id` | char(36) FK→users_extension | Organiser |
-| `status` | varchar(20) | `pending` / `registration_open` / `in_progress` / `completed` / `cancelled` |
+| `status` | varchar(20) | `registration_open` / `registration_closed` / `prepared` / `in_progress` / `finished` |
 | `approved_at` | datetime | When admin approved the tournament |
-| `started_at` | datetime | When tournament started |
+| `scheduled_start_at` | datetime | Informational planned start, editable until the tournament starts |
+| `started_at` | datetime | Actual start written by the Start lifecycle action |
 | `finished_at` | datetime | When tournament finished |
 | `registration_closed_at` | datetime | When registration was closed |
 | `prepared_at` | datetime | When brackets/groups were generated |
-| `tournament_type` | varchar(50) | `elimination` / `league` / `swiss` / `mixed` |
-| `tournament_mode` | varchar(20) | `ranked` / `unranked` / `1v1` / `2v2` |
+| `tournament_type` | varchar(50) | `elimination` / `league` / `swiss` / `swiss_elimination` |
+| `tournament_mode` | varchar(20) | `ranked` / `unranked` / `team` |
 | `max_participants` | int | Maximum number of participants (NULL = unlimited) |
 | `round_duration_days` | int | Days allocated per round |
 | `auto_advance_round` | tinyint(1) | Whether rounds advance automatically |
@@ -469,7 +470,7 @@ Rounds within a tournament.
 | `tournament_id` | char(36) FK→tournaments | |
 | `round_number` | int | Sequential round number |
 | `match_format` | varchar(10) | `bo1` / `bo3` / `bo5` |
-| `round_status` | varchar(20) | `pending` / `active` / `completed` |
+| `round_status` | varchar(20) | `pending` / `in_progress` / `completed` |
 | `round_type` | varchar(20) | `general` / `final` |
 | `round_classification` | varchar(50) | E.g., `quarterfinal`, `semifinal`, `final` |
 | `round_start_date` | datetime | |
@@ -584,7 +585,7 @@ Substitute players for 2v2 teams.
 
 ### `tournament_unranked_maps`
 
-Maps allowed in unranked tournaments (overrides the global ranked map list).
+Per-tournament map allow-list. Ranked tournaments may reference only active ranked maps; other modes may reference any active map.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -597,7 +598,7 @@ Maps allowed in unranked tournaments (overrides the global ranked map list).
 
 ### `tournament_unranked_factions`
 
-Factions allowed in unranked tournaments.
+Per-tournament faction allow-list. Ranked tournaments may reference only active ranked factions; other modes may reference any active faction.
 
 | Column | Type | Notes |
 |---|---|---|

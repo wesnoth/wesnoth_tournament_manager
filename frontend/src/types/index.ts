@@ -2,6 +2,7 @@ export interface User {
   id: string;
   nickname: string;
   language: 'en' | 'es' | 'zh' | 'de' | 'ru';
+  timezone?: string;
   discord_id?: string;
   elo_rating: number;
   level: string;

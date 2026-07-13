@@ -18,6 +18,7 @@ Administrators may cancel tournaments owned by other users, but only before a to
 
 ## Related documentation
 
-- [TOURNAMENT_SCHEDULING_DOCUMENTATION.md](TOURNAMENT_SCHEDULING_DOCUMENTATION.md): tournament lifecycle, scheduling, and round progression.
+- [TOURNAMENTS_DOCUMENTATION.md](TOURNAMENTS_DOCUMENTATION.md): tournament modes, formats, lifecycle, and round progression.
+- [TOURNAMENT_SCHEDULING_DOCUMENTATION.md](TOURNAMENT_SCHEDULING_DOCUMENTATION.md): participant match-time scheduling.
 - [API_ENDPOINTS.md](API_ENDPOINTS.md): endpoint routes and authorization levels.
 - [PLAYERS_AND_USERS_DOCUMENTATION.md](PLAYERS_AND_USERS_DOCUMENTATION.md): shared authenticated navigation and administrative entry points.
