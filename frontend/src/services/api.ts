@@ -257,7 +257,7 @@ export const adminService = {
   getSystemSettings: () => api.get('/admin/system-settings'),
   updateSystemSetting: (key: string, value: string) => api.put(`/admin/system-settings/${key}`, { setting_value: value }),
   
-  // News/Announcements
+  // News administration
   getNews: () => api.get('/admin/news'),
   createNews: (data: any) => api.post('/admin/news', data),
   updateNews: (id: string, data: any) => api.put(`/admin/news/${id}`, data),

@@ -28,7 +28,6 @@
   "admin.user_demoted": "Пользователь {{nickname}} удален из админов",
   "admin.user_promoted": "Пользователь {{nickname}} повышен до админа",
   "admin.user_unblocked": "Пользователь {{nickname}} успешно разблокирован",
-  "admin_announcements": "Управление объявлениями",
   "admin_approve": "Одобрить",
   "admin_balance_events": "Управление событиями баланса",
   "admin_block": "Заблокировать пользователя",
@@ -45,7 +44,12 @@
   "all": "Все",
   "all_accumulated": "Все (Накопленные)",
   "all_matches": "Все матчи",
-  "announcements": "Объявления",
+  "news_title": "Новости",
+  "news_see_all": "Посмотреть все новости",
+  "news_no_items": "Новостей нет",
+  "news_error_loading": "Ошибка загрузки новостей",
+  "news_by": "Автор: {{author}}",
+  "back_to_home": "На главную",
   "app_name": "Менеджер турниров Wesnoth",
   "auth.back_to_login": "Помните ваш пароль?",
   "auth.confirm_and_send": "Подтвердить и отправить письмо",
@@ -284,8 +288,7 @@
   "home": {
     "player_of_month": "Игрок месяца",
     "recent_players": "Недавние игроки",
-    "top_10_players": "Топ-10 игроков",
-    "no_announcements": "Нет объявлений"
+    "top_10_players": "Топ-10 игроков"
   },
   "hotfix": "Срочное исправление",
   "impact_analysis": "Статистика баланса с момента события",

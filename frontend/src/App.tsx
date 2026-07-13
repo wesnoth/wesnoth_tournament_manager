@@ -28,7 +28,7 @@ const MyTournaments = React.lazy(() => import('./pages/MyTournaments'));
 const Rankings = React.lazy(() => import('./pages/Rankings'));
 const Statistics = React.lazy(() => import('./pages/Statistics'));
 const Players = React.lazy(() => import('./pages/Players'));
-const AdminAnnouncements = React.lazy(() => import('./pages/AdminAnnouncements'));
+const AdminNews = React.lazy(() => import('./pages/AdminNews'));
 const AdminTournaments = React.lazy(() => import('./pages/AdminTournaments'));
 const AdminDisputes = React.lazy(() => import('./pages/AdminDisputes'));
 const AdminAudit = React.lazy(() => import('./pages/AdminAudit'));
@@ -38,6 +38,7 @@ const AdminBalanceEvents = React.lazy(() => import('./pages/AdminBalanceEvents')
 const Tournaments = React.lazy(() => import('./pages/Tournaments'));
 const TournamentDetail = React.lazy(() => import('./pages/TournamentDetail'));
 const Events = React.lazy(() => import('./pages/Events'));
+const News = React.lazy(() => import('./pages/News'));
 const Help = React.lazy(() => import('./pages/Help'));
 const AdminWiki = React.lazy(() => import('./pages/AdminWiki'));
 const AdminRuleTemplates = React.lazy(() => import('./pages/AdminRuleTemplates'));
@@ -115,10 +116,11 @@ const App: React.FC = () => {
               <Route path="/tournaments" element={<Tournaments />} />
               <Route path="/tournament/:id" element={<TournamentDetail />} />
               <Route path="/events" element={<Events />} />
+              <Route path="/news" element={<News />} />
               <Route path="/my-stats" element={<MyStats />} />
               <Route path="/my-tournaments" element={<MyTournaments />} />
               <Route path="/admin" element={<Admin />} />
-              <Route path="/admin/announcements" element={<AdminAnnouncements />} />
+              <Route path="/admin/news" element={<AdminNews />} />
               <Route path="/admin/faq" element={<Navigate to="/admin/wiki" replace />} />
               <Route path="/admin/tournaments" element={<AdminTournaments />} />
               <Route path="/admin/wiki" element={<AdminWiki />} />

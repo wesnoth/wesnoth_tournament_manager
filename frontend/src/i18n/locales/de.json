@@ -28,7 +28,6 @@
   "admin.user_demoted": "Benutzer {{nickname}} vom Admin entfernt",
   "admin.user_promoted": "Benutzer {{nickname}} zum Admin befördert",
   "admin.user_unblocked": "Benutzer {{nickname}} erfolgreich entsperrt",
-  "admin_announcements": "Ankündigungsverwaltung",
   "admin_approve": "Genehmigen",
   "admin_balance_events": "Balance-Events-Verwaltung",
   "admin_block": "Benutzer blockieren",
@@ -45,7 +44,12 @@
   "all": "Alle",
   "all_accumulated": "Alle (Kumulativ)",
   "all_matches": "Alle Spiele",
-  "announcements": "Ankündigungen",
+  "news_title": "Nachrichten",
+  "news_see_all": "Alle Nachrichten anzeigen",
+  "news_no_items": "Keine Nachrichten verfügbar",
+  "news_error_loading": "Fehler beim Laden der Nachrichten",
+  "news_by": "Von {{author}}",
+  "back_to_home": "Zurück zur Startseite",
   "app_name": "Wesnoth-Turniermanager",
   "auth.back_to_login": "Erinnern Sie sich an Ihr Passwort?",
   "auth.confirm_and_send": "Bestätigen und E-Mail senden",
@@ -284,8 +288,7 @@
   "home": {
     "player_of_month": "Spieler des Monats",
     "recent_players": "Neueste Spieler",
-    "top_10_players": "Top 10 Spieler",
-    "no_announcements": "Keine Ankündigungen"
+    "top_10_players": "Top 10 Spieler"
   },
   "hotfix": "Schnellbehebung",
   "impact_analysis": "Balance-Statistiken ab Ereignis",

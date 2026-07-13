@@ -28,7 +28,6 @@
   "admin.user_demoted": "Usuario {{nickname}} eliminado como admin",
   "admin.user_promoted": "Usuario {{nickname}} promovido a admin",
   "admin.user_unblocked": "Usuario {{nickname}} desbloqueado correctamente",
-  "admin_announcements": "Gestión de Anuncios",
   "admin_approve": "Aprobar",
   "admin_balance_events": "Gestión de Eventos de Balance",
   "admin_block": "Bloquear Usuario",
@@ -45,7 +44,12 @@
   "all": "Todos",
   "all_accumulated": "Todo (Acumulado)",
   "all_matches": "Todas las Partidas",
-  "announcements": "Anuncios",
+  "news_title": "Noticias",
+  "news_see_all": "Ver todas las noticias",
+  "news_no_items": "No hay noticias disponibles",
+  "news_error_loading": "Error al cargar las noticias",
+  "news_by": "Por {{author}}",
+  "back_to_home": "Volver al inicio",
   "app_name": "Gestor de Torneos Wesnoth",
   "auth.back_to_login": "¿Recuerdas tu contraseña?",
   "auth.confirm_and_send": "Confirmar y enviar email",
@@ -293,8 +297,7 @@
   "home": {
     "player_of_month": "Jugador del Mes",
     "recent_players": "Jugadores Recientes",
-    "top_10_players": "Top 10 Jugadores",
-    "no_announcements": "No hay anuncios"
+    "top_10_players": "Top 10 Jugadores"
   },
   "hotfix": "Hotfix",
   "impact_analysis": "Estadísticas de Balance desde Evento",

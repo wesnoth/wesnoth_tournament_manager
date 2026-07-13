@@ -106,15 +106,15 @@ export function processMultiLanguageItems(
  * const { i18n } = useTranslation();
  * const userLanguage = i18n.language; // 'en', 'es', 'zh', 'de', 'ru'
  * 
- * const rawAnnouncements = await publicService.getNews(); // all languages mixed
- * const localizedAnnouncements = processMultiLanguageItems(
- *   rawAnnouncements,
+ * const rawNews = await publicService.getNews(); // all languages mixed
+ * const localizedNews = processMultiLanguageItems(
+ *   rawNews,
  *   userLanguage
  * );
  * 
- * // Now each announcement is in the user's language (or EN if not available)
- * localizedAnnouncements.forEach(ann => {
- *   console.log(ann.title, ann.content, ann.language_code);
+ * // Now each news item is in the user's language (or EN if not available)
+ * localizedNews.forEach(newsItem => {
+ *   console.log(newsItem.title, newsItem.content, newsItem.language_code);
  * });
  */
 

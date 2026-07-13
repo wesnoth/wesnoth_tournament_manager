@@ -114,9 +114,9 @@ router.post('/users/:id/unlock', moderatorOrAdminMiddleware, async (req: AuthReq
 // User management endpoints
 // =============================
 
-// Create news (multi-language)
+// Create a multilingual news publication.
 // Body: { en: {title, content}, es: {title, content}, zh: {title, content}, de: {title, content}, ru: {title, content} }
-router.post('/news', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/news', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
   try {
     const languages = ['en', 'es', 'zh', 'de', 'ru'];
     
@@ -150,7 +150,7 @@ router.post('/news', authMiddleware, async (req: AuthRequest, res) => {
 
 // Update news (multi-language)
 // Body: { en: {title, content}, es: {title, content}, ... }
-router.put('/news/:id', authMiddleware, async (req: AuthRequest, res) => {
+router.put('/news/:id', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const languages = ['en', 'es', 'zh', 'de', 'ru'];
@@ -201,7 +201,7 @@ router.put('/news/:id', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 // Delete news (deletes all language versions)
-router.delete('/news/:id', authMiddleware, async (req: AuthRequest, res) => {
+router.delete('/news/:id', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     await query('DELETE FROM news WHERE id = ?', [id]);
@@ -212,8 +212,8 @@ router.delete('/news/:id', authMiddleware, async (req: AuthRequest, res) => {
   }
 });
 
-// Get all news/announcements
-router.get('/news', authMiddleware, async (req: AuthRequest, res) => {
+// Get all news publications for administration.
+router.get('/news', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
   try {
     const result = await query(
       `SELECT n.id, n.title, n.content, n.published_at, n.language_code, u.nickname as author 

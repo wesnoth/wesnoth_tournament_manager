@@ -4,13 +4,15 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { adminService } from '../services/api';
 import MainLayout from '../components/MainLayout';
+import MarkdownTranslationEditor from '../components/MarkdownTranslationEditor';
+import { renderWikiMarkdown } from '../utils/wikiMarkdown';
 
-const AdminAnnouncements: React.FC = () => {
+const AdminNews: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { isAuthenticated, isAdmin } = useAuthStore();
+  const { isAuthenticated, isAdmin, token } = useAuthStore();
   
-  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [newsItems, setNewsItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -41,14 +43,14 @@ const AdminAnnouncements: React.FC = () => {
       return;
     }
 
-    fetchAnnouncements();
+    fetchNews();
   }, [isAuthenticated, isAdmin, navigate]);
 
-  const fetchAnnouncements = async () => {
+  const fetchNews = async () => {
     try {
       setLoading(true);
       const res = await adminService.getNews();
-      // Group announcements by ID to get all language versions
+      // Group news rows by ID to get all language versions.
       const grouped: Record<string, any> = {};
       (res.data || []).forEach((item: any) => {
         if (!grouped[item.id]) {
@@ -56,11 +58,11 @@ const AdminAnnouncements: React.FC = () => {
         }
         grouped[item.id][item.language_code || 'en'] = item;
       });
-      setAnnouncements(Object.values(grouped));
+      setNewsItems(Object.values(grouped));
       setError('');
     } catch (err: any) {
-      console.error('Error fetching announcements:', err);
-      setError('Error loading announcements');
+      console.error('Error fetching news:', err);
+      setError('Error loading news');
     } finally {
       setLoading(false);
     }
@@ -90,46 +92,46 @@ const AdminAnnouncements: React.FC = () => {
     try {
       if (editingId) {
         await adminService.updateNews(editingId, formData);
-        setMessage('Announcement updated successfully');
+        setMessage('News item updated successfully');
       } else {
         await adminService.createNews(formData);
-        setMessage('Announcement created successfully');
+        setMessage('News item created successfully');
       }
 
       resetForm();
       setShowForm(false);
-      fetchAnnouncements();
+      fetchNews();
       setTimeout(() => setMessage(''), 3000);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to save announcement');
+      setError(err.response?.data?.error || 'Failed to save news item');
     }
   };
 
-  const handleEdit = (announcementGroup: any) => {
+  const handleEdit = (newsGroup: any) => {
     const newFormData = { ...formData };
     languages.forEach(lang => {
-      if (announcementGroup[lang]) {
+      if (newsGroup[lang]) {
         newFormData[lang as keyof typeof newFormData] = {
-          title: announcementGroup[lang].title,
-          content: announcementGroup[lang].content
+          title: newsGroup[lang].title,
+          content: newsGroup[lang].content
         };
       }
     });
     setFormData(newFormData);
-    setEditingId(announcementGroup.en?.id || announcementGroup[languages[0]]?.id);
+    setEditingId(newsGroup.en?.id || newsGroup[languages[0]]?.id);
     setActiveLanguageTab('en');
     setShowForm(true);
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this announcement (all languages)?')) {
+    if (window.confirm('Are you sure you want to delete this news item (all languages)?')) {
       try {
         await adminService.deleteNews(id);
-        setMessage('Announcement deleted successfully');
-        fetchAnnouncements();
+        setMessage('News item deleted successfully');
+        fetchNews();
         setTimeout(() => setMessage(''), 3000);
       } catch (err: any) {
-        setError('Failed to delete announcement');
+        setError('Failed to delete news item');
       }
     }
   };
@@ -141,21 +143,21 @@ const AdminAnnouncements: React.FC = () => {
   return (
     <MainLayout>
       <div className="max-w-6xl mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold text-gray-800 mb-6">Manage Announcements</h1>
+      <h1 className="text-3xl font-bold text-gray-800 mb-6">Manage News</h1>
 
       {error && <p className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</p>}
       {message && <p className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-4">{message}</p>}
 
       <section>
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-semibold text-gray-800">Announcements</h2>
+          <h2 className="text-2xl font-semibold text-gray-800">News</h2>
           <button onClick={() => {
             if (showForm) {
               resetForm();
             }
             setShowForm(!showForm);
           }} className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
-            {showForm ? 'Cancel' : 'New Announcement'}
+            {showForm ? 'Cancel' : 'New News Item'}
           </button>
         </div>
 
@@ -181,44 +183,42 @@ const AdminAnnouncements: React.FC = () => {
 
             {/* Language Content */}
             <div className="mb-6">
-              <input
-                type="text"
-                placeholder="Title"
-                value={formData[activeLanguageTab as keyof typeof formData].title}
-                onChange={(e) => setFormData({
+              <MarkdownTranslationEditor
+                translations={Object.fromEntries(
+                  languages.map((lang) => [lang, {
+                    title: formData[lang as keyof typeof formData].title,
+                    content_markdown: formData[lang as keyof typeof formData].content,
+                  }]),
+                )}
+                currentLanguage={activeLanguageTab as 'en' | 'es' | 'de' | 'ru' | 'zh'}
+                onLanguageChange={(language) => setActiveLanguageTab(language)}
+                onTitleChange={(title) => setFormData({
                   ...formData,
-                  [activeLanguageTab]: { ...formData[activeLanguageTab as keyof typeof formData], title: e.target.value }
+                  [activeLanguageTab]: { ...formData[activeLanguageTab as keyof typeof formData], title },
                 })}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 mb-4"
-              />
-              <textarea
-                placeholder="Content"
-                value={formData[activeLanguageTab as keyof typeof formData].content}
-                onChange={(e) => setFormData({
+                onContentChange={(content) => setFormData({
                   ...formData,
-                  [activeLanguageTab]: { ...formData[activeLanguageTab as keyof typeof formData], content: e.target.value }
+                  [activeLanguageTab]: { ...formData[activeLanguageTab as keyof typeof formData], content },
                 })}
-                rows={5}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                token={token}
+                showLanguageTabs={false}
               />
             </div>
 
             <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">
-              {editingId ? 'Update Announcement (All Languages)' : 'Create Announcement (All Languages)'}
+              {editingId ? 'Update News Item (All Languages)' : 'Create News Item (All Languages)'}
             </button>
           </form>
         )}
 
-        {announcements.length > 0 ? (
+        {newsItems.length > 0 ? (
           <div className="space-y-4">
-            {announcements.map((annGroup) => {
-              const firstLang = languages.find(lang => annGroup[lang]);
-              const id = firstLang ? annGroup[firstLang].id : '';
-              const title = firstLang ? annGroup[firstLang].title : 'N/A';
-              const publishedAt = firstLang ? annGroup[firstLang].published_at : '';
-              const author = firstLang ? annGroup[firstLang].author : '';
+            {newsItems.map((newsGroup) => {
+              const firstLang = languages.find(lang => newsGroup[lang]);
+              const id = firstLang ? newsGroup[firstLang].id : '';
+              const title = firstLang ? newsGroup[firstLang].title : 'N/A';
+              const publishedAt = firstLang ? newsGroup[firstLang].published_at : '';
+              const author = firstLang ? newsGroup[firstLang].author : '';
               
               return (
                 <div key={id} className="bg-white rounded-lg shadow-md p-4">
@@ -226,12 +226,12 @@ const AdminAnnouncements: React.FC = () => {
                     <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
                     <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-full">Multi-language</span>
                   </div>
-                  <p className="text-gray-700 mb-2">{annGroup[firstLang || 'en']?.content}</p>
+                  <div className="prose prose-sm max-w-none mb-2" dangerouslySetInnerHTML={{ __html: renderWikiMarkdown(newsGroup[firstLang || 'en']?.content || '').html }} />
                   {author && publishedAt && (
                     <small className="text-gray-600">By {author} on {new Date(publishedAt).toLocaleDateString()}</small>
                   )}
                   <div className="flex gap-2 mt-4">
-                    <button onClick={() => handleEdit(annGroup)} className="px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600">Edit</button>
+                    <button onClick={() => handleEdit(newsGroup)} className="px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600">Edit</button>
                     <button onClick={() => handleDelete(id)} className="px-3 py-1 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600">Delete</button>
                   </div>
                 </div>
@@ -239,7 +239,7 @@ const AdminAnnouncements: React.FC = () => {
             })}
           </div>
         ) : (
-          <p className="text-gray-600">No announcements yet</p>
+          <p className="text-gray-600">No news yet</p>
         )}
       </section>
       </div>
@@ -247,4 +247,4 @@ const AdminAnnouncements: React.FC = () => {
   );
 };
 
-export default AdminAnnouncements;
+export default AdminNews;

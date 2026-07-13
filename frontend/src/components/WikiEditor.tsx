@@ -4,7 +4,8 @@
  * Supports: EN | ES | DE | RU | ZH with copy-from-English feature
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
+import MarkdownTranslationEditor from './MarkdownTranslationEditor';
 import { renderWikiMarkdown } from '../utils/wikiMarkdown';
 
 type Language = 'en' | 'es' | 'de' | 'ru' | 'zh';
@@ -47,14 +48,6 @@ interface WikiArticle {
   updated_at: string;
 }
 
-const AVAILABLE_LANGUAGES: { code: Language; label: string }[] = [
-  { code: 'en', label: 'English' },
-  { code: 'es', label: 'Español' },
-  { code: 'de', label: 'Deutsch' },
-  { code: 'ru', label: 'Русский' },
-  { code: 'zh', label: '中文' }
-];
-
 const WikiEditor: React.FC<WikiEditorProps> = ({
   editingArticle,
   onSave,
@@ -77,9 +70,6 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
   const [isPublished, setIsPublished] = useState(editingArticle?.is_published ?? true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const currentTranslation = translations[currentLanguage] || { title: '', content_markdown: '' };
 
@@ -107,64 +97,6 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
         content_markdown: enTranslation.content_markdown || ''
       }
     }));
-  };
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploadingImage(true);
-    setError(null);
-
-    try {
-      const formData = new FormData();
-      formData.append('image', file);
-
-      const response = await fetch('/api/admin/wiki/upload-image', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Upload failed');
-      }
-
-      const { url } = await response.json();
-
-      // Insert markdown image syntax at cursor position
-      if (textareaRef.current) {
-        const textarea = textareaRef.current;
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        const currentContent = currentTranslation.content_markdown || '';
-        const newContent =
-          currentContent.substring(0, start) +
-          `![alt-text](${url})` +
-          currentContent.substring(end);
-
-        updateCurrentTranslation('content_markdown', newContent);
-
-        // Restore cursor position
-        setTimeout(() => {
-          textarea.focus();
-          textarea.selectionStart = start + `![alt-text](${url})`.length;
-          textarea.selectionEnd = start + `![alt-text](${url})`.length;
-        }, 0);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Image upload failed';
-      setError(msg);
-    } finally {
-      setUploadingImage(false);
-      // Reset input so same file can be uploaded again
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    }
   };
 
   const handleSave = async () => {
@@ -198,16 +130,6 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const renderMarkdownPreview = (markdown: string) => {
-    const { html } = renderWikiMarkdown(markdown);
-    return <div dangerouslySetInnerHTML={{ __html: html }} className="prose prose-sm max-w-none" />;
-  };
-
-  const hasTranslation = (lang: Language) => {
-    const trans = translations[lang];
-    return trans && trans.title && trans.content_markdown;
   };
 
   return (
@@ -252,83 +174,16 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
           </div>
         </div>
 
-        {/* Language Tabs */}
-        <div className="mb-4">
-          <div className="flex gap-2 border-b border-gray-200">
-            {AVAILABLE_LANGUAGES.map(({ code, label }) => (
-              <button
-                key={code}
-                onClick={() => setCurrentLanguage(code)}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                  currentLanguage === code
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {label}
-                {hasTranslation(code) && <span className="ml-1 text-green-600">✓</span>}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Translation Fields */}
-        <div className="space-y-4 mb-6 pb-6 border-b border-gray-200">
-          {/* Copy from English Button (for non-EN languages) */}
-          {currentLanguage !== 'en' && (
-            <button
-              onClick={copyFromEnglish}
-              className="w-full px-3 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-sm font-medium border border-blue-200"
-            >
-              📋 Copy Title & Content from English
-            </button>
-          )}
-
-          {/* Title */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Title ({currentLanguage.toUpperCase()})
-            </label>
-            <input
-              type="text"
-              value={currentTranslation.title || ''}
-              onChange={(e) => updateCurrentTranslation('title', e.target.value)}
-              placeholder={`Article title in ${AVAILABLE_LANGUAGES.find(l => l.code === currentLanguage)?.label}`}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-            />
-          </div>
-        </div>
-
-        {/* Content Area */}
-        <div className="flex-1 flex flex-col">
-          <div className="flex justify-between items-center mb-2">
-            <label className="text-sm font-medium text-gray-700">Content (Markdown)</label>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadingImage || isSaving}
-              className="text-xs px-3 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {uploadingImage ? 'Uploading...' : '📷 Insert Image'}
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleImageUpload}
-              className="hidden"
-            />
-          </div>
-          <textarea
-            ref={textareaRef}
-            value={currentTranslation.content_markdown || ''}
-            onChange={(e) => updateCurrentTranslation('content_markdown', e.target.value)}
-            placeholder={`Write markdown here (${AVAILABLE_LANGUAGES.find(l => l.code === currentLanguage)?.label})...`}
-            className="flex-1 p-3 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-primary focus:border-transparent resize-vertical min-h-[400px]"
-          />
-          <p className="text-xs text-gray-500 mt-2">
-            Supports: **bold**, *italic*, `code`, # headers, - lists, [links](/help/article), ![images](/api/public/wiki/images/file.jpg)
-          </p>
-        </div>
+        <MarkdownTranslationEditor
+          translations={translations}
+          currentLanguage={currentLanguage}
+          onLanguageChange={setCurrentLanguage}
+          onTitleChange={(value) => updateCurrentTranslation('title', value)}
+          onContentChange={(value) => updateCurrentTranslation('content_markdown', value)}
+          onCopyFromEnglish={copyFromEnglish}
+          token={token}
+          showPreview={false}
+        />
 
         {/* Actions */}
         <div className="flex gap-3 mt-4 pt-4 border-t border-gray-200">
@@ -359,7 +214,7 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
         </div>
         <div className="flex-1 overflow-y-auto">
           {(currentTranslation.content_markdown || '').trim() ? (
-            renderMarkdownPreview(currentTranslation.content_markdown || '')
+            <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: renderWikiMarkdown(currentTranslation.content_markdown || '').html }} />
           ) : (
             <div className="text-center py-12">
               <p className="text-gray-500">Start writing to see preview here</p>

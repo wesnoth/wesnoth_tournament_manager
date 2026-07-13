@@ -134,6 +134,9 @@ Actions:
 - The navbar keeps `/faq` as a stable entry point and redirects to the published Wiki article with slug `faq`.
 - The article is rendered by `pages/Help.tsx` and managed from `/admin/wiki`.
 
+### News (`/news`) — `pages/News.tsx`
+- `publicService.getNews()` → `GET /api/public/news` — all publication language rows; the frontend applies language fallback.
+
 ### Login (`/login`) — `pages/Login.tsx`
 - `authService.login(nickname, password)` → `POST /api/auth/login`.
 - "Forgot password" link → `https://forum.wesnoth.org/ucp.php?mode=sendpassword` (external, no backend call).
@@ -158,7 +161,7 @@ All admin routes require `is_admin = 1` in `users_extension`.
 - `adminService.getMaintenanceStatus()` → `GET /api/admin/maintenance-status`.
 - `adminService.toggleMaintenance(enable, reason)` → `POST /api/admin/toggle-maintenance`.
 
-### `/admin/announcements` — `pages/AdminAnnouncements.tsx`
+### `/admin/news` — `pages/AdminNews.tsx`
 - `adminService.getNews()` → `GET /api/admin/news`.
 - `adminService.createNews(data)` → `POST /api/admin/news`.
 - `adminService.updateNews(id, data)` → `PUT /api/admin/news/:id`.

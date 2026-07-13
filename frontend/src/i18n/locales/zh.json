@@ -28,7 +28,6 @@
   "admin.user_demoted": "用户 {{nickname}} 已从管理员移除",
   "admin.user_promoted": "用户 {{nickname}} 已提升为管理员",
   "admin.user_unblocked": "用户 {{nickname}} 已成功解封",
-  "admin_announcements": "公告管理",
   "admin_approve": "批准",
   "admin_balance_events": "平衡事件管理",
   "admin_block": "阻止用户",
@@ -45,7 +44,12 @@
   "all": "全部",
   "all_accumulated": "全部（累计）",
   "all_matches": "所有比赛",
-  "announcements": "公告",
+  "news_title": "新闻",
+  "news_see_all": "查看所有新闻",
+  "news_no_items": "暂无新闻",
+  "news_error_loading": "加载新闻时出错",
+  "news_by": "作者：{{author}}",
+  "back_to_home": "返回首页",
   "app_name": "Wesnoth锦标赛管理器",
   "auth.back_to_login": "记得你的密码吗？",
   "auth.confirm_and_send": "确认并发送邮件",
@@ -284,8 +288,7 @@
   "home": {
     "player_of_month": "本月玩家",
     "recent_players": "近期玩家",
-    "top_10_players": "前10名玩家",
-    "no_announcements": "暂无公告"
+    "top_10_players": "前10名玩家"
   },
   "hotfix": "热修复",
   "impact_analysis": "从事件开始的平衡统计",

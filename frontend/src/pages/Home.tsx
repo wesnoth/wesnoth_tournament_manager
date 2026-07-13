@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import { userService, matchService, publicService } from '../services/api';
 import { processMultiLanguageItems } from '../utils/languageFallback';
 import { getLevelTranslationKey } from '../utils/levelTranslation';
 import PlayerLink from '../components/PlayerLink';
 import GlobalStats from '../components/GlobalStats';
+import { renderWikiMarkdown } from '../utils/wikiMarkdown';
 
 // Get API URL for direct backend calls
 // Determine API URL based on frontend hostname and Vite environment variables
@@ -54,7 +56,7 @@ const Home: React.FC = () => {
   const [recentPlayers, setRecentPlayers] = useState<any[]>([]);
   const [playerOfMonth, setPlayerOfMonth] = useState<any>(null);
   const [playerMonthlyStats, setPlayerMonthlyStats] = useState<any>(null);
-  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [newsItems, setNewsItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const fetchInProgressRef = useRef(false);
@@ -219,10 +221,10 @@ const Home: React.FC = () => {
           }
         }
 
-        // Fetch announcements
+        // Fetch recent news for the Home summary.
         if (cachedNews) {
           const localizedNews = processMultiLanguageItems(cachedNews, i18n.language);
-          setAnnouncements(localizedNews.slice(0, 5));
+          setNewsItems(localizedNews.slice(0, 5));
         } else {
           try {
             const newsRes = await publicService.getNews();
@@ -230,9 +232,9 @@ const Home: React.FC = () => {
             setCachedData('news', rawNews);
             // Process with language fallback: use user's language, fallback to EN
             const localizedNews = processMultiLanguageItems(rawNews, i18n.language);
-            setAnnouncements(localizedNews.slice(0, 5));
+            setNewsItems(localizedNews.slice(0, 5));
           } catch (err) {
-            console.error('Error fetching announcements:', err);
+            console.error('Error fetching news:', err);
           }
         }
       } catch (error) {
@@ -446,21 +448,26 @@ const Home: React.FC = () => {
             )}
           </section>
 
-          {/* Announcements */}
+          {/* News */}
           <section className="bg-white rounded-xl shadow-lg p-8">
-            <h2>{t('announcements')}</h2>
-            {announcements.length > 0 ? (
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <h2>{t('news_title', 'News')}</h2>
+              <Link to="/news" className="text-blue-700 font-semibold hover:underline">
+                {t('news_see_all', 'See all news')}
+              </Link>
+            </div>
+            {newsItems.length > 0 ? (
               <div className="flex flex-col gap-4">
-                {announcements.map((announcement) => (
-                  <div key={announcement.id} className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
-                    <h3>{announcement.title}</h3>
-                    <p dangerouslySetInnerHTML={{ __html: announcement.content.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>') }} />
-                    <small>By {announcement.author} - {new Date(announcement.published_at || announcement.created_at).toLocaleDateString()}</small>
+                {newsItems.map((newsItem) => (
+                  <div key={newsItem.id} className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+                    <h3>{newsItem.title}</h3>
+                    <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: renderWikiMarkdown(newsItem.content || '').html }} />
+                    <small>By {newsItem.author} - {new Date(newsItem.published_at || newsItem.created_at).toLocaleDateString(i18n.language)}</small>
                   </div>
                 ))}
               </div>
             ) : (
-              <p>{t('home.no_announcements')}</p>
+              <p>{t('news_no_items', 'No news available')}</p>
             )}
           </section>
         </div>

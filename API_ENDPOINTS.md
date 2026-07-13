@@ -27,7 +27,7 @@
 - `[GET] /api/public/tournaments/:id/unranked-assets` — Public — Unranked maps/factions for a tournament.
 - `[GET] /api/public/tournaments/:id/teams` — Public — Teams in a team tournament.
 - `[GET] /api/public/tournaments/:tournamentId/pending-replays` — Public — Confidence=1 replays matched to open tournament matches.
-- `[GET] /api/public/news` — Public — none — All news/announcements (all languages).
+- `[GET] /api/public/news` — Public — none — All published News items (all languages).
 - `[GET] /api/public/matches/recent` — Public — none — Recent confirmed matches.
 - `[GET] /api/public/players` — Public — query: `page, nickname, min_elo, max_elo, min_matches, rated_only` — Player directory.
 - `[GET] /api/public/matches` — Public — query: `page, player, map, status, confirmed, faction` — All matches.

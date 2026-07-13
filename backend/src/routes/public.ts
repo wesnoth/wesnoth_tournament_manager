@@ -430,16 +430,16 @@ router.get('/tournaments/:id/matches', async (req, res) => {
   }
 });
 
-// Get announcements/news (public endpoint)
+// Get all published news publications.
 router.get('/news', async (req, res) => {
   try {
     const result = await query(
       `SELECT n.id, n.title, n.content, n.translations, n.published_at, n.created_at, u.nickname as author 
        FROM news n
        LEFT JOIN users_extension u ON n.author_id = u.id
-       ORDER BY COALESCE(n.published_at, n.created_at) DESC`
+       WHERE n.published_at IS NOT NULL
+       ORDER BY n.published_at DESC, n.id ASC`
     );
-    console.log('News query result:', result.rows.length, 'rows found');
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching news:', error);
