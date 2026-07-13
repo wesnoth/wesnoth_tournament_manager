@@ -38,7 +38,7 @@ Role-specific navigation is additive:
 
 - **Regular authenticated users** see the common profile, tournament, notification, and help destinations.
 - **Tournament moderators** see the moderator subset for user management, disputes, audit logs, and replay administration.
-- **Administrators** see the full administrative navigation, including tournament management, announcements, FAQ, wiki, maps and factions, disputes, audit logs, replays, and balance events.
+- **Administrators** see the full administrative navigation, including Manage Users, tournament management, News, Wiki, maps and factions, disputes, audit logs, replays, and balance events.
 
 The UI visibility is not the authorization boundary. Protected routes and backend endpoints must continue to validate authentication and role permissions independently. A user may have both administrator and tournament-moderator flags; administrator navigation takes precedence over the moderator-only subset.
 
@@ -46,6 +46,7 @@ The UI visibility is not the authorization boundary. Protected routes and backen
 
 - [NOTIFICATIONS_DOCUMENTATION.md](NOTIFICATIONS_DOCUMENTATION.md): notification persistence, delivery, UI, and retention.
 - [PROFILE_DOCUMENTATION.md](PROFILE_DOCUMENTATION.md): authenticated profile-management settings and persistence policy.
+- [ADMIN_USERS_DOCUMENTATION.md](ADMIN_USERS_DOCUMENTATION.md): Manage Users responsibilities, role boundaries, and operational actions.
 - [WIKI_DOCUMENTATION.md](WIKI_DOCUMENTATION.md): public Help/wiki rendering and administrative article management.
 - [P2P_CHALLENGES_DOCUMENTATION.md](P2P_CHALLENGES_DOCUMENTATION.md): player-to-player challenge scheduling.
 - [NAV_INDEX_EN.md](NAV_INDEX_EN.md): navigation-oriented page and API index.

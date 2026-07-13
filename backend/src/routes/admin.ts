@@ -18,15 +18,11 @@ const router = Router();
 // Reserved team ID for replaced/inactive players
 const REPLACED_PLAYERS_TEAM_ID = '00000000-0000-0000-0000-000000000001';
 
-// Get all users
-router.get('/users/all', authMiddleware, async (req: AuthRequest, res) => {
+// List users for the shared Manage Users page. Moderators need read access so
+// they can act on eligible accounts, while mutation endpoints enforce their
+// narrower permissions independently.
+router.get('/users/all', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
   try {
-    // Check if user is admin
-    const userResult = await query('SELECT is_admin FROM users_extension WHERE id = ?', [req.userId]);
-    if (userResult.rows.length === 0 || !userResult.rows[0].is_admin) {
-      return res.status(403).json({ error: 'Only admins can access this resource' });
-    }
-
     const result = await query(
       `SELECT id, nickname, language, discord_id, is_admin, is_active, is_blocked, is_rated, elo_rating, enable_ranked, matches_played, total_wins, total_losses, created_at, updated_at
        FROM users_extension 
@@ -64,8 +60,7 @@ router.get('/users/all', authMiddleware, async (req: AuthRequest, res) => {
   }
 });
 
-// Block user (canonical endpoint)
-
+// Unlock a user account and clear both lockout state and the blocked flag.
 router.post('/users/:id/unlock', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
@@ -254,7 +249,7 @@ router.post('/users/:id/block', moderatorOrAdminMiddleware, async (req: AuthRequ
 });
 
 // Make user admin
-router.post('/users/:id/make-admin', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/users/:id/make-admin', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     await query(`UPDATE users_extension SET is_admin = 1 WHERE id = ?`, [id]);
@@ -271,7 +266,7 @@ router.post('/users/:id/make-admin', authMiddleware, async (req: AuthRequest, re
 });
 
 // Remove admin
-router.post('/users/:id/remove-admin', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/users/:id/remove-admin', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     await query(`UPDATE users_extension SET is_admin = 0 WHERE id = ?`, [id]);
@@ -288,7 +283,7 @@ router.post('/users/:id/remove-admin', authMiddleware, async (req: AuthRequest, 
 });
 
 // Delete user
-router.delete('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
+router.delete('/users/:id', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     await query('DELETE FROM users_extension WHERE id = ?', [id]);

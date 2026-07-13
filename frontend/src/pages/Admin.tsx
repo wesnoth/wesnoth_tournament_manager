@@ -2,25 +2,37 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { userService, adminService } from '../services/api';
+import { adminService } from '../services/api';
 import MainLayout from '../components/MainLayout';
+
+interface ManagedUser {
+  id: string;
+  nickname: string;
+  elo_rating?: number;
+  level?: string;
+  is_blocked?: boolean;
+  is_active?: boolean;
+  is_admin?: boolean;
+  is_moderator?: boolean;
+  enable_ranked?: boolean;
+}
 
 const AdminUsers: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { isAuthenticated, isAdmin, isTournamentModerator } = useAuthStore();
   
-  const [users, setUsers] = useState<any[]>([]);
-  const [filteredUsers, setFilteredUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [selectedUser, setSelectedUser] = useState<ManagedUser | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [actionType, setActionType] = useState('');
   const [searchNIC, setSearchNIC] = useState('');
   const [recalculatingStats, setRecalculatingStats] = useState(false);
-  const [userStatusFilter, setUserStatusFilter] = useState('all'); // 'all', 'active', 'blocked'
+  const [userStatusFilter, setUserStatusFilter] = useState('all');
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [maintenanceReason, setMaintenanceReason] = useState('');
   const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
@@ -44,7 +56,7 @@ const AdminUsers: React.FC = () => {
     try {
       setLoading(true);
       const res = await adminService.getAllUsers();
-      const usersData = res.data || [];
+      const usersData: ManagedUser[] = res.data || [];
       setUsers(usersData);
       applyFilters(searchNIC, userStatusFilter, usersData);
       setError('');
@@ -58,23 +70,23 @@ const AdminUsers: React.FC = () => {
     }
   };
 
-  const applyFilters = (nicValue: string, statusValue: string, usersData?: any[]) => {
+  const applyFilters = (nicValue: string, statusValue: string, usersData?: ManagedUser[]) => {
     const data = usersData || users;
     let filtered = data;
 
     // Filter by nickname
     if (nicValue.trim() !== '') {
       const lowerSearch = nicValue.toLowerCase();
-      filtered = filtered.filter((user: any) => user.nickname.toLowerCase().includes(lowerSearch));
+      filtered = filtered.filter((user) => user.nickname.toLowerCase().includes(lowerSearch));
     }
 
     // Filter by status
     if (statusValue === 'blocked') {
-      filtered = filtered.filter((user: any) => !!user.is_blocked);
+      filtered = filtered.filter((user) => !!user.is_blocked);
     } else if (statusValue === 'active') {
-      filtered = filtered.filter((user: any) => !user.is_blocked && !!user.is_active);
+      filtered = filtered.filter((user) => !user.is_blocked && !!user.is_active);
     } else if (statusValue === 'inactive') {
-      filtered = filtered.filter((user: any) => !user.is_blocked && !user.is_active);
+      filtered = filtered.filter((user) => !user.is_blocked && !user.is_active);
     }
 
     setFilteredUsers(filtered);
@@ -112,14 +124,20 @@ const AdminUsers: React.FC = () => {
     }
   };
 
-  const handleSearchNIC = (value: string) => {
-    setSearchNIC(value);
-    applyFilters(value, userStatusFilter);
-  };
-
   const handleStatusFilterChange = (status: string) => {
     setUserStatusFilter(status);
     applyFilters(searchNIC, status);
+  };
+
+  const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      applyFilters(searchNIC, userStatusFilter);
+    }
+  };
+
+  const handleRefresh = () => {
+    applyFilters(searchNIC, userStatusFilter);
+    fetchUsers();
   };
 
   const handlePageChange = (newPage: number) => {
@@ -172,16 +190,14 @@ const AdminUsers: React.FC = () => {
     }
   };
 
-  const handleAction = (user: any, action: string) => {
+  const handleAction = (user: ManagedUser, action: string) => {
     setSelectedUser(user);
     setActionType(action);
     setShowModal(true);
   };
 
-  const handleConfirmDelete = (user: any) => {
-    if (window.confirm(t('admin.confirm_delete_warning'))) {
-      handleAction(user, 'delete');
-    }
+  const handleConfirmDelete = (user: ManagedUser) => {
+    handleAction(user, 'delete');
   };
 
   const handleRecalculateAllStats = async () => {
@@ -268,7 +284,8 @@ const AdminUsers: React.FC = () => {
               type="text"
               placeholder={t('admin.search_by_nic')}
               value={searchNIC}
-              onChange={(e) => handleSearchNIC(e.target.value)}
+              onChange={(e) => setSearchNIC(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
               className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
             />
             <select 
@@ -278,9 +295,16 @@ const AdminUsers: React.FC = () => {
             >
               <option value="all">{t('admin.filter_all_users', 'All Users')}</option>
               <option value="active">{t('admin.filter_active', 'Active')}</option>
-              <option value="inactive">Inactive</option>
+              <option value="inactive">{t('status_inactive')}</option>
               <option value="blocked">{t('admin.filter_blocked', 'Blocked')}</option>
             </select>
+            <button
+              type="button"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              onClick={handleRefresh}
+            >
+              {t('common.refresh')}
+            </button>
           </div>
           <span className="text-sm text-gray-600">
             {t('showing_count', { count: filteredUsers.slice((currentPage - 1) * pageSize, currentPage * pageSize).length, total: filteredUsers.length, page: currentPage, totalPages: Math.ceil(filteredUsers.length / pageSize) })}
@@ -362,7 +386,7 @@ const AdminUsers: React.FC = () => {
                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
                       user.is_blocked ? 'bg-red-100 text-red-800' : user.is_active ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
                     }`}>
-                      {user.is_blocked ? t('status_blocked') : user.is_active ? t('status_active') : 'Inactive'}
+                      {user.is_blocked ? t('status_blocked') : user.is_active ? t('status_active') : t('status_inactive')}
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -371,7 +395,7 @@ const AdminUsers: React.FC = () => {
                       user.is_moderator ? 'bg-blue-100 text-blue-800' :
                       'bg-gray-100 text-gray-800'
                     }`}>
-                      {user.is_admin ? t('role_admin') : user.is_moderator ? 'Moderator' : t('role_user')}
+                      {user.is_admin ? t('role_admin') : user.is_moderator ? t('role_moderator', 'Moderator') : t('role_user')}
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -486,11 +510,15 @@ const AdminUsers: React.FC = () => {
               {actionType === 'delete' && t('admin.confirm_delete_title')}
               {actionType === 'block' && t('admin.confirm_block_title')}
               {actionType === 'unblock' && t('admin.confirm_unblock_title', 'Unblock User')}
+              {actionType === 'makeAdmin' && t('admin.confirm_action_title')}
+              {actionType === 'removeAdmin' && t('admin.confirm_action_title')}
             </h3>
             <p className="text-gray-700 mb-6">
               {actionType === 'delete' && t('admin.confirm_delete', { nickname: selectedUser.nickname })}
               {actionType === 'block' && t('admin.confirm_block', { nickname: selectedUser.nickname })}
-              {actionType === 'unblock' && `Are you sure you want to unblock ${selectedUser.nickname}?`}
+              {actionType === 'unblock' && t('admin.confirm_unblock', { nickname: selectedUser.nickname })}
+              {actionType === 'makeAdmin' && t('admin.confirm_make_admin', { nickname: selectedUser.nickname })}
+              {actionType === 'removeAdmin' && t('admin.confirm_remove_admin', { nickname: selectedUser.nickname })}
             </p>
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
               <button className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600" onClick={() => setShowModal(false)}>

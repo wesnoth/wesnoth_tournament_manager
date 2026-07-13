@@ -205,10 +205,9 @@
 > **Note on access levels**: Some admin routes are accessible to `tournament_moderator` users (members of phpBB group `FORUM_MODERATOR_GROUP_ID`). These are marked *(admin + moderator)*. All other admin routes require site admin (`is_admin = 1`).
 
 ### User Management
-- `[GET] /api/admin/users` — Private (admin) — List all users with full profile.
+- `[GET] /api/admin/users/all` — Private (admin + moderator) — List users with management status and public player fields.
 - `[POST] /api/admin/users/:id/block` — Private (admin + moderator) — Block user (`is_blocked = 1`). Moderators cannot block admin users.
-- `[POST] /api/admin/users/:id/unblock` — Private (admin + moderator) — Unblock user (`is_blocked = 0`).
-- `[POST] /api/admin/users/:id/unlock` — Private (admin) — Reset failed login attempts and unblock user. Sends Discord notification if configured.
+- `[POST] /api/admin/users/:id/unlock` — Private (admin + moderator) — Reset failed login attempts and unblock user.
 - `[POST] /api/admin/users/:id/make-admin` — Private (admin) — Grant site admin role (`is_admin = 1`).
 - `[POST] /api/admin/users/:id/remove-admin` — Private (admin) — Revoke site admin role.
 - `[DELETE] /api/admin/users/:id` — Private (admin) — Delete user account from `users_extension`.
