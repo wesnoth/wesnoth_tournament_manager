@@ -402,14 +402,14 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     // Add allowed factions and maps for all tournament modes (ranked, unranked, team)
     for (const factionId of factionIds) {
       await query(
-        `INSERT INTO tournament_unranked_factions (tournament_id, faction_id) VALUES (?, ?)`,
-        [tournamentId, factionId]
+        `INSERT INTO tournament_unranked_factions (id, tournament_id, faction_id) VALUES (?, ?, ?)`,
+        [randomUUID(), tournamentId, factionId]
       );
     }
     for (const mapId of mapIds) {
       await query(
-        `INSERT INTO tournament_unranked_maps (tournament_id, map_id) VALUES (?, ?)`,
-        [tournamentId, mapId]
+        `INSERT INTO tournament_unranked_maps (id, tournament_id, map_id) VALUES (?, ?, ?)`,
+        [randomUUID(), tournamentId, mapId]
       );
     }
 
@@ -968,14 +968,14 @@ router.put('/:id/assets', authMiddleware, async (req: AuthRequest, res) => {
       await connection.execute('DELETE FROM tournament_unranked_maps WHERE tournament_id = ?', [id]);
       for (const factionId of uniqueFactionIds) {
         await connection.execute(
-          'INSERT INTO tournament_unranked_factions (tournament_id, faction_id) VALUES (?, ?)',
-          [id, factionId]
+          'INSERT INTO tournament_unranked_factions (id, tournament_id, faction_id) VALUES (?, ?, ?)',
+          [randomUUID(), id, factionId]
         );
       }
       for (const mapId of uniqueMapIds) {
         await connection.execute(
-          'INSERT INTO tournament_unranked_maps (tournament_id, map_id) VALUES (?, ?)',
-          [id, mapId]
+          'INSERT INTO tournament_unranked_maps (id, tournament_id, map_id) VALUES (?, ?, ?)',
+          [randomUUID(), id, mapId]
         );
       }
       await connection.commit();
