@@ -1,14 +1,14 @@
 #!/bin/bash
 #
 # Script to clone tournament database to tournament-test
-# IMPORTANT: Backend services MUST be stopped before running this script
+# IMPORTANT: Backend services MUST be stopped before running this script.
 #
 # Usage: ./clone_tournament_db.sh [source_db] [target_db] [mysql_user] [mysql_host] [--skip-ssl]
 # Example: ./clone_tournament_db.sh tournament tournament-test root localhost
 # Example with --skip-ssl: ./clone_tournament_db.sh tournament tournament-test root localhost --skip-ssl
 #
 
-set -e  # Exit on error
+set -euo pipefail
 
 # Default values
 SOURCE_DB="${1:-tournament}"
@@ -18,8 +18,18 @@ MYSQL_HOST="${4:-localhost}"
 MYSQL_PASSWORD=""
 SKIP_SSL=""
 
+if [[ ! "$SOURCE_DB" =~ ^[A-Za-z0-9_-]+$ || ! "$TARGET_DB" =~ ^[A-Za-z0-9_-]+$ ]]; then
+    echo "ERROR: Database names may only contain letters, numbers, underscores, and hyphens."
+    exit 1
+fi
+
+if [ "$SOURCE_DB" = "$TARGET_DB" ]; then
+    echo "ERROR: Source and target databases must be different."
+    exit 1
+fi
+
 # Check for --skip-ssl flag
-if [ "$5" = "--skip-ssl" ]; then
+if [ "${5:-}" = "--skip-ssl" ]; then
     SKIP_SSL="--skip-ssl"
 fi
 
@@ -36,13 +46,11 @@ echo ""
 
 # Step 1: Verify backend is stopped
 echo -e "${YELLOW}[Step 1]${NC} Verifying backend services are stopped..."
-if pgrep -f "node.*8100" > /dev/null || pgrep -f "npm.*dev" > /dev/null; then
+if pgrep -f "dist/server.js|tsx watch src/server.ts" > /dev/null; then
     echo -e "${RED}ERROR: Backend services are still running!${NC}"
     echo "Please stop the backend services before running this script."
     echo ""
-    echo "To stop services:"
-    echo "  cd /home/carlos/programacion/wesnoth_tournament_manager"
-    echo "  npm stop  # or Ctrl+C if running in foreground"
+    echo "Stop the backend process or service and run this command again."
     exit 1
 fi
 echo -e "${GREEN}✓ Backend services are stopped${NC}"
@@ -55,18 +63,24 @@ read -s MYSQL_PASSWORD
 echo ""
 echo ""
 
-# Build MySQL command with optional password and --skip-ssl
-if [ -z "$MYSQL_PASSWORD" ]; then
-    MYSQL_CMD="mysql -h $MYSQL_HOST -u $MYSQL_USER $SKIP_SSL"
-    MYSQLDUMP_CMD="mysqldump -h $MYSQL_HOST -u $MYSQL_USER $SKIP_SSL"
-else
-    MYSQL_CMD="mysql -h $MYSQL_HOST -u $MYSQL_USER -p$MYSQL_PASSWORD $SKIP_SSL"
-    MYSQLDUMP_CMD="mysqldump -h $MYSQL_HOST -u $MYSQL_USER -p$MYSQL_PASSWORD $SKIP_SSL"
+# Keep the password out of command arguments and remove the temporary file on every exit path.
+AUTH_FILE=$(mktemp /tmp/tournament-db-clone-auth.XXXXXX)
+chmod 600 "$AUTH_FILE"
+trap 'rm -f "$AUTH_FILE"' EXIT
+printf '[client]\nhost=%s\nuser=%s\npassword=%s\n' \
+    "$MYSQL_HOST" "$MYSQL_USER" "$MYSQL_PASSWORD" > "$AUTH_FILE"
+unset MYSQL_PASSWORD
+
+MYSQL_CMD=(mysql "--defaults-extra-file=$AUTH_FILE")
+MYSQLDUMP_CMD=(mysqldump "--defaults-extra-file=$AUTH_FILE")
+if [ -n "$SKIP_SSL" ]; then
+    MYSQL_CMD+=("$SKIP_SSL")
+    MYSQLDUMP_CMD+=("$SKIP_SSL")
 fi
 
 # Step 3: Verify connectivity
 echo -e "${YELLOW}[Step 3]${NC} Verifying database connectivity..."
-if ! $MYSQL_CMD -e "SELECT 1;" > /dev/null 2>&1; then
+if ! "${MYSQL_CMD[@]}" -e "SELECT 1;" > /dev/null 2>&1; then
     echo -e "${RED}ERROR: Cannot connect to MySQL!${NC}"
     echo "Check your credentials and host."
     exit 1
@@ -76,7 +90,7 @@ echo ""
 
 # Step 4: Verify source database exists
 echo -e "${YELLOW}[Step 4]${NC} Verifying source database '$SOURCE_DB' exists..."
-if ! $MYSQL_CMD -e "USE $SOURCE_DB;" > /dev/null 2>&1; then
+if ! "${MYSQL_CMD[@]}" -e "USE \`$SOURCE_DB\`;" > /dev/null 2>&1; then
     echo -e "${RED}ERROR: Source database '$SOURCE_DB' does not exist!${NC}"
     exit 1
 fi
@@ -85,7 +99,7 @@ echo ""
 
 # Step 5: Verify target database exists (should be empty)
 echo -e "${YELLOW}[Step 5]${NC} Verifying target database '$TARGET_DB' exists..."
-if ! $MYSQL_CMD -e "USE $TARGET_DB;" > /dev/null 2>&1; then
+if ! "${MYSQL_CMD[@]}" -e "USE \`$TARGET_DB\`;" > /dev/null 2>&1; then
     echo -e "${RED}ERROR: Target database '$TARGET_DB' does not exist!${NC}"
     echo "Create it with: mysql -u root -p -e 'CREATE DATABASE $TARGET_DB;'"
     exit 1
@@ -107,7 +121,7 @@ echo ""
 # Step 7: Backup target database (just in case)
 echo -e "${YELLOW}[Step 6]${NC} Creating backup of target database..."
 BACKUP_FILE="/tmp/${TARGET_DB}_backup_$(date +%Y%m%d_%H%M%S).sql"
-if $MYSQLDUMP_CMD "$TARGET_DB" > "$BACKUP_FILE" 2>/dev/null; then
+if "${MYSQLDUMP_CMD[@]}" "$TARGET_DB" > "$BACKUP_FILE" 2>/dev/null; then
     echo -e "${GREEN}✓ Backup created: $BACKUP_FILE${NC}"
 else
     echo -e "${YELLOW}⚠ Backup skipped (database may be empty)${NC}"
@@ -117,26 +131,26 @@ echo ""
 # Step 7: Dump source database
 echo -e "${YELLOW}[Step 7]${NC} Dumping source database '$SOURCE_DB'..."
 DUMP_FILE="/tmp/${SOURCE_DB}_dump_$(date +%Y%m%d_%H%M%S).sql"
-$MYSQLDUMP_CMD --single-transaction --quick --lock-tables=false "$SOURCE_DB" > "$DUMP_FILE"
+"${MYSQLDUMP_CMD[@]}" --single-transaction --quick --lock-tables=false "$SOURCE_DB" > "$DUMP_FILE"
 echo -e "${GREEN}✓ Dump created: $DUMP_FILE${NC}"
 echo ""
 
 # Step 8: Clear target database
 echo -e "${YELLOW}[Step 8]${NC} Clearing target database '$TARGET_DB'..."
-$MYSQL_CMD -e "DROP DATABASE $TARGET_DB; CREATE DATABASE $TARGET_DB;"
+"${MYSQL_CMD[@]}" -e "DROP DATABASE \`$TARGET_DB\`; CREATE DATABASE \`$TARGET_DB\`;"
 echo -e "${GREEN}✓ Target database cleared and recreated${NC}"
 echo ""
 
 # Step 9: Restore dump to target
 echo -e "${YELLOW}[Step 9]${NC} Restoring dump to target database '$TARGET_DB'..."
-$MYSQL_CMD "$TARGET_DB" < "$DUMP_FILE"
+"${MYSQL_CMD[@]}" "$TARGET_DB" < "$DUMP_FILE"
 echo -e "${GREEN}✓ Data restored${NC}"
 echo ""
 
 # Step 10: Verify clone
 echo -e "${YELLOW}[Step 10]${NC} Verifying clone integrity..."
-SOURCE_COUNT=$($MYSQL_CMD -N -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$SOURCE_DB';")
-TARGET_COUNT=$($MYSQL_CMD -N -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$TARGET_DB';")
+SOURCE_COUNT=$("${MYSQL_CMD[@]}" -N -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$SOURCE_DB';")
+TARGET_COUNT=$("${MYSQL_CMD[@]}" -N -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$TARGET_DB';")
 
 if [ "$SOURCE_COUNT" -eq "$TARGET_COUNT" ]; then
     echo -e "${GREEN}✓ Clone successful!${NC}"
@@ -162,6 +176,6 @@ echo "  Dump:     $DUMP_FILE"
 echo "  Backup:   $BACKUP_FILE"
 echo ""
 echo "Next steps:"
-echo "  1. Verify data in tournament-test database: mysql -u $MYSQL_USER -p$MYSQL_PASSWORD tournament-test"
+echo "  1. Verify data in '$TARGET_DB' using your normal MariaDB client configuration"
 echo "  2. Restart backend services"
 echo ""

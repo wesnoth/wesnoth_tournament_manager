@@ -35,7 +35,6 @@
 - `[GET] /api/public/factions` — Public — query: `is_ranked` (optional) — All active factions.
 - `[GET] /api/public/player-of-month` — Public — none — Current player of the month.
 - `[GET] /api/public/debug` — Public — none — Debug info (shown to admins in UI only).
-- `[GET] /api/public/replay/download-url` — Public — query: `path` — Signed/direct download URL for a replay file.
 - `[POST] /api/public/tournament-matches/:matchId/replay/download-count` — Public — Increment download counter for a tournament match replay.
 
 ---
@@ -74,9 +73,6 @@
 - `[POST] /api/matches/report-confidence-1-replay` — Private — body: `{replayId, winner_choice, comments?, rating?, tournament_match_id?}` — Player confirms result of a confidence=1 auto-detected replay.
 - `[POST] /api/matches/cancel-confidence-1-replay` — Private — body: `{replayId}` — Cancel a confidence=1 replay before reporting.
 - `[POST] /api/matches/admin-discard-replay` — Private (admin) — body: `{replayId}` — Admin discards a replay from the confirmation queue.
-- `[GET] /api/matches/pending-reporting` — Private — Matches pending manual reporting (alternative flow).
-- `[POST] /api/matches/:matchId/confirm-report` — Private — Confirm a pending manual report.
-- `[POST] /api/matches/:matchId/reject-report` — Private — Reject a pending manual report.
 
 ---
 

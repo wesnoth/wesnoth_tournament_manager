@@ -70,8 +70,16 @@ tmp/
 *.sqlite
 *.sqlite3
 
-# Scripts / export files
-scripts/
+# Generated script inputs and exports. Keep reviewed maintenance utilities public.
+/scripts/*
+!/scripts/clone_tournament_db.sh
+!/scripts/check_licenses.js
+!/scripts/countries_insert.sql
+!/scripts/extract_wesnoth_avatars.ps1
+!/scripts/generate_countries_sql.py
+!/scripts/generate_wesnoth_manifest.py
+!/scripts/normalize_avatar_filenames.py
+wesnoth_avatars.json
 playwright-report/
 wiki-artifacts/
 .wiki-tmp/

@@ -54,4 +54,4 @@ Schedule proposals, confirmations, rejections, changes, counter-proposals, and c
 
 ## Maintenance policy
 
-When behavior changes, update the English comments/JSDoc beside the implementation first. Update this document only when architecture, participant resolution, lifecycle, reservation policy, notification policy, or supported operations change. Keep exact route contracts in `API_ENDPOINTS.md` and operational procedures under `tests/e2e/`.
+When behavior changes, update the English comments/JSDoc beside the implementation first. Update this document only when architecture, participant resolution, lifecycle, reservation policy, notification policy, or supported operations change. Keep exact route contracts in `API_ENDPOINTS.md` and follow the integration constraints in `TESTING.md`.

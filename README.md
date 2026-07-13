@@ -54,7 +54,7 @@ A comprehensive tournament management system for **Wesnoth**, featuring automate
 
 ## Prerequisites
 
-- **Node.js** v18 or higher
+- **Node.js** v20 or higher
 - **MariaDB** 10.5+ (for tournament data and forum integration)
 - **Docker & Docker Compose** (optional, for containerized deployment)
 - **Wesnoth Forum** with phpBB3 database (for user authentication)
@@ -70,21 +70,16 @@ A comprehensive tournament management system for **Wesnoth**, featuring automate
 git clone https://github.com/clmates/wesnoth_tournament_manager.git
 cd wesnoth_tournament_manager
 
-# Create .env file
-cp backend/.env.example backend/.env
-
-# Edit backend/.env with your configuration
-# IMPORTANT: Set FORUM_DATABASE_URL to point to your Wesnoth forum phpBB database
-# This is required for user authentication to work
-
 # Start all services
-docker-compose up
+docker compose up --build
 
 # Services will be available at:
 # - Frontend: http://localhost:5173
 # - Backend API: http://localhost:3000
 # - MariaDB: localhost:3306
 ```
+
+The local container initializes an empty `phpbb3_users` reference table. Authentication still requires forum-backed users; import suitable isolated phpBB fixtures before testing login-dependent behavior. The development credentials in `docker-compose.yml` must not be used for a public deployment.
 
 ### Local Installation (Without Docker)
 
@@ -94,14 +89,13 @@ docker-compose up
 cd backend
 
 # Install dependencies
-npm install
+npm ci
 
 # Create .env file
 cp .env.example .env
 
-# Configure .env with your MariaDB and forum database connections
-# DATABASE_URL=mysql://root:root@localhost:3306/wesnoth_tournament
-# FORUM_DATABASE_URL=mysql://root:root@localhost:3306/phpbb3
+# Configure DB_* for the tournament database and PHPBB_DB_*/FORUM_DB_*
+# for the forum and game-server databases.
 
 # Build TypeScript
 npm run build
@@ -118,7 +112,7 @@ npm run dev
 cd frontend
 
 # Install dependencies
-npm install
+npm ci
 
 # Start development server
 npm run dev
@@ -233,7 +227,6 @@ wesnoth_tournament_manager/
 │   │   ├── config/              # Database connections
 │   │   │   ├── database.ts      # MariaDB config (tournament DB)
 │   │   │   ├── forumDatabase.ts # Forum phpBB connection
-│   │   │   └── supabase.ts      # Optional: file storage
 │   │   ├── middleware/          # Express middleware
 │   │   │   ├── auth.ts          # JWT verification
 │   │   │   ├── rateLimiter.ts   # DDoS protection
@@ -295,7 +288,7 @@ wesnoth_tournament_manager/
 ├── MATCH_DISPUTES_DOCUMENTATION.md # Match dispute overview
 ├── BALANCE_EVENTS_DOCUMENTATION.md # Balance events and historical snapshots
 ├── STATISTICS.md                   # Statistics architecture and responsibilities
-├── MariaDB_tournament_schema.sql # Tournament schema
+├── backend/src/config/schema.sql # Canonical MariaDB tournament schema
 ├── MariaDB_forum_schema.sql     # Forum schema (reference)
 └── README.md
 ```
@@ -314,7 +307,7 @@ For complete API reference, see [API_ENDPOINTS.md](API_ENDPOINTS.md)
 - `POST /api/tournaments` — Create tournament
 - `GET /api/tournaments` — List tournaments
 - `GET /api/tournaments/:id` — Get tournament details
-- `POST /api/tournaments/:id/join` — Join tournament
+- `POST /api/tournaments/:id/request-join` — Request tournament registration
 - `GET /api/tournaments/:id/ranking` — Tournament standings
 
 ### Matches & Replays (Automatic Processing)
@@ -745,18 +738,20 @@ REPLAY_AUTO_DISCARD_TIME=30  # Days (default: 30)
 
 ## 📦 Production Deployment
 
-### Option 1: Docker (Recommended)
+### Option 1: Container Images
 
 ```bash
 # Build production images
-docker-compose -f docker-compose.yml build --no-cache
+docker compose build --no-cache
 
 # Start services
-docker-compose up -d
+docker compose up -d
 
 # View logs
-docker-compose logs -f backend
+docker compose logs -f backend
 ```
+
+The committed Compose credentials are development-only. Production deployments must provide secrets externally and connect to the authoritative phpBB and game-server databases.
 
 ### Option 2: Railway/Heroku
 
@@ -766,12 +761,7 @@ The `Procfile` defines how to deploy:
 web: cd backend && npm run build && npm start
 ```
 
-Use this with Railway, Heroku, or similar platforms:
-
-```bash
-# Push to platform (example with Git)
-git push railway main
-```
+Use this with Railway, Heroku, or a similar platform through the project's `test` to `prod` release workflow.
 
 ### Option 3: Manual VPS Deployment
 
@@ -780,8 +770,8 @@ git push railway main
 git clone https://github.com/clmates/wesnoth_tournament_manager.git
 cd wesnoth_tournament_manager
 
-# Install Node.js v18+
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+# Install Node.js v20+
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install nodejs
 
 # Setup backend
@@ -817,7 +807,7 @@ The frontend implements intelligent fallback:
 3. Language fallback chain (e.g., zh-Hans → zh → en)
 4. Default (English)
 
-For missing translations, see [LANGUAGE_FALLBACK_SYSTEM_EN.md](LANGUAGE_FALLBACK_SYSTEM_EN.md)
+For content and interface fallback policy, see [LOCALIZATION_DOCUMENTATION.md](LOCALIZATION_DOCUMENTATION.md).
 
 ---
 
@@ -857,8 +847,10 @@ Configured in `backend/src/middleware/rateLimiter.ts`:
 - **[MATCH_DISPUTES_DOCUMENTATION.md](MATCH_DISPUTES_DOCUMENTATION.md)** — Match dispute handling overview
 - **[BALANCE_EVENTS_DOCUMENTATION.md](BALANCE_EVENTS_DOCUMENTATION.md)** — Balance events and historical snapshots
 - **[STATISTICS.md](STATISTICS.md)** — Statistics architecture and responsibilities
-- **[LANGUAGE_FALLBACK_SYSTEM_EN.md](LANGUAGE_FALLBACK_SYSTEM_EN.md)** — i18n implementation
-- **[START_HERE_EN.md](START_HERE_EN.md)** — Getting started guide
+- **[LOCALIZATION_DOCUMENTATION.md](LOCALIZATION_DOCUMENTATION.md)** — Interface and content fallback policy
+- **[FRONTEND_ENV_CONFIGURATION.md](FRONTEND_ENV_CONFIGURATION.md)** — Frontend build-time environment
+- **[MAINTENANCE_MODE_DOCUMENTATION.md](MAINTENANCE_MODE_DOCUMENTATION.md)** — Administrative maintenance behavior
+- **[TESTING.md](TESTING.md)** — Verification baseline and integration-test constraints
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — Contribution guidelines
 
 ---
@@ -904,7 +896,7 @@ This license reflects our values:
 
 ### Dependency Licenses
 
-See [DEPENDENCIES_AND_LICENSES.md](DEPENDENCIES_AND_LICENSES.md) for information about the licenses of all libraries used.
+Run `node scripts/check_licenses.js` after installing backend and frontend dependencies to inspect the license metadata declared by the installed packages.
 
 All dependencies are compatible with AGPL-3.0.
 

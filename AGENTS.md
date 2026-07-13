@@ -20,6 +20,12 @@
 - Before installing a new package or dependency, verify that its release is at least one month old.
 - Do not install a package released less than one month ago without explicit user approval.
 
+## Environment configuration
+
+- Use only the tracked `.env.example` files when inspecting or documenting environment configuration.
+- Do not read `.env` files or environment-specific variants. Effective deployment values are configured on the servers and are outside the repository workflow.
+- If a required setting is not documented in an example file, ask the user for the necessary information instead of attempting to inspect an environment file.
+
 ## Filter interaction
 
 - Text and numeric list filters must not trigger a request on every keystroke.

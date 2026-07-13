@@ -30,4 +30,4 @@ Global statistics recalculation replays the supported match history and rebuilds
 - [PLAYERS_AND_USERS_DOCUMENTATION.md](PLAYERS_AND_USERS_DOCUMENTATION.md): shared authenticated navigation and player/user area boundaries.
 - [API_ENDPOINTS.md](API_ENDPOINTS.md): endpoint-level routes and access levels.
 - [AUDIT_LOG_DOCUMENTATION.md](AUDIT_LOG_DOCUMENTATION.md): audit history and administrative event review.
-- [MAINTENANCE_MODE_IMPLEMENTATION_SP.md](MAINTENANCE_MODE_IMPLEMENTATION_SP.md): maintenance-mode implementation details.
+- [MAINTENANCE_MODE_DOCUMENTATION.md](MAINTENANCE_MODE_DOCUMENTATION.md): maintenance-mode behavior and operational limits.

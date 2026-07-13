@@ -185,14 +185,14 @@ git clone https://github.com/your-username/wesnoth_tournament_manager.git
 
 # Backend
 cd backend
-npm install
+npm ci
 cp .env.example .env
 # Edit .env with your values
 npm run dev
 
 # Frontend (in another terminal)
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
@@ -203,7 +203,7 @@ Backend: http://localhost:3000
 
 - [ ] Code follows project style
 - [ ] Commit messages are clear
-- [ ] Tests pass (if applicable)
+- [ ] Builds and TypeScript checks pass; integration tests follow [TESTING.md](TESTING.md)
 - [ ] No unnecessary console.log() calls
 - [ ] No unused dependencies
 - [ ] Documentation updated
@@ -211,8 +211,8 @@ Backend: http://localhost:3000
 
 ## 📚 Important Documentation
 
-- [DEPENDENCIES_AND_LICENSES.md](DEPENDENCIES_AND_LICENSES.md) - Dependency and license analysis
-- [DEPENDENCY_USAGE_ANALYSIS.md](DEPENDENCY_USAGE_ANALYSIS.md) - Which dependencies are actually used
+- [TESTING.md](TESTING.md) - Verification baseline and integration-test constraints
+- [AGENTS.md](AGENTS.md) - Repository engineering policies
 - [LICENSE](LICENSE) - Full AGPL-3.0 text
 - [README.md](README.md) - Project overview
 

@@ -1158,50 +1158,6 @@ router.get('/tournaments/:id/teams', async (req, res) => {
   }
 });
 
-// Get signed download URL for replay files (for unranked/team tournaments without match_id)
-// PUBLIC endpoint that generates a temporary signed URL for any replay path
-router.get('/replay/download-url', async (req, res) => {
-  try {
-    const { path: replayFilePath } = req.query;
-    
-    console.log('📥 [REPLAY-DL] Request received with path:', replayFilePath);
-    
-    if (!replayFilePath || typeof replayFilePath !== 'string') {
-      console.warn('⚠️ [REPLAY-DL] Invalid or missing replay path');
-      return res.status(400).json({ error: 'Missing replay path' });
-    }
-
-    console.log('📥 [REPLAY-DL] Generating signed URL for path:', replayFilePath);
-
-    // NOTE: Supabase replay download temporarily disabled - using /uploads/replays instead
-    /*
-    const filename = replayFilePath.split('/').pop() || 'replay.zip';
-    const { data: signedData, error: signedError } = await supabase.storage
-      .from('replays')
-      .createSignedUrl(replayFilePath, 300); // 5 minutes expiration
-
-    if (signedError || !signedData?.signedUrl) {
-      console.error('❌ [REPLAY-DL] Failed to generate signed URL:', signedError?.message || 'No signed URL');
-      return res.status(500).json({ error: 'Failed to generate download link', details: signedError?.message });
-    }
-
-    console.log('✅ [REPLAY-DL] Signed URL generated (5-min expiry)');
-
-    return res.json({
-      signedUrl: signedData.signedUrl,
-      filename: filename,
-      expiresIn: 300
-    });
-    */
-    
-    // TODO: Implement local file download from /uploads/replays
-    return res.status(501).json({ error: 'Replay download feature will be implemented' });
-  } catch (error) {
-    console.error('❌ [REPLAY-DL] Unexpected error:', error);
-    return res.status(500).json({ error: 'Failed to download replay', details: (error as any)?.message });
-  }
-});
-
 // Increment replay download count for tournament matches
 // PUBLIC endpoint that increments the counter for unranked/team tournament replays
 router.post('/tournament-matches/:matchId/replay/download-count', async (req, res) => {

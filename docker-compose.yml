@@ -1,18 +1,19 @@
-version: '3.8'
-
 services:
-  postgres:
-    image: postgres:16-alpine
+  mariadb:
+    image: mariadb:11.8
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: wesnoth_tournament
+      MARIADB_DATABASE: tournament
+      MARIADB_USER: tournament
+      MARIADB_PASSWORD: tournament-dev
+      MARIADB_ROOT_PASSWORD: root-dev
     ports:
-      - "5432:5432"
+      - "3306:3306"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mariadb_data:/var/lib/mysql
+      - ./backend/src/config/schema.sql:/docker-entrypoint-initdb.d/10-tournament.sql:ro
+      - ./MariaDB_forum_schema.sql:/docker-entrypoint-initdb.d/20-forum-reference.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -22,34 +23,36 @@ services:
     ports:
       - "3000:3000"
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/wesnoth_tournament
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: wesnoth_tournament
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      JWT_SECRET: your-super-secret-jwt-key-change-this
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-your-openai-api-key}
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_NAME: tournament
+      DB_USER: tournament
+      DB_PASSWORD: tournament-dev
+      PHPBB_DB_HOST: mariadb
+      PHPBB_DB_USER: tournament
+      PHPBB_DB_PASSWORD: tournament-dev
+      PHPBB_DB_NAME: tournament
+      FORUM_DB_HOST: mariadb
+      FORUM_DB_USER: tournament
+      FORUM_DB_PASSWORD: tournament-dev
+      FORUM_DB_NAME: tournament
+      JWT_SECRET: local-docker-secret-change-outside-development
       FRONTEND_URL: http://localhost:5173
       PORT: 3000
       NODE_ENV: development
     depends_on:
-      postgres:
+      mariadb:
         condition: service_healthy
-    volumes:
-      - ./backend/src:/app/src
-      - ./backend/uploads:/app/uploads
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:3000/api
     ports:
-      - "5173:5173"
-    environment:
-      VITE_API_URL: http://localhost:3000/api
+      - "5173:80"
     depends_on:
       - backend
-    volumes:
-      - ./frontend/src:/app/src
 
 volumes:
-  postgres_data:
+  mariadb_data:

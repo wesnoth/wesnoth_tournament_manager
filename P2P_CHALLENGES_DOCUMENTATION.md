@@ -46,4 +46,4 @@ The current event categories are proposal, confirmation, rejection, counter-prop
 
 ## Maintenance policy
 
-When behavior changes, update the English comments/JSDoc next to the implementation first. Update this document only when the architecture, lifecycle, supported operations, persistence model, or notification policy changes. Keep exact route contracts in `API_ENDPOINTS.md` and operational test procedures under `tests/e2e/`.
+When behavior changes, update the English comments/JSDoc next to the implementation first. Update this document only when the architecture, lifecycle, supported operations, persistence model, or notification policy changes. Keep exact route contracts in `API_ENDPOINTS.md` and follow the integration constraints in `TESTING.md`.

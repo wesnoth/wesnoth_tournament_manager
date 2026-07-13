@@ -71,5 +71,5 @@ When notification behavior changes:
 
 1. Update the English comments/JSDoc beside the implementation first.
 2. Update this document only when responsibilities, data flow, supported categories, transport, API capabilities, or retention policy changes.
-3. Keep test procedures and test assertions with the actual E2E test files under `tests/e2e/`.
+3. Keep future integration procedures aligned with the forum-backed identity requirements in `TESTING.md`.
 4. Do not copy function inventories, line numbers, SQL listings, or transient test results into this document.
