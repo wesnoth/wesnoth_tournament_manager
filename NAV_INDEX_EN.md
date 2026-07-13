@@ -21,6 +21,7 @@ This index is organized following the app navigation (Navbar as entry point). Fo
 | Tournaments | `/tournaments` | `pages/Tournaments.tsx` |
 | Matches | `/matches` | `pages/Matches.tsx` |
 | FAQ | `/faq` → `/help/faq` | Wiki article with slug `faq` |
+| News | `/news` | `pages/News.tsx` |
 | User menu → Profile *(auth)* | `/user` | `pages/User.tsx` |
 | Login *(unauth)* | `/login` | `pages/Login.tsx` |
 | Register *(unauth)* | `/register` | `pages/Register.tsx` (→ wesnoth.org) |
