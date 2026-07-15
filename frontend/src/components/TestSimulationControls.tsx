@@ -203,7 +203,7 @@ export function SimulateJoinPanel({ tournament, onCompleted }: { tournament: any
     finally { setSaving(false); }
   };
   return (
-    <section className="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-6">
+    <section data-help-id="region-test-simulate-join" className="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-6">
       <h2 className="text-xl font-bold text-gray-800 mb-2">Simulate Join</h2>
       <p className="text-sm text-gray-600 mb-4">Test-only organizer tool. No Discord notification or participant confirmation is generated.</p>
       {message && <p className="text-green-700 mb-3">{message}</p>}

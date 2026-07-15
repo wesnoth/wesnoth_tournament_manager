@@ -209,6 +209,7 @@ const Players: React.FC = () => {
       {totalPages > 1 && (
         <div className="flex justify-center items-center gap-2 mb-8">
           <button 
+            data-help-id="action-players-pagination-first"
             className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => handlePageChange(1)}
             disabled={currentPage === 1}
@@ -216,6 +217,7 @@ const Players: React.FC = () => {
             {t('pagination_first')}
           </button>
           <button 
+            data-help-id="action-players-pagination-previous"
             className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => handlePageChange(currentPage - 1)}
             disabled={currentPage === 1}
@@ -228,6 +230,7 @@ const Players: React.FC = () => {
           </div>
           
           <button 
+            data-help-id="action-players-pagination-next"
             className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => handlePageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
@@ -235,6 +238,7 @@ const Players: React.FC = () => {
             {t('pagination_next')}
           </button>
           <button 
+            data-help-id="action-players-pagination-last"
             className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => handlePageChange(totalPages)}
             disabled={currentPage === totalPages}
@@ -250,6 +254,7 @@ const Players: React.FC = () => {
           <div className="flex flex-col gap-1 min-w-[150px] flex-1">
             <label htmlFor="nickname" className="font-semibold text-gray-700 text-sm">{t('filter_nickname')}</label>
             <input
+              data-help-id="field-players-nickname"
               type="text"
               id="nickname"
               name="nickname"
@@ -264,6 +269,7 @@ const Players: React.FC = () => {
           <div className="flex flex-col gap-1 min-w-[120px] flex-1">
             <label htmlFor="min_elo" className="font-semibold text-gray-700 text-sm">{t('filter_min_elo')}</label>
             <input
+              data-help-id="field-players-min-elo"
               type="number"
               id="min_elo"
               name="min_elo"
@@ -278,6 +284,7 @@ const Players: React.FC = () => {
           <div className="flex flex-col gap-1 min-w-[120px] flex-1">
             <label htmlFor="max_elo" className="font-semibold text-gray-700 text-sm">{t('filter_max_elo')}</label>
             <input
+              data-help-id="field-players-max-elo"
               type="number"
               id="max_elo"
               name="max_elo"
@@ -292,6 +299,7 @@ const Players: React.FC = () => {
           <div className="flex flex-col gap-1 min-w-[120px] flex-1">
             <label htmlFor="min_matches" className="font-semibold text-gray-700 text-sm">{t('filter_min_matches')}</label>
             <input
+              data-help-id="field-players-min-matches"
               type="number"
               id="min_matches"
               name="min_matches"
@@ -305,6 +313,7 @@ const Players: React.FC = () => {
 
           <label htmlFor="rated_only" className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700 text-sm pb-2 whitespace-nowrap">
             <input
+              data-help-id="option-players-rated-only"
               type="checkbox"
               id="rated_only"
               name="rated_only"
@@ -317,6 +326,7 @@ const Players: React.FC = () => {
 
           <label htmlFor="ranked_only" className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700 text-sm pb-2 whitespace-nowrap">
             <input
+              data-help-id="option-players-ranked-only"
               type="checkbox"
               id="ranked_only"
               name="ranked_only"
@@ -327,10 +337,10 @@ const Players: React.FC = () => {
             {t('filter_ranked_only', 'Ranked enabled')}
           </label>
 
-          <button className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded transition-colors whitespace-nowrap" onClick={handleResetFilters}>
+          <button data-help-id="action-reset-players-filters" className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded transition-colors whitespace-nowrap" onClick={handleResetFilters}>
             {t('reset_filters')}
           </button>
-          <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded transition-colors" onClick={handleRefresh} title="Refresh">
+          <button data-help-id="action-refresh-players" className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded transition-colors" onClick={handleRefresh} title="Refresh">
             🔄
           </button>
         </div>
@@ -345,34 +355,34 @@ const Players: React.FC = () => {
           <thead>
               <tr className="bg-gray-200">
                 <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700">#</th>
-                <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700" onClick={() => handleSort('nickname')} style={{cursor:'pointer'}}>
+                <th data-help-id="action-sort-players-by-nickname" className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700" onClick={() => handleSort('nickname')} style={{cursor:'pointer'}}>
                   {t('label_nickname')}
                   {sortColumn === 'nickname' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                 </th>
-                <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700" onClick={() => handleSort('elo_rating')} style={{cursor:'pointer'}}>
+                <th data-help-id="action-sort-players-by-elo" className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700" onClick={() => handleSort('elo_rating')} style={{cursor:'pointer'}}>
                   {t('label_elo')}
                   {sortColumn === 'elo_rating' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                 </th>
-                <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700" onClick={() => handleSort('is_rated')} style={{cursor:'pointer'}}>
+                <th data-help-id="action-sort-players-by-status" className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700" onClick={() => handleSort('is_rated')} style={{cursor:'pointer'}}>
                   {t('label_status')}
                   {sortColumn === 'is_rated' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700">
                   {t('label_ranked', 'Ranked')}
                 </th>
-                <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700" onClick={() => handleSort('matches_played')} style={{cursor:'pointer'}}>
+                <th data-help-id="action-sort-players-by-matches" className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700" onClick={() => handleSort('matches_played')} style={{cursor:'pointer'}}>
                   {t('label_total')}
                   {sortColumn === 'matches_played' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                 </th>
-                <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700" onClick={() => handleSort('total_wins')} style={{cursor:'pointer'}}>
+                <th data-help-id="action-sort-players-by-wins" className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700" onClick={() => handleSort('total_wins')} style={{cursor:'pointer'}}>
                   {t('label_wins')}
                   {sortColumn === 'total_wins' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                 </th>
-                <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700" onClick={() => handleSort('total_losses')} style={{cursor:'pointer'}}>
+                <th data-help-id="action-sort-players-by-losses" className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700" onClick={() => handleSort('total_losses')} style={{cursor:'pointer'}}>
                   {t('label_losses')}
                   {sortColumn === 'total_losses' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                 </th>
-                <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700" onClick={() => handleSort('winPercentage')} style={{cursor:'pointer'}}>
+                <th data-help-id="action-sort-players-by-win-percentage" className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700" onClick={() => handleSort('winPercentage')} style={{cursor:'pointer'}}>
                   {t('label_win_pct')}
                   {sortColumn === 'winPercentage' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                 </th>
@@ -392,7 +402,7 @@ const Players: React.FC = () => {
                       username={player.nickname}
                       size="medium-small"
                     />
-                    <a 
+                    <a data-help-id="action-view-player-profile"
                       href="#" 
                       onClick={(e) => {
                         e.preventDefault();
@@ -441,6 +451,7 @@ const Players: React.FC = () => {
       {totalPages > 1 && (
         <div className="flex justify-center items-center gap-2 mt-8">
           <button 
+            data-help-id="action-players-pagination-first"
             className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => handlePageChange(1)}
             disabled={currentPage === 1}
@@ -448,6 +459,7 @@ const Players: React.FC = () => {
             {t('pagination_first')}
           </button>
           <button 
+            data-help-id="action-players-pagination-previous"
             className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => handlePageChange(currentPage - 1)}
             disabled={currentPage === 1}
@@ -460,6 +472,7 @@ const Players: React.FC = () => {
           </div>
           
           <button 
+            data-help-id="action-players-pagination-next"
             className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => handlePageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
@@ -467,6 +480,7 @@ const Players: React.FC = () => {
             {t('pagination_next')}
           </button>
           <button 
+            data-help-id="action-players-pagination-last"
             className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => handlePageChange(totalPages)}
             disabled={currentPage === totalPages}

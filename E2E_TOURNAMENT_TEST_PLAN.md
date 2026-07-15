@@ -7,7 +7,8 @@ This plan covers the complete tournament lifecycle through the test environment:
 - Run scenarios sequentially because they create persistent tournament data and exercise shared player state.
 - Use only the test deployment. The simulator endpoints are unavailable in production.
 - Authenticate interactively or through `E2E_USERNAME` and `E2E_PASSWORD`; credentials are never stored in the repository.
-- Use `E2E_PLAYER_PREFIX` to select an existing fixture set, defaulting to `team_1` through `team_8`.
+- The pilot reads eight real nicknames from `/players` with `Ranked enabled` active; use `E2E_PLAYER_NAMES` with eight comma-separated nicknames to pin a specific set.
+- Team scenarios must also select real player nicknames from `/players`, then group them into eight teams through the team form; team names are not player identities.
 - Keep the browser-visible checks as the acceptance source. API/database inspection may diagnose failures but does not replace UI assertions.
 - Use `E2E_TOURNAMENT_NAME` to override a name when rerunning a scenario after a partial failure.
 
