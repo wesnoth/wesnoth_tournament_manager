@@ -712,6 +712,7 @@ function SchedulingFreeBusyGrid({
 
                   return (
                     <td
+                      data-help-id="option-schedule-slot"
                       key={`${participant.id}-${dateKey}-${slotKey}`}
                       className={`border ${borderColor} p-0.5 h-8 cursor-${readOnly || isReserved || isPast ? 'default' : 'pointer'} ${bgColor} ${
                         !readOnly && !isProposed && !isReserved && !isPast ? 'hover:opacity-75 touch-manipulation' : ''

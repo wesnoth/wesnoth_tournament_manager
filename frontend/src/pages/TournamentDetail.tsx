@@ -1356,7 +1356,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
     return (
       <MainLayout><div className="w-full min-h-screen px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200">
         <p>{error || t('tournament_title')}</p>
-        <button onClick={() => navigate('/tournaments')}>{t('tournaments.back_to_tournaments')}</button>
+        <button data-help-id="action-back-to-tournaments" onClick={() => navigate('/tournaments')}>{t('tournaments.back_to_tournaments')}</button>
       </div></MainLayout>
     );
   }
@@ -1364,7 +1364,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
   return (
     <MainLayout><div className="w-full min-h-screen px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200">
       <div className="flex justify-between items-center mb-8 pb-4 border-b-2 border-gray-300">
-        <button onClick={handleBackButton} className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors">← {t('tournaments.back_to_tournaments')}</button>
+        <button data-help-id="action-back-to-tournaments" onClick={handleBackButton} className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors">← {t('tournaments.back_to_tournaments')}</button>
         <div className="flex flex-col gap-2">
           <h1 className="text-4xl font-bold text-gray-800">{tournament.name}</h1>
           <span 
@@ -1522,7 +1522,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
         {!editMode && tournament.status === 'registration_open' && !userParticipationStatus && userId && (
           tournament.tournament_mode === 'ranked' && !enableRanked ? (
             <div className="flex flex-col gap-1">
-              <button className="px-6 py-2 bg-gray-300 text-gray-500 rounded cursor-not-allowed" disabled>
+              <button data-help-id="action-join-tournament-disabled" className="px-6 py-2 bg-gray-300 text-gray-500 rounded cursor-not-allowed" disabled>
                 {t('tournaments.request_join')}
               </button>
               <p className="text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded">
@@ -1530,7 +1530,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
               </p>
             </div>
           ) : (
-            <button className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors" onClick={handleJoinTournament}>
+            <button data-help-id="action-join-tournament" className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors" onClick={handleJoinTournament}>
               {t('tournaments.request_join')}
             </button>
           )
@@ -1579,6 +1579,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                   {t('tournaments.btn_recalculate_tiebreakers')}
                 </button>
                 <button 
+                  data-help-id="action-notify-tournament-results"
                   onClick={handleNotifyResults}
                   className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
                   title={t('tournaments.btn_notify_results_tooltip', 'Send standings or results to Discord')}
@@ -1590,6 +1591,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
 
             {(tournament.status !== 'in_progress' && tournament.status !== 'finished') && (
               <button 
+                data-help-id="action-cancel-tournament"
                 onClick={() => {
                   if (confirm(t('confirm_cancel_tournament', 'Are you sure you want to cancel this tournament? All data will be deleted.'))) {
                     handleCancelTournament();
@@ -1646,30 +1648,35 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
         {/* Tab buttons */}
         <div className="flex flex-wrap gap-2 items-center">
           <button 
+            data-help-id="action-tab-participants"
             className={`px-4 py-2 rounded font-semibold cursor-pointer transition-all ${activeTab === 'participants' ? 'bg-blue-500 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
             onClick={() => setActiveTab('participants')}
           >
             {tournament?.tournament_mode === 'team' ? 'Teams' : t('tabs.participants', { count: participants.length })}
           </button>
           <button 
+            data-help-id="action-tab-matches"
             className={`px-4 py-2 rounded font-semibold cursor-pointer transition-all ${activeTab === 'matches' ? 'bg-blue-500 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
             onClick={() => setActiveTab('matches')}
           >
             {t('tabs.matches', { count: matches.length })}
           </button>
           <button 
+            data-help-id="action-tab-rounds"
             className={`px-4 py-2 rounded font-semibold cursor-pointer transition-all ${activeTab === 'rounds' ? 'bg-blue-500 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
             onClick={() => setActiveTab('rounds')}
           >
             {t('tabs.rounds', { count: rounds.length })}
           </button>
           <button 
+            data-help-id="action-tab-round-details"
             className={`px-4 py-2 rounded font-semibold cursor-pointer transition-all ${activeTab === 'roundMatches' ? 'bg-blue-500 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
             onClick={() => setActiveTab('roundMatches')}
           >
             {t('tabs.round_details')}
           </button>
           <button 
+            data-help-id="action-tab-ranking"
             className={`px-4 py-2 rounded font-semibold cursor-pointer transition-all ${activeTab === 'ranking' ? 'bg-blue-500 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
             onClick={() => setActiveTab('ranking')}
           >
@@ -1678,6 +1685,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
           
           {/* Refresh button */}
           <button
+            data-help-id="action-refresh-tournament-detail"
             onClick={() => {
               setIsRefreshing(true);
               fetchTournamentData().finally(() => setIsRefreshing(false));
@@ -1705,6 +1713,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
             {userId && (
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
+                  data-help-id="option-filter-my-matches"
                   type="checkbox"
                   checked={myMatchesOnly}
                   onChange={(e) => setMyMatchesOnly(e.target.checked)}
@@ -1719,6 +1728,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
               <div className="flex gap-3">
                 <label className="flex items-center gap-1 cursor-pointer">
                   <input
+                    data-help-id="option-filter-all-matches"
                     type="radio"
                     name="statusFilter"
                     value="all"
@@ -1730,6 +1740,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                 </label>
                 <label className="flex items-center gap-1 cursor-pointer">
                   <input
+                    data-help-id="option-filter-scheduled-matches"
                     type="radio"
                     name="statusFilter"
                     value="scheduled"
@@ -1741,6 +1752,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                 </label>
                 <label className="flex items-center gap-1 cursor-pointer">
                   <input
+                    data-help-id="option-filter-completed-matches"
                     type="radio"
                     name="statusFilter"
                     value="completed"
@@ -1789,6 +1801,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                           </h3>
                           {canRenameTeam(team) && tournament?.status === 'registration_open' && team.nickname !== 'Rejected players' && (
                             <button
+                              data-help-id="action-rename-team"
                               className="text-gray-400 hover:text-blue-600 transition-colors p-1"
                               title="Rename team"
                               onClick={() => { setRenameTeamModal({ open: true, teamId: team.id, currentName: team.nickname }); setRenameTeamValue(team.nickname); }}
@@ -1862,6 +1875,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                 <div className="flex gap-2 flex-wrap">
                                   {member.participation_status === 'unconfirmed' && member.user_id === userId && (
                                     <button
+                                      data-help-id="action-confirm-participation"
                                       className="px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600 transition-colors"
                                       onClick={() => handleConfirmParticipation(member.participant_id)}
                                       title="Confirm your participation"
@@ -1872,6 +1886,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                   {isCreator && member.participation_status === 'pending' && (
                                     <>
                                       <button
+                                        data-help-id="action-accept-participant"
                                         className="px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600 transition-colors"
                                         onClick={() => handleAcceptParticipant(member.participant_id)}
                                         title={t('btn_accept')}
@@ -1879,6 +1894,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                         {t('btn_accept')}
                                       </button>
                                       <button
+                                        data-help-id="action-reject-participant"
                                         className="px-3 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600 transition-colors"
                                         onClick={() => handleRejectParticipant(member.participant_id)}
                                         title={t('btn_reject')}
@@ -1895,6 +1911,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                   {/* Substitute Player — organizer only, after tournament starts, team active, for accepted members */}
                                   {isCreator && ['registration_closed', 'prepared', 'in_progress'].includes(tournament?.status || '') && team.status === 'active' && member.participation_status === 'accepted' && (
                                     <button
+                                      data-help-id="action-replace-team-member"
                                       className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
                                       title="Replace this player with a substitute"
                                       onClick={() => {
@@ -1919,6 +1936,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                   {(member.user_id === userId || canManageParticipants) &&
                                    tournament?.status === 'registration_open' && (
                                     <button
+                                      data-help-id="action-remove-participant"
                                       className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 transition-colors"
                                       title="Remove from tournament"
                                       onClick={() => handleRemoveParticipant(member.participant_id, member.nickname)}
@@ -1986,12 +2004,14 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                         {isCreator && p.participation_status === 'pending' && (
                           <>
                           <button 
+                            data-help-id="action-accept-participant"
                             className="px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600 transition-colors"
                             onClick={() => handleAcceptParticipant(p.id)}
                           >
                             {t('btn_accept')}
                           </button>
                           <button 
+                            data-help-id="action-reject-participant"
                             className="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600 transition-colors"
                             onClick={() => handleRejectParticipant(p.id)}
                           >
@@ -2001,6 +2021,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                         )}
                         {(p.user_id === userId || canManageParticipants) && (
                           <button
+                            data-help-id="action-remove-participant"
                             className="px-2 py-1 bg-red-700 text-white rounded text-xs hover:bg-red-800 transition-colors"
                             title="Remove from tournament"
                             onClick={() => handleRemoveParticipant(p.id, p.nickname)}
@@ -2125,6 +2146,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                     {canManageParticipants && (
                                       <td className="px-4 py-3 text-gray-700">
                                         {firstSeriesRow && <button
+                                          data-help-id="action-determine-match-winner"
                                           className="px-3 py-1 bg-orange-500 text-white rounded text-xs font-semibold hover:bg-orange-600 transition-colors whitespace-nowrap"
                                           onClick={() => openDetermineWinnerModal({
                                             id: match.tournament_round_match_id || match.id,
@@ -2424,6 +2446,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                      ) : isPendingReplay && (userId === winnerId || (match.is_team_mode && userTeamId === winnerId)) ? (
                                        <>
                                          <button
+                                           data-help-id="action-confirm-match-won"
                                            className="px-2 py-1 text-xs bg-green-500 hover:bg-green-600 text-white rounded transition-colors"
                                            onClick={() => {
                                              setSelectedTournamentReplay(match);
@@ -2435,6 +2458,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                            ✓ {t('i_won') || 'I Won'}
                                          </button>
                                          <button
+                                           data-help-id="action-confirm-match-lost"
                                            className="px-2 py-1 text-xs bg-red-500 hover:bg-red-600 text-white rounded transition-colors"
                                            onClick={() => {
                                              setSelectedTournamentReplay(match);
@@ -2464,6 +2488,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                      ) : isPendingReplay && (userId === loserId || (match.is_team_mode && userTeamId === loserId)) ? (
                                        <>
                                          <button
+                                           data-help-id="action-confirm-match-won"
                                            className="px-2 py-1 text-xs bg-green-500 hover:bg-green-600 text-white rounded transition-colors"
                                            onClick={() => {
                                              setSelectedTournamentReplay(match);
@@ -2475,6 +2500,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                            ✓ {t('i_won') || 'I Won'}
                                          </button>
                                          <button
+                                           data-help-id="action-confirm-match-lost"
                                            className="px-2 py-1 text-xs bg-red-500 hover:bg-red-600 text-white rounded transition-colors"
                                            onClick={() => {
                                              setSelectedTournamentReplay(match);
@@ -2499,6 +2525,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                      ) : hasReportedMatch ? (
                                        <>
                                          <button
+                                           data-help-id="action-view-match-details"
                                            className="px-2 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
                                            onClick={() => setMatchDetailsModal({ isOpen: true, match })}
                                            title={t('view_match_details')}
@@ -2506,8 +2533,9 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                            {t('details_btn')}
                                          </button>
                                          {match.replay_file_path ? (
-                                           <a
-                                             href={match.replay_url || match.replay_file_path}
+                                             <a
+                                              data-help-id="action-download-replay"
+                                              href={match.replay_url || match.replay_file_path}
                                              target="_blank"
                                              rel="noopener noreferrer"
                                              className="px-2 py-1 text-xs bg-green-500 hover:bg-green-600 text-white rounded transition-colors"
@@ -2525,6 +2553,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                      )}
                                      {!isAdminDetermined && !isPendingReplay && isCurrentUserLoser && confirmationStatus === 'unconfirmed' && !nextRoundStarted && (
                                        <button
+                                         data-help-id="action-confirm-match-dispute"
                                          className="px-2 py-1 text-xs bg-yellow-500 hover:bg-yellow-600 text-white rounded transition-colors"
                                          onClick={() => handleOpenConfirmModal(match)}
                                        >
@@ -2533,6 +2562,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                      )}
                                      {!isAdminDetermined && !isPendingReplay && isCurrentUserWinner && !match.winner_comments && !match.winner_rating && !nextRoundStarted && (
                                        <button
+                                         data-help-id="action-inform-match-result"
                                          className="px-2 py-1 text-xs bg-orange-500 hover:bg-orange-600 text-white rounded transition-colors"
                                          onClick={() => handleOpenConfirmModal(match)}
                                        >
@@ -2541,6 +2571,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                      )}
                                      {isCreator && !isPendingReplay && confirmationStatus === 'disputed' && (
                                        <button
+                                         data-help-id="action-manage-match-dispute"
                                          className="px-2 py-1 text-xs bg-orange-500 hover:bg-orange-600 text-white rounded transition-colors"
                                          onClick={() => {
                                            console.log('[MANAGE DISPUTE] Button clicked for match:', match.id, 'confirmationStatus:', confirmationStatus);
@@ -2607,7 +2638,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                             const nextRound = rounds.find(r => r.round_number === round.round_number + 1);
                             return nextRound && nextRound.round_status === 'pending' ? (
                               <button
-                                data-help-id={`action-start-next-round-${round.round_number}`}
+                                data-help-id="action-start-next-round"
                                 className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition-colors"
                                 onClick={() => handleStartNextRound(round.round_number)}
                                 title={t('start_next_round')}
@@ -2754,6 +2785,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                        <div className="flex flex-col gap-1">
                                          {canScheduleMatch(match) && (
                                            <button
+                                             data-help-id="action-schedule-match"
                                              className="px-3 py-1 bg-green-500 text-white rounded text-xs font-semibold hover:bg-green-600 transition-colors whitespace-nowrap"
                                              onClick={() => handlePreloadSchedulingData(match.tournament_round_match_id || match.id, true)}
                                              disabled={isLoadingScheduling}
@@ -2788,6 +2820,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                        <div className="flex flex-col gap-1">
                                          {canScheduleMatch(match) && (
                                            <button
+                                             data-help-id="action-schedule-match"
                                              className="px-3 py-1 bg-purple-500 text-white rounded text-xs font-semibold hover:bg-purple-600 transition-colors whitespace-nowrap"
                                              onClick={() => handlePreloadSchedulingData(match.tournament_round_match_id || match.id, true)}
                                              disabled={isLoadingScheduling}
@@ -2822,6 +2855,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                       <>
                                        {canScheduleMatch(match) && (
                                          <button
+                                           data-help-id="action-schedule-match"
                                            className="px-3 py-1 bg-purple-500 text-white rounded text-xs font-semibold hover:bg-purple-600 transition-colors whitespace-nowrap"
                                            onClick={() => handlePreloadSchedulingData(match.id, true)}
                                            disabled={isLoadingScheduling}
@@ -2846,6 +2880,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                               <td className="px-4 py-3 text-gray-700">
                                 {(match as any).series_status === 'in_progress' && (
                                   <button
+                                    data-help-id="action-determine-match-winner"
                                     className="px-3 py-1 bg-orange-500 text-white rounded text-xs font-semibold hover:bg-orange-600 transition-colors whitespace-nowrap"
                                     onClick={() => openDetermineWinnerModal({
                                       id: match.id,
@@ -3081,6 +3116,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                   : t('tournaments.eliminate_step2_title')}
               </h3>
               <button
+                data-help-id="action-close-determine-winner"
                 className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
                 onClick={closeDetermineWinnerModal}
               >
@@ -3098,12 +3134,14 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                 </p>
                 <div className="flex gap-4">
                   <button
+                    data-help-id="action-select-winner-player-one"
                     className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
                     onClick={() => handleDetermineWinnerStep1(determineWinnerData.player1_id)}
                   >
                     {determineWinnerData.player1_nickname} {t('label_wins')}
                   </button>
                   <button
+                    data-help-id="action-select-winner-player-two"
                     className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
                     onClick={() => handleDetermineWinnerStep1(determineWinnerData.player2_id)}
                   >
@@ -3120,12 +3158,14 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                 </p>
                 <div className="flex flex-col gap-3">
                   <button
+                    data-help-id="action-keep-series-active"
                     className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
                     onClick={() => handleDetermineWinner(pendingWinnerSelection!, false)}
                   >
                     {t('tournaments.eliminate_only_series')}
                   </button>
                   <button
+                    data-help-id="action-eliminate-from-tournament"
                     className="w-full px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors"
                     onClick={() => handleDetermineWinner(pendingWinnerSelection!, true)}
                   >
@@ -3133,6 +3173,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                   </button>
                 </div>
                 <button
+                  data-help-id="action-back-determine-winner-step"
                   className="mt-4 text-sm text-gray-500 hover:text-gray-700 underline w-full text-center"
                   onClick={() => { setDetermineWinnerStep(1); setPendingWinnerSelection(null); }}
                 >
@@ -3165,18 +3206,21 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
               </div>
               <div className="flex gap-3 justify-end">
                 <button 
+                  data-help-id="action-close-dispute-modal"
                   className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded transition-colors"
                   onClick={() => setDisputeManagementModal({ isOpen: false, match: null })}
                 >
                   {t('cancel_btn')}
                 </button>
                 <button 
+                  data-help-id="action-reject-dispute"
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
                   onClick={() => handleDisputeAction('dismiss', disputeManagementModal.match!.id)}
                 >
                   ✗ Reject Dispute
                 </button>
                 <button 
+                  data-help-id="action-validate-dispute"
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
                   onClick={() => handleDisputeAction('confirm', disputeManagementModal.match!.id)}
                 >
@@ -3196,12 +3240,14 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
             <p className="text-gray-600 mb-6">{t('tournaments.no_participants_message') || 'No participants have registered for this tournament. Delete it?'}</p>
             <div className="flex justify-end gap-3">
               <button
+                data-help-id="action-cancel-delete-tournament"
                 className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors"
                 onClick={() => setShowDeleteConfirmModal(false)}
               >
                 {t('cancel_btn') || 'Cancel'}
               </button>
               <button
+                data-help-id="action-confirm-delete-tournament"
                 className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors"
                 onClick={handleConfirmDelete}
               >
@@ -3220,6 +3266,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-1">New team name</label>
               <input
+                data-help-id="field-team-name"
                 type="text"
                 value={renameTeamValue}
                 onChange={(e) => setRenameTeamValue(e.target.value)}
@@ -3231,12 +3278,14 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
             </div>
             <div className="flex justify-end gap-3">
               <button
+                data-help-id="action-cancel-rename-team"
                 className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors"
                 onClick={() => setRenameTeamModal({ open: false, teamId: '', currentName: '' })}
               >
                 {t('cancel_btn') || 'Cancel'}
               </button>
               <button
+                data-help-id="action-save-team-name"
                 className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
                 disabled={renameTeamLoading || !renameTeamValue.trim()}
                 onClick={handleRenameTeam}

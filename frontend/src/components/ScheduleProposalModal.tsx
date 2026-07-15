@@ -396,6 +396,7 @@ export default function ScheduleProposalModal({
               {mode === 'propose' ? 'Propose Match Schedule' : mode === 'edit_proposal' ? 'Edit Schedule Proposal' : 'Confirm Schedule'}
             </h2>
             <button
+              data-help-id="action-close-schedule-modal"
               onClick={onClose}
               className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
             >
@@ -422,6 +423,7 @@ export default function ScheduleProposalModal({
                 <label className="block text-sm font-semibold text-gray-800">Select Date Range Start</label>
                 <div className="flex gap-2">
                   <input
+                    data-help-id="field-schedule-start-date"
                     type="date"
                     min={minimumDate}
                     value={displayDateStart.toISOString().split('T')[0]}
@@ -519,6 +521,7 @@ export default function ScheduleProposalModal({
                   Notes (optional, max 500 characters)
                 </label>
                 <textarea
+                  data-help-id="field-schedule-notes"
                   value={notes}
                   onChange={handleNotesChange}
                   placeholder="Add any notes about your availability or preferences..."
@@ -536,6 +539,7 @@ export default function ScheduleProposalModal({
         <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6 space-y-3">
           <div className="flex gap-3 justify-end">
             <button
+              data-help-id="action-cancel-schedule"
               onClick={onClose}
               className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 text-gray-700 font-medium"
               disabled={loading}
@@ -545,6 +549,7 @@ export default function ScheduleProposalModal({
 
             {mode === 'propose' ? (
               <button
+                data-help-id="action-propose-schedule"
                 onClick={handleProposeSlots}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium disabled:opacity-50"
                 disabled={loading || selectedSlots.size === 0}
@@ -554,6 +559,7 @@ export default function ScheduleProposalModal({
             ) : mode === 'edit_proposal' ? (
               <>
                 <button
+                  data-help-id="action-cancel-schedule-proposal"
                   onClick={handleCancelProposal}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-medium"
                   disabled={loading}
@@ -561,6 +567,7 @@ export default function ScheduleProposalModal({
                   Cancel Proposal
                 </button>
                 <button
+                  data-help-id="action-change-schedule-proposal"
                   onClick={handleProposeSlots}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium disabled:opacity-50"
                   disabled={loading || selectedSlots.size === 0}
@@ -571,6 +578,7 @@ export default function ScheduleProposalModal({
             ) : (
               <>
                 <button
+                  data-help-id="action-counter-propose-schedule"
                   onClick={() => {
                     setMode('counter');
                     setSelectedSlots(new Set());
@@ -581,6 +589,7 @@ export default function ScheduleProposalModal({
                   Counter-propose
                 </button>
                 <button
+                  data-help-id="action-confirm-schedule"
                   onClick={handleConfirmSlots}
                   className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium disabled:opacity-50"
                   disabled={loading || confirmedSlotIds.size === 0}

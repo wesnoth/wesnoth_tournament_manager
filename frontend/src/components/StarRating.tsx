@@ -55,6 +55,7 @@ const StarRating: React.FC<StarRatingProps> = ({ value, onChange, ratingLabels }
 
           return (
             <button
+              data-help-id="option-match-rating"
               key={rating}
               type="button"
               onClick={() => onChange(currentValue === rating ? '' : rating.toString())}
@@ -84,6 +85,7 @@ const StarRating: React.FC<StarRatingProps> = ({ value, onChange, ratingLabels }
       {/* Clear button - shown when a value is selected */}
       {currentValue > 0 && (
         <button
+          data-help-id="action-clear-match-rating"
           type="button"
           onClick={() => onChange('')}
           className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1 rounded hover:bg-gray-100 transition-colors"

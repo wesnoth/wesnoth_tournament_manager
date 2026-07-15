@@ -199,7 +199,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-4xl font-bold text-gray-800">{title}</h1>
           {showCreateButton && (
-            <button className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors" onClick={onCreateClick}>
+            <button data-help-id="action-create-tournament" className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors" onClick={onCreateClick}>
               {t('create_tournament')}
             </button>
           )}
@@ -212,6 +212,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
       {totalPages > 1 && (
         <div className="flex gap-4 items-center justify-center mb-6 flex-wrap">
           <button
+            data-help-id="action-tournament-pagination-first"
             className={`px-4 py-2 rounded transition-colors ${currentPage === 1 ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600'}`}
             onClick={() => handlePageChange(1)}
             disabled={currentPage === 1}
@@ -219,6 +220,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
             {t('pagination_first')}
           </button>
           <button
+            data-help-id="action-tournament-pagination-previous"
             className={`px-4 py-2 rounded transition-colors ${currentPage === 1 ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600'}`}
             onClick={() => handlePageChange(currentPage - 1)}
             disabled={currentPage === 1}
@@ -231,6 +233,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
           </div>
 
           <button
+            data-help-id="action-tournament-pagination-next"
             className={`px-4 py-2 rounded transition-colors ${currentPage === totalPages ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600'}`}
             onClick={() => handlePageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
@@ -238,6 +241,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
             {t('pagination_next')}
           </button>
           <button
+            data-help-id="action-tournament-pagination-last"
             className={`px-4 py-2 rounded transition-colors ${currentPage === totalPages ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600'}`}
             onClick={() => handlePageChange(totalPages)}
             disabled={currentPage === totalPages}
@@ -254,6 +258,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
             <div className="flex flex-col gap-2 flex-shrink-0 min-w-[200px]">
               <label htmlFor="name" className="font-semibold text-gray-700 text-sm">{t('tournament_name')}</label>
               <input
+                data-help-id="field-tournament-list-name"
                 type="text"
                 id="name"
                 name="name"
@@ -268,6 +273,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
             <div className="flex flex-col gap-2 flex-shrink-0 min-w-[200px]">
               <label htmlFor="status" className="font-semibold text-gray-700 text-sm">{t('filter_status')}</label>
               <select
+                data-help-id="field-tournament-list-status"
                 id="status"
                 name="status"
                 value={inputFilters.status}
@@ -288,6 +294,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
             <div className="flex flex-col gap-2 flex-shrink-0 min-w-[200px]">
               <label htmlFor="type" className="font-semibold text-gray-700 text-sm">{t('filter_type')}</label>
               <select
+                data-help-id="field-tournament-list-type"
                 id="type"
                 name="type"
                 value={inputFilters.type}
@@ -305,6 +312,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
               <label className="font-semibold text-gray-700 text-sm">&nbsp;</label>
               <div className="flex items-center gap-2 pt-1">
                 <input
+                  data-help-id="option-tournament-list-my-tournaments"
                   type="checkbox"
                   id="my_tournaments"
                   name="my_tournaments"
@@ -323,10 +331,10 @@ const TournamentList: React.FC<TournamentListProps> = ({
               </div>
             </div>
 
-            <button className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors flex-shrink-0 h-fit self-end" onClick={handleResetFilters}>
+            <button data-help-id="action-reset-tournament-filters" className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors flex-shrink-0 h-fit self-end" onClick={handleResetFilters}>
               {t('reset_filters')}
             </button>
-            <button className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors flex-shrink-0 h-fit self-end" onClick={applyFilters}>
+            <button data-help-id="action-refresh-tournament-list" className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors flex-shrink-0 h-fit self-end" onClick={applyFilters}>
               {t('common.refresh')}
             </button>
           </div>
@@ -388,6 +396,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
                     </button>
                     {onEdit && (
                       <button
+                        data-help-id="action-edit-tournament-list-item"
                         onClick={() => onEdit(tournament.id)}
                         className="px-3 py-1 bg-yellow-500 text-white rounded text-xs hover:bg-yellow-600 transition-colors"
                       >
@@ -396,6 +405,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
                     )}
                     {onDelete && (
                       <button
+                        data-help-id="action-delete-tournament-list-item"
                         onClick={() => onDelete(tournament.id)}
                         className="px-3 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600 transition-colors"
                       >
@@ -416,6 +426,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
       {totalPages > 1 && (
         <div className="flex gap-4 items-center justify-center mb-6 flex-wrap">
           <button
+            data-help-id="action-tournament-pagination-first"
             className={`px-4 py-2 rounded transition-colors ${currentPage === 1 ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600'}`}
             onClick={() => handlePageChange(1)}
             disabled={currentPage === 1}
@@ -423,6 +434,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
             {t('pagination_first')}
           </button>
           <button
+            data-help-id="action-tournament-pagination-previous"
             className={`px-4 py-2 rounded transition-colors ${currentPage === 1 ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600'}`}
             onClick={() => handlePageChange(currentPage - 1)}
             disabled={currentPage === 1}
@@ -435,6 +447,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
           </div>
 
           <button
+            data-help-id="action-tournament-pagination-next"
             className={`px-4 py-2 rounded transition-colors ${currentPage === totalPages ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600'}`}
             onClick={() => handlePageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
@@ -442,6 +455,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
             {t('pagination_next')}
           </button>
           <button
+            data-help-id="action-tournament-pagination-last"
             className={`px-4 py-2 rounded transition-colors ${currentPage === totalPages ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600'}`}
             onClick={() => handlePageChange(totalPages)}
             disabled={currentPage === totalPages}

@@ -53,6 +53,7 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
         <div className="flex justify-between items-center border-b-2 border-gray-100 px-6 py-6 bg-gray-50">
           <h2 className="text-2xl font-semibold text-gray-800 m-0">Match Details</h2>
           <button 
+            data-help-id="action-close-match-details"
             className="bg-none border-none text-gray-400 text-2xl cursor-pointer p-0 w-8 h-8 flex items-center justify-center rounded hover:text-gray-800 hover:bg-gray-100 transition-all"
             onClick={onClose}
           >
@@ -161,6 +162,7 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
                       <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">Replay</td>
                       <td colSpan={2} className="px-4 py-3 text-center">
                         <a
+                          data-help-id="action-download-match-replay"
                           href={match.replay_url || match.replay_file_path}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -186,6 +188,7 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
         <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex gap-3 justify-center">
           {canCancel && (
             <button 
+              data-help-id="action-cancel-match-report"
               className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
                 cancelSuccess 
                   ? 'bg-green-500 text-white' 
@@ -205,6 +208,7 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
             </div>
           )}
           <button 
+            data-help-id="action-close-match-details"
             className="px-6 py-2 bg-gray-400 hover:bg-gray-500 text-white rounded-lg font-semibold transition-colors"
             onClick={onClose}
           >

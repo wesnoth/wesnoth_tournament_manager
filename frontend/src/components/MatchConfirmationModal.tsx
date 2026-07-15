@@ -118,6 +118,7 @@ const MatchConfirmationModal: React.FC<MatchConfirmationModalProps> = ({
         <div className="flex justify-between items-center border-b-2 border-gray-100 px-6 py-6 bg-gray-50">
           <h2 className="text-2xl font-semibold text-gray-800 m-0">Match Confirmation</h2>
           <button 
+            data-help-id="action-close-match-confirmation"
             className="bg-none border-none text-gray-400 text-3xl cursor-pointer p-0 w-8 h-8 flex items-center justify-center rounded hover:text-gray-800 hover:bg-gray-100 transition-all"
             onClick={onClose}
           >
@@ -159,6 +160,7 @@ const MatchConfirmationModal: React.FC<MatchConfirmationModalProps> = ({
               <div className="mt-4">
                 <label htmlFor="comments" className="block font-semibold text-gray-700 mb-2">Comments:</label>
                 <textarea
+                  data-help-id="field-match-confirmation-comments"
                   id="comments"
                   name="comments"
                   value={formData.comments}
@@ -179,6 +181,7 @@ const MatchConfirmationModal: React.FC<MatchConfirmationModalProps> = ({
 
         <div className="flex gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
           <button
+            data-help-id="action-cancel-match-confirmation"
             className="flex-1 px-4 py-2 bg-gray-300 text-gray-800 rounded-lg font-semibold hover:bg-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={onClose}
             disabled={isSubmitting}
@@ -188,6 +191,7 @@ const MatchConfirmationModal: React.FC<MatchConfirmationModalProps> = ({
           {isLoser && isAuthenticated && (
             <>
               <button
+                data-help-id="action-dispute-match"
                 className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={handleDispute}
                 disabled={isSubmitting}
@@ -195,6 +199,7 @@ const MatchConfirmationModal: React.FC<MatchConfirmationModalProps> = ({
                 {isSubmitting ? 'Processing...' : 'Dispute'}
               </button>
               <button
+                data-help-id="action-confirm-match"
                 className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={handleConfirm}
                 disabled={isSubmitting}
@@ -205,6 +210,7 @@ const MatchConfirmationModal: React.FC<MatchConfirmationModalProps> = ({
           )}
           {isWinner && isAuthenticated && !isReported && !match.winner_comments && !match.winner_rating && (
             <button
+              data-help-id="action-inform-match"
               className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={handleConfirm}
               disabled={isSubmitting}
