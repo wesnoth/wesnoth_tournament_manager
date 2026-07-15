@@ -218,6 +218,7 @@ router.post('/:replayId/confirm-winner', authMiddleware, async (req: AuthRequest
       matchType:                    summary.matchType || 'ranked',
       linkedTournamentId:           summary.linkedTournamentId   || null,
       linkedTournamentRoundMatchId: replay.tournament_round_match_id || null,
+      updateTournamentRoundMatch:   false,
       gameId:                       replay.game_id,
       wesnothVersion:               replay.wesnoth_version,
       instanceUuid:                 replay.instance_uuid,
@@ -314,4 +315,3 @@ router.post('/:replayId/discard', authMiddleware, async (req: AuthRequest, res) 
 });
 
 export default router;
-

@@ -38,6 +38,8 @@ export interface CreateMatchInput {
   instanceUuid: string | null;
   /** Replay-created matches use 1; test simulations deliberately use 0. */
   autoReported?: boolean;
+  /** Set false when the caller will run handlePostConfirmation afterwards. */
+  updateTournamentRoundMatch?: boolean;
 }
 
 export interface CreateMatchResult {
@@ -160,7 +162,7 @@ export async function createMatch(input: CreateMatchInput): Promise<CreateMatchR
     );
 
     // Update tournament round match if linked
-    if (input.linkedTournamentRoundMatchId) {
+    if (input.linkedTournamentRoundMatchId && input.updateTournamentRoundMatch !== false) {
       await updateTournamentRoundMatch(input.linkedTournamentRoundMatchId, winner.id);
     }
 
@@ -328,6 +330,41 @@ export async function updateTournamentRoundMatch(
       );
 
       console.log(`   ✅ [TOURNAMENT LINK] 1v1 stats: winner(${winnerId}) +1W+1P, loser(${loserId}) +1L`);
+    }
+
+    // Elimination progression must be applied by the shared result service.
+    // Previously only the organizer's manual determine-winner route changed
+    // the loser's status, so replay-driven and simulated results left losers
+    // active and allowed them to be paired again in the next round.
+    const roundTypeResult = await query(
+      `SELECT t.tournament_type, tr.round_type
+       FROM tournaments t
+       JOIN tournament_rounds tr ON tr.tournament_id = t.id
+       WHERE t.id = ? AND tr.id = ?`,
+      [rm.tournament_id, rm.round_id]
+    );
+    const roundType = roundTypeResult.rows[0]?.round_type?.toLowerCase() || 'general';
+    const tournamentType = roundTypeResult.rows[0]?.tournament_type?.toLowerCase();
+    const isEliminationRound = tournamentType === 'elimination'
+      || (tournamentType === 'swiss_elimination' && roundType !== 'general');
+
+    if (isEliminationRound) {
+      if (tournamentMode === 'team') {
+        await query(
+          `UPDATE tournament_teams SET status = 'eliminated', updated_at = NOW()
+           WHERE id = ? AND status = 'active'`,
+          [loserId]
+        );
+      } else {
+        await query(
+          `UPDATE tournament_participants
+           SET status = 'eliminated'
+           WHERE tournament_id = ? AND user_id = ?
+             AND participation_status = 'accepted' AND status = 'active'`,
+          [rm.tournament_id, loserId]
+        );
+      }
+      console.log(`   🏁 [TOURNAMENT LINK] Eliminated ${loserId} from ${roundType} round`);
     }
   }
 
