@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { adminService } from '../services/api';
 import MainLayout from '../components/MainLayout';
+import { SimulateMatchPanel } from '../components/TestSimulationControls';
 
 const STATUS_COLORS: Record<string, string> = {
   new: 'bg-blue-100 text-blue-800',
@@ -81,6 +82,7 @@ const AdminReplays: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [showSimulation, setShowSimulation] = useState(false);
   
   // System settings state
   const [systemSettings, setSystemSettings] = useState<any[]>([]);
@@ -258,12 +260,25 @@ const AdminReplays: React.FC = () => {
   return (
     <MainLayout>
       <div className="w-full mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-6">
-          {t('admin.replays_title', 'Manage Replays')}
-        </h1>
+        <div className="flex items-center justify-between gap-4 mb-6">
+          <h1 className="text-3xl font-bold text-gray-800">
+            {t('admin.replays_title', 'Manage Replays')}
+          </h1>
+          {import.meta.env.MODE === 'test' && (
+            <button
+              data-help-id="action-open-test-simulate-match"
+              onClick={() => setShowSimulation((visible) => !visible)}
+              className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700"
+            >
+              {showSimulation ? 'Close Simulator' : 'Simulate Match'}
+            </button>
+          )}
+        </div>
 
         {error && <p className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</p>}
         {message && <p className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-4">{message}</p>}
+
+        {showSimulation && <SimulateMatchPanel onCompleted={() => fetchReplays()} />}
 
         {/* System settings are replay-processing controls, shown only to administrators. */}
         {isAdmin && <div className="bg-white rounded-lg shadow-md p-6 mb-8">

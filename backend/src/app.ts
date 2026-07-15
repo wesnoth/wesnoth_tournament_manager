@@ -18,6 +18,7 @@ import wikiRoutes from './routes/wiki.js';
 import wikiAdminRoutes from './routes/wikiAdmin.js';
 import adminRuleTemplatesRoutes from './routes/adminRuleTemplates.js';
 import ruleTemplatesRoutes from './routes/ruleTemplates.js';
+import testToolsRoutes from './routes/testTools.js';
 import { generalLimiter } from './middleware/rateLimiter.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -84,6 +85,9 @@ app.use('/api/replays', replaysRoutes);
 app.use('/api/tournament-scheduling', schedulingRoutes);
 app.use('/api/challenges', challengesRoutes);
 app.use('/api/notifications', notificationsRoutes);
+if (process.env.NODE_ENV === 'test') {
+  app.use('/api/test-tools', testToolsRoutes);
+}
 
 // Health check endpoints
 app.get('/health', (req, res) => {

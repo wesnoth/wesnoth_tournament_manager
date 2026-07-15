@@ -25,17 +25,19 @@ export interface CreateMatchInput {
   map: string;
   winnerSide: number;
   /** ID of the replays table row */
-  replayRowId: string;
-  replayFilePath: string;
+  replayRowId: string | null;
+  replayFilePath: string | null;
   /** 'ranked' | 'tournament_ranked' | 'tournament_unranked' */
   matchType: string;
   /** tournament_id to set on the match (null for direct ranked) */
   linkedTournamentId: string | null;
   /** If set, update win counters in tournament_round_matches after match creation */
   linkedTournamentRoundMatchId: string | null;
-  gameId: number;
-  wesnothVersion: string;
-  instanceUuid: string;
+  gameId: number | null;
+  wesnothVersion: string | null;
+  instanceUuid: string | null;
+  /** Replay-created matches use 1; test simulations deliberately use 0. */
+  autoReported?: boolean;
 }
 
 export interface CreateMatchResult {
@@ -114,13 +116,14 @@ export async function createMatch(input: CreateMatchInput): Promise<CreateMatchR
          winner_ranking_pos, winner_ranking_change, loser_ranking_pos, loser_ranking_change,
          winner_side, game_id, wesnoth_version, instance_uuid,
          created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'reported', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'reported', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         matchId,
         winner.id, loser.id,
         input.winnerFaction, input.loserFaction,
         input.map,
         input.replayRowId, input.replayFilePath,
+        input.autoReported === false ? 0 : 1,
         getTournamentType(input.matchType),
         getTournamentMode(input.matchType),
         input.linkedTournamentId,

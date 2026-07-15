@@ -45,6 +45,8 @@ The canonical lifecycle is:
 
 Lifecycle fields cannot be changed through the general configuration endpoint. Closing registration, preparing, starting, and advancing use dedicated endpoints so each transition validates its prerequisites.
 
+In the test environment, an organizer can use `Simulate Join` while registration is open. It adds an existing user directly as accepted, or creates a two-member accepted team, without participant confirmation or Discord notifications. The tool is unavailable in production and does not change the normal public join workflow.
+
 ## Round progression and standings
 
 Manual progression and `auto_advance_round` use the same round activation function. Automatic advancement occurs only after a non-empty round has completed all of its series. League rounds are already active concurrently and finish only when no open league round remains.

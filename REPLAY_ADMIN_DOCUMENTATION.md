@@ -16,6 +16,8 @@ Replay records are stored in the tournament database. Forum database tables are 
 - Global replay-processing settings are displayed separately from the replay list and can only be edited by administrators.
 - Administrative replay actions are recorded in `audit_logs`.
 
+In the test environment, authorized administrators and tournament moderators also have a `Simulate Match` tool. It supports direct ranked matches and open tournament series, selects valid assets on the server, and reports the result through the same ELO/statistics and tournament progression services used by replay integration. Simulated matches have no replay row or replay URL and are recorded in `audit_logs`; they are not exposed or accepted by production backend routes.
+
 ## Filtering and pagination
 
 The API applies status, game ID, map, and player filters in the database before pagination. Map searches use the same precedence as the UI: `finalMap`, `forumMap`, `resolvedMap`, then `map_name`. Player searches inspect parsed `forumPlayers[*].user_name` values.

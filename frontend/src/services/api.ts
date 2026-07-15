@@ -269,6 +269,23 @@ export const adminService = {
   deleteRuleTemplate: (id: string) => api.delete(`/admin/rule-templates/${id}`),
 };
 
+export const testToolsService = {
+  searchUsers: (search: string, rankedOnly = false) =>
+    api.get('/test-tools/users', { params: { search, ranked_only: rankedOnly } }),
+  getTournaments: (mode: string) => api.get('/test-tools/tournaments', { params: { mode } }),
+  getOpenMatches: (tournamentId: string) => api.get(`/test-tools/tournaments/${tournamentId}/matches`),
+  getAssets: (tournamentId: string) => api.get(`/test-tools/tournaments/${tournamentId}/assets`),
+  simulateMatch: (data: {
+    mode: string;
+    tournament_id?: string;
+    round_match_id?: string;
+    winner_id: string;
+    loser_id?: string;
+  }) => api.post('/test-tools/simulate-match', data),
+  simulateJoin: (tournamentId: string, data: { user_ids: string[]; team_name?: string }) =>
+    api.post(`/test-tools/tournaments/${tournamentId}/simulate-join`, data),
+};
+
 // Public API endpoints (no auth required)
 export const publicService = {
   getNews: () => api.get('/public/news'),

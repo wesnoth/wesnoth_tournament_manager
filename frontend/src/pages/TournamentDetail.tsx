@@ -15,6 +15,7 @@ import ScheduleProposalModal from '../components/ScheduleProposalModal';
 import { TeamReplacementModal } from '../components/TeamReplacementModal';
 import MarkdownPreview from '../components/MarkdownPreview';
 import MainLayout from '../components/MainLayout';
+import { SimulateJoinPanel } from '../components/TestSimulationControls';
 import type { TournamentFormData, TournamentUpdatePayload } from '../types/tournament';
 
 // Helper function to extract parsed replay data from JSON summary
@@ -1600,6 +1601,10 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
           </div>
         )}
       </div>
+
+      {import.meta.env.MODE === 'test' && isCreator && tournament.status === 'registration_open' && (
+        <SimulateJoinPanel tournament={tournament} onCompleted={() => fetchTournamentData()} />
+      )}
 
       {/* Edit form - shown when in edit mode */}
       {isCreator && editMode && tournament.status !== 'in_progress' && (
