@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { testToolsService } from '../services/api';
 
 interface UserOption { id: string; nickname: string; elo_rating?: number; enable_ranked?: boolean; }
@@ -70,9 +70,9 @@ function UserSearch({
 }
 
 export function SimulateMatchPanel({ onCompleted }: { onCompleted?: () => void }) {
-  const [mode, setMode] = useState('ranked');
+  const [mode, setMode] = useState(() => sessionStorage.getItem('test-simulate-match-mode') || 'ranked');
   const [tournaments, setTournaments] = useState<any[]>([]);
-  const [tournamentId, setTournamentId] = useState('');
+  const [tournamentId, setTournamentId] = useState(() => sessionStorage.getItem('test-simulate-match-tournament') || '');
   const [openMatches, setOpenMatches] = useState<any[]>([]);
   const [roundMatchId, setRoundMatchId] = useState('');
   const [winner, setWinner] = useState<UserOption | null>(null);
@@ -81,11 +81,17 @@ export function SimulateMatchPanel({ onCompleted }: { onCompleted?: () => void }
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const initialModeLoad = useRef(true);
 
   const tournamentMode = mode !== 'ranked';
   useEffect(() => {
     if (!isTestBuild || !tournamentMode) return;
-    setTournamentId('');
+    if (initialModeLoad.current) {
+      initialModeLoad.current = false;
+    } else {
+      setTournamentId('');
+      sessionStorage.removeItem('test-simulate-match-tournament');
+    }
     setOpenMatches([]);
     testToolsService.getTournaments(mode).then((response) => setTournaments(response.data || [])).catch(() => setError('Failed to load active tournaments'));
   }, [mode, tournamentMode]);
@@ -114,8 +120,16 @@ export function SimulateMatchPanel({ onCompleted }: { onCompleted?: () => void }
       setMessage('Simulated match reported successfully');
       setWinner(null); setLoser(null); setWinnerId(''); setRoundMatchId('');
       if (tournamentId) {
-        const response = await testToolsService.getOpenMatches(tournamentId);
-        setOpenMatches(response.data || []);
+        // Series and round transitions are finalized asynchronously. Poll the
+        // source briefly so the persistent form exposes the next game instead
+        // of presenting a transient empty list to the test operator.
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+          const response = await testToolsService.getOpenMatches(tournamentId);
+          const nextMatches = response.data || [];
+          setOpenMatches(nextMatches);
+          if (nextMatches.length > 0 || attempt === 4) break;
+          await new Promise((resolve) => window.setTimeout(resolve, 2_000));
+        }
       }
       onCompleted?.();
     } catch (err: any) {
@@ -132,7 +146,7 @@ export function SimulateMatchPanel({ onCompleted }: { onCompleted?: () => void }
       <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <label className="flex flex-col gap-1">
           <span className="text-sm font-semibold text-gray-700">Match mode</span>
-          <select data-help-id="option-test-match-mode" value={mode} onChange={(event) => { setMode(event.target.value); setError(''); }} className="px-3 py-2 border border-gray-300 rounded-lg">
+          <select data-help-id="option-test-match-mode" value={mode} onChange={(event) => { setMode(event.target.value); sessionStorage.setItem('test-simulate-match-mode', event.target.value); setError(''); }} className="px-3 py-2 border border-gray-300 rounded-lg">
             <option value="ranked">Ranked</option>
             <option value="tournament_ranked">Tournament Ranked</option>
             <option value="tournament_unranked">Tournament Unranked</option>
@@ -148,7 +162,7 @@ export function SimulateMatchPanel({ onCompleted }: { onCompleted?: () => void }
           <>
             <label className="flex flex-col gap-1">
               <span className="text-sm font-semibold text-gray-700">Active tournament</span>
-              <select data-help-id="field-test-tournament" value={tournamentId} onChange={(event) => { setTournamentId(event.target.value); setRoundMatchId(''); setWinnerId(''); }} className="px-3 py-2 border border-gray-300 rounded-lg">
+              <select data-help-id="field-test-tournament" value={tournamentId} onChange={(event) => { setTournamentId(event.target.value); sessionStorage.setItem('test-simulate-match-tournament', event.target.value); setRoundMatchId(''); setWinnerId(''); }} className="px-3 py-2 border border-gray-300 rounded-lg">
                 <option value="">Select tournament</option>
                 {tournaments.map((tournament) => <option key={tournament.id} value={tournament.id}>{tournament.name}</option>)}
               </select>
