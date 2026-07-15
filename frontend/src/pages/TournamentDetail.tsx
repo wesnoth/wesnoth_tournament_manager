@@ -1544,6 +1544,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
           <div className="flex flex-wrap gap-3">
             {tournament.status !== 'prepared' && tournament.status !== 'in_progress' && tournament.status !== 'finished' && (
               <button 
+                data-help-id="action-edit-tournament"
                 onClick={() => setEditMode(true)} 
                 disabled={!assetsLoaded}
                 className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
@@ -1553,15 +1554,15 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
             )}
 
             {tournament.status === 'registration_open' && (
-              <button onClick={handleCloseRegistration} className="px-6 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors">{t('tournaments.btn_close_registration')}</button>
+              <button data-help-id="action-close-registration" onClick={handleCloseRegistration} className="px-6 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors">{t('tournaments.btn_close_registration')}</button>
             )}
 
             {tournament.status === 'registration_closed' && (
-              <button onClick={handlePrepareAndStart} className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">{t('tournaments.btn_prepare')}</button>
+              <button data-help-id="action-prepare-tournament" onClick={handlePrepareAndStart} className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">{t('tournaments.btn_prepare')}</button>
             )}
 
             {tournament.status === 'prepared' && (
-              <button onClick={handleStartTournament} className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors">{t('tournaments.btn_start')}</button>
+              <button data-help-id="action-start-tournament" onClick={handleStartTournament} className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors">{t('tournaments.btn_start')}</button>
             )}
 
             {(tournament.status === 'in_progress' || tournament.status === 'finished') && isCreator && (
@@ -1569,7 +1570,8 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                 {tournament.status === 'in_progress' && (
                   <p className="text-green-600">✓ {t('tournaments.started_locked')}</p>
                 )}
-                <button 
+                <button
+                  data-help-id="action-recalculate-tiebreakers"
                   onClick={handleRecalculateTiebreakers}
                   className="px-6 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition-colors"
                   title={t('tournaments.btn_recalculate_tiebreakers_tooltip', 'Recalculate OMP, GWP, OGP for all participants')}
@@ -2605,6 +2607,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                             const nextRound = rounds.find(r => r.round_number === round.round_number + 1);
                             return nextRound && nextRound.round_status === 'pending' ? (
                               <button
+                                data-help-id={`action-start-next-round-${round.round_number}`}
                                 className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition-colors"
                                 onClick={() => handleStartNextRound(round.round_number)}
                                 title={t('start_next_round')}

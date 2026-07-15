@@ -120,6 +120,7 @@ const MyTournaments: React.FC = () => {
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-center text-4xl font-bold text-gray-800">{t('my_tournaments_title')}</h1>
           <button 
+            data-help-id="action-open-create-tournament"
             className="px-8 py-4 text-lg font-bold text-white bg-gradient-to-r from-green-500 to-green-700 border-none rounded-lg cursor-pointer transition-all duration-300 shadow-lg hover:shadow-xl hover:from-green-600 hover:to-green-800 hover:-translate-y-0.5 active:translate-y-0 active:shadow-md disabled:opacity-60 disabled:cursor-not-allowed uppercase tracking-wider whitespace-nowrap"
             onClick={() => setShowCreateForm(!showCreateForm)}
           >

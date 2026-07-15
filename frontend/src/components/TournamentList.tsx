@@ -380,6 +380,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
                   <td className="px-4 py-3 text-gray-700">{formatDate(tournament.updated_at)}</td>
                   <td className="px-4 py-3 text-gray-700 flex gap-2">
                     <button
+                      data-help-id="action-view-tournament-details"
                       onClick={() => handleViewDetails(tournament.id)}
                       className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition-colors"
                     >

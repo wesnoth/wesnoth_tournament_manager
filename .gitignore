@@ -54,6 +54,7 @@ Thumbs.db
 **/skills/
 
 # Testing artifacts
+/e2e/
 /testing/results/
 /testing/scripts/test_credentials.csv
 /testing/scripts/test_tournament.ps1
