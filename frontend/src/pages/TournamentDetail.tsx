@@ -2044,17 +2044,10 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                           }
                           return true;
                         });
-                      // Deduplicate by series ID: for pre-generated BO3 league series,
-                      // multiple tournament_matches rows share the same tournament_round_match_id.
-                      // Show only one row per series to avoid duplicate "Determine Winner" buttons.
-                      const seenSeriesIds = new Set<string>();
+                      // A best-of series contains one row per individual game.
+                      // Keep every pending game visible; only the organizer action
+                      // is limited to the first row of each series below.
                       const scheduledMatches = rawScheduled
-                        .filter((m) => {
-                          const seriesId = m.tournament_round_match_id || m.id;
-                          if (seenSeriesIds.has(seriesId)) return false;
-                          seenSeriesIds.add(seriesId);
-                          return true;
-                        })
                         .sort((a, b) => (a.player1_nickname || '').localeCompare(b.player1_nickname || ''));
                       
                       if (scheduledMatches.length === 0) return null;
@@ -2081,7 +2074,11 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                               </tr>
                             </thead>
                             <tbody>
-                              {scheduledMatches.map((match) => {
+                              {scheduledMatches.map((match, matchIndex) => {
+                                const seriesId = match.tournament_round_match_id || match.id;
+                                const firstSeriesRow = scheduledMatches.findIndex(
+                                  (candidate) => (candidate.tournament_round_match_id || candidate.id) === seriesId
+                                ) === matchIndex;
                                 // Check if current user is one of the players/teams
                                 let isPlayer = false;
                                 if (match.is_team_mode) {
@@ -2125,7 +2122,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                     </td>
                                     {canManageParticipants && (
                                       <td className="px-4 py-3 text-gray-700">
-                                        <button
+                                        {firstSeriesRow && <button
                                           className="px-3 py-1 bg-orange-500 text-white rounded text-xs font-semibold hover:bg-orange-600 transition-colors whitespace-nowrap"
                                           onClick={() => openDetermineWinnerModal({
                                             id: match.tournament_round_match_id || match.id,
@@ -2139,7 +2136,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                           title={t('determine_winner')}
                                         >
                                           ⚖️ {t('determine_winner')}
-                                        </button>
+                                        </button>}
                                       </td>
                                     )}
                                   </tr>
