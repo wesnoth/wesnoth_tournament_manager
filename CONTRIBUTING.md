@@ -80,6 +80,8 @@ Use clear commit messages in English or Spanish:
   - Use functional components.
   - Prefer React hooks.
   - Keep components small and reusable.
+  - Add stable `data-help-id` hooks to new or functionally changed controls so Wiki Help can capture and document them without relying on translated text or CSS structure.
+  - Use semantic `action-`, `field-`, and `option-` prefixes for controls, and reserve `region-` for large documentation areas that need an independent screenshot.
 
 - Tests
   - Include tests for critical new code.

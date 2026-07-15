@@ -116,7 +116,7 @@ export const UnrankedFactionSelect: React.FC<UnrankedFactionSelectProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-full min-h-[26rem] max-h-[66vh] bg-white border border-gray-300 rounded-lg overflow-hidden shadow-sm">
+    <div data-help-id="region-tournament-factions" className="flex flex-col h-full min-h-[26rem] max-h-[66vh] bg-white border border-gray-300 rounded-lg overflow-hidden shadow-sm">
       <div className="flex flex-col h-full gap-0">
         <div className="flex justify-between items-center px-4 py-3 bg-gradient-to-r from-purple-700 to-indigo-500 border-b border-gray-200 text-white font-semibold flex-shrink-0">
           <h4 className="text-sm font-semibold">Factions</h4>
@@ -132,6 +132,7 @@ export const UnrankedFactionSelect: React.FC<UnrankedFactionSelectProps> = ({
             <div className="px-4 py-2">
               <label className="flex items-center gap-2 py-2 border-b border-gray-200 font-semibold">
                 <input
+                  data-help-id="option-tournament-factions-all"
                   type="checkbox"
                   checked={selectAll}
                   onChange={handleSelectAll}
@@ -146,6 +147,7 @@ export const UnrankedFactionSelect: React.FC<UnrankedFactionSelectProps> = ({
               {factions.map((faction) => (
                 <label key={faction.id} className="flex items-center gap-2 px-4 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100">
                   <input
+                    data-help-id="option-tournament-faction"
                     type="checkbox"
                     checked={selectedFactionIds.includes(faction.id)}
                     onChange={() => handleFactionSelect(faction.id)}
@@ -161,6 +163,7 @@ export const UnrankedFactionSelect: React.FC<UnrankedFactionSelectProps> = ({
 
         {!isRankedOnly && (
           <button
+            data-help-id="action-create-tournament-faction"
             className="m-3 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-semibold text-sm disabled:opacity-50"
             onClick={() => setShowModal(true)}
             disabled={disabled}
@@ -172,11 +175,12 @@ export const UnrankedFactionSelect: React.FC<UnrankedFactionSelectProps> = ({
       </div>
 
       {!isRankedOnly && showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowModal(false)}>
+        <div data-help-id="region-create-tournament-faction" className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowModal(false)}>
           <div className="bg-white rounded-lg shadow-lg p-6 w-96" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-xl font-bold mb-4">Create New Faction</h3>
 
             <input
+              data-help-id="field-new-tournament-faction-name"
               type="text"
               placeholder="Faction Name"
               value={newFactionName}
@@ -189,6 +193,7 @@ export const UnrankedFactionSelect: React.FC<UnrankedFactionSelectProps> = ({
 
             <div className="flex gap-2 justify-end">
               <button
+                data-help-id="action-cancel-create-tournament-faction"
                 onClick={() => setShowModal(false)}
                 disabled={creatingFaction}
                 type="button"
@@ -197,6 +202,7 @@ export const UnrankedFactionSelect: React.FC<UnrankedFactionSelectProps> = ({
                 Cancel
               </button>
               <button
+                data-help-id="action-confirm-create-tournament-faction"
                 onClick={handleCreateFaction}
                 disabled={creatingFaction || !newFactionName.trim()}
                 className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"

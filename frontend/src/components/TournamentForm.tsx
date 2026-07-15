@@ -148,16 +148,17 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
   };
 
   return (
-    <form id="tournament-form" className="bg-white rounded-lg shadow-md p-8 space-y-6" onSubmit={onSubmit}>
+    <form id="tournament-form" data-help-id="region-tournament-form" className="bg-white rounded-lg shadow-md p-8 space-y-6" onSubmit={onSubmit}>
       {/* SECTION 1: BASIC INFORMATION */}
-      <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-white">
+      <div data-help-id="region-tournament-basic-information" className="mb-6 p-4 border border-gray-200 rounded-lg bg-white">
         <h3 className="mb-4 font-semibold text-gray-800">{t('tournament.basic_info', 'Basic Information')}</h3>
         
-        <div className={`mb-4 grid grid-cols-1 ${mode === 'create' ? 'xl:grid-cols-2' : ''} gap-4`}>
+        <div data-help-id="region-tournament-identity" className={`mb-4 grid grid-cols-1 ${mode === 'create' ? 'xl:grid-cols-2' : ''} gap-4`}>
           {/* Tournament Name */}
           <div className="flex flex-col gap-2">
             <label className="font-medium text-gray-700">{t('tournament_name', 'Tournament Name')}</label>
             <input
+              data-help-id="field-tournament-name"
               type="text"
               placeholder={t('tournament_name', 'Tournament Name')}
               value={formData.name}
@@ -173,6 +174,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
               <label className="font-medium text-gray-700">{t('tournament.organizers', 'Organizers')}</label>
               <div className="flex gap-2">
                 <select
+                  data-help-id="field-tournament-co-organizer"
                   value={organizerCandidateId}
                   onChange={(e) => setOrganizerCandidateId(e.target.value)}
                   disabled={isLoading || templatesLoading}
@@ -186,6 +188,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                   ))}
                 </select>
                 <button
+                  data-help-id="action-add-tournament-organizer"
                   type="button"
                   onClick={handleAddCoOrganizer}
                   disabled={isLoading || !organizerCandidateId}
@@ -204,6 +207,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                       <React.Fragment key={user.id}>
                         <span>{user.nickname}</span>
                         <button
+                          data-help-id="action-remove-tournament-organizer"
                           type="button"
                           onClick={() => handleRemoveCoOrganizer(user.id)}
                           disabled={isLoading}
@@ -223,12 +227,13 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
         </div>
 
         {/* Tournament Description - Wiki editor */}
-        <div className="mb-4 flex flex-col gap-2">
+        <div data-help-id="region-tournament-description" className="mb-4 flex flex-col gap-2">
           <label className="font-medium text-gray-700">{t('tournament_description', 'Description')}</label>
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
               <span className="text-sm font-medium text-gray-600">{t('tournament.editor', 'Editor')}</span>
               <textarea
+                data-help-id="field-tournament-description"
                 placeholder={t('tournament.description_markdown_placeholder', 'Write tournament description in markdown...')}
                 value={formData.description}
                 onChange={(e) => onFormDataChange({ ...formData, description: e.target.value })}
@@ -238,7 +243,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 resize-vertical font-mono text-sm"
               />
             </div>
-            <div className="rounded-md border border-gray-200 p-4 bg-gray-50">
+            <div data-help-id="region-tournament-description-preview" className="rounded-md border border-gray-200 p-4 bg-gray-50">
               <h4 className="font-semibold text-gray-800 mb-2">{t('tournament.description_preview', 'Description Preview')}</h4>
               <MarkdownPreview
                 markdown={formData.description}
@@ -251,9 +256,10 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
           </small>
         </div>
 
-        <div className="mb-4 flex flex-col gap-2">
+        <div data-help-id="region-tournament-rules-template" className="mb-4 flex flex-col gap-2">
           <label className="font-medium text-gray-700">{t('tournament.rules_template', 'Rules Template')}</label>
           <select
+            data-help-id="field-tournament-rules-template"
             value={formData.rules_template_id || ''}
             onChange={(e) => handleRuleTemplateChange(e.target.value)}
             disabled={isLoading || templatesLoading}
@@ -271,12 +277,13 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
           </small>
         </div>
 
-        <div className="mb-4 flex flex-col gap-2">
+        <div data-help-id="region-tournament-rules" className="mb-4 flex flex-col gap-2">
           <label className="font-medium text-gray-700">{t('tournament.rules_content', 'Tournament Rules')}</label>
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
               <span className="text-sm font-medium text-gray-600">{t('tournament.editor', 'Editor')}</span>
               <textarea
+                data-help-id="field-tournament-rules"
                 placeholder={t('tournament.rules_content_placeholder', 'Write tournament rules in markdown...')}
                 value={formData.rules_content || ''}
                 onChange={(e) => onFormDataChange({ ...formData, rules_content: e.target.value })}
@@ -285,7 +292,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 resize-vertical font-mono text-sm"
               />
             </div>
-            <div className="rounded-md border border-gray-200 p-4 bg-gray-50">
+            <div data-help-id="region-tournament-rules-preview" className="rounded-md border border-gray-200 p-4 bg-gray-50">
               <h4 className="font-semibold text-gray-800 mb-2">{t('tournament.rules_preview', 'Rules Preview')}</h4>
               <MarkdownPreview
                 markdown={formData.rules_content || ''}
@@ -299,11 +306,12 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
         </div>
         
         {/* Tournament Mode Selector (Ranked/Unranked/Team) */}
-        <div className="flex flex-col gap-2">
+        <div data-help-id="region-tournament-mode" className="flex flex-col gap-2">
           <label className="font-medium text-gray-700">{t('tournament.match_type', 'Match Type')}:</label>
           <div className="flex flex-col gap-2">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
+                data-help-id="option-tournament-mode-ranked"
                 type="radio"
                 value="ranked"
                 checked={formData.tournament_mode === 'ranked'}
@@ -314,6 +322,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
+                data-help-id="option-tournament-mode-unranked"
                 type="radio"
                 value="unranked"
                 checked={formData.tournament_mode === 'unranked'}
@@ -324,6 +333,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
+                data-help-id="option-tournament-mode-team"
                 type="radio"
                 value="team"
                 checked={formData.tournament_mode === 'team'}
@@ -337,12 +347,13 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
       </div>
 
       {/* SECTION 2: TOURNAMENT TYPE AND PARTICIPANTS */}
-      <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-white">
+      <div data-help-id="region-tournament-format" className="mb-6 p-4 border border-gray-200 rounded-lg bg-white">
         <h3 className="mb-4 font-semibold text-gray-800">{t('tournament.format_settings', 'Format Settings')}</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="flex flex-col gap-2">
             <label className="font-medium text-gray-700">{t('tournament.tournament_format', 'Tournament Format')}</label>
             <select
+              data-help-id="field-tournament-format"
               value={formData.tournament_type}
               onChange={(e) => handleTournamentTypeChange(e.target.value as TournamentType)}
               required
@@ -358,6 +369,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
           <div className="flex flex-col gap-2">
             <label className="font-medium text-gray-700">{t('label_max_participants', 'Max Participants')}</label>
             <input
+              data-help-id="field-tournament-max-participants"
               type="number"
               placeholder={t('label_max_participants', 'Max Participants')}
               min="2"
@@ -376,7 +388,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
 
       {/* SECTION 3: UNRANKED ASSETS (conditional) */}
       {formData.tournament_mode === 'unranked' && (
-        <div className="mb-6">
+        <div data-help-id="region-tournament-assets-unranked" className="mb-6">
           <h3>{t('tournament.unranked_assets', 'Unranked Tournament Assets')}</h3>
           <p className="text-sm text-gray-600 italic mb-4">{t('tournament.select_allowed_factions_maps', 'Select which factions and maps are allowed in this tournament')}</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -396,7 +408,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
 
       {/* SECTION 3B: TEAM ASSETS (same as unranked) */}
       {formData.tournament_mode === 'team' && (
-        <div className="mb-6">
+        <div data-help-id="region-tournament-assets-team" className="mb-6">
           <h3>{t('tournament.team_assets', 'Team Tournament Assets')}</h3>
           <p className="text-sm text-gray-600 italic mb-4">{t('tournament.select_allowed_factions_maps', 'Select which factions and maps are allowed in this tournament')}</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -416,7 +428,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
 
       {/* SECTION 3C: RANKED ASSETS (only ranked factions/maps) */}
       {formData.tournament_mode === 'ranked' && (
-        <div className="mb-6">
+        <div data-help-id="region-tournament-assets-ranked" className="mb-6">
           <h3>{t('tournament.ranked_assets', 'Ranked Tournament Assets')}</h3>
           <p className="text-sm text-gray-600 italic mb-4">{t('tournament.select_allowed_ranked_factions_maps', 'Select which ranked factions and maps are allowed in this tournament')}</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -436,7 +448,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
         </div>
       )}
 
-      <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-white">
+      <div data-help-id="region-tournament-round-configuration" className="mb-6 p-4 border border-gray-200 rounded-lg bg-white">
         <div className="mb-4">
           <h3 className="font-semibold text-gray-800">{t('tournament.round_configuration', 'Round Configuration')}</h3>
           {!formData.max_participants && (
@@ -448,6 +460,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
           <div className="flex-1">
             <label className="block font-medium text-gray-700 mb-2">{t('label_round_duration', 'Round Duration (days)')}</label>
             <input
+              data-help-id="field-tournament-round-duration"
               type="number"
               min="1"
               max="365"
@@ -464,6 +477,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
           <div className="flex items-center gap-3">
             <label className="font-medium text-gray-700">{t('label_auto_advance_rounds', 'Auto-advance Rounds')}</label>
             <input
+              data-help-id="option-tournament-auto-advance"
               type="checkbox"
               checked={formData.auto_advance_round}
               onChange={(e) => onFormDataChange({ 
@@ -481,6 +495,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
             {t('label_scheduled_start_date', 'Planned Start')}
           </label>
           <input
+            data-help-id="field-tournament-scheduled-start"
             type="datetime-local"
             value={formData.scheduled_start_at
               ? toLocalDateTimeValue(formData.scheduled_start_at)
@@ -499,7 +514,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
 
         {/* ELIMINATION TOURNAMENT - Auto-calculated rounds */}
         {formData.tournament_type === 'elimination' && (
-          <div className="border-t border-gray-200 pt-6">
+          <div data-help-id="region-tournament-format-elimination" className="border-t border-gray-200 pt-6">
             <h4 className="font-semibold text-gray-800 mb-2">{t('tournament.round_configuration', 'Round Configuration')}</h4>
             <p className="text-sm text-gray-600 mb-4">{t('tournament.configure_match_formats_elimination', 'Configure match formats for your elimination tournament')}</p>
             
@@ -511,6 +526,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
               <div className="flex flex-col gap-2">
                 <label className="font-medium text-gray-700">{t('tournament.preliminary_rounds_format', 'Preliminary Rounds Match Format')}</label>
                 <select
+                  data-help-id="field-tournament-elimination-preliminary-format"
                   value={formData.general_rounds_format}
                   onChange={(e) => onFormDataChange({
                     ...formData,
@@ -529,6 +545,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
               <div className="flex flex-col gap-2">
                 <label className="font-medium text-gray-700">{t('tournament.final_match_format', 'Final Match Format')}</label>
                 <select
+                  data-help-id="field-tournament-elimination-final-format"
                   value={formData.final_rounds_format}
                   onChange={(e) => onFormDataChange({
                     ...formData,
@@ -552,13 +569,14 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
           <div className="border-t border-gray-200 pt-6 space-y-6">
             {/* LEAGUE TOURNAMENT */}
             {formData.tournament_type === 'league' && (
-              <div>
+              <div data-help-id="region-tournament-format-league">
                 <h4 className="font-semibold text-gray-800 mb-2">{t('tournament.league_configuration', 'League Format Configuration')}</h4>
                 <p className="text-sm text-gray-600 mb-4">{t('tournament.league_description', 'Configure the League tournament format')}</p>
                 <div className="space-y-4">
                   <div className="flex flex-col gap-2">
                     <label className="font-medium text-gray-700">{t('tournament.league_format', 'League Format')}</label>
                     <select
+                      data-help-id="field-tournament-league-waves"
                       value={formData.general_rounds}
                       onChange={(e) => onFormDataChange({
                         ...formData,
@@ -575,6 +593,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                   <div className="flex flex-col gap-2">
                     <label className="font-medium text-gray-700">{t('tournament.match_format', 'Match Format')}</label>
                     <select
+                      data-help-id="field-tournament-league-match-format"
                       value={formData.general_rounds_format}
                       onChange={(e) => onFormDataChange({
                         ...formData,
@@ -589,7 +608,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                     </select>
                     <small className="text-gray-600">{t('tournament.match_format_help', 'Number of games in each match')}</small>
                   </div>
-                  <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                  <div data-help-id="region-tournament-league-summary" className="bg-gray-50 p-3 rounded border border-gray-200">
                     <p className="text-sm"><strong>{t('tournament.format', 'Format')}:</strong> {formData.general_rounds === 2 ? t('tournament.double_round', 'Double Wave') : t('tournament.single_round', 'Single Wave')} ({formData.general_rounds_format?.toUpperCase()})</p>
                   </div>
                 </div>
@@ -598,13 +617,14 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
 
             {/* SWISS TOURNAMENT */}
             {formData.tournament_type === 'swiss' && (
-              <div>
+              <div data-help-id="region-tournament-format-swiss">
                 <h4 className="font-semibold text-gray-800 mb-2">{t('tournament.swiss_configuration', 'Swiss Rounds Configuration')}</h4>
                 <p className="text-sm text-gray-600 mb-4">{t('tournament.swiss_description', 'Configure the Swiss round tournament')}</p>
                 <div className="space-y-4">
                   <div className="flex flex-col gap-2">
                     <label className="font-medium text-gray-700">{t('tournament.number_swiss_rounds', 'Number of Swiss Rounds')}</label>
                     <select
+                      data-help-id="field-tournament-swiss-rounds"
                       value={formData.general_rounds}
                       onChange={(e) => onFormDataChange({
                         ...formData,
@@ -622,6 +642,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                   <div className="flex flex-col gap-2">
                     <label className="font-medium text-gray-700">{t('tournament.match_format', 'Match Format')}</label>
                     <select
+                      data-help-id="field-tournament-swiss-match-format"
                       value={formData.general_rounds_format}
                       onChange={(e) => onFormDataChange({
                         ...formData,
@@ -636,7 +657,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                     </select>
                     <small className="text-gray-600">{t('tournament.match_format_help', 'Number of games in each match')}</small>
                   </div>
-                  <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                  <div data-help-id="region-tournament-swiss-summary" className="bg-gray-50 p-3 rounded border border-gray-200">
                     <p className="text-sm"><strong>{t('tournament.total_rounds', 'Total Rounds')}:</strong> {formData.general_rounds} {t('tournament.swiss_rounds', 'Swiss rounds')} ({formData.general_rounds_format?.toUpperCase()})</p>
                   </div>
                 </div>
@@ -645,7 +666,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
 
             {/* SWISS-ELIMINATION HYBRID TOURNAMENT */}
             {formData.tournament_type === 'swiss_elimination' && (
-              <div>
+              <div data-help-id="region-tournament-format-swiss-elimination">
                 <h4 className="font-semibold text-gray-800 mb-2">{t('tournament.swiss_elimination_configuration', 'Swiss-Elimination Mix Configuration')}</h4>
                 <p className="text-sm text-gray-600 mb-4">{t('tournament.swiss_elimination_description', 'Configure Swiss qualifying rounds and elimination bracket with different match formats')}</p>
                 <div className="border border-blue-200 bg-blue-50 p-4 rounded mb-4">
@@ -653,12 +674,13 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                 </div>
                 
                 {/* Rounds Configuration */}
-                <div className="border border-gray-200 p-4 rounded-lg mb-4">
+                <div data-help-id="region-tournament-swiss-elimination-rounds" className="border border-gray-200 p-4 rounded-lg mb-4">
                   <h5 className="font-medium text-gray-800 mb-4">{t('tournament.rounds_configuration', 'Rounds Configuration')}</h5>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="flex flex-col gap-2">
                       <label className="font-medium text-gray-700">{t('tournament.number_swiss_rounds', 'Number of Swiss Rounds')}</label>
                       <select
+                        data-help-id="field-tournament-swiss-elimination-swiss-rounds"
                         value={formData.general_rounds}
                         onChange={(e) => onFormDataChange({
                           ...formData,
@@ -676,6 +698,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                     <div className="flex flex-col gap-2">
                       <label className="font-medium text-gray-700">{t('tournament.number_elimination_rounds', 'Number of Elimination Rounds')}</label>
                       <select
+                        data-help-id="field-tournament-swiss-elimination-final-rounds"
                         value={formData.final_rounds}
                         onChange={(e) => onFormDataChange({
                           ...formData,
@@ -694,12 +717,13 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                 </div>
 
                 {/* Match Formats */}
-                <div className="border border-gray-200 p-4 rounded-lg mb-4">
+                <div data-help-id="region-tournament-swiss-elimination-match-formats" className="border border-gray-200 p-4 rounded-lg mb-4">
                   <h5 className="font-medium text-gray-800 mb-4">{t('tournament.match_formats', 'Match Formats')}</h5>
                   <div className="space-y-4">
                     <div className="flex flex-col gap-2">
                       <label className="font-medium text-gray-700">{t('tournament.general_format', 'General Format (Swiss Rounds + Elimination except Final)')}</label>
                       <select
+                        data-help-id="field-tournament-swiss-elimination-general-format"
                         value={formData.general_rounds_format}
                         onChange={(e) => onFormDataChange({
                           ...formData,
@@ -717,6 +741,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                     <div className="flex flex-col gap-2">
                       <label className="font-medium text-gray-700">{t('tournament.final_format', 'Final Format (Grand Final)')}</label>
                       <select
+                        data-help-id="field-tournament-swiss-elimination-final-format"
                         value={formData.final_rounds_format}
                         onChange={(e) => onFormDataChange({
                           ...formData,
@@ -735,7 +760,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
                 </div>
 
                 {/* Summary */}
-                <div className="bg-gray-50 p-4 rounded border border-gray-200">
+                <div data-help-id="region-tournament-swiss-elimination-summary" className="bg-gray-50 p-4 rounded border border-gray-200">
                   <p className="font-medium text-gray-800 mb-2">{t('tournament.tournament_structure', 'Tournament Structure')}:</p>
                   <div className="space-y-1 text-sm text-gray-700">
                     <p>• {t('tournament.swiss_phase', 'Swiss Phase')}: {formData.general_rounds} {t('tournament.rounds', 'rounds')} ({formData.general_rounds_format?.toUpperCase()})</p>
@@ -753,11 +778,12 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
       </div>
 
       <div className="flex w-full gap-2">
-        <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded flex-1 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading}>
+        <button data-help-id={mode === 'create' ? 'action-create-tournament' : 'action-update-tournament'} type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded flex-1 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading}>
           {isLoading ? t('loading') : (mode === 'create' ? t('tournament_create') : t('btn_confirm'))}
         </button>
         {mode === 'edit' && onCancel && (
           <button 
+            data-help-id="action-cancel-tournament-edit"
             type="button"
             onClick={onCancel}
             className="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded flex-1"

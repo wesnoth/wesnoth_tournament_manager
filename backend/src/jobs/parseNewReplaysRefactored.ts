@@ -660,11 +660,10 @@ export class ParseNewReplaysRefactorized {
     }
 
     // ======== VALIDATE AND RESOLVE FACTIONS AND MAP ========
-    // Only needed for ranked matches and ranked tournaments
-    // Team tournaments skip asset validation (only users, teams, rounds, matches)
+    // Only ranked matches and ranked tournaments enforce the ranked asset catalogs.
+    // Unranked and team tournament assets are informational labels for organizers.
     if (parseSummary.matchType === 'tournament_unranked') {
-      // Team tournament - skip asset validation
-      console.log(`🔍 [PARSE] Skipping asset validation (team tournament)`);
+      console.log(`🔍 [PARSE] Skipping asset validation (unranked or team tournament)`);
       // matchType remains 'tournament_unranked', will proceed to linkToTournament
     } else {
       // Need to validate factions and map for ranked paths

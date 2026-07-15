@@ -120,7 +120,7 @@ export const UnrankedMapSelect: React.FC<UnrankedMapSelectProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-full min-h-[26rem] max-h-[66vh] bg-white border border-gray-300 rounded-lg overflow-hidden shadow-sm">
+    <div data-help-id="region-tournament-maps" className="flex flex-col h-full min-h-[26rem] max-h-[66vh] bg-white border border-gray-300 rounded-lg overflow-hidden shadow-sm">
       <div className="flex flex-col h-full gap-0">
         <div className="flex justify-between items-center px-4 py-3 bg-gradient-to-r from-purple-700 to-indigo-500 border-b border-gray-200 text-white font-semibold flex-shrink-0">
           <h4 className="text-sm font-semibold">Maps</h4>
@@ -136,6 +136,7 @@ export const UnrankedMapSelect: React.FC<UnrankedMapSelectProps> = ({
             <div className="px-4 py-2">
               <label className="flex items-center gap-2 py-2 border-b border-gray-200 font-semibold">
                 <input
+                  data-help-id="option-tournament-maps-all"
                   type="checkbox"
                   checked={selectAll}
                   onChange={handleSelectAll}
@@ -150,6 +151,7 @@ export const UnrankedMapSelect: React.FC<UnrankedMapSelectProps> = ({
               {maps.map((map) => (
                 <label key={map.id} className="flex items-center gap-2 px-4 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100">
                   <input
+                    data-help-id="option-tournament-map"
                     type="checkbox"
                     checked={selectedMapIds.includes(map.id)}
                     onChange={() => handleMapSelect(map.id)}
@@ -168,6 +170,7 @@ export const UnrankedMapSelect: React.FC<UnrankedMapSelectProps> = ({
 
         {!isRankedOnly && (
           <button
+            data-help-id="action-create-tournament-map"
             className="m-3 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-semibold text-sm disabled:opacity-50"
             onClick={() => setShowModal(true)}
             disabled={disabled}
@@ -179,11 +182,12 @@ export const UnrankedMapSelect: React.FC<UnrankedMapSelectProps> = ({
       </div>
 
       {!isRankedOnly && showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowModal(false)}>
+        <div data-help-id="region-create-tournament-map" className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowModal(false)}>
           <div className="bg-white rounded-lg shadow-lg p-6 w-96" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-xl font-bold mb-4">Create New Map</h3>
 
             <input
+              data-help-id="field-new-tournament-map-name"
               type="text"
               placeholder="Map Name"
               value={newMapData.name}
@@ -196,6 +200,7 @@ export const UnrankedMapSelect: React.FC<UnrankedMapSelectProps> = ({
 
             <div className="flex gap-2 justify-end">
               <button
+                data-help-id="action-cancel-create-tournament-map"
                 onClick={() => setShowModal(false)}
                 disabled={creatingMap}
                 type="button"
@@ -204,6 +209,7 @@ export const UnrankedMapSelect: React.FC<UnrankedMapSelectProps> = ({
                 Cancel
               </button>
               <button
+                data-help-id="action-confirm-create-tournament-map"
                 onClick={handleCreateMap}
                 disabled={creatingMap || !newMapData.name.trim()}
                 className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"

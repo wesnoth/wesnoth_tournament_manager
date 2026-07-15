@@ -37,3 +37,11 @@
 - Every page reached through the user or admin navigation must render inside the shared authenticated layout so the `UserProfileNav` remains visible for all user and administrative actions.
 - The admin navigation is shown by that shared layout only when the authenticated user has the required permissions.
 - New user or admin navigation entries must use the shared layout; page-specific layouts must not replace or hide either navigation bar.
+
+## Help instrumentation
+
+- Add a stable `data-help-id` to every new or functionally changed actionable or editable frontend control that may need user documentation.
+- Use semantic, untranslated kebab-case values with `action-`, `field-`, or `option-` prefixes. Do not derive values from visible text, CSS classes, DOM position, or persisted record identifiers.
+- Add `region-` hooks only to large, meaningful documentation areas such as previews, tables, editors, or panels that need an independent screenshot.
+- Repeated controls may share the same semantic `data-help-id`; documentation tooling must disambiguate them through a stable parent context rather than indexes or record identifiers.
+- Preserve help hooks through refactors. When removing or conceptually changing a hook, update any dependent Wiki Help capture workflow and article.
