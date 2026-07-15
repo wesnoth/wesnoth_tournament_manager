@@ -587,7 +587,12 @@ async function generateSwissMatches(
       );
     }
 
-    const standings = standingsResult.rows;
+    // A malformed participant list must not be able to produce duplicate
+    // pairings. Keep the first standings row for each competitive entity so
+    // the pairing invariant is based on unique players or teams.
+    const standings = Array.from(
+      new Map(standingsResult.rows.map((standing: any) => [standing.user_id, standing])).values()
+    );
     console.log(`\n🎲 [SWISS PAIRINGS] Round ${roundNumber}: ${standings.length} ${tournamentMode === 'team' ? 'teams' : 'players'}`);
     standings.forEach(p => {
       const score = (p.tournament_wins - p.tournament_losses);
@@ -813,8 +818,61 @@ async function generateSwissMatches(
       }
     }
 
-    console.log(`\n[SWISS PAIRINGS RESULT] Generated ${matches.length} pairings`);
-    return matches;
+    // Keep the generated bracket safe even if an unusual score-group layout
+    // reaches more than one pairing path. Each entity may occur only once in
+    // a Swiss round, and a round cannot contain more than floor(N / 2) games.
+    const normalizedMatches: any[] = [];
+    const pairedIds = new Set<string>();
+    let byeAssigned = false;
+
+    for (const match of matches) {
+      const player1Id = match.player1_id as string;
+      const player2Id = match.player2_id as string | null;
+      if (!player1Id || pairedIds.has(player1Id)) continue;
+
+      if (!player2Id) {
+        if (!byeAssigned) {
+          normalizedMatches.push(match);
+          pairedIds.add(player1Id);
+          byeAssigned = true;
+        }
+        continue;
+      }
+
+      if (player1Id === player2Id || pairedIds.has(player2Id)) continue;
+      normalizedMatches.push(match);
+      pairedIds.add(player1Id);
+      pairedIds.add(player2Id);
+    }
+
+    // Repair any unpaired entities left by a malformed or duplicate pairing
+    // path. This preserves the Swiss round size without reusing a participant.
+    const unpaired = standings.filter((standing: any) => !pairedIds.has(standing.user_id));
+    for (let index = 0; index + 1 < unpaired.length; index += 2) {
+      normalizedMatches.push({
+        tournament_id: tournamentId,
+        round_id: roundId,
+        player1_id: unpaired[index].user_id,
+        player2_id: unpaired[index + 1].user_id,
+      });
+      pairedIds.add(unpaired[index].user_id);
+      pairedIds.add(unpaired[index + 1].user_id);
+    }
+
+    if (unpaired.length % 2 === 1 && !byeAssigned) {
+      const byePlayer = unpaired[unpaired.length - 1];
+      normalizedMatches.push({
+        tournament_id: tournamentId,
+        round_id: roundId,
+        player1_id: byePlayer.user_id,
+        player2_id: null,
+        is_bye: true,
+      });
+    }
+
+    const actualMatches = normalizedMatches.filter((match) => match.player2_id !== null);
+    console.log(`\n[SWISS PAIRINGS RESULT] Generated ${actualMatches.length} matches and ${normalizedMatches.length - actualMatches.length} byes`);
+    return normalizedMatches;
   } catch (error) {
     console.error('❌ Error in generateSwissMatches:', error);
     throw error;
