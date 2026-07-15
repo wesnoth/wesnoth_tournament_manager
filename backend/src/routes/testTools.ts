@@ -67,9 +67,9 @@ router.get('/users', async (req, res) => {
     const rankedOnly = req.query.ranked_only === 'true';
     if (search.length < 2) return res.json([]);
     const result = await query(
-      `SELECT id, nickname, elo_rating, enable_ranked
+      `SELECT id, nickname, elo_rating, enable_ranked, is_active
        FROM users_extension
-       WHERE nickname LIKE ? AND is_active = 1 AND is_blocked = 0
+       WHERE nickname LIKE ? AND is_blocked = 0
          ${rankedOnly ? 'AND enable_ranked = 1' : ''}
        ORDER BY nickname LIMIT 20`,
       [`%${search}%`]
@@ -180,12 +180,23 @@ router.post('/simulate-match', async (req: AuthRequest, res) => {
 
     const assets = await getAssets(tournamentId || null, mode === 'ranked');
     if (!assets.factions.length || !assets.maps.length) return res.status(400).json({ error: 'No usable factions and maps are configured' });
+    // Test fixtures may use inactive accounts, but blocked accounts must never
+    // participate in generated matches or joins.
     const winnerFaction = randomItem(assets.factions).name;
     const loserFaction = randomItem(assets.factions).name;
     const map = randomItem(assets.maps).name;
-    const loserId = mode === 'ranked'
-      ? (await query('SELECT id FROM users_extension WHERE id = ? AND id <> ? AND enable_ranked = 1 AND is_active = 1', [requestedLoserId, winnerId])).rows[0]?.id
-      : (winnerId === roundMatch.player1_id ? roundMatch.player2_id : roundMatch.player1_id);
+    let loserId: string | undefined;
+    if (mode === 'ranked') {
+      const rankedUsers = await query(
+        `SELECT id FROM users_extension
+         WHERE id IN (?, ?) AND enable_ranked = 1 AND is_blocked = 0`,
+        [winnerId, requestedLoserId]
+      );
+      if (rankedUsers.rows.length !== 2) return res.status(400).json({ error: 'Both ranked players must have ranked matches enabled and be unblocked' });
+      loserId = requestedLoserId;
+    } else {
+      loserId = winnerId === roundMatch.player1_id ? roundMatch.player2_id : roundMatch.player1_id;
+    }
 
     if (!loserId) return res.status(400).json({ error: 'The selected ranked winner has no valid opponent' });
     let matchId: string | undefined;
@@ -251,7 +262,7 @@ router.post('/tournaments/:tournamentId/simulate-join', async (req: AuthRequest,
     }
     if (tournament.tournament_mode !== 'team' && userIds.length !== 1) return res.status(400).json({ error: 'Individual tournaments accept one user per simulation' });
     const placeholders = userIds.map(() => '?').join(',');
-    const users = await query(`SELECT id, nickname, enable_ranked FROM users_extension WHERE id IN (${placeholders}) AND is_active = 1 AND is_blocked = 0`, userIds);
+    const users = await query(`SELECT id, nickname, enable_ranked FROM users_extension WHERE id IN (${placeholders}) AND is_blocked = 0`, userIds);
     if (users.rows.length !== userIds.length) return res.status(400).json({ error: 'One or more selected users are unavailable' });
     if (tournament.tournament_mode === 'ranked' && users.rows.some((u: any) => !u.enable_ranked)) return res.status(400).json({ error: 'All users must have ranked matches enabled' });
     const duplicate = await query(`SELECT user_id FROM tournament_participants WHERE tournament_id = ? AND user_id IN (${placeholders}) AND participation_status IN ('pending','unconfirmed','accepted')`, [tournamentId, ...userIds]);
