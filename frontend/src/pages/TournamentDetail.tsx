@@ -1462,9 +1462,11 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
           <div className="flex flex-col gap-2">
             <strong className="font-semibold text-gray-700">{t('label_round_duration')}:</strong> <span className="text-gray-600">{tournament.round_duration_days} {t('label_days')}</span>
           </div>
-          <div className="flex flex-col gap-2">
-            <strong className="font-semibold text-gray-700">{t('label_auto_advance_rounds')}:</strong> <span className="text-gray-600">{tournament.auto_advance_round ? t('yes') : t('no')}</span>
-          </div>
+          {tournament.tournament_type !== 'league' && (
+            <div className="flex flex-col gap-2">
+              <strong className="font-semibold text-gray-700">{t('label_auto_advance_rounds')}:</strong> <span className="text-gray-600">{tournament.auto_advance_round ? t('yes') : t('no')}</span>
+            </div>
+          )}
 
           {/* For swiss_elimination tournaments, show structured information */}
           {tournament.tournament_type === 'swiss_elimination' ? (

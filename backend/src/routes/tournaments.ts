@@ -166,6 +166,10 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       unranked_maps
     } = req.body;
 
+    const effectiveAutoAdvanceRound = tournament_type === 'league'
+      ? false
+      : (auto_advance_round ?? false);
+
     // Validation
     if (typeof name !== 'string' || !name.trim() || typeof description !== 'string' || !description.trim() || !tournament_type) {
       return res.status(400).json({ error: 'Missing required fields: name, description, tournament_type' });
@@ -176,7 +180,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       tournament_mode: tournament_mode || 'ranked',
       max_participants: max_participants ?? null,
       round_duration_days: round_duration_days ?? 7,
-      auto_advance_round: auto_advance_round ?? false,
+      auto_advance_round: effectiveAutoAdvanceRound,
       general_rounds: tournament_type === 'elimination' ? 0 : (general_rounds ?? 0),
       final_rounds: tournament_type === 'elimination' ? 0 : (final_rounds ?? 0),
       general_rounds_format: general_rounds_format || 'bo3',
@@ -355,7 +359,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
         tournament_mode || 'ranked',
         max_participants, 
         round_duration_days || 7,
-        auto_advance_round || false,
+        effectiveAutoAdvanceRound,
         scheduled_start_at ? toMariaDbDateTime(scheduled_start_at) : null,
         totalRounds,
         tournamentTypeLower === 'elimination' ? 0 : (general_rounds || 0),
@@ -722,6 +726,10 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
 
     const currentTournament = tournamentResult.rows[0];
     const currentStatus = currentTournament.status;
+    const effectiveTournamentType = tournament_type ?? currentTournament.tournament_type;
+    const effectiveAutoAdvanceRound = effectiveTournamentType === 'league'
+      ? false
+      : (auto_advance_round ?? currentTournament.auto_advance_round);
 
     // Validate tournament_type change is only allowed in registration_open or registration_closed states
     if (tournament_type !== undefined && tournament_type !== currentTournament.tournament_type) {
@@ -737,11 +745,11 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
     }
 
     const configurationError = validateTournamentConfiguration({
-      tournament_type: tournament_type ?? currentTournament.tournament_type,
+      tournament_type: effectiveTournamentType,
       tournament_mode: currentTournament.tournament_mode,
       max_participants: max_participants !== undefined ? max_participants : currentTournament.max_participants,
       round_duration_days: round_duration_days ?? currentTournament.round_duration_days,
-      auto_advance_round: auto_advance_round ?? currentTournament.auto_advance_round,
+      auto_advance_round: effectiveAutoAdvanceRound,
       general_rounds: general_rounds ?? currentTournament.general_rounds,
       final_rounds: final_rounds ?? currentTournament.final_rounds,
       general_rounds_format: general_rounds_format ?? currentTournament.general_rounds_format,
@@ -821,9 +829,9 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
       values.push(round_duration_days);
     }
 
-    if (auto_advance_round !== undefined) {
+    if (auto_advance_round !== undefined || effectiveTournamentType === 'league') {
       updates.push(`auto_advance_round = ?`);
-      values.push(auto_advance_round);
+      values.push(effectiveAutoAdvanceRound);
     }
 
     if (scheduled_start_at !== undefined) {

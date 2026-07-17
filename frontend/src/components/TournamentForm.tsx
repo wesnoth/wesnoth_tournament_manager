@@ -66,6 +66,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
       updatedData.general_rounds = 0;
       updatedData.final_rounds = 0;
     } else if (newType === 'league') {
+      updatedData.auto_advance_round = false;
       updatedData.general_rounds = 1;
       updatedData.final_rounds = 0;
       updatedData.general_rounds_format = 'bo3';
@@ -474,20 +475,22 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
             />
           </div>
 
-          <div className="flex items-center gap-3">
-            <label className="font-medium text-gray-700">{t('label_auto_advance_rounds', 'Auto-advance Rounds')}</label>
-            <input
-              data-help-id="option-tournament-auto-advance"
-              type="checkbox"
-              checked={formData.auto_advance_round}
-              onChange={(e) => onFormDataChange({ 
-                ...formData, 
-                auto_advance_round: e.target.checked 
-              })}
-              className="w-5 h-5"
-              disabled={isLoading}
-            />
-          </div>
+          {formData.tournament_type !== 'league' && (
+            <div className="flex items-center gap-3">
+              <label className="font-medium text-gray-700">{t('label_auto_advance_rounds', 'Auto-advance Rounds')}</label>
+              <input
+                data-help-id="option-tournament-auto-advance"
+                type="checkbox"
+                checked={formData.auto_advance_round}
+                onChange={(e) => onFormDataChange({
+                  ...formData,
+                  auto_advance_round: e.target.checked
+                })}
+                className="w-5 h-5"
+                disabled={isLoading}
+              />
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col gap-2 mb-4">
