@@ -215,12 +215,15 @@ export async function calculateTeamSwissTiebreakers(
   tournamentId: string
 ): Promise<TiebreakerResult[]> {
   try {
-    // Get all teams
+    // Include eliminated teams as well as the active champion. Filtering to
+    // active teams would make elimination tournaments calculate tiebreakers
+    // only for the final winner. Exclude the administrative rejection bucket,
+    // which is not a competitive team.
     const teamsResult = await query(
       `SELECT DISTINCT tt.id
        FROM tournament_teams tt
        WHERE tt.tournament_id = ?
-         AND tt.status = 'active'
+         AND tt.name <> 'Rejected players'
        ORDER BY tt.id`,
       [tournamentId]
     );
