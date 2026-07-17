@@ -859,6 +859,7 @@ async function generateSwissMatches(
     const normalizedMatches: any[] = [];
     const pairedIds = new Set<string>();
     let byeAssigned = false;
+    let byeMatchIndex = -1;
 
     for (const match of matches) {
       const player1Id = match.player1_id as string;
@@ -870,6 +871,7 @@ async function generateSwissMatches(
           normalizedMatches.push(match);
           pairedIds.add(player1Id);
           byeAssigned = true;
+          byeMatchIndex = normalizedMatches.length - 1;
         }
         continue;
       }
@@ -878,6 +880,43 @@ async function generateSwissMatches(
       normalizedMatches.push(match);
       pairedIds.add(player1Id);
       pairedIds.add(player2Id);
+    }
+
+    if (byeMatchIndex >= 0) {
+      const currentByeId = normalizedMatches[byeMatchIndex].player1_id as string;
+      const replacementBye = standings.find((standing: any) => !previousByeIds.has(standing.user_id));
+      if (replacementBye && replacementBye.user_id !== currentByeId) {
+        const replacementMatchIndex = normalizedMatches.findIndex((match, index) =>
+          index !== byeMatchIndex
+          && (match.player1_id === replacementBye.user_id || match.player2_id === replacementBye.user_id)
+        );
+
+        if (replacementMatchIndex >= 0) {
+          // Move the repeated-bye participant into the replacement player's
+          // match. This preserves the round size while avoiding a repeat bye.
+          const replacementMatch = normalizedMatches[replacementMatchIndex];
+          const opponentId = replacementMatch.player1_id === replacementBye.user_id
+            ? replacementMatch.player2_id
+            : replacementMatch.player1_id;
+          normalizedMatches[byeMatchIndex] = {
+            ...normalizedMatches[byeMatchIndex],
+            player1_id: replacementBye.user_id,
+            player2_id: null,
+            is_bye: true,
+          };
+          normalizedMatches[replacementMatchIndex] = {
+            ...replacementMatch,
+            player1_id: currentByeId,
+            player2_id: opponentId,
+          };
+        } else if (!pairedIds.has(replacementBye.user_id)) {
+          // If the replacement is already unpaired, exchange membership so
+          // the former bye participant is repaired by the pairing pass below.
+          normalizedMatches[byeMatchIndex].player1_id = replacementBye.user_id;
+          pairedIds.delete(currentByeId);
+          pairedIds.add(replacementBye.user_id);
+        }
+      }
     }
 
     // Repair any unpaired entities left by a malformed or duplicate pairing
