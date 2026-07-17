@@ -2721,11 +2721,22 @@ router.get('/:tournamentId/round-matches', async (req, res) => {
                   trb.team_id AS winner_id, NULL AS player1_wins, NULL AS player2_wins,
                   NULL AS best_of, 'bye' AS series_status,
                   tr.round_number, tr.round_type,
-                  tt.name AS player1_nickname, NULL AS player2_nickname,
+                  CASE
+                    WHEN ttm.members IS NULL THEN tt.name
+                    ELSE CONCAT(tt.name, ' (', ttm.members, ')')
+                  END AS player1_nickname, NULL AS player2_nickname,
                   tt.name AS winner_nickname, TRUE AS is_team_mode, TRUE AS is_bye
            FROM tournament_round_byes trb
            JOIN tournament_rounds tr ON tr.id = trb.round_id
            JOIN tournament_teams tt ON tt.id = trb.team_id
+           LEFT JOIN (
+             SELECT tp.team_id,
+                    GROUP_CONCAT(u.nickname ORDER BY tp.team_position SEPARATOR ', ') AS members
+             FROM tournament_participants tp
+             JOIN users_extension u ON u.id = tp.user_id
+             WHERE tp.participation_status = 'accepted'
+             GROUP BY tp.team_id
+           ) ttm ON ttm.team_id = tt.id
            WHERE trb.tournament_id = ?`
         : `SELECT trb.id, trb.tournament_id, trb.round_id,
                   tp.user_id AS player1_id, NULL AS player2_id,
