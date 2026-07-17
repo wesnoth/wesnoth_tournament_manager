@@ -610,7 +610,7 @@ function solveSwissPairingExactly(
   };
 
   const toPairings = (pairs: Array<[number, number]>, byeIndex: number | null): SwissPairing[] => {
-    const result = pairs.map(([first, second]) => ({
+    const result: SwissPairing[] = pairs.map(([first, second]) => ({
       tournament_id: '',
       round_id: '',
       player1_id: standings[first].user_id,
