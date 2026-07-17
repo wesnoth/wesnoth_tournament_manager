@@ -550,11 +550,107 @@ function generateRoundRobinMatches(
   return matches;
 }
 
+type SwissPairing = {
+  tournament_id: string;
+  round_id: string;
+  player1_id: string;
+  player2_id: string | null;
+  is_bye?: boolean;
+};
+
 /**
- * Generates Swiss system matches
- * Pairs players based on their current score and tiebreakers (OMP, GWP, OGP)
- * Avoids re-pairings when possible
- * For team mode: player_id1/2 contain team_id (Option B architecture)
+ * Finds a minimum-cost Swiss pairing for small fields.
+ * Rematches are more expensive than score-group floats, so an early greedy
+ * choice cannot force a later rematch when a valid alternative exists.
+ */
+function solveSwissPairingExactly(
+  standings: any[],
+  previousPairings: Set<string>,
+  previousByeIds: Set<string>,
+): SwissPairing[] | null {
+  if (standings.length > 20) return null;
+
+  const pairingKey = (first: string, second: string) =>
+    first < second ? `${first}|${second}` : `${second}|${first}`;
+  const scoreOf = (player: any) => (player.tournament_wins || 0) - (player.tournament_losses || 0);
+  const pairCost = (firstIndex: number, secondIndex: number): number => {
+    const first = standings[firstIndex];
+    const second = standings[secondIndex];
+    const rematchCost = previousPairings.has(pairingKey(first.user_id, second.user_id)) ? 1_000_000 : 0;
+    const scoreGapCost = Math.abs(scoreOf(first) - scoreOf(second)) * 10_000;
+    return rematchCost + scoreGapCost + Math.abs(firstIndex - secondIndex);
+  };
+
+  const solveEven = (indexes: number[]): { cost: number; pairs: Array<[number, number]> } | null => {
+    const memo = new Map<number, { cost: number; pairs: Array<[number, number]> } | null>();
+    const visit = (mask: number): { cost: number; pairs: Array<[number, number]> } | null => {
+      if (mask === 0) return { cost: 0, pairs: [] };
+      if (memo.has(mask)) return memo.get(mask) || null;
+
+      let firstPosition = 0;
+      while ((mask & (1 << firstPosition)) === 0) firstPosition += 1;
+      let best: { cost: number; pairs: Array<[number, number]> } | null = null;
+
+      for (let secondPosition = firstPosition + 1; secondPosition < indexes.length; secondPosition += 1) {
+        const secondBit = 1 << secondPosition;
+        if ((mask & secondBit) === 0) continue;
+        const remainder = visit(mask ^ (1 << firstPosition) ^ secondBit);
+        if (!remainder) continue;
+        const candidate = {
+          cost: pairCost(indexes[firstPosition], indexes[secondPosition]) + remainder.cost,
+          pairs: [[indexes[firstPosition], indexes[secondPosition]] as [number, number], ...remainder.pairs],
+        };
+        if (!best || candidate.cost < best.cost) best = candidate;
+      }
+
+      memo.set(mask, best);
+      return best;
+    };
+    return visit((1 << indexes.length) - 1);
+  };
+
+  const toPairings = (pairs: Array<[number, number]>, byeIndex: number | null): SwissPairing[] => {
+    const result = pairs.map(([first, second]) => ({
+      tournament_id: '',
+      round_id: '',
+      player1_id: standings[first].user_id,
+      player2_id: standings[second].user_id,
+    }));
+    if (byeIndex !== null) {
+      result.push({
+        tournament_id: '',
+        round_id: '',
+        player1_id: standings[byeIndex].user_id,
+        player2_id: null,
+        is_bye: true,
+      });
+    }
+    return result;
+  };
+
+  if (standings.length % 2 === 0) {
+    const solution = solveEven(standings.map((_, index) => index));
+    return solution ? toPairings(solution.pairs, null) : null;
+  }
+
+  let best: { cost: number; pairs: Array<[number, number]>; byeIndex: number } | null = null;
+  for (let byeIndex = standings.length - 1; byeIndex >= 0; byeIndex -= 1) {
+    const remaining = standings.map((_, index) => index).filter((index) => index !== byeIndex);
+    const solution = solveEven(remaining);
+    if (!solution) continue;
+    const byeCost = (previousByeIds.has(standings[byeIndex].user_id) ? 100_000_000 : 0)
+      + (standings.length - 1 - byeIndex);
+    const candidate = { cost: solution.cost + byeCost, pairs: solution.pairs, byeIndex };
+    if (!best || candidate.cost < best.cost) best = candidate;
+  }
+
+  return best ? toPairings(best.pairs, best.byeIndex) : null;
+}
+
+/**
+ * Generates Swiss system matches.
+ * Pairs by score and tiebreakers while avoiding rematches whenever possible.
+ * For team mode, player_id1/2 contain team_id (Option B architecture).
  */
 async function generateSwissMatches(
   participants: any[],
@@ -702,6 +798,31 @@ async function generateSwissMatches(
     );
 
     console.log(`\n[PREVIOUS PAIRINGS]: ${previousPairings.size} historical pairings found`);
+
+    // Use a bounded exact search for normal tournament fields. The previous
+    // greedy flow could commit one high-score pairing too early and force a
+    // rematch later in the same round-generation decision.
+    const orderedStandings = [...standings].sort((first: any, second: any) => {
+      const scoreDifference = ((second.tournament_wins || 0) - (second.tournament_losses || 0))
+        - ((first.tournament_wins || 0) - (first.tournament_losses || 0));
+      if (scoreDifference !== 0) return scoreDifference;
+      if ((second.omp || 0) !== (first.omp || 0)) return (second.omp || 0) - (first.omp || 0);
+      if ((second.gwp || 0) !== (first.gwp || 0)) return (second.gwp || 0) - (first.gwp || 0);
+      if ((second.ogp || 0) !== (first.ogp || 0)) return (second.ogp || 0) - (first.ogp || 0);
+      if ((second.elo_rating || 0) !== (first.elo_rating || 0)) return (second.elo_rating || 0) - (first.elo_rating || 0);
+      return String(first.user_id).localeCompare(String(second.user_id));
+    });
+    const optimizedPairings = solveSwissPairingExactly(orderedStandings, previousPairings, previousByeIds);
+    if (optimizedPairings) {
+      const normalizedPairings = optimizedPairings.map((pairing) => ({
+        ...pairing,
+        tournament_id: tournamentId,
+        round_id: roundId,
+      }));
+      const actualMatches = normalizedPairings.filter((match) => match.player2_id !== null);
+      console.log(`\n[SWISS PAIRINGS RESULT] Generated ${actualMatches.length} matches and ${normalizedPairings.length - actualMatches.length} byes (optimized)`);
+      return normalizedPairings;
+    }
 
     // PHASE 1: Pair within each score group, reserve best if odd
     const paired = new Set<string>();
