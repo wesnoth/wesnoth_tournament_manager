@@ -593,7 +593,38 @@ async function generateSwissMatches(
     const standings = Array.from(
       new Map(standingsResult.rows.map((standing: any) => [standing.user_id, standing])).values()
     );
+
+    // Byes are currently represented only by the absence of a round-match
+    // row. Reconstruct the historical bye recipients so a player or team is
+    // not selected again while another participant is still eligible.
+    const previousByeIds = new Set<string>();
+    if (roundNumber > 1 && standings.length > 0) {
+      const previousMatchesResult = await query(
+        `SELECT tr.round_number, trm.player1_id, trm.player2_id
+         FROM tournament_round_matches trm
+         JOIN tournament_rounds tr ON tr.id = trm.round_id
+         WHERE trm.tournament_id = ? AND tr.round_number < ?
+         ORDER BY tr.round_number`,
+        [tournamentId, roundNumber]
+      );
+      const participantsByRound = new Map<number, Set<string>>();
+      for (const match of previousMatchesResult.rows) {
+        if (!participantsByRound.has(match.round_number)) {
+          participantsByRound.set(match.round_number, new Set<string>());
+        }
+        const roundParticipants = participantsByRound.get(match.round_number)!;
+        if (match.player1_id) roundParticipants.add(match.player1_id);
+        if (match.player2_id) roundParticipants.add(match.player2_id);
+      }
+      const currentParticipantIds = standings.map((standing: any) => standing.user_id);
+      for (const roundParticipants of participantsByRound.values()) {
+        for (const participantId of currentParticipantIds) {
+          if (!roundParticipants.has(participantId)) previousByeIds.add(participantId);
+        }
+      }
+    }
     console.log(`\n🎲 [SWISS PAIRINGS] Round ${roundNumber}: ${standings.length} ${tournamentMode === 'team' ? 'teams' : 'players'}`);
+    console.log(`   Previous bye recipients: ${[...previousByeIds].join(', ') || 'none'}`);
     standings.forEach(p => {
       const score = (p.tournament_wins - p.tournament_losses);
       const label = tournamentMode === 'team' ? 'Team' : 'Player';
@@ -657,14 +688,17 @@ async function generateSwissMatches(
       // Get available players in this group
       const available = group.filter(p => !paired.has(p.user_id));
       
-      // If odd number of players, reserve the best one for bye (no pairing)
+      // If odd number of players, reserve an eligible player for bye (no pairing)
       let reservedForBye: any = null;
       let availableToMatch = available;
       
       if (available.length % 2 === 1 && available.length > 1) {
-        // Odd group: reserve the best player (index 0, already sorted by tiebreakers DESC) for bye
-        reservedForBye = available[0];
-        availableToMatch = available.slice(1);
+        // Prefer the best player who has not already received a bye so the
+        // previous bye recipient can be paired in this round.
+        const reservedIndex = available.findIndex((player) => !previousByeIds.has(player.user_id));
+        const selectedIndex = reservedIndex >= 0 ? reservedIndex : 0;
+        reservedForBye = available[selectedIndex];
+        availableToMatch = available.filter((_, index) => index !== selectedIndex);
         reservedByScore[score] = reservedForBye;
         console.log(`  🔄 Odd group of ${available.length}: reserving best player ${reservedForBye.user_id} (ELO:${reservedForBye.elo_rating})`);
       } else if (available.length % 2 === 1 && available.length === 1) {
@@ -777,8 +811,9 @@ async function generateSwissMatches(
       });
 
       if (allReserved.length % 2 === 1) {
-        // Odd number of reserved: give bye to best, pair rest
-        const byePlayer = sortedReserved[0];
+        // Prefer the best reserved participant who has not already received a
+        // bye. Repeating is unavoidable only when every candidate has one.
+        const byePlayer = sortedReserved.find((player) => !previousByeIds.has(player.user_id)) || sortedReserved[0];
         console.log(`\n✅ BYE (from reserved players): ${byePlayer.user_id} (${byePlayer.tournament_wins}-${byePlayer.tournament_losses}, ELO: ${byePlayer.elo_rating})`);
         matches.push({
           tournament_id: tournamentId,
@@ -860,7 +895,7 @@ async function generateSwissMatches(
     }
 
     if (unpaired.length % 2 === 1 && !byeAssigned) {
-      const byePlayer = unpaired[unpaired.length - 1];
+      const byePlayer = unpaired.find((player: any) => !previousByeIds.has(player.user_id)) || unpaired[unpaired.length - 1];
       normalizedMatches.push({
         tournament_id: tournamentId,
         round_id: roundId,
