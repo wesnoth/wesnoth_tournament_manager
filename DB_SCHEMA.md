@@ -17,6 +17,7 @@
 | `tournament_matches` | Matches within tournaments | `id` | `player1_id`, `player2_id`, `winner_id`, `match_id`, `status`, `match_status` |
 | `tournament_teams` | Team records (2v2) | `id` | `name`, `tournament_id`, `status` |
 | `tournament_round_matches` | Round-level match aggregates | `id` | `player1_id`, `player2_id`, `winner_id` |
+| `tournament_round_byes` | Automatic bye events per round | `id` | `tournament_id`, `round_id`, `participant_id`, `team_id` |
 | `match_schedule_proposals` | Schedule proposals (Phase 2) | `id` | `tournament_round_match_id`, `proposed_by_user_id`, `challenge_mode`, `challenged_user_id`, `status` |
 | `match_schedule_slots` | Time slots within a proposal | `id` | `proposal_id`, `slot_datetime`, `status` |
 | `match_schedule_confirmations` | User confirmations of proposals | `id` | `proposal_id`, `user_id`, `confirmed_at` |
@@ -508,6 +509,24 @@ Best-of series pairing within a tournament round. Supports match scheduling with
 | `scheduled_confirmed_at` | datetime | When both players confirmed the schedule |
 | `created_at` | datetime | |
 | `updated_at` | datetime | |
+
+---
+
+### `tournament_round_byes`
+
+Automatic advancement events for participants or teams that do not receive a pairing in a round with an odd number of competitive entities.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | char(36) PK | UUID |
+| `tournament_id` | char(36) FK->tournaments | Owning tournament |
+| `round_id` | char(36) FK->tournament_rounds | Round that awarded the bye |
+| `participant_id` | char(36) FK->tournament_participants | Set for individual tournaments |
+| `team_id` | char(36) FK->tournament_teams | Set for team tournaments |
+| `reason` | varchar(50) | Automatic bye reason |
+| `created_at` | datetime | |
+
+Exactly one of `participant_id` and `team_id` is populated. The table is the source of truth for bye history and allows Round Details to display byes without inferring them from missing match rows.
 
 ---
 

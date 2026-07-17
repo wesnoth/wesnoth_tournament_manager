@@ -2683,19 +2683,33 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                   }
                   return true;
                 });
+                const byesInRound = matchesInRound.filter((match) => match.is_bye);
+                const playableMatchesInRound = matchesInRound.filter((match) => !match.is_bye);
                 
                 if (matchesInRound.length === 0) return null;
                 
                 return (
                   <div key={round.id} className="mb-8">
                     <h3 className="text-2xl font-bold text-gray-800 mb-4 pb-3 border-b-2 border-gray-300">{t('label_round')} {round.round_number} - {round.round_phase_label || round.round_type || 'Round'}</h3>
+                    {byesInRound.length > 0 && (
+                      <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                        <h4 className="font-semibold text-amber-900">{t('label_bye', 'Bye')}</h4>
+                        {byesInRound.map((bye) => (
+                          <div key={bye.id} className="mt-2 flex flex-wrap items-center gap-2 text-sm text-amber-900">
+                            <strong>{bye.is_team_mode ? bye.player1_nickname : <PlayerLink nickname={bye.player1_nickname} userId={bye.player1_id} />}</strong>
+                            <span>{t('bye_automatic_advancement', 'advanced automatically')}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {playableMatchesInRound.length > 0 && (
                     <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-100">
                         <tr>
-                          <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{matchesInRound.length > 0 && matchesInRound[0].is_team_mode ? t('label_team1') : t('label_player1')}</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{playableMatchesInRound.length > 0 && playableMatchesInRound[0].is_team_mode ? t('label_team1') : t('label_player1')}</th>
                           <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('vs')}</th>
-                          <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{matchesInRound.length > 0 && matchesInRound[0].is_team_mode ? t('label_team2') : t('label_player2')}</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{playableMatchesInRound.length > 0 && playableMatchesInRound[0].is_team_mode ? t('label_team2') : t('label_player2')}</th>
                           <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_winner')}</th>
                           <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_status')}</th>
                           <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">Schedule</th>
@@ -2703,7 +2717,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                         </tr>
                       </thead>
                       <tbody>
-                        {matchesInRound.map((match) => {
+                        {playableMatchesInRound.map((match) => {
                           const isHighlighted = highlightedMatchId === match.id;
                           return (
                             <tr 
@@ -2904,6 +2918,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                       </tbody>
                     </table>
                     </div>
+                    )}
                   </div>
                 );
               })}

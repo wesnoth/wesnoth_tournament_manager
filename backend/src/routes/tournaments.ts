@@ -2706,10 +2706,42 @@ router.get('/:tournamentId/round-matches', async (req, res) => {
       [tournamentId]
     );
 
-    console.log(`🔍 [ROUND-MATCHES] Query returned ${result.rows.length} rows for tournament ${tournamentId}`);
+    const byeResult = await query(
+      isTeamMode
+        ? `SELECT trb.id, trb.tournament_id, trb.round_id,
+                  trb.team_id AS player1_id, NULL AS player2_id,
+                  trb.team_id AS winner_id, NULL AS player1_wins, NULL AS player2_wins,
+                  NULL AS best_of, 'bye' AS series_status,
+                  tr.round_number, tr.round_type,
+                  tt.name AS player1_nickname, NULL AS player2_nickname,
+                  tt.name AS winner_nickname, TRUE AS is_team_mode, TRUE AS is_bye
+           FROM tournament_round_byes trb
+           JOIN tournament_rounds tr ON tr.id = trb.round_id
+           JOIN tournament_teams tt ON tt.id = trb.team_id
+           WHERE trb.tournament_id = ?`
+        : `SELECT trb.id, trb.tournament_id, trb.round_id,
+                  tp.user_id AS player1_id, NULL AS player2_id,
+                  tp.user_id AS winner_id, NULL AS player1_wins, NULL AS player2_wins,
+                  NULL AS best_of, 'bye' AS series_status,
+                  tr.round_number, tr.round_type,
+                  u.nickname AS player1_nickname, NULL AS player2_nickname,
+                  u.nickname AS winner_nickname, FALSE AS is_team_mode, TRUE AS is_bye
+           FROM tournament_round_byes trb
+           JOIN tournament_rounds tr ON tr.id = trb.round_id
+           JOIN tournament_participants tp ON tp.id = trb.participant_id
+           JOIN users_extension u ON u.id = tp.user_id
+           WHERE trb.tournament_id = ?`,
+      [tournamentId]
+    );
+
+    const roundDetails = [...result.rows, ...byeResult.rows].sort((left, right) =>
+      Number(left.round_number) - Number(right.round_number)
+    );
+
+    console.log(`🔍 [ROUND-MATCHES] Query returned ${roundDetails.length} rows for tournament ${tournamentId}`);
     
     // Log details of each row - especially replay fields
-    result.rows.forEach((row: any, idx: number) => {
+    roundDetails.forEach((row: any, idx: number) => {
       console.log(`🔍 [ROUND-MATCHES] Row ${idx}:`, {
         match_id: row.id,
         player1: row.player1_nickname,
@@ -2721,7 +2753,7 @@ router.get('/:tournamentId/round-matches', async (req, res) => {
       });
     });
 
-    res.json(result.rows);
+    res.json(roundDetails);
   } catch (error) {
     console.error('Error fetching tournament round matches:', error);
     res.status(500).json({ error: 'Failed to fetch tournament round matches' });

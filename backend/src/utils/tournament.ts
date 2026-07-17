@@ -20,6 +20,47 @@ interface Participant {
 }
 
 /**
+ * Persist an automatic advancement event for the round details and future
+ * Swiss bye selection. Pairing code uses user IDs for 1v1 and team IDs for
+ * team tournaments, while the event table keeps the corresponding FK type.
+ */
+async function recordTournamentBye(
+  tournamentId: string,
+  roundId: string,
+  entityId: string,
+  tournamentMode: string,
+  reason = 'automatic_bye'
+): Promise<void> {
+  let participantId: string | null = null;
+  let teamId: string | null = null;
+
+  if (tournamentMode === 'team') {
+    teamId = entityId;
+  } else {
+    const participantResult = await query(
+      `SELECT id FROM tournament_participants
+       WHERE tournament_id = ? AND user_id = ?
+         AND participation_status = 'accepted'
+       ORDER BY created_at DESC LIMIT 1`,
+      [tournamentId, entityId]
+    );
+    participantId = participantResult.rows[0]?.id || null;
+  }
+
+  if (!participantId && !teamId) {
+    throw new Error(`Cannot persist bye: entity ${entityId} is not an accepted tournament participant`);
+  }
+
+  await query(
+    `INSERT INTO tournament_round_byes
+       (id, tournament_id, round_id, participant_id, team_id, reason)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE reason = VALUES(reason)`,
+    [randomUUID(), tournamentId, roundId, participantId, teamId, reason]
+  );
+}
+
+/**
  * Select top players for elimination phase in Swiss-Elimination Mix
  * This function is called before activating the first elimination round
  * It calculates how many players should advance based on elimination rounds
@@ -594,33 +635,19 @@ async function generateSwissMatches(
       new Map(standingsResult.rows.map((standing: any) => [standing.user_id, standing])).values()
     );
 
-    // Byes are currently represented only by the absence of a round-match
-    // row. Reconstruct the historical bye recipients so a player or team is
-    // not selected again while another participant is still eligible.
+    // Bye history is persisted as a round event, so selection does not need
+    // to infer recipients from missing round-match rows.
     const previousByeIds = new Set<string>();
-    if (roundNumber > 1 && standings.length > 0) {
-      const previousMatchesResult = await query(
-        `SELECT tr.round_number, trm.player1_id, trm.player2_id
-         FROM tournament_round_matches trm
-         JOIN tournament_rounds tr ON tr.id = trm.round_id
-         WHERE trm.tournament_id = ? AND tr.round_number < ?
-         ORDER BY tr.round_number`,
-        [tournamentId, roundNumber]
+    if (standings.length > 0) {
+      const previousByesResult = await query(
+        `SELECT trb.team_id, tp.user_id
+         FROM tournament_round_byes trb
+         LEFT JOIN tournament_participants tp ON tp.id = trb.participant_id
+         WHERE trb.tournament_id = ?`,
+        [tournamentId]
       );
-      const participantsByRound = new Map<number, Set<string>>();
-      for (const match of previousMatchesResult.rows) {
-        if (!participantsByRound.has(match.round_number)) {
-          participantsByRound.set(match.round_number, new Set<string>());
-        }
-        const roundParticipants = participantsByRound.get(match.round_number)!;
-        if (match.player1_id) roundParticipants.add(match.player1_id);
-        if (match.player2_id) roundParticipants.add(match.player2_id);
-      }
-      const currentParticipantIds = standings.map((standing: any) => standing.user_id);
-      for (const roundParticipants of participantsByRound.values()) {
-        for (const participantId of currentParticipantIds) {
-          if (!roundParticipants.has(participantId)) previousByeIds.add(participantId);
-        }
+      for (const bye of previousByesResult.rows) {
+        previousByeIds.add(tournamentMode === 'team' ? bye.team_id : bye.user_id);
       }
     }
     console.log(`\n🎲 [SWISS PAIRINGS] Round ${roundNumber}: ${standings.length} ${tournamentMode === 'team' ? 'teams' : 'players'}`);
@@ -1162,6 +1189,10 @@ export async function preGenerateLeagueMatches(
 
       console.log(`[PRE_GENERATE] Generated ${matches.length} pairings for Round ${roundNumber}`);
 
+      for (const pairing of matches.filter((match) => match.is_bye || match.player2_id === null)) {
+        await recordTournamentBye(tournamentId, round.id, pairing.player1_id, tournamentMode);
+      }
+
       // Insert all matches for this round
       const bestOf = formatMap[round.match_format] || 3;
       const winsRequired = Math.ceil(bestOf / 2);
@@ -1602,6 +1633,7 @@ export async function activateRound(tournamentId: string, roundNumber: number): 
             if (pairing.is_bye || pairing.player2_id === null) {
               console.log(`✅ BYE: ${tournament.tournament_mode === 'team' ? 'Team' : 'Player'} ${pairing.player1_id} advances automatically to next round`);
               byesProcessed++;
+              await recordTournamentBye(tournamentId, round.id, pairing.player1_id, tournament.tournament_mode);
         
               // In League tournaments, byes don't award points (all teams play same number of matches)
               // In Swiss/Swiss-Elimination, byes award 1 point (automatic win)
