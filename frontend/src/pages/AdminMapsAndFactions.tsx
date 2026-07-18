@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../services/api';
 import MainLayout from '../components/MainLayout';
+import AdminMapPacksPanel from '../components/AdminMapPacksPanel';
 
 interface Map {
   id: string;
@@ -105,9 +106,9 @@ const LangForm: React.FC<{
 
 const AdminMapsAndFactions: React.FC = () => {
   const navigate = useNavigate();
-  const { isAuthenticated, isAdmin } = useAuthStore();
+  const { isAuthenticated, isAdmin, isTournamentModerator } = useAuthStore();
 
-  const [activeTab, setActiveTab] = useState<'maps' | 'factions'>('maps');
+  const [activeTab, setActiveTab] = useState<'maps' | 'factions' | 'map-packs'>(isAdmin ? 'maps' : 'map-packs');
   const [maps, setMaps] = useState<Map[]>([]);
   const [factions, setFactions] = useState<Faction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -129,14 +130,19 @@ const AdminMapsAndFactions: React.FC = () => {
   const [factionFlags, setFactionFlags] = useState({ is_active: true, is_ranked: true });
 
   useEffect(() => {
-    if (!isAuthenticated || !isAdmin) { navigate('/'); return; }
+    if (!isAuthenticated || (!isAdmin && !isTournamentModerator)) { navigate('/'); return; }
     fetchData();
-  }, [isAuthenticated, isAdmin, navigate]);
+  }, [isAuthenticated, isAdmin, isTournamentModerator, navigate]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       setError('');
+      if (!isAdmin) {
+        setMaps([]);
+        setFactions([]);
+        return;
+      }
       const [mapsRes, factionsRes] = await Promise.all([
         api.get('/admin/maps'),
         api.get('/admin/factions'),
@@ -320,25 +326,26 @@ const AdminMapsAndFactions: React.FC = () => {
   // ── Reusable lang-tab form defined outside this component (above) to avoid remounting on each render
 
   if (loading) return <MainLayout><div className="max-w-6xl mx-auto px-4 py-8"><p className="text-center text-gray-600">Loading...</p></div></MainLayout>;
-  if (!isAuthenticated || !isAdmin) return <MainLayout><div className="max-w-6xl mx-auto px-4 py-8"><p className="text-center text-red-600">Access denied. Admin only.</p></div></MainLayout>;
+  if (!isAuthenticated || (!isAdmin && !isTournamentModerator)) return <MainLayout><div className="max-w-6xl mx-auto px-4 py-8"><p className="text-center text-red-600">Access denied.</p></div></MainLayout>;
 
   return (
     <MainLayout>
       <div className="max-w-6xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-6">Manage Maps & Factions</h1>
+        <h1 className="text-3xl font-bold text-gray-800 mb-6">Manage Maps, Factions & Map Packs</h1>
 
         {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</div>}
         {success && <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-4">{success}</div>}
 
         <div className="flex border-b border-gray-300 mb-6">
-          {(['maps', 'factions'] as const).map(tab => (
+          {(isAdmin ? ['maps', 'factions', 'map-packs'] as const : ['map-packs'] as const).map(tab => (
             <button key={tab}
+              data-help-id={`action-tab-admin-${tab}`}
               className={`px-4 py-2 font-semibold border-b-2 capitalize ${
                 activeTab === tab ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-600 hover:text-gray-800'
               }`}
               onClick={() => setActiveTab(tab)}
             >
-              {tab === 'maps' ? `Maps (${maps.length})` : `Factions (${factions.length})`}
+              {tab === 'maps' ? `Maps (${maps.length})` : tab === 'factions' ? `Factions (${factions.length})` : 'Map Packs'}
             </button>
           ))}
         </div>
@@ -446,6 +453,8 @@ const AdminMapsAndFactions: React.FC = () => {
             </div>
           </div>
         )}
+
+        {activeTab === 'map-packs' && <AdminMapPacksPanel />}
       </div>
     </MainLayout>
   );

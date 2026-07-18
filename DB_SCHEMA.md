@@ -695,6 +695,14 @@ Localised names and descriptions for maps.
 
 ---
 
+### `map_packs` and `map_pack_maps`
+
+Administrative map collections used to accelerate map selection. Packs are reusable catalog records managed by administrators and moderators. The junction table allows each map to belong to multiple packs and preserves display order.
+
+Applying a pack in tournament setup copies its currently eligible map IDs into the ordinary tournament map selection. Tournaments do not store a pack reference, so later pack changes never alter existing tournament configuration.
+
+---
+
 ### `factions`
 
 Faction registry.

@@ -793,6 +793,215 @@ router.post('/replays/:replayId/reprocess', moderatorOrAdminMiddleware, async (r
 });
 
 // ============================================================
+// MAP PACKS MANAGEMENT
+// ============================================================
+
+interface MapPackInput {
+  name?: unknown;
+  description?: unknown;
+  is_active?: unknown;
+  map_ids?: unknown;
+}
+
+/** Validate and normalize a map pack mutation before opening a transaction. */
+async function validateMapPackInput(input: MapPackInput): Promise<{
+  name: string;
+  description: string | null;
+  isActive: number;
+  mapIds: string[];
+}> {
+  const name = typeof input.name === 'string' ? input.name.trim() : '';
+  const description = typeof input.description === 'string' ? input.description.trim() : '';
+  if (name.length < 2 || name.length > 100) throw new Error('MAP_PACK_NAME_INVALID');
+  if (description.length > 500) throw new Error('MAP_PACK_DESCRIPTION_INVALID');
+  if (!Array.isArray(input.map_ids)) throw new Error('MAP_PACK_MAPS_INVALID');
+  const mapIds = [...new Set(input.map_ids.filter((value): value is string => typeof value === 'string' && value.length > 0))];
+  if (mapIds.length === 0 || mapIds.length !== input.map_ids.length) throw new Error('MAP_PACK_MAPS_INVALID');
+  const placeholders = mapIds.map(() => '?').join(', ');
+  const maps = await query(`SELECT id FROM game_maps WHERE id IN (${placeholders})`, mapIds);
+  if (maps.rows.length !== mapIds.length) throw new Error('MAP_PACK_MAPS_UNKNOWN');
+  return {
+    name,
+    description: description || null,
+    isActive: input.is_active === false || input.is_active === 0 ? 0 : 1,
+    mapIds,
+  };
+}
+
+function mapPackValidationResponse(error: any, res: any): boolean {
+  const messages: Record<string, string> = {
+    MAP_PACK_NAME_INVALID: 'Map pack name must contain between 2 and 100 characters',
+    MAP_PACK_DESCRIPTION_INVALID: 'Map pack description cannot exceed 500 characters',
+    MAP_PACK_MAPS_INVALID: 'Select at least one map without duplicate identifiers',
+    MAP_PACK_MAPS_UNKNOWN: 'One or more selected maps do not exist',
+  };
+  if (!messages[error?.message]) return false;
+  res.status(400).json({ error: messages[error.message] });
+  return true;
+}
+
+/** Return active packs for the transient selector used by tournament setup. */
+router.get('/map-packs/available', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const rankedOnly = req.query.ranked_only === 'true';
+    const result = await query(
+      `SELECT packs.id, packs.name, packs.description, maps.id AS map_id, maps.name AS map_name
+       FROM map_packs packs
+       JOIN map_pack_maps membership ON membership.map_pack_id = packs.id
+       JOIN game_maps maps ON maps.id = membership.map_id
+       WHERE packs.is_active = 1 AND maps.is_active = 1
+         AND (? = 0 OR maps.is_ranked = 1)
+       ORDER BY packs.name, membership.sort_order, maps.name`,
+      [rankedOnly ? 1 : 0]
+    );
+    const packs = new Map<string, any>();
+    for (const row of result.rows) {
+      if (!packs.has(row.id)) packs.set(row.id, { id: row.id, name: row.name, description: row.description, maps: [] });
+      packs.get(row.id).maps.push({ id: row.map_id, name: row.map_name });
+    }
+    return res.json([...packs.values()]);
+  } catch (error) {
+    console.error('Available map packs lookup failed:', error);
+    return res.status(500).json({ error: 'Failed to load map packs' });
+  }
+});
+
+/** Return map options to administrators and moderators editing pack membership. */
+router.get('/map-packs/maps', moderatorOrAdminMiddleware, async (_req: AuthRequest, res) => {
+  try {
+    const result = await query(
+      `SELECT id, name, is_active, is_ranked FROM game_maps ORDER BY is_active DESC, name`
+    );
+    return res.json(result.rows);
+  } catch (error) {
+    console.error('Map pack map lookup failed:', error);
+    return res.status(500).json({ error: 'Failed to load maps for map packs' });
+  }
+});
+
+router.get('/map-packs', moderatorOrAdminMiddleware, async (_req: AuthRequest, res) => {
+  try {
+    const [packResult, membershipResult] = await Promise.all([
+      query(`SELECT id, name, description, is_active, created_at, updated_at FROM map_packs ORDER BY name`),
+      query(
+        `SELECT membership.map_pack_id, maps.id, maps.name, maps.is_active, maps.is_ranked
+         FROM map_pack_maps membership
+         JOIN game_maps maps ON maps.id = membership.map_id
+         ORDER BY membership.map_pack_id, membership.sort_order, maps.name`
+      ),
+    ]);
+    const memberships = new Map<string, any[]>();
+    for (const row of membershipResult.rows) {
+      memberships.set(row.map_pack_id, [...(memberships.get(row.map_pack_id) || []), {
+        id: row.id, name: row.name, is_active: Boolean(row.is_active), is_ranked: Boolean(row.is_ranked),
+      }]);
+    }
+    return res.json(packResult.rows.map((pack: any) => ({
+      ...pack,
+      is_active: Boolean(pack.is_active),
+      maps: memberships.get(pack.id) || [],
+    })));
+  } catch (error) {
+    console.error('Map pack lookup failed:', error);
+    return res.status(500).json({ error: 'Failed to load map packs' });
+  }
+});
+
+router.post('/map-packs', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const input = await validateMapPackInput(req.body || {});
+    const id = uuidv4();
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.execute(
+        `INSERT INTO map_packs (id, name, description, is_active, created_by, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [id, input.name, input.description, input.isActive, req.userId, req.userId]
+      );
+      for (const [index, mapId] of input.mapIds.entries()) {
+        await connection.execute(
+          `INSERT INTO map_pack_maps (map_pack_id, map_id, sort_order) VALUES (?, ?, ?)`,
+          [id, mapId, index + 1]
+        );
+      }
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+    await logAuditEvent({
+      event_type: 'ADMIN_ACTION', user_id: req.userId, ip_address: getUserIP(req), user_agent: getUserAgent(req),
+      details: { action: 'create_map_pack', map_pack_id: id, name: input.name, map_ids: input.mapIds },
+    });
+    return res.status(201).json({ id });
+  } catch (error: any) {
+    if (mapPackValidationResponse(error, res)) return;
+    if (error?.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'A map pack with this name already exists' });
+    console.error('Map pack creation failed:', error);
+    return res.status(500).json({ error: 'Failed to create map pack' });
+  }
+});
+
+router.put('/map-packs/:mapPackId', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const input = await validateMapPackInput(req.body || {});
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [existing] = await connection.execute<any[]>(`SELECT id FROM map_packs WHERE id = ? FOR UPDATE`, [req.params.mapPackId]);
+      if (!existing.length) throw new Error('MAP_PACK_NOT_FOUND');
+      await connection.execute(
+        `UPDATE map_packs SET name = ?, description = ?, is_active = ?, updated_by = ? WHERE id = ?`,
+        [input.name, input.description, input.isActive, req.userId, req.params.mapPackId]
+      );
+      await connection.execute(`DELETE FROM map_pack_maps WHERE map_pack_id = ?`, [req.params.mapPackId]);
+      for (const [index, mapId] of input.mapIds.entries()) {
+        await connection.execute(
+          `INSERT INTO map_pack_maps (map_pack_id, map_id, sort_order) VALUES (?, ?, ?)`,
+          [req.params.mapPackId, mapId, index + 1]
+        );
+      }
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+    await logAuditEvent({
+      event_type: 'ADMIN_ACTION', user_id: req.userId, ip_address: getUserIP(req), user_agent: getUserAgent(req),
+      details: { action: 'update_map_pack', map_pack_id: req.params.mapPackId, name: input.name, map_ids: input.mapIds },
+    });
+    return res.json({ success: true });
+  } catch (error: any) {
+    if (error?.message === 'MAP_PACK_NOT_FOUND') return res.status(404).json({ error: 'Map pack not found' });
+    if (mapPackValidationResponse(error, res)) return;
+    if (error?.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'A map pack with this name already exists' });
+    console.error('Map pack update failed:', error);
+    return res.status(500).json({ error: 'Failed to update map pack' });
+  }
+});
+
+router.delete('/map-packs/:mapPackId', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const result = await query(`SELECT id, name FROM map_packs WHERE id = ?`, [req.params.mapPackId]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Map pack not found' });
+    await query(`DELETE FROM map_packs WHERE id = ?`, [req.params.mapPackId]);
+    await logAuditEvent({
+      event_type: 'ADMIN_ACTION', user_id: req.userId, ip_address: getUserIP(req), user_agent: getUserAgent(req),
+      details: { action: 'delete_map_pack', map_pack_id: req.params.mapPackId, name: result.rows[0].name },
+    });
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Map pack deletion failed:', error);
+    return res.status(500).json({ error: 'Failed to delete map pack' });
+  }
+});
+
+// ============================================================
 // MAPS MANAGEMENT
 // ============================================================
 

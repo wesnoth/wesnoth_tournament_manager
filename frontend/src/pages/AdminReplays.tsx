@@ -281,9 +281,9 @@ const AdminReplays: React.FC = () => {
         {showSimulation && <SimulateMatchPanel onCompleted={() => fetchReplays()} />}
 
         {/* System settings are replay-processing controls, shown only to administrators. */}
-        {isAdmin && <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">System Settings</h2>
-          
+        {isAdmin && <details data-help-id="region-replay-system-settings" className="bg-white rounded-lg shadow-md mb-8">
+          <summary data-help-id="action-toggle-replay-system-settings" className="cursor-pointer p-6 text-xl font-bold text-gray-800">System Settings</summary>
+          <div className="px-6 pb-6">
           {loadingSettings ? (
             <p className="text-gray-600">{t('loading')}</p>
           ) : systemSettings.length === 0 ? (
@@ -311,6 +311,7 @@ const AdminReplays: React.FC = () => {
                       </td>
                       <td className="px-4 py-2">
                         <button
+                          data-help-id="action-edit-replay-system-setting"
                           onClick={() => handleEditSetting(setting.setting_key, setting.setting_value)}
                           className="text-blue-600 hover:text-blue-800 text-sm font-semibold"
                         >
@@ -323,7 +324,8 @@ const AdminReplays: React.FC = () => {
               </table>
             </div>
           )}
-        </div>}
+          </div>
+        </details>}
 
         {/* Filter */}
         <div className="bg-white rounded-lg shadow-md p-4 mb-6">

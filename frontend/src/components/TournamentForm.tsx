@@ -8,6 +8,7 @@ import { useAuthStore } from '../store/authStore';
 import type { MatchFormat, TournamentFormData, TournamentMode, TournamentType } from '../types/tournament';
 import type { TournamentFormatDefinition } from '../types/tournament';
 import TournamentPhaseBuilder from './TournamentPhaseBuilder';
+import TournamentMapPackSelector from './TournamentMapPackSelector';
 
 interface RuleTemplate {
   id: string;
@@ -175,9 +176,9 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
   return (
     <form id="tournament-form" data-help-id="region-tournament-form" className="bg-white rounded-lg shadow-md p-8 space-y-6" onSubmit={onSubmit}>
       {/* SECTION 1: BASIC INFORMATION */}
-      <div data-help-id="region-tournament-basic-information" className="mb-6 p-4 border border-gray-200 rounded-lg bg-white">
-        <h3 className="mb-4 font-semibold text-gray-800">{t('tournament.basic_info', 'Basic Information')}</h3>
-        
+      <details open data-help-id="region-tournament-basic-information" className="mb-6 border border-gray-200 rounded-lg bg-white">
+        <summary data-help-id="action-toggle-tournament-basic-information" className="cursor-pointer p-4 font-semibold text-gray-800">{t('tournament.basic_info', 'Basic Information')}</summary>
+        <div className="px-4 pb-4">
         <div data-help-id="region-tournament-identity" className={`mb-4 grid grid-cols-1 ${mode === 'create' ? 'xl:grid-cols-2' : ''} gap-4`}>
           {/* Tournament Name */}
           <div className="flex flex-col gap-2">
@@ -252,7 +253,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
         </div>
 
         <div className="mt-4 flex flex-col gap-2">
-          <label className="font-medium text-gray-700">Wesnoth forum topic URL (optional)</label>
+          <label className="font-medium text-gray-700">Wesnoth Forum Tournament Thread URL</label>
           <input
             data-help-id="field-tournament-forum-topic-url"
             type="url"
@@ -385,11 +386,13 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
             </label>
           </div>
         </div>
-      </div>
+        </div>
+      </details>
 
       {/* SECTION 2: TOURNAMENT TYPE AND PARTICIPANTS */}
-      <div data-help-id="region-tournament-format" className="mb-6 p-4 border border-gray-200 rounded-lg bg-white">
-        <h3 className="mb-4 font-semibold text-gray-800">{t('tournament.format_settings', 'Format Settings')}</h3>
+      <details data-help-id="region-tournament-format" className="mb-6 border border-gray-200 rounded-lg bg-white">
+        <summary data-help-id="action-toggle-tournament-format-settings" className="cursor-pointer p-4 font-semibold text-gray-800">{t('tournament.format_settings', 'Format Settings')}</summary>
+        <div className="px-4 pb-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {!formData.format_definition && <div className="flex flex-col gap-2">
             <label className="font-medium text-gray-700">{t('tournament.tournament_format', 'Tournament Format')}</label>
@@ -425,22 +428,30 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
             />
           </div>
         </div>
-      </div>
+        </div>
+      </details>
 
 
-      <TournamentPhaseBuilder
-        value={formData.format_definition}
-        onChange={handlePhaseFormatChange}
-        disabled={isLoading}
-        initialTemplate={formData.tournament_type === 'league' ? 'league' : formData.tournament_type === 'elimination' ? 'elimination' : 'swiss'}
-        entryOptions={entryOptions}
-      />
+      <details data-help-id="region-tournament-phase-configuration" className="mb-6 rounded-lg border border-blue-200 bg-white">
+        <summary data-help-id="action-toggle-tournament-phase-configuration" className="cursor-pointer p-4 font-semibold text-gray-800">Tournament Phases</summary>
+        <div className="px-4 pb-4">
+          <TournamentPhaseBuilder
+            value={formData.format_definition}
+            onChange={handlePhaseFormatChange}
+            disabled={isLoading}
+            initialTemplate={formData.tournament_type === 'league' ? 'league' : formData.tournament_type === 'elimination' ? 'elimination' : 'swiss'}
+            entryOptions={entryOptions}
+          />
+        </div>
+      </details>
 
       {/* SECTION 3: UNRANKED ASSETS (conditional) */}
       {formData.tournament_mode === 'unranked' && (
-        <div data-help-id="region-tournament-assets-unranked" className="mb-6">
-          <h3>{t('tournament.unranked_assets', 'Unranked Tournament Assets')}</h3>
+        <details data-help-id="region-tournament-assets-unranked" className="mb-6 rounded-lg border border-gray-200 bg-white">
+          <summary data-help-id="action-toggle-tournament-assets" className="cursor-pointer p-4 font-semibold text-gray-800">{t('tournament.unranked_assets', 'Unranked Tournament Assets')}</summary>
+          <div className="px-4 pb-4">
           <p className="text-sm text-gray-600 italic mb-4">{t('tournament.select_allowed_factions_maps', 'Select which factions and maps are allowed in this tournament')}</p>
+          <TournamentMapPackSelector selectedMapIds={unrankedMaps} onChange={onUnrankedMapsChange} disabled={isLoading} />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <UnrankedFactionSelect 
               selectedFactionIds={unrankedFactions}
@@ -453,14 +464,17 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
               disabled={isLoading}
             />
           </div>
-        </div>
+          </div>
+        </details>
       )}
 
       {/* SECTION 3B: TEAM ASSETS (same as unranked) */}
       {formData.tournament_mode === 'team' && (
-        <div data-help-id="region-tournament-assets-team" className="mb-6">
-          <h3>{t('tournament.team_assets', 'Team Tournament Assets')}</h3>
+        <details data-help-id="region-tournament-assets-team" className="mb-6 rounded-lg border border-gray-200 bg-white">
+          <summary data-help-id="action-toggle-tournament-assets" className="cursor-pointer p-4 font-semibold text-gray-800">{t('tournament.team_assets', 'Team Tournament Assets')}</summary>
+          <div className="px-4 pb-4">
           <p className="text-sm text-gray-600 italic mb-4">{t('tournament.select_allowed_factions_maps', 'Select which factions and maps are allowed in this tournament')}</p>
+          <TournamentMapPackSelector selectedMapIds={unrankedMaps} onChange={onUnrankedMapsChange} disabled={isLoading} />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <UnrankedFactionSelect 
               selectedFactionIds={unrankedFactions}
@@ -473,14 +487,17 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
               disabled={isLoading}
             />
           </div>
-        </div>
+          </div>
+        </details>
       )}
 
       {/* SECTION 3C: RANKED ASSETS (only ranked factions/maps) */}
       {formData.tournament_mode === 'ranked' && (
-        <div data-help-id="region-tournament-assets-ranked" className="mb-6">
-          <h3>{t('tournament.ranked_assets', 'Ranked Tournament Assets')}</h3>
+        <details data-help-id="region-tournament-assets-ranked" className="mb-6 rounded-lg border border-gray-200 bg-white">
+          <summary data-help-id="action-toggle-tournament-assets" className="cursor-pointer p-4 font-semibold text-gray-800">{t('tournament.ranked_assets', 'Ranked Tournament Assets')}</summary>
+          <div className="px-4 pb-4">
           <p className="text-sm text-gray-600 italic mb-4">{t('tournament.select_allowed_ranked_factions_maps', 'Select which ranked factions and maps are allowed in this tournament')}</p>
+          <TournamentMapPackSelector selectedMapIds={unrankedMaps} onChange={onUnrankedMapsChange} rankedOnly disabled={isLoading} />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <UnrankedFactionSelect 
               selectedFactionIds={unrankedFactions}
@@ -495,12 +512,14 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
               isRankedOnly={true}
             />
           </div>
-        </div>
+          </div>
+        </details>
       )}
 
-      <div data-help-id="region-tournament-round-configuration" className="mb-6 p-4 border border-gray-200 rounded-lg bg-white">
+      <details data-help-id="region-tournament-round-configuration" className="mb-6 border border-gray-200 rounded-lg bg-white">
+        <summary data-help-id="action-toggle-tournament-round-configuration" className="cursor-pointer p-4 font-semibold text-gray-800">{t('tournament.round_configuration', 'Round Configuration')}</summary>
+        <div className="px-4 pb-4">
         <div className="mb-4">
-          <h3 className="font-semibold text-gray-800">{t('tournament.round_configuration', 'Round Configuration')}</h3>
           {!formData.max_participants && (
             <span className="text-sm text-gray-600 italic">{t('tournaments.round_config_optional', 'Optional - set when preparing the tournament')}</span>
           )}
@@ -827,7 +846,8 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
             )}
           </div>
         )}
-      </div>
+        </div>
+      </details>
 
       <div className="flex w-full gap-2">
         <button data-help-id={mode === 'create' ? 'action-create-tournament' : 'action-update-tournament'} type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded flex-1 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading}>

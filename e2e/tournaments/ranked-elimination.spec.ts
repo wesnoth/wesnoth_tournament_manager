@@ -40,6 +40,13 @@ function action(page: import('@playwright/test').Page, helpId: string, label: Re
     .first();
 }
 
+async function openTournamentSection(page: import('@playwright/test').Page, helpId: string) {
+  const summary = page.locator(`[data-help-id="${helpId}"]`);
+  await expect(summary).toBeVisible();
+  const isOpen = await summary.evaluate(element => element.parentElement?.hasAttribute('open') || false);
+  if (!isOpen) await summary.click();
+}
+
 async function selectUser(page: import('@playwright/test').Page, inputIndex: number, nickname: string) {
   const searchInputs = page.locator('input[data-help-id="field-test-user-search"]');
   const input = searchInputs.nth(inputIndex);
@@ -249,9 +256,12 @@ test('flexible tournament accepts simulated joins and progresses through every c
     await page.waitForTimeout(1_000);
     await page.locator(`[data-help-id="option-tournament-mode-${tournamentMode}"]`).check();
     await page.waitForTimeout(1_000);
+    await openTournamentSection(page, 'action-toggle-tournament-phase-configuration');
     await page.locator('[data-help-id="option-tournament-format-template"]').selectOption(formatTemplate);
+    await openTournamentSection(page, 'action-toggle-tournament-format-settings');
     await page.locator('[data-help-id="field-tournament-max-participants"]').fill(String(participantCount));
     await page.waitForTimeout(1_000);
+    await openTournamentSection(page, 'action-toggle-tournament-assets');
     // Select every asset explicitly; the aggregate Select All checkbox can
     // retain stale derived state when the form changes tournament type.
     const factionOptions = page.locator('[data-help-id="option-tournament-faction"]');
@@ -270,6 +280,7 @@ test('flexible tournament accepts simulated joins and progresses through every c
     expect(await mapOptions.evaluateAll((inputs) => inputs.every((input) => (input as HTMLInputElement).checked))).toBe(true);
     await page.waitForTimeout(1_000);
     if (autoAdvanceRounds) {
+      await openTournamentSection(page, 'action-toggle-tournament-round-configuration');
       const autoAdvance = page.locator('[data-help-id="option-tournament-auto-advance"]');
       if (!(await autoAdvance.isChecked())) await autoAdvance.check();
       await page.waitForTimeout(1_000);

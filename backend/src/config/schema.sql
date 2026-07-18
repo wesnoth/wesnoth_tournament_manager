@@ -197,6 +197,45 @@ CREATE TABLE `game_maps` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `map_packs`
+--
+
+DROP TABLE IF EXISTS `map_pack_maps`;
+DROP TABLE IF EXISTS `map_packs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `map_packs` (
+  `id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `description` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_by` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `updated_by` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_map_packs_name` (`name`),
+  KEY `idx_map_packs_active_name` (`is_active`,`name`),
+  KEY `idx_map_packs_created_by` (`created_by`),
+  KEY `idx_map_packs_updated_by` (`updated_by`),
+  CONSTRAINT `fk_map_packs_created_by` FOREIGN KEY (`created_by`) REFERENCES `users_extension` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_map_packs_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `users_extension` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `map_pack_maps` (
+  `map_pack_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `map_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `sort_order` smallint(5) unsigned NOT NULL DEFAULT 0,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`map_pack_id`,`map_id`),
+  KEY `idx_map_pack_maps_map` (`map_id`),
+  KEY `idx_map_pack_maps_order` (`map_pack_id`,`sort_order`),
+  CONSTRAINT `fk_map_pack_maps_map` FOREIGN KEY (`map_id`) REFERENCES `game_maps` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_map_pack_maps_pack` FOREIGN KEY (`map_pack_id`) REFERENCES `map_packs` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `global_statistics`
 --
 

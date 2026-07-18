@@ -106,6 +106,17 @@ const UserProfileNav: React.FC = () => {
                 <span className="hidden md:inline">Replays</span>
               </button>
 
+              {/* Map Packs */}
+              <button
+                data-help-id="action-open-map-packs"
+                className="flex items-center gap-2 px-3 py-2 bg-orange-500/10 border border-orange-500/30 text-white text-sm font-medium rounded hover:bg-orange-500/20 hover:border-orange-500/50 active:bg-orange-500/25 transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-md:px-2.5"
+                onClick={() => handleNavigate('/admin/maps-and-factions')}
+                title="Manage Map Packs"
+              >
+                <span className="text-lg flex items-center justify-center min-w-5 max-sm:text-base">🗺️</span>
+                <span className="hidden md:inline">Map Packs</span>
+              </button>
+
             </>
           )}
 
