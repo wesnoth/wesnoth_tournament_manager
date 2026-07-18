@@ -1,9 +1,9 @@
-import { query } from '../config/database.js';
+import { pool, query } from '../config/database.js';
 
 async function main(): Promise<void> {
   const tournamentId = process.argv.find(argument => argument.startsWith('--tournament='))?.split('=')[1];
   if (!tournamentId) {
-    console.error('Usage: node dist/scripts/auditLegacyTournamentMigration.js --tournament=<uuid>');
+    console.error('Usage: NODE_ENV=<test|production> node dist/scripts/auditLegacyTournamentMigration.js --tournament=<uuid>');
     process.exitCode = 2;
     return;
   }
@@ -21,7 +21,17 @@ async function main(): Promise<void> {
       query(`SELECT COUNT(*) AS count FROM tournament_round_matches WHERE tournament_id = ?`, [tournamentId]),
       query(`SELECT COUNT(*) AS count FROM tournament_matches WHERE tournament_id = ?`, [tournamentId]),
       query(`SELECT COUNT(*) AS count FROM replays WHERE tournament_id = ? OR tournament_round_match_id IN (SELECT id FROM tournament_round_matches WHERE tournament_id = ?)`, [tournamentId, tournamentId]),
-      query(`SELECT COUNT(*) AS count FROM match_schedule_proposals WHERE tournament_round_match_id IN (SELECT id FROM tournament_round_matches WHERE tournament_id = ?)`, [tournamentId]),
+      // The historical scheduling table inherited utf8mb4_unicode_ci while
+      // tournament UUIDs use utf8mb4_general_ci. Make the read-only comparison
+      // explicit so the audit works before any optional schema normalization.
+      query(
+        `SELECT COUNT(DISTINCT proposals.id) AS count
+         FROM match_schedule_proposals proposals
+         JOIN tournament_round_matches series
+           ON proposals.tournament_round_match_id COLLATE utf8mb4_general_ci = series.id
+         WHERE series.tournament_id = ?`,
+        [tournamentId]
+      ),
     ]);
     const tournament = tournamentResult.rows[0];
     const report = {
@@ -43,7 +53,12 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch(error => {
-  console.error('Legacy tournament migration audit failed:', error);
-  process.exitCode = 1;
-});
+main()
+  .catch(error => {
+    console.error('Legacy tournament migration audit failed:', error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    // CLI processes must release pooled sockets after both success and failure.
+    await pool.end();
+  });

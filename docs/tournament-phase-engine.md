@@ -45,6 +45,8 @@ Deployment follows four separate stages:
 
 The expansion migration is intentionally reversible at application level by switching back to legacy code before version 2 data becomes authoritative. The contract stage is not included in the expansion and must have its own backup, restore test, and approval.
 
+Before migrating a retained legacy tournament, run the read-only audit with an explicit deployment environment: `npm run audit:tournament-migration:test -- --tournament=<uuid>` in TEST or `npm run audit:tournament-migration:production -- --tournament=<uuid>` in production. The report never mutates tournament data.
+
 ## Deferred streaming scope
 
 Streams remain a low-priority follow-up. The intended model attaches multiple stream records to a scheduled series, game, or broad round time window and introduces a streamer role. No stream field is embedded in a round or game because a round can span days and may have several simultaneous broadcasts.
