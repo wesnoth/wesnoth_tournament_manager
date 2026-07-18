@@ -18,6 +18,7 @@ import MainLayout from '../components/MainLayout';
 import { SimulateJoinPanel } from '../components/TestSimulationControls';
 import type { TournamentFormData, TournamentUpdatePayload } from '../types/tournament';
 import TournamentCompetitionView from '../components/TournamentCompetitionView';
+import TournamentOverallStandings from '../components/TournamentOverallStandings';
 
 // Helper function to extract parsed replay data from JSON summary
 function parseReplaySummary(summaryJson: string | null): {
@@ -238,9 +239,9 @@ const TournamentDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [activeTab, setActiveTab] = useState<'participants' | 'matches' | 'rounds' | 'roundMatches' | 'ranking' | 'competition' | 'teams'>(() => {
+  const [activeTab, setActiveTab] = useState<'participants' | 'matches' | 'rounds' | 'roundMatches' | 'ranking' | 'competition' | 'tournamentStandings' | 'teams'>(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam === 'roundMatches' || tabParam === 'matches' || tabParam === 'rounds' || tabParam === 'ranking' || tabParam === 'competition' || tabParam === 'teams') {
+    if (tabParam === 'roundMatches' || tabParam === 'matches' || tabParam === 'rounds' || tabParam === 'ranking' || tabParam === 'competition' || tabParam === 'tournamentStandings' || tabParam === 'teams') {
       return tabParam;
     }
     return 'participants';
@@ -351,7 +352,8 @@ const TournamentDetail: React.FC = () => {
         // or aggregate-ranking tables. Open their authoritative competition
         // view unless the caller explicitly requested Participants.
         const requestedTab = searchParams.get('tab');
-        if (requestedTab !== 'participants') setActiveTab('competition');
+        if (requestedTab === 'tournamentStandings') setActiveTab('tournamentStandings');
+        else if (requestedTab !== 'participants') setActiveTab('competition');
       }
       console.log('📋 Tournament loaded:', {
         id: tournamentRes.data.id,
@@ -1752,6 +1754,15 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
           </button>}
           {usesPhaseEngine && (
             <button
+              data-help-id="action-tab-tournament-standings"
+              className={`px-4 py-2 rounded font-semibold cursor-pointer transition-all ${activeTab === 'tournamentStandings' ? 'bg-blue-500 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
+              onClick={() => setActiveTab('tournamentStandings')}
+            >
+              Tournament Standings
+            </button>
+          )}
+          {usesPhaseEngine && (
+            <button
               data-help-id="action-tab-competition"
               className={`px-4 py-2 rounded font-semibold cursor-pointer transition-all ${activeTab === 'competition' ? 'bg-blue-500 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
               onClick={() => setActiveTab('competition')}
@@ -3009,6 +3020,12 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
       {activeTab === 'competition' && tournament && (
         <div className="bg-white rounded-lg shadow-lg p-8 mb-8 mt-6">
           <TournamentCompetitionView tournamentId={tournament.id} canManage={isCreator} />
+        </div>
+      )}
+
+      {activeTab === 'tournamentStandings' && tournament && (
+        <div className="mb-8 mt-6">
+          <TournamentOverallStandings tournamentId={tournament.id} />
         </div>
       )}
 

@@ -180,6 +180,19 @@ async function readTournamentStatus(
   return { status, href: page.url() };
 }
 
+async function assertOverallStandings(page: import('@playwright/test').Page, expectedEntries: number) {
+  const standingsTab = page.locator('[data-help-id="action-tab-tournament-standings"]');
+  await expect(standingsTab).toBeVisible();
+  await standingsTab.click();
+  const region = page.locator('[data-help-id="region-tournament-overall-standings"]');
+  await expect(region).toBeVisible({ timeout: 30_000 });
+  await expect(region.locator('tbody tr')).toHaveCount(expectedEntries);
+  await expect(region).toContainText('Champion');
+  await expect(region).toContainText('Runner-up');
+  await expect(region).toContainText('Eliminated');
+  await expect(region.locator('tbody tr').first().locator('td').first()).toHaveText('1');
+}
+
 async function advanceTournamentUntilFinished(
   page: import('@playwright/test').Page,
   tournamentName: string,
@@ -240,7 +253,10 @@ test('flexible tournament accepts simulated joins and progresses through every c
   let tournamentInProgress = false;
   if (await existingRow.count()) {
     if (await existingRow.getByText('Finished', { exact: true }).count()) {
-      console.log('Tournament is already finished; no further actions required');
+      await existingRow.locator('[data-help-id="action-view-tournament-details"], button').first().click();
+      await expect(page).toHaveURL(/\/tournament\//, { timeout: 30_000 });
+      await assertOverallStandings(page, participantCount);
+      console.log('Tournament is already finished and its overall standings are valid');
       return;
     }
     tournamentInProgress = await existingRow.getByText('In Progress', { exact: true }).count() > 0;
@@ -412,12 +428,13 @@ test('flexible tournament accepts simulated joins and progresses through every c
 
   await advanceTournamentUntilFinished(page, tournamentName, autoAdvanceRounds);
 
-  // The tournament list is the terminal assertion. Once it reports Finished,
-  // the scenario is complete; do not navigate into the detail page again.
   await page.goto('/tournaments');
   const finishedRow = page.locator('tr').filter({ hasText: tournamentName }).last();
   await expect(finishedRow).toContainText('Finished', { timeout: 30_000 });
   const resultCells = finishedRow.locator('td');
   await expect(resultCells.nth(5)).not.toHaveText('-');
   await expect(resultCells.nth(6)).not.toHaveText('-');
+  await finishedRow.locator('[data-help-id="action-view-tournament-details"], a, button').first().click();
+  await expect(page).toHaveURL(/\/tournament\//, { timeout: 30_000 });
+  await assertOverallStandings(page, participantCount);
 });

@@ -131,6 +131,225 @@ router.get('/:id/competition', async (req, res) => {
   }
 });
 
+/**
+ * Build an overall classification from immutable phase history. Entries that
+ * reached the same phase are separated by the strongest available competitive
+ * evidence. Group ranks use their materialized tiebreakers; elimination ranks
+ * use series records and then game margin, so a 2-1 loss outranks a 2-0 loss.
+ * Truly identical records share a competition rank and the following placement
+ * skips the occupied positions.
+ */
+router.get('/:id/overall-standings', async (req, res) => {
+  try {
+    const tournamentResult = await query(
+      `SELECT id, status, competition_model_version FROM tournaments WHERE id = ?`,
+      [req.params.id]
+    );
+    if (!tournamentResult.rows.length) return res.status(404).json({ error: 'Tournament not found' });
+    if (Number(tournamentResult.rows[0].competition_model_version) !== 2) {
+      return res.status(409).json({ error: 'Tournament does not use the phase engine' });
+    }
+
+    const [entryResult, historyResult, resultRows] = await Promise.all([
+      query(
+        `SELECT entries.id AS entry_id, entries.initial_seed,
+                COALESCE(users.id, teams.id) AS entity_id,
+                COALESCE(users.nickname, teams.name) AS entry_name
+         FROM tournament_entries entries
+         LEFT JOIN tournament_participants participants ON participants.id = entries.participant_id
+         LEFT JOIN users_extension users ON users.id = participants.user_id
+         LEFT JOIN tournament_teams teams ON teams.id = entries.team_id
+         WHERE entries.tournament_id = ?`,
+        [req.params.id]
+      ),
+      query(
+        `SELECT phase_entries.entry_id, phases.id AS phase_id, phases.phase_order,
+                phases.name AS phase_name, phases.format, phases.status AS phase_status,
+                groups.id AS group_id, groups.name AS group_name,
+                standings.rank_position, standings.matches_played, standings.wins,
+                standings.losses, standings.points, standings.omp, standings.gwp, standings.ogp,
+                (SELECT COUNT(*)
+                 FROM tournament_series phase_series
+                 JOIN tournament_phase_rounds phase_rounds ON phase_rounds.id = phase_series.round_id
+                 WHERE phase_rounds.group_id = groups.id
+                   AND phase_series.winner_entry_id = phase_entries.entry_id) AS series_wins,
+                (SELECT COUNT(*)
+                 FROM tournament_series phase_series
+                 JOIN tournament_phase_rounds phase_rounds ON phase_rounds.id = phase_series.round_id
+                 WHERE phase_rounds.group_id = groups.id
+                   AND phase_series.loser_entry_id = phase_entries.entry_id) AS series_losses,
+                (SELECT MAX(rounds.round_number)
+                 FROM tournament_series series
+                 JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+                 WHERE rounds.group_id = groups.id
+                   AND phases.format = 'single_elimination'
+                   AND series.loser_entry_id = phase_entries.entry_id) AS eliminated_round,
+                (SELECT CASE
+                          WHEN elimination_slot.slot_number = 1 THEN elimination_series.entry1_wins
+                          ELSE elimination_series.entry2_wins
+                        END
+                 FROM tournament_series elimination_series
+                 JOIN tournament_phase_rounds elimination_round ON elimination_round.id = elimination_series.round_id
+                 JOIN tournament_series_slots elimination_slot
+                   ON elimination_slot.series_id = elimination_series.id
+                  AND elimination_slot.resolved_entry_id = phase_entries.entry_id
+                 WHERE elimination_round.group_id = groups.id
+                   AND phases.format = 'single_elimination'
+                   AND elimination_series.loser_entry_id = phase_entries.entry_id
+                 ORDER BY elimination_round.round_number DESC LIMIT 1) AS elimination_game_wins,
+                (SELECT CASE
+                          WHEN elimination_slot.slot_number = 1 THEN elimination_series.entry2_wins
+                          ELSE elimination_series.entry1_wins
+                        END
+                 FROM tournament_series elimination_series
+                 JOIN tournament_phase_rounds elimination_round ON elimination_round.id = elimination_series.round_id
+                 JOIN tournament_series_slots elimination_slot
+                   ON elimination_slot.series_id = elimination_series.id
+                  AND elimination_slot.resolved_entry_id = phase_entries.entry_id
+                 WHERE elimination_round.group_id = groups.id
+                   AND phases.format = 'single_elimination'
+                   AND elimination_series.loser_entry_id = phase_entries.entry_id
+                 ORDER BY elimination_round.round_number DESC LIMIT 1) AS elimination_game_losses
+         FROM tournament_phase_entries phase_entries
+         JOIN tournament_phase_groups groups ON groups.id = phase_entries.group_id
+         JOIN tournament_phases phases ON phases.id = groups.phase_id
+         LEFT JOIN tournament_phase_standings standings
+           ON standings.group_id = groups.id AND standings.entry_id = phase_entries.entry_id
+         WHERE phases.tournament_id = ?
+         ORDER BY phases.phase_order, groups.group_order`,
+        [req.params.id]
+      ),
+      query(
+        `SELECT entry_id, placement, placement_label, is_champion
+         FROM tournament_results WHERE tournament_id = ?`,
+        [req.params.id]
+      ),
+    ]);
+
+    const histories = new Map<string, any[]>();
+    for (const row of historyResult.rows) {
+      histories.set(row.entry_id, [...(histories.get(row.entry_id) || []), {
+        phase_id: row.phase_id,
+        phase_order: Number(row.phase_order),
+        phase_name: row.phase_name,
+        format: row.format,
+        phase_status: row.phase_status,
+        group_id: row.group_id,
+        group_name: row.group_name,
+        group_position: row.rank_position == null ? null : Number(row.rank_position),
+        matches_played: Number(row.matches_played || 0),
+        wins: Number(row.wins || 0),
+        losses: Number(row.losses || 0),
+        points: Number(row.points || 0),
+        omp: Number(row.omp || 0),
+        gwp: Number(row.gwp || 0),
+        ogp: Number(row.ogp || 0),
+        series_wins: Number(row.series_wins || 0),
+        series_losses: Number(row.series_losses || 0),
+        eliminated_round: row.eliminated_round == null ? null : Number(row.eliminated_round),
+        elimination_game_wins: Number(row.elimination_game_wins || 0),
+        elimination_game_losses: Number(row.elimination_game_losses || 0),
+      }]);
+    }
+    const materializedResults = new Map(resultRows.rows.map((row: any) => [row.entry_id, row]));
+    const tournamentFinished = tournamentResult.rows[0].status === 'finished';
+    const standings = entryResult.rows.map((entry: any) => {
+      const history = histories.get(entry.entry_id) || [];
+      const furthest = history[history.length - 1] || null;
+      const result: any = materializedResults.get(entry.entry_id);
+      const champion = Boolean(result?.is_champion);
+      const runnerUp = tournamentFinished && Number(result?.placement) === 2;
+      const eliminated = !champion && !runnerUp && Boolean(
+        furthest?.eliminated_round || furthest?.phase_status === 'completed'
+      );
+      const status = champion ? 'champion' : runnerUp ? 'runner_up' : eliminated ? 'eliminated' : 'active';
+      const outcome = champion
+        ? 'Champion'
+        : runnerUp
+          ? 'Runner-up'
+          : furthest?.eliminated_round
+            ? `Eliminated in ${furthest.phase_name}, round ${furthest.eliminated_round}`
+            : eliminated && furthest?.group_position
+              ? `Eliminated in ${furthest.phase_name}: ${furthest.group_name}, position ${furthest.group_position}`
+              : furthest
+                ? `Active in ${furthest.phase_name}: ${furthest.group_name}`
+                : 'Registered';
+      // Descending numeric vectors make the ranking rules explicit and keep
+      // display order independent from labels or UUIDs. Initial seed is only a
+      // deterministic display fallback and never breaks a competitive tie.
+      const rankVector = result?.placement != null
+        ? [3, -Number(result.placement)]
+        : furthest?.eliminated_round
+          ? [
+              2,
+              furthest.phase_order,
+              1,
+              furthest.eliminated_round,
+              furthest.series_wins,
+              -furthest.series_losses,
+              furthest.elimination_game_wins,
+              -furthest.elimination_game_losses,
+              furthest.points,
+              furthest.wins,
+              -furthest.losses,
+              furthest.omp,
+              furthest.gwp,
+              furthest.ogp,
+            ]
+          : [
+              2,
+              furthest?.phase_order || 0,
+              eliminated ? 0 : 2,
+              -Number(furthest?.group_position || 999),
+              furthest?.points || 0,
+              furthest?.wins || 0,
+              -(furthest?.losses || 0),
+              furthest?.omp || 0,
+              furthest?.gwp || 0,
+              furthest?.ogp || 0,
+            ];
+      return {
+        entry_id: entry.entry_id,
+        entity_id: entry.entity_id,
+        entry_name: entry.entry_name,
+        initial_seed: Number(entry.initial_seed || 0),
+        status,
+        outcome,
+        rank_vector: rankVector,
+        furthest_phase_order: Number(furthest?.phase_order || 0),
+        history,
+      };
+    });
+
+    const compareVectors = (left: number[], right: number[]) => {
+      const length = Math.max(left.length, right.length);
+      for (let index = 0; index < length; index += 1) {
+        const difference = (right[index] || 0) - (left[index] || 0);
+        if (difference !== 0) return difference;
+      }
+      return 0;
+    };
+    standings.sort((left: any, right: any) =>
+      compareVectors(left.rank_vector, right.rank_vector)
+      || left.initial_seed - right.initial_seed
+      || left.entry_name.localeCompare(right.entry_name)
+    );
+    let previousRankVector: string | null = null;
+    let placement = 0;
+    const ranked = standings.map((standing: any, index: number) => {
+      const rankVectorKey = JSON.stringify(standing.rank_vector);
+      if (rankVectorKey !== previousRankVector) placement = index + 1;
+      previousRankVector = rankVectorKey;
+      const { rank_vector, ...publicStanding } = standing;
+      return { ...publicStanding, placement };
+    });
+    return res.json({ standings: ranked });
+  } catch (error) {
+    console.error('Overall tournament standings error:', error);
+    return res.status(500).json({ error: 'Failed to load overall tournament standings' });
+  }
+});
+
 router.get('/:id/phases/:phaseId/standings', async (req, res) => {
   const result = await query(
     `SELECT s.*, g.name AS group_name, e.entry_type,
