@@ -172,12 +172,27 @@ router.get('/:id/phases/:phaseId/bracket', async (req, res) => {
   return res.json({ slots: result.rows });
 });
 
+/**
+ * Return phase games with the presentation metadata used by tournament detail.
+ * tournament_games is authoritative for phase results; ranked match metadata is
+ * a fallback, while unranked replay URLs are resolved through tournament_game_id.
+ */
 router.get('/:id/phases/:phaseId/games', async (req, res) => {
   const result = await query(
     `SELECT games.id AS game_id, games.game_number, games.status, games.played_at,
-            games.winner_entry_id, series.id AS series_id, series.best_of,
-            rounds.round_number, groups.name AS group_name,
+            games.winner_entry_id, games.match_id, series.id AS series_id, series.best_of,
+            phases.id AS phase_id, phases.name AS phase_name,
+            rounds.round_number, groups.id AS group_id, groups.name AS group_name,
             games.entry1_id, games.entry2_id,
+            COALESCE(games.map, linked_match.map) AS map,
+            COALESCE(games.winner_faction, linked_match.winner_faction) AS winner_faction,
+            COALESCE(games.loser_faction, linked_match.loser_faction) AS loser_faction,
+            COALESCE(games.winner_side, linked_match.winner_side) AS winner_side,
+            COALESCE(linked_match.replay_file_path,
+              (SELECT replay.replay_url FROM replays replay
+               WHERE replay.tournament_game_id = games.id AND replay.deleted_at IS NULL
+               ORDER BY replay.detected_at DESC LIMIT 1)) AS replay_url,
+            COALESCE(linked_match.replay_downloads, 0) AS replay_downloads,
             COALESCE(user1.nickname, team1.name) AS entry1_name,
             COALESCE(user2.nickname, team2.name) AS entry2_name
      FROM tournament_games games
@@ -193,6 +208,7 @@ router.get('/:id/phases/:phaseId/games', async (req, res) => {
      LEFT JOIN users_extension user2 ON user2.id = participant2.user_id
      LEFT JOIN tournament_teams team1 ON team1.id = entry1.team_id
      LEFT JOIN tournament_teams team2 ON team2.id = entry2.team_id
+     LEFT JOIN matches linked_match ON linked_match.id = games.match_id
      WHERE phases.tournament_id = ? AND phases.id = ?
      ORDER BY groups.group_order, rounds.round_number, series.series_position, games.game_number`,
     [req.params.id, req.params.phaseId]

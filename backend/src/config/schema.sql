@@ -1370,6 +1370,7 @@ CREATE TABLE `tournament_games` (
   `map` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `winner_faction` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `loser_faction` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `winner_side` tinyint(3) unsigned DEFAULT NULL,
   `winner_comments` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `winner_rating` int(11) DEFAULT NULL,
   `loser_comments` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -1383,7 +1384,8 @@ CREATE TABLE `tournament_games` (
   KEY `idx_tournament_games_match` (`match_id`),
   KEY `idx_tournament_games_status` (`status`),
   KEY `idx_tournament_games_winner` (`winner_entry_id`),
-  KEY `idx_tournament_games_loser` (`loser_entry_id`)
+  KEY `idx_tournament_games_loser` (`loser_entry_id`),
+  CONSTRAINT `chk_tournament_games_winner_side` CHECK (`winner_side` is null or `winner_side` in (1,2))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `tournament_byes` (

@@ -111,6 +111,43 @@ interface ParseSummary {
   }>;
 }
 
+/**
+ * Extract display metadata for a phase-engine game from the validated replay.
+ * Team games store faction lists and leave winner_side unset because their
+ * WML sides are not restricted to the 1v1 S1/S2 invariant.
+ */
+function phaseGameDisplayMetadata(parseSummary: ParseSummary): {
+  map: string | null;
+  winnerFaction: string | null;
+  loserFaction: string | null;
+  winnerSide: number | null;
+} {
+  const winnerName = parseSummary.replayVictory?.winner_name?.toLowerCase();
+  const winnerTeam = Object.values(parseSummary.detectedTeams || {}).find(team =>
+    team.members.some(member => member.toLowerCase() === winnerName)
+  );
+  if (winnerTeam) {
+    const loserTeam = Object.values(parseSummary.detectedTeams || {}).find(team => team.team_id !== winnerTeam.team_id);
+    return {
+      map: parseSummary.resolvedMap,
+      winnerFaction: winnerTeam.factions.join(', ') || null,
+      loserFaction: loserTeam?.factions.join(', ') || null,
+      winnerSide: null,
+    };
+  }
+
+  const winner = parseSummary.forumPlayers.find(player => player.user_name?.toLowerCase() === winnerName);
+  const loserName = parseSummary.replayVictory?.loser_name?.toLowerCase();
+  const loser = parseSummary.forumPlayers.find(player => player.user_name?.toLowerCase() === loserName);
+  const winnerSide = Number(winner?.side_number);
+  return {
+    map: parseSummary.resolvedMap,
+    winnerFaction: winner ? parseSummary.resolvedFactions[`side${winner.side_number}`] || null : null,
+    loserFaction: loser ? parseSummary.resolvedFactions[`side${loser.side_number}`] || null : null,
+    winnerSide: winnerSide === 1 || winnerSide === 2 ? winnerSide : null,
+  };
+}
+
 export class ParseNewReplaysRefactorized {
   private readonly parser: ReplayParser;
   private isRunning: boolean = false;
@@ -247,6 +284,13 @@ export class ParseNewReplaysRefactorized {
           let matchCreateResult;
 
           if (parseSummary.matchType === 'tournament_unranked' && parseSummary.linkedTournamentGameId) {
+            const metadata = phaseGameDisplayMetadata(parseSummary);
+            await query(
+              `UPDATE tournament_games
+               SET map = ?, winner_faction = ?, loser_faction = ?, winner_side = ?
+               WHERE id = ? AND status = 'pending'`,
+              [metadata.map, metadata.winnerFaction, metadata.loserFaction, metadata.winnerSide, parseSummary.linkedTournamentGameId]
+            );
             await recordPhaseGameResult(
               parseSummary.linkedTournamentId!,
               parseSummary.linkedTournamentGameId,
@@ -279,6 +323,13 @@ export class ParseNewReplaysRefactorized {
           } else {
             matchCreateResult = await this.createMatchFromParseSummary(replay, parseSummary);
             if (matchCreateResult.success && parseSummary.linkedTournamentGameId) {
+              const metadata = phaseGameDisplayMetadata(parseSummary);
+              await query(
+                `UPDATE tournament_games
+                 SET map = ?, winner_faction = ?, loser_faction = ?, winner_side = ?
+                 WHERE id = ? AND status = 'pending'`,
+                [metadata.map, metadata.winnerFaction, metadata.loserFaction, metadata.winnerSide, parseSummary.linkedTournamentGameId]
+              );
               await recordPhaseGameResult(
                 parseSummary.linkedTournamentId!,
                 parseSummary.linkedTournamentGameId,

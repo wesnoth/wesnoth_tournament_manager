@@ -268,9 +268,9 @@ router.post('/simulate-match', async (req: AuthRequest, res) => {
       // then let the phase engine atomically update series and progression.
       await query(
         `UPDATE tournament_games
-         SET map = ?, winner_faction = ?, loser_faction = ?
+         SET map = ?, winner_faction = ?, loser_faction = ?, winner_side = ?
          WHERE id = ? AND status IN ('pending', 'in_progress')`,
-        [map, winnerFaction, loserFaction, selectedMatchId]
+        [map, winnerFaction, loserFaction, 1, selectedMatchId]
       );
       await recordPhaseGameResult(tournamentId!, selectedMatchId!, winnerId, matchId || null);
     }

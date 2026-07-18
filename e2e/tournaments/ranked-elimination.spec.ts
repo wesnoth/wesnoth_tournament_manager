@@ -400,6 +400,16 @@ test('flexible tournament accepts simulated joins and progresses through every c
   }
   await expect(page.getByText(/tournament has started/i)).toBeVisible();
 
+  if (formatTemplate === 'swiss_brackets_final') {
+    const competitionTab = page.locator('[data-help-id="action-tab-competition"]');
+    await competitionTab.click();
+    await expect(page.locator('[data-help-id="region-tournament-standings-group"]')).toHaveCount(4);
+    await expect(page.getByRole('columnheader', { name: 'OMP' }).first()).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'GWP' }).first()).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'OGP' }).first()).toBeVisible();
+    await expect(page.locator('[data-help-id="region-tournament-phase-games"]')).toBeVisible();
+  }
+
   await advanceTournamentUntilFinished(page, tournamentName, autoAdvanceRounds);
 
   // The tournament list is the terminal assertion. Once it reports Finished,
