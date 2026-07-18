@@ -9,7 +9,16 @@
 |---|---|---|---|
 | `users_extension` | Player profiles | `id` | `user_id`, `nickname`, `elo`, `level`, `is_admin` |
 | `matches` | Direct matches (1v1) | `id` | `player1_id`, `player2_id`, `winner_id`, `loser_id`, `status` |
-| `tournaments` | Tournament records | `id` | `name`, `tournament_mode`, `tournament_type`, `status`, `creator_id`, `rules_content` |
+| `tournaments` | Tournament identity and lifecycle | `id` | `name`, `forum_topic_id`, `competition_model_version`, `tournament_mode`, `status` |
+| `tournament_entries` | Immutable competitive player/team identities | `id` | `tournament_id`, `entry_type`, `participant_id`, `team_id`, `initial_seed` |
+| `tournament_phases` | Ordered phase graph | `id` | `tournament_id`, `phase_order`, `format`, `status` |
+| `tournament_phase_groups` | Parallel groups or brackets inside a phase | `id` | `phase_id`, `group_order`, `status` |
+| `tournament_phase_entries` | Entry membership and preclassification per group | `id` | `group_id`, `entry_id`, `group_seed`, `status` |
+| `tournament_phase_rounds` | Rounds scoped to one group/bracket | `id` | `group_id`, `round_number`, `best_of`, `status` |
+| `tournament_series` | Best-of competitive series | `id` | `round_id`, `best_of`, `winner_entry_id`, `status` |
+| `tournament_series_slots` | Direct or derived bracket positions | `id` | `series_id`, `slot_number`, `source_type`, `resolved_entry_id` |
+| `tournament_games` | Individual games belonging to a series | `id` | `series_id`, `game_number`, `match_id`, `status` |
+| `tournament_phase_standings` | Materialized group standings | (`group_id`,`entry_id`) | `points`, `omp`, `gwp`, `ogp`, `rank_position` |
 | `tournament_organizers` | Co-organizers per tournament | (`tournament_id`,`user_id`) | `tournament_id`, `user_id`, `created_by` |
 | `tournament_rule_templates` | Reusable markdown rules templates | `id` | `title`, `content_markdown`, `is_active` |
 | `tournament_participants` | Players in tournaments | `id` | `user_id`, `team_id`, `status` |
@@ -50,6 +59,14 @@ The application uses **two MariaDB schemas** on the same server:
 |---|---|---|
 | `forum` | phpBB forum users + Wesnoth game server data | **READ-ONLY** — managed by the wesnoth.org team. Never create migrations for these tables. |
 | `tournament` | All tournament application data | **Full control** — migrations are applied automatically on backend startup. |
+
+### Tournament competition model
+
+Tournament identity, registration, participants, teams, ranked `matches`, and `replays.match_id` remain stable. Tournaments with `competition_model_version=2` use an ordered acyclic phase graph. A phase owns one or more parallel groups; each group owns rounds; rounds own best-of series; and series own individual games. Advancement rules map a finalized source rank to a target group preclassification.
+
+The rollout follows expand, migrate, switch, and contract. The expansion is additive: legacy round and match tables remain readable while version 2 tournaments are validated. Contract migrations must be separate and must not run until production has completed its compatibility window.
+
+`forum_topic_id` is optional. When present, Wesnoth game rooms use `T<topic-id>` and replay resolution prefers that code. Without it, the exact tournament name remains the fallback; ambiguous matches require manual integration.
 
 ---
 

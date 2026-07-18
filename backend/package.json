@@ -14,7 +14,9 @@
     "start": "NODE_ENV=production node dist/server.js",
     "start:migration": "NODE_ENV=migration node dist/server.js",
     "start:test": "NODE_ENV=test node dist/server.js",
-    "migrate": "node scripts/migrate.js"
+    "migrate": "node scripts/migrate.js",
+    "test:tournament-engine": "node dist/tournament-engine/tournamentEngine.selftest.js",
+    "audit:tournament-migration": "node dist/scripts/auditLegacyTournamentMigration.js"
   },
   "dependencies": {
     "archiver": "^8.0.0",

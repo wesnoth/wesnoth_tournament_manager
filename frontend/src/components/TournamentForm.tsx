@@ -6,6 +6,8 @@ import MarkdownPreview from './MarkdownPreview';
 import { tournamentService, userService } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import type { MatchFormat, TournamentFormData, TournamentMode, TournamentType } from '../types/tournament';
+import type { TournamentFormatDefinition } from '../types/tournament';
+import TournamentPhaseBuilder from './TournamentPhaseBuilder';
 
 interface RuleTemplate {
   id: string;
@@ -29,6 +31,7 @@ interface TournamentFormProps {
   onUnrankedMapsChange: (mapIds: string[]) => void;
   isLoading?: boolean;
   onCancel?: () => void;
+  entryOptions?: Array<{ id: string; name: string }>;
 }
 
 const toLocalDateTimeValue = (dateValue: string): string => {
@@ -48,6 +51,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
   onUnrankedMapsChange,
   isLoading = false,
   onCancel,
+  entryOptions = [],
 }) => {
   const { t } = useTranslation();
   const { userId } = useAuthStore();
@@ -84,6 +88,25 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
     onFormDataChange(updatedData);
   };
 
+  const handlePhaseFormatChange = (definition: TournamentFormatDefinition) => {
+    const first = definition.phases[0];
+    const hasElimination = definition.phases.some(item => item.format === 'single_elimination');
+    const legacyType: TournamentType = definition.phases.length > 1 && hasElimination
+      ? 'swiss_elimination'
+      : first?.format === 'round_robin' ? 'league'
+        : first?.format === 'single_elimination' ? 'elimination' : 'swiss';
+    onFormDataChange({
+      ...formData,
+      format_definition: definition,
+      tournament_type: legacyType,
+      general_rounds: first?.format === 'round_robin'
+        ? (first.round_robin?.cycle_count || 1)
+        : (first?.swiss?.round_count || (legacyType === 'elimination' ? 0 : 1)),
+      final_rounds: definition.phases.length > 1 && hasElimination ? 1 : 0,
+      general_rounds_format: `bo${first?.default_best_of || 3}` as MatchFormat,
+    });
+  };
+
   useEffect(() => {
     const loadRuleTemplatesAndUsers = async () => {
       try {
@@ -106,6 +129,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
   }, []);
 
   const selectedOrganizerIds = formData.organizer_ids || [];
+  const extractedForumTopicId = formData.forum_topic_url?.match(/[?&]t=([1-9][0-9]*)/)?.[1] || null;
   const coOrganizerOptions = allUsers.filter(
     (user) => user.id !== userId && !selectedOrganizerIds.includes(user.id)
   );
@@ -225,6 +249,22 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
               </div>
             </div>
           )}
+        </div>
+
+        <div className="mt-4 flex flex-col gap-2">
+          <label className="font-medium text-gray-700">Wesnoth forum topic URL (optional)</label>
+          <input
+            data-help-id="field-tournament-forum-topic-url"
+            type="url"
+            placeholder="https://forums.wesnoth.org/viewtopic.php?t=60773"
+            value={formData.forum_topic_url || ''}
+            onChange={(event) => onFormDataChange({ ...formData, forum_topic_url: event.target.value || null })}
+            disabled={isLoading}
+            pattern="https://forums\.wesnoth\.org/viewtopic\.php\?.*t=[0-9]+.*"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+          />
+          <small className="text-gray-600">Optional in test and production. When present, its topic number becomes the short unique game code.</small>
+          {extractedForumTopicId && <small className="text-green-700">Detected topic {extractedForumTopicId}; Wesnoth game name: T{extractedForumTopicId}</small>}
         </div>
 
         {/* Tournament Description - Wiki editor */}
@@ -351,7 +391,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
       <div data-help-id="region-tournament-format" className="mb-6 p-4 border border-gray-200 rounded-lg bg-white">
         <h3 className="mb-4 font-semibold text-gray-800">{t('tournament.format_settings', 'Format Settings')}</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="flex flex-col gap-2">
+          {!formData.format_definition && <div className="flex flex-col gap-2">
             <label className="font-medium text-gray-700">{t('tournament.tournament_format', 'Tournament Format')}</label>
             <select
               data-help-id="field-tournament-format"
@@ -366,7 +406,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
               <option value="swiss">{t('option_type_swiss', 'Swiss')}</option>
               <option value="swiss_elimination">{t('option_type_swiss_elimination', 'Swiss-Elimination Mix')}</option>
             </select>
-          </div>
+          </div>}
           <div className="flex flex-col gap-2">
             <label className="font-medium text-gray-700">{t('label_max_participants', 'Max Participants')}</label>
             <input
@@ -386,6 +426,15 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
           </div>
         </div>
       </div>
+
+
+      <TournamentPhaseBuilder
+        value={formData.format_definition}
+        onChange={handlePhaseFormatChange}
+        disabled={isLoading}
+        initialTemplate={formData.tournament_type === 'league' ? 'league' : formData.tournament_type === 'elimination' ? 'elimination' : 'swiss'}
+        entryOptions={entryOptions}
+      />
 
       {/* SECTION 3: UNRANKED ASSETS (conditional) */}
       {formData.tournament_mode === 'unranked' && (
@@ -516,7 +565,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
         </div>
 
         {/* ELIMINATION TOURNAMENT - Auto-calculated rounds */}
-        {formData.tournament_type === 'elimination' && (
+        {!formData.format_definition && formData.tournament_type === 'elimination' && (
           <div data-help-id="region-tournament-format-elimination" className="border-t border-gray-200 pt-6">
             <h4 className="font-semibold text-gray-800 mb-2">{t('tournament.round_configuration', 'Round Configuration')}</h4>
             <p className="text-sm text-gray-600 mb-4">{t('tournament.configure_match_formats_elimination', 'Configure match formats for your elimination tournament')}</p>
@@ -568,7 +617,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
         )}
 
         {/* NON-ELIMINATION TOURNAMENT - Manual round configuration */}
-        {formData.tournament_type !== 'elimination' && (
+        {!formData.format_definition && formData.tournament_type !== 'elimination' && (
           <div className="border-t border-gray-200 pt-6 space-y-6">
             {/* LEAGUE TOURNAMENT */}
             {formData.tournament_type === 'league' && (

@@ -53,8 +53,14 @@ Thumbs.db
 .codex/skills/
 **/skills/
 
-# Testing artifacts
-/e2e/
+# End-to-end test sources are versioned; generated authentication state and
+# reports remain local because they can contain session credentials.
+/e2e/*
+!/e2e/auth.setup.ts
+!/e2e/tournaments/
+/e2e/tournaments/*
+!/e2e/tournaments/ranked-elimination.spec.ts
+/e2e/.auth/
 /testing/results/
 /testing/scripts/test_credentials.csv
 /testing/scripts/test_tournament.ps1

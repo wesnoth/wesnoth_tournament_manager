@@ -21,6 +21,32 @@ import { checkForumBanlist } from '../services/phpbbAuth.js';
 import { queryPhpbb } from '../config/phpbbDatabase.js';
 import * as fs from 'fs';
 import * as path from 'path';
+import { parseTournamentCode } from '../tournament-engine/forumTopic.js';
+import { recordPhaseGameResult } from '../tournament-engine/competitionProgression.js';
+
+/** Resolve an active tournament by explicit forum code first, then by its exact name. */
+async function findTournamentForGameName(gameName: string, modes: string[]): Promise<any | null> {
+  const topicId = parseTournamentCode(gameName);
+  const modePlaceholders = modes.map(() => '?').join(', ');
+  if (topicId !== null) {
+    const result = await query(
+      `SELECT id, name, tournament_mode, tournament_type, competition_model_version
+       FROM tournaments
+       WHERE status = 'in_progress' AND tournament_mode IN (${modePlaceholders}) AND forum_topic_id = ?`,
+      [...modes, topicId]
+    );
+    if (result.rows.length === 1) return result.rows[0];
+  }
+  const result = await query(
+    `SELECT id, name, tournament_mode, tournament_type, competition_model_version
+     FROM tournaments
+     WHERE status = 'in_progress' AND tournament_mode IN (${modePlaceholders}) AND LOWER(name) = LOWER(?)
+     LIMIT 2`,
+    [...modes, gameName]
+  );
+  // Exact-name collisions are deliberately left unlinked for manual resolution.
+  return result.rows.length === 1 ? result.rows[0] : null;
+}
 
 interface UnparsedReplay {
   id: string;
@@ -70,8 +96,10 @@ interface ParseSummary {
   // Set when matchType is tournament_* and a matching tournament_round_match is found
   linkedTournamentId: string | null;
   linkedTournamentRoundMatchId: string | null;
+  linkedTournamentGameId: string | null;
+  linkedWinnerEntryId: string | null;
   // Cached tournament record found during match type detection (avoid double DB lookup)
-  detectedTournament: { id: string; name: string; tournament_mode: string; tournament_type: string } | null;
+  detectedTournament: { id: string; name: string; tournament_mode: string; tournament_type: string; competition_model_version?: number } | null;
   // Team information for team tournaments (populated during linkToTeamTournament)
   detectedTeams?: Record<string, {
     team_id: string;
@@ -204,8 +232,12 @@ export class ParseNewReplaysRefactorized {
             console.log(`⏳ [PARSE] Confidence=1 → Parsed but no match created (awaiting player confirmation)`);
             await query(
               `UPDATE replays SET parse_status = 'parsed', parsed = 1, need_integration = 1, integration_confidence = ?,
-               tournament_id = ?, tournament_round_match_id = ?, parse_error_message = NULL, parse_summary = ? WHERE id = ?`,
-              [parseSummary.confidenceLevel, parseSummary.linkedTournamentId, parseSummary.linkedTournamentRoundMatchId, JSON.stringify(parseSummary), replay.id]
+               tournament_id = ?, tournament_round_match_id = ?, tournament_game_id = ?,
+               tournament_link_method = ?, tournament_linked_at = CURRENT_TIMESTAMP,
+               parse_error_message = NULL, parse_summary = ? WHERE id = ?`,
+              [parseSummary.confidenceLevel, parseSummary.linkedTournamentId, parseSummary.linkedTournamentRoundMatchId,
+                parseSummary.linkedTournamentGameId, parseSummary.linkedTournamentGameId ? 'participants' : null,
+                JSON.stringify(parseSummary), replay.id]
             );
             parsedCount++;
             continue;
@@ -214,7 +246,14 @@ export class ParseNewReplaysRefactorized {
           // Create match (only if confidence=2)
           let matchCreateResult;
 
-          if (parseSummary.matchType === 'tournament_unranked') {
+          if (parseSummary.matchType === 'tournament_unranked' && parseSummary.linkedTournamentGameId) {
+            await recordPhaseGameResult(
+              parseSummary.linkedTournamentId!,
+              parseSummary.linkedTournamentGameId,
+              parseSummary.linkedWinnerEntryId!
+            );
+            matchCreateResult = { success: true, matchId: null };
+          } else if (parseSummary.matchType === 'tournament_unranked') {
             // Unranked tournament: insert into tournament_matches only, no ELO/stats update
             const winnerUser = await this.getUserDataByNickname(parseSummary.replayVictory!.winner_name);
             if (!winnerUser) {
@@ -239,6 +278,14 @@ export class ParseNewReplaysRefactorized {
             });
           } else {
             matchCreateResult = await this.createMatchFromParseSummary(replay, parseSummary);
+            if (matchCreateResult.success && parseSummary.linkedTournamentGameId) {
+              await recordPhaseGameResult(
+                parseSummary.linkedTournamentId!,
+                parseSummary.linkedTournamentGameId,
+                parseSummary.linkedWinnerEntryId!,
+                matchCreateResult.matchId
+              );
+            }
           }
 
           if (matchCreateResult.success) {
@@ -247,8 +294,12 @@ export class ParseNewReplaysRefactorized {
             const replayMatchId = parseSummary.matchType === 'tournament_unranked' ? null : matchCreateResult.matchId;
             await query(
               `UPDATE replays SET parse_status = 'completed', parsed = 1, integration_confidence = ?,
-               tournament_id = ?, tournament_round_match_id = ?, match_id = ?, parse_error_message = NULL, parse_summary = ? WHERE id = ?`,
-              [parseSummary.confidenceLevel, parseSummary.linkedTournamentId, parseSummary.linkedTournamentRoundMatchId, replayMatchId, JSON.stringify(parseSummary), replay.id]
+               tournament_id = ?, tournament_round_match_id = ?, tournament_game_id = ?,
+               tournament_link_method = ?, tournament_linked_at = CURRENT_TIMESTAMP,
+               match_id = ?, parse_error_message = NULL, parse_summary = ? WHERE id = ?`,
+              [parseSummary.confidenceLevel, parseSummary.linkedTournamentId, parseSummary.linkedTournamentRoundMatchId,
+                parseSummary.linkedTournamentGameId, parseSummary.linkedTournamentGameId ? 'participants' : null,
+                replayMatchId, JSON.stringify(parseSummary), replay.id]
             );
             
             // Update last integration timestamp
@@ -353,6 +404,8 @@ export class ParseNewReplaysRefactorized {
       matchType: 'rejected',
       linkedTournamentId: null,
       linkedTournamentRoundMatchId: null,
+      linkedTournamentGameId: null,
+      linkedWinnerEntryId: null,
       detectedTournament: null
     };
 
@@ -597,16 +650,9 @@ export class ParseNewReplaysRefactorized {
           parseSummary.matchType = 'rejected';
           return parseSummary;
         } else {
-          const tournResult = await query(
-            `SELECT id, name, tournament_mode, tournament_type FROM tournaments
-             WHERE status = 'in_progress' AND tournament_mode IN ('unranked', 'team') AND LOWER(name) = LOWER(?)
-             LIMIT 1`,
-            [searchName]
-          );
-          const tournaments = (tournResult as any).rows || [];
+          const tournament = await findTournamentForGameName(searchName, ['unranked', 'team']);
 
-          if (tournaments.length > 0) {
-            const tournament = tournaments[0];
+          if (tournament) {
             parseSummary.detectedTournament = tournament;
             console.log(`   🏆 Detected tournament: "${tournament.name}" (mode=${tournament.tournament_mode})`);
             parseSummary.matchType = 'tournament_unranked';
@@ -637,16 +683,9 @@ export class ParseNewReplaysRefactorized {
           console.log(`   ⚠️  No game_name available, treating as direct ranked`);
           parseSummary.matchType = 'ranked';
         } else {
-          const tournResult = await query(
-            `SELECT id, name, tournament_mode, tournament_type FROM tournaments
-             WHERE status = 'in_progress' AND tournament_mode = 'ranked' AND LOWER(name) = LOWER(?)
-             LIMIT 1`,
-            [searchName]
-          );
-          const tournaments = (tournResult as any).rows || [];
+          const tournament = await findTournamentForGameName(searchName, ['ranked']);
 
-          if (tournaments.length > 0) {
-            const tournament = tournaments[0];
+          if (tournament) {
             parseSummary.detectedTournament = tournament;
             console.log(`   🏆 Detected ranked tournament: "${tournament.name}"`);
             parseSummary.matchType = 'tournament_ranked';
@@ -917,6 +956,37 @@ export class ParseNewReplaysRefactorized {
       return false;
     }
 
+    if (Number(tournament.competition_model_version) === 2) {
+      const phaseGames = await query(
+        `SELECT games.id, games.entry1_id, games.entry2_id,
+                participant1.user_id AS user1_id, participant2.user_id AS user2_id
+         FROM tournament_games games
+         JOIN tournament_series series ON series.id = games.series_id
+         JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+         JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+         JOIN tournament_phases phases ON phases.id = groups.phase_id
+         JOIN tournament_entries entry1 ON entry1.id = games.entry1_id
+         JOIN tournament_entries entry2 ON entry2.id = games.entry2_id
+         JOIN tournament_participants participant1 ON participant1.id = entry1.participant_id
+         JOIN tournament_participants participant2 ON participant2.id = entry2.participant_id
+         WHERE phases.tournament_id = ? AND rounds.status = 'in_progress' AND games.status = 'pending'
+           AND ((participant1.user_id = ? AND participant2.user_id = ?) OR (participant1.user_id = ? AND participant2.user_id = ?))
+         ORDER BY phases.phase_order, rounds.round_number, games.game_number
+         LIMIT 2`,
+        [tournament.id, winnerUser.id, loserUser.id, loserUser.id, winnerUser.id]
+      );
+      if (phaseGames.rows.length !== 1) {
+        console.log(`   ❌ [TOURNAMENT LINK] Phase game resolution is ${phaseGames.rows.length === 0 ? 'missing' : 'ambiguous'}`);
+        return false;
+      }
+      parseSummary.linkedTournamentId = tournament.id;
+      parseSummary.linkedTournamentGameId = phaseGames.rows[0].id;
+      parseSummary.linkedWinnerEntryId = phaseGames.rows[0].user1_id === winnerUser.id
+        ? phaseGames.rows[0].entry1_id
+        : phaseGames.rows[0].entry2_id;
+      return true;
+    }
+
     // 1v1 tournament: search by player IDs directly
     // For league tournaments all rounds are open simultaneously, so we search across all rounds
     // and use ORDER BY round_number ASC to resolve double round-robin ambiguity (earliest pending first)
@@ -1033,6 +1103,29 @@ export class ParseNewReplaysRefactorized {
     const team2 = teams[1];
 
     console.log(`   ✅ [TEAM TOURNAMENT] Teams identified: ${team1} vs ${team2}`);
+
+    if (Number(tournament.competition_model_version) === 2) {
+      const phaseGames = await query(
+        `SELECT games.id
+         FROM tournament_games games
+         JOIN tournament_series series ON series.id = games.series_id
+         JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+         JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+         JOIN tournament_phases phases ON phases.id = groups.phase_id
+         JOIN tournament_entries entry1 ON entry1.id = games.entry1_id
+         JOIN tournament_entries entry2 ON entry2.id = games.entry2_id
+         WHERE phases.tournament_id = ? AND rounds.status = 'in_progress' AND games.status = 'pending'
+           AND ((entry1.team_id = ? AND entry2.team_id = ?) OR (entry1.team_id = ? AND entry2.team_id = ?))
+         ORDER BY phases.phase_order, rounds.round_number, games.game_number
+         LIMIT 2`,
+        [tournament.id, team1, team2, team2, team1]
+      );
+      if (phaseGames.rows.length !== 1) return false;
+      parseSummary.linkedTournamentId = tournament.id;
+      parseSummary.linkedTournamentGameId = phaseGames.rows[0].id;
+      parseSummary.confidenceLevel = 1;
+      return true;
+    }
 
     // Verify both teams have players
     const team1Players = participants.filter((p: any) => p.team_id === team1);

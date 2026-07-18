@@ -17,6 +17,7 @@ import MarkdownPreview from '../components/MarkdownPreview';
 import MainLayout from '../components/MainLayout';
 import { SimulateJoinPanel } from '../components/TestSimulationControls';
 import type { TournamentFormData, TournamentUpdatePayload } from '../types/tournament';
+import TournamentCompetitionView from '../components/TournamentCompetitionView';
 
 // Helper function to extract parsed replay data from JSON summary
 function parseReplaySummary(summaryJson: string | null): {
@@ -131,6 +132,8 @@ interface Tournament {
   scheduled_start_at?: string | null;
   started_at: string;
   finished_at: string;
+  forum_topic_id?: number | null;
+  competition_model_version?: number;
 }
 
 interface TournamentOrganizer {
@@ -235,9 +238,9 @@ const TournamentDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [activeTab, setActiveTab] = useState<'participants' | 'matches' | 'rounds' | 'roundMatches' | 'ranking' | 'teams'>(() => {
+  const [activeTab, setActiveTab] = useState<'participants' | 'matches' | 'rounds' | 'roundMatches' | 'ranking' | 'competition' | 'teams'>(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam === 'roundMatches' || tabParam === 'matches' || tabParam === 'rounds' || tabParam === 'ranking' || tabParam === 'teams') {
+    if (tabParam === 'roundMatches' || tabParam === 'matches' || tabParam === 'rounds' || tabParam === 'ranking' || tabParam === 'competition' || tabParam === 'teams') {
       return tabParam;
     }
     return 'participants';
@@ -418,6 +421,12 @@ const TournamentDetail: React.FC = () => {
         final_rounds_format: tournamentRes.data.final_rounds_format || 'bo5',
         rules_template_id: tournamentRes.data.rules_template_id || null,
         rules_content: tournamentRes.data.rules_content || tournamentRes.data.description || '',
+        forum_topic_url: tournamentRes.data.forum_topic_id
+          ? `https://forums.wesnoth.org/viewtopic.php?t=${tournamentRes.data.forum_topic_id}`
+          : null,
+        format_definition: Number(tournamentRes.data.competition_model_version) === 2
+          ? (await api.get(`/tournaments/${id}/format`)).data
+          : undefined,
       });
       
       // Check user's participation status
@@ -784,7 +793,9 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
           editData.auto_advance_round !== tournament?.auto_advance_round ||
           editData.scheduled_start_at !== tournament?.scheduled_start_at ||
           editData.rules_template_id !== tournament?.rules_template_id ||
-          editData.rules_content !== tournament?.rules_content) {
+          editData.rules_content !== tournament?.rules_content ||
+          editData.format_definition !== undefined ||
+          editData.forum_topic_url !== (tournament?.forum_topic_id ? `https://forums.wesnoth.org/viewtopic.php?t=${tournament.forum_topic_id}` : null)) {
         const updateObj: TournamentUpdatePayload = {
           description: editData.description,
           max_participants: editData.max_participants,
@@ -797,6 +808,8 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
           final_rounds_format: editData.final_rounds_format,
           rules_template_id: editData.rules_template_id,
           rules_content: editData.rules_content,
+          forum_topic_url: editData.forum_topic_url,
+          format_definition: editData.format_definition,
         };
         await tournamentService.updateTournament(id!, updateObj);
       }
@@ -858,6 +871,8 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
         final_rounds_format: editData.final_rounds_format,
         rules_template_id: editData.rules_template_id,
         rules_content: editData.rules_content,
+        forum_topic_url: editData.forum_topic_url,
+        format_definition: editData.format_definition,
       };
       // Save tournament configuration
       await tournamentService.updateTournament(id!, updateObj);
@@ -1396,6 +1411,14 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
           ))}
         </p>
         <p><strong>{t('tournament.col_type')}:</strong> {tournament.tournament_type}</p>
+        <p><strong>Wesnoth game name:</strong> <code className="px-1 bg-gray-100 rounded">{tournament.forum_topic_id ? `T${tournament.forum_topic_id}` : tournament.name}</code></p>
+        {tournament.forum_topic_id && (
+          <p><strong>Forum:</strong>{' '}
+            <a data-help-id="action-open-tournament-forum-topic" className="text-blue-600 hover:underline" href={`https://forums.wesnoth.org/viewtopic.php?t=${tournament.forum_topic_id}`} target="_blank" rel="noreferrer">
+              Topic {tournament.forum_topic_id}
+            </a>
+          </p>
+        )}
         {tournament.scheduled_start_at && (
           <p><strong>{t('label_scheduled_start_date', 'Planned Start')}:</strong> {formatDate(tournament.scheduled_start_at)}</p>
         )}
@@ -1635,6 +1658,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
             setUnrankedMaps(selected);
           }}
           onCancel={() => setEditMode(false)}
+          entryOptions={participants.map(participant => ({ id: participant.id, name: participant.nickname }))}
         />
       )}
 
@@ -1684,6 +1708,15 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
           >
             {t('tabs.ranking')}
           </button>
+          {Number(tournament?.competition_model_version) === 2 && (
+            <button
+              data-help-id="action-tab-competition"
+              className={`px-4 py-2 rounded font-semibold cursor-pointer transition-all ${activeTab === 'competition' ? 'bg-blue-500 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
+              onClick={() => setActiveTab('competition')}
+            >
+              Competition
+            </button>
+          )}
           
           {/* Refresh button */}
           <button
@@ -2928,6 +2961,12 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
           ) : (
             <p className="text-gray-600">{t('no_rounds_configured_tournament')}</p>
           )}
+        </div>
+      )}
+
+      {activeTab === 'competition' && tournament && (
+        <div className="bg-white rounded-lg shadow-lg p-8 mb-8 mt-6">
+          <TournamentCompetitionView tournamentId={tournament.id} canManage={isCreator} />
         </div>
       )}
 

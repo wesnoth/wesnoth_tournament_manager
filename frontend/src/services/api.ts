@@ -278,7 +278,7 @@ export const testToolsService = {
   simulateMatch: (data: {
     mode: string;
     tournament_id?: string;
-    round_match_id?: string;
+    competition_match_id?: string;
     winner_id: string;
     loser_id?: string;
   }) => api.post('/test-tools/simulate-match', data),

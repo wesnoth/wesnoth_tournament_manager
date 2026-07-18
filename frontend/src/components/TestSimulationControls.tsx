@@ -74,7 +74,7 @@ export function SimulateMatchPanel({ onCompleted }: { onCompleted?: () => void }
   const [tournaments, setTournaments] = useState<any[]>([]);
   const [tournamentId, setTournamentId] = useState(() => sessionStorage.getItem('test-simulate-match-tournament') || '');
   const [openMatches, setOpenMatches] = useState<any[]>([]);
-  const [roundMatchId, setRoundMatchId] = useState('');
+  const [competitionMatchId, setCompetitionMatchId] = useState('');
   const [winner, setWinner] = useState<UserOption | null>(null);
   const [loser, setLoser] = useState<UserOption | null>(null);
   const [winnerId, setWinnerId] = useState('');
@@ -102,7 +102,7 @@ export function SimulateMatchPanel({ onCompleted }: { onCompleted?: () => void }
   }, [tournamentId]);
 
   if (!isTestBuild) return null;
-  const selectedMatch = openMatches.find((match) => match.id === roundMatchId);
+  const selectedMatch = openMatches.find((match) => match.id === competitionMatchId);
   const canSubmit = mode === 'ranked' ? Boolean(winner?.id && loser?.id && winner.id !== loser.id) : Boolean(selectedMatch && winnerId);
 
   const submit = async (event: React.FormEvent) => {
@@ -113,12 +113,12 @@ export function SimulateMatchPanel({ onCompleted }: { onCompleted?: () => void }
       await testToolsService.simulateMatch({
         mode,
         tournament_id: tournamentId || undefined,
-        round_match_id: roundMatchId || undefined,
+        competition_match_id: competitionMatchId || undefined,
         winner_id: mode === 'ranked' ? winner!.id : winnerId,
         loser_id: mode === 'ranked' ? loser!.id : undefined,
       });
       setMessage('Simulated match reported successfully');
-      setWinner(null); setLoser(null); setWinnerId(''); setRoundMatchId('');
+      setWinner(null); setLoser(null); setWinnerId(''); setCompetitionMatchId('');
       if (tournamentId) {
         // Series and round transitions are finalized asynchronously. Poll the
         // source briefly so the persistent form exposes the next game instead
@@ -138,7 +138,7 @@ export function SimulateMatchPanel({ onCompleted }: { onCompleted?: () => void }
   };
 
   return (
-    <section className="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-8">
+    <section data-help-id="region-test-simulate-match" className="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-8">
       <h2 className="text-xl font-bold text-gray-800 mb-2">Simulate Match</h2>
       <p className="text-sm text-gray-600 mb-4">Test-only tool. Factions and map are selected randomly by the server.</p>
       {message && <p className="text-green-700 mb-3">{message}</p>}
@@ -162,16 +162,16 @@ export function SimulateMatchPanel({ onCompleted }: { onCompleted?: () => void }
           <>
             <label className="flex flex-col gap-1">
               <span className="text-sm font-semibold text-gray-700">Active tournament</span>
-              <select data-help-id="field-test-tournament" value={tournamentId} onChange={(event) => { setTournamentId(event.target.value); sessionStorage.setItem('test-simulate-match-tournament', event.target.value); setRoundMatchId(''); setWinnerId(''); }} className="px-3 py-2 border border-gray-300 rounded-lg">
+              <select data-help-id="field-test-tournament" value={tournamentId} onChange={(event) => { setTournamentId(event.target.value); sessionStorage.setItem('test-simulate-match-tournament', event.target.value); setCompetitionMatchId(''); setWinnerId(''); }} className="px-3 py-2 border border-gray-300 rounded-lg">
                 <option value="">Select tournament</option>
                 {tournaments.map((tournament) => <option key={tournament.id} value={tournament.id}>{tournament.name}</option>)}
               </select>
             </label>
             <label className="flex flex-col gap-1 md:col-span-2">
               <span className="text-sm font-semibold text-gray-700">Open match</span>
-              <select data-help-id="field-test-open-match" value={roundMatchId} onChange={(event) => { setRoundMatchId(event.target.value); setWinnerId(''); }} disabled={!tournamentId} className="px-3 py-2 border border-gray-300 rounded-lg">
+              <select data-help-id="field-test-open-match" value={competitionMatchId} onChange={(event) => { setCompetitionMatchId(event.target.value); setWinnerId(''); }} disabled={!tournamentId} className="px-3 py-2 border border-gray-300 rounded-lg">
                 <option value="">Select match</option>
-                {openMatches.map((match) => <option key={match.id} value={match.id}>Round {match.round_number}: {match.player1_name} vs {match.player2_name} ({match.player1_wins}-{match.player2_wins})</option>)}
+                {openMatches.map((match) => <option key={match.id} value={match.id}>{match.phase_name ? `${match.phase_name} / ${match.group_name} / ` : ''}Round {match.round_number}: {match.player1_name} vs {match.player2_name} ({match.player1_wins}-{match.player2_wins})</option>)}
               </select>
             </label>
             {selectedMatch && (

@@ -9,8 +9,8 @@ import { query } from '../config/database.js';
 import { authMiddleware, moderatorOrAdminMiddleware, AuthRequest } from '../middleware/auth.js';
 import { isTournamentOrganizer } from '../services/tournamentAuthorizationService.js';
 import { createMatch } from '../services/matchCreationService.js';
-import { handlePostConfirmation } from '../services/replayConfirmationService.js';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
+import { recordPhaseGameResult } from '../tournament-engine/competitionProgression.js';
 
 const router = Router();
 const TEST_MODES = ['ranked', 'tournament_ranked', 'tournament_unranked', 'tournament_team'] as const;
@@ -92,6 +92,7 @@ router.get('/tournaments', async (req, res) => {
        FROM tournaments
        WHERE status = COALESCE(?, status)
          AND tournament_mode = COALESCE(?, tournament_mode)
+         AND competition_model_version = 2
        ORDER BY name`,
       [status, tournamentMode]
     );
@@ -105,28 +106,38 @@ router.get('/tournaments', async (req, res) => {
 router.get('/tournaments/:tournamentId/matches', async (req, res) => {
   try {
     const tournamentId = req.params.tournamentId;
+    // A selectable item is one concrete phase-engine game. Only games in
+    // active rounds are exposed, which prevents test operators from bypassing
+    // manual phase or round start policies.
     const result = await query(
-      `SELECT trm.id, trm.round_id, trm.player1_id, trm.player2_id,
-              trm.player1_wins, trm.player2_wins, trm.best_of, trm.wins_required,
-              tr.round_number,
-              CASE WHEN t.tournament_mode = 'team' THEN CONCAT(t1.name, ' (', COALESCE(t1m.members, ''), ')') ELSE u1.nickname END AS player1_name,
-              CASE WHEN t.tournament_mode = 'team' THEN CONCAT(t2.name, ' (', COALESCE(t2m.members, ''), ')') ELSE u2.nickname END AS player2_name
-       FROM tournament_round_matches trm
-       JOIN tournament_rounds tr ON tr.id = trm.round_id
-       JOIN tournaments t ON t.id = trm.tournament_id
-       LEFT JOIN users_extension u1 ON t.tournament_mode <> 'team' AND u1.id = trm.player1_id
-       LEFT JOIN users_extension u2 ON t.tournament_mode <> 'team' AND u2.id = trm.player2_id
-       LEFT JOIN tournament_teams t1 ON t1.id = trm.player1_id
-       LEFT JOIN tournament_teams t2 ON t2.id = trm.player2_id
-       LEFT JOIN (SELECT team_id, GROUP_CONCAT(u.nickname ORDER BY tp.team_position SEPARATOR ', ') members
-                  FROM tournament_participants tp JOIN users_extension u ON u.id = tp.user_id
-                  GROUP BY team_id) t1m ON t1m.team_id = t1.id
-       LEFT JOIN (SELECT team_id, GROUP_CONCAT(u.nickname ORDER BY tp.team_position SEPARATOR ', ') members
-                  FROM tournament_participants tp JOIN users_extension u ON u.id = tp.user_id
-                  GROUP BY team_id) t2m ON t2m.team_id = t2.id
-       WHERE trm.tournament_id = ? AND trm.series_status IN ('pending', 'in_progress')
-         AND trm.winner_id IS NULL
-       ORDER BY tr.round_number, trm.created_at`,
+        `SELECT games.id, games.entry1_id AS player1_id, games.entry2_id AS player2_id,
+                series.entry1_wins AS player1_wins, series.entry2_wins AS player2_wins,
+                series.best_of, series.wins_required, rounds.round_number,
+                phases.name AS phase_name, groups.name AS group_name,
+                COALESCE(user1.nickname, team1.name) AS player1_name,
+                COALESCE(user2.nickname, team2.name) AS player2_name,
+                2 AS competition_model_version
+         FROM tournament_games games
+         JOIN tournament_series series ON series.id = games.series_id
+         JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+         JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+         JOIN tournament_phases phases ON phases.id = groups.phase_id
+         JOIN tournament_entries entry1 ON entry1.id = games.entry1_id
+         JOIN tournament_entries entry2 ON entry2.id = games.entry2_id
+         LEFT JOIN tournament_participants participant1 ON participant1.id = entry1.participant_id
+         LEFT JOIN tournament_participants participant2 ON participant2.id = entry2.participant_id
+         LEFT JOIN users_extension user1 ON user1.id = participant1.user_id
+         LEFT JOIN users_extension user2 ON user2.id = participant2.user_id
+         LEFT JOIN tournament_teams team1 ON team1.id = entry1.team_id
+         LEFT JOIN tournament_teams team2 ON team2.id = entry2.team_id
+         WHERE phases.tournament_id = ?
+           AND phases.status = 'in_progress'
+           AND rounds.status = 'in_progress'
+           AND series.status IN ('ready', 'in_progress')
+           AND games.status IN ('pending', 'in_progress')
+           AND games.winner_entry_id IS NULL
+         ORDER BY phases.phase_order, groups.group_order, rounds.round_number,
+                  series.series_position, games.game_number`,
       [tournamentId]
     );
     res.json(result.rows);
@@ -147,9 +158,20 @@ router.get('/tournaments/:tournamentId/assets', async (req, res) => {
 
 router.post('/simulate-match', async (req: AuthRequest, res) => {
   try {
-    const { mode, tournament_id: tournamentId, round_match_id: roundMatchId, winner_id: winnerId, loser_id: requestedLoserId } = req.body as {
-      mode: TestMatchMode; tournament_id?: string; round_match_id?: string; winner_id: string; loser_id?: string;
+    const {
+      mode,
+      tournament_id: tournamentId,
+      competition_match_id: competitionMatchId,
+      winner_id: winnerId,
+      loser_id: requestedLoserId,
+    } = req.body as {
+      mode: TestMatchMode;
+      tournament_id?: string;
+      competition_match_id?: string;
+      winner_id: string;
+      loser_id?: string;
     };
+    const selectedMatchId = competitionMatchId;
     if (!TEST_MODES.includes(mode) || typeof winnerId !== 'string' || (mode === 'ranked' && typeof requestedLoserId !== 'string')) {
       return res.status(400).json({ error: 'Invalid simulation payload' });
     }
@@ -158,22 +180,41 @@ router.post('/simulate-match', async (req: AuthRequest, res) => {
     let roundMatch: any = null;
     if (mode !== 'ranked') {
       const tournamentMode = tournamentModeForMatch(mode);
-      if (typeof tournamentId !== 'string' || typeof roundMatchId !== 'string') {
+      if (typeof tournamentId !== 'string' || typeof selectedMatchId !== 'string') {
         return res.status(400).json({ error: 'Tournament and open match are required' });
       }
       const tournamentResult = await query(
-        `SELECT id, name, tournament_mode, status FROM tournaments WHERE id = ? AND status = 'in_progress' AND tournament_mode = ?`,
+        `SELECT id, name, tournament_mode, status, competition_model_version
+         FROM tournaments
+         WHERE id = ? AND status = 'in_progress' AND tournament_mode = ?
+           AND competition_model_version = 2`,
         [tournamentId, tournamentMode]
       );
       tournament = tournamentResult.rows[0];
       if (!tournament) return res.status(400).json({ error: 'Tournament is not active or does not match the selected mode' });
       const matchResult = await query(
-        `SELECT * FROM tournament_round_matches
-         WHERE id = ? AND tournament_id = ? AND series_status IN ('pending', 'in_progress') AND winner_id IS NULL`,
-        [roundMatchId, tournamentId]
-      );
+          `SELECT games.*, series.round_id,
+                  participant1.user_id AS player1_user_id,
+                  participant2.user_id AS player2_user_id
+           FROM tournament_games games
+           JOIN tournament_series series ON series.id = games.series_id
+           JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+           JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+           JOIN tournament_phases phases ON phases.id = groups.phase_id
+           JOIN tournament_entries entry1 ON entry1.id = games.entry1_id
+           JOIN tournament_entries entry2 ON entry2.id = games.entry2_id
+           LEFT JOIN tournament_participants participant1 ON participant1.id = entry1.participant_id
+           LEFT JOIN tournament_participants participant2 ON participant2.id = entry2.participant_id
+           WHERE games.id = ? AND phases.tournament_id = ?
+             AND phases.status = 'in_progress' AND rounds.status = 'in_progress'
+             AND series.status IN ('ready', 'in_progress')
+             AND games.status IN ('pending', 'in_progress')
+             AND games.winner_entry_id IS NULL`,
+          [selectedMatchId, tournamentId]
+        );
       roundMatch = matchResult.rows[0];
-      if (!roundMatch || ![roundMatch.player1_id, roundMatch.player2_id].includes(winnerId)) {
+      const validWinnerIds = [roundMatch?.entry1_id, roundMatch?.entry2_id];
+      if (!roundMatch || !validWinnerIds.includes(winnerId)) {
         return res.status(400).json({ error: 'Open tournament match or winner is invalid' });
       }
     }
@@ -195,14 +236,24 @@ router.post('/simulate-match', async (req: AuthRequest, res) => {
       if (rankedUsers.rows.length !== 2) return res.status(400).json({ error: 'Both ranked players must have ranked matches enabled and be unblocked' });
       loserId = requestedLoserId;
     } else {
-      loserId = winnerId === roundMatch.player1_id ? roundMatch.player2_id : roundMatch.player1_id;
+      const winnerIsEntry1 = winnerId === roundMatch.entry1_id;
+      loserId = winnerIsEntry1 ? roundMatch.entry2_id : roundMatch.entry1_id;
     }
 
     if (!loserId) return res.status(400).json({ error: 'The selected ranked winner has no valid opponent' });
     let matchId: string | undefined;
     if (mode === 'ranked' || mode === 'tournament_ranked') {
+      const phaseWinnerUserId = mode === 'tournament_ranked'
+        ? (winnerId === roundMatch.entry1_id ? roundMatch.player1_user_id : roundMatch.player2_user_id)
+        : winnerId;
+      const phaseLoserUserId = mode === 'tournament_ranked'
+        ? (winnerId === roundMatch.entry1_id ? roundMatch.player2_user_id : roundMatch.player1_user_id)
+        : loserId;
+      if (!phaseWinnerUserId || !phaseLoserUserId) {
+        return res.status(400).json({ error: 'Ranked phase entries are not linked to individual users' });
+      }
       const created = await createMatch({
-        winnerId, loserId, winnerFaction, loserFaction, map, winnerSide: 1,
+        winnerId: phaseWinnerUserId, loserId: phaseLoserUserId, winnerFaction, loserFaction, map, winnerSide: 1,
         replayRowId: null, replayFilePath: null,
         matchType: mode === 'ranked' ? 'ranked' : 'tournament_ranked',
         linkedTournamentId: tournamentId || null, linkedTournamentRoundMatchId: null,
@@ -213,31 +264,26 @@ router.post('/simulate-match', async (req: AuthRequest, res) => {
     }
 
     if (mode !== 'ranked') {
-      const existing = await query(
-        `SELECT id FROM tournament_matches WHERE tournament_round_match_id = ? AND match_status IN ('pending', 'in_progress') ORDER BY created_at LIMIT 1`,
-        [roundMatchId]
+      // Persist the same fixture metadata produced by real replay parsing,
+      // then let the phase engine atomically update series and progression.
+      await query(
+        `UPDATE tournament_games
+         SET map = ?, winner_faction = ?, loser_faction = ?
+         WHERE id = ? AND status IN ('pending', 'in_progress')`,
+        [map, winnerFaction, loserFaction, selectedMatchId]
       );
-      const tournamentMatchId = existing.rows[0]?.id || randomUUID();
-      if (existing.rows[0]) {
-        await query(
-          `UPDATE tournament_matches SET match_id = ?, winner_id = ?, loser_id = ?, match_status = 'completed', status = 'confirmed',
-             played_at = NOW(), map = ?, winner_faction = ?, loser_faction = ?, replay_file_path = NULL WHERE id = ?`,
-          [matchId || null, winnerId, loserId, map, winnerFaction, loserFaction, tournamentMatchId]
-        );
-      } else {
-        await query(
-          `INSERT INTO tournament_matches
-           (id, tournament_id, round_id, player1_id, player2_id, match_id, winner_id, loser_id, match_status, status, played_at, tournament_round_match_id, map, winner_faction, loser_faction, replay_file_path)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'completed', 'confirmed', NOW(), ?, ?, ?, ?, NULL)`,
-          [tournamentMatchId, tournamentId, roundMatch.round_id, roundMatch.player1_id, roundMatch.player2_id, matchId || null, winnerId, loserId, roundMatchId, map, winnerFaction, loserFaction]
-        );
-      }
-      await handlePostConfirmation(roundMatchId!, winnerId, {}, mode === 'tournament_team' ? 'tournament_unranked' : mode);
+      await recordPhaseGameResult(tournamentId!, selectedMatchId!, winnerId, matchId || null);
     }
 
     await logAuditEvent({
       event_type: 'ADMIN_ACTION', user_id: req.userId, ip_address: getUserIP(req), user_agent: getUserAgent(req),
-      details: { action: 'simulate_match', simulated_match: true, mode, tournament_id: tournamentId || null, round_match_id: roundMatchId || null, winner_id: winnerId, loser_id: loserId, match_id: matchId || null },
+      details: {
+        action: 'simulate_match', simulated_match: true, mode,
+        tournament_id: tournamentId || null,
+        competition_match_id: selectedMatchId || null,
+        competition_model_version: tournament?.competition_model_version || null,
+        winner_id: winnerId, loser_id: loserId, match_id: matchId || null,
+      },
     });
     res.status(201).json({ success: true, match_id: matchId || null, map, winner_faction: winnerFaction, loser_faction: loserFaction });
   } catch (error: any) {
@@ -254,7 +300,12 @@ router.post('/tournaments/:tournamentId/simulate-join', async (req: AuthRequest,
       return res.status(400).json({ error: 'Select one user for individual tournaments or two users for teams' });
     }
     if (!(await isTournamentOrganizer(tournamentId, req.userId!))) return res.status(403).json({ error: 'Only tournament organizers can simulate joins' });
-    const tournamentResult = await query(`SELECT id, name, status, tournament_mode, max_participants FROM tournaments WHERE id = ? AND status = 'registration_open'`, [tournamentId]);
+    const tournamentResult = await query(
+      `SELECT id, name, status, tournament_mode, max_participants
+       FROM tournaments
+       WHERE id = ? AND status = 'registration_open' AND competition_model_version = 2`,
+      [tournamentId]
+    );
     const tournament = tournamentResult.rows[0];
     if (!tournament) return res.status(400).json({ error: 'Tournament registration is not open' });
     if (tournament.tournament_mode === 'team' && (userIds.length !== 2 || typeof teamName !== 'string' || teamName.trim().length < 2)) {

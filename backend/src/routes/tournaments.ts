@@ -12,6 +12,10 @@ import {
   calculateLeagueTiebreakers,
   calculateTeamSwissTiebreakers,
 } from '../services/statisticsCalculator.js';
+import { preparePhaseCompetition, startPhaseCompetition } from '../tournament-engine/competitionCompiler.js';
+import { parseForumTopicUrl } from '../tournament-engine/forumTopic.js';
+import { saveTournamentFormat } from '../tournament-engine/formatService.js';
+import type { TournamentFormatDefinition } from '../tournament-engine/types.js';
 
 const router = Router();
 
@@ -163,8 +167,16 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       rules_content,
       organizer_ids,
       unranked_factions,
-      unranked_maps
+      unranked_maps,
+      forum_topic_url,
+      format_definition
     } = req.body;
+    let forumTopicId: number | null;
+    try {
+      forumTopicId = parseForumTopicUrl(forum_topic_url);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
 
     const effectiveAutoAdvanceRound = tournament_type === 'league'
       ? false
@@ -341,17 +353,18 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     // Create tournament
     const tournamentResult = await query(
       `INSERT INTO tournaments (
-        id, name, description, rules_template_id, rules_content, creator_id, tournament_type, tournament_mode,
-        max_participants, round_duration_days, auto_advance_round, scheduled_start_at,
+        id, name, description, forum_topic_id, rules_template_id, rules_content, creator_id, tournament_type, tournament_mode,
+        max_participants, round_duration_days, auto_advance_round, auto_progress, scheduled_start_at,
         total_rounds, general_rounds, final_rounds,
         general_rounds_format, final_rounds_format,
         status, current_round
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        `,
       [
         tournamentId,
         name.trim(),
         description.trim(),
+        forumTopicId,
         selectedTemplateId,
         resolvedRulesContent,
         req.userId, 
@@ -359,6 +372,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
         tournament_mode || 'ranked',
         max_participants, 
         round_duration_days || 7,
+        effectiveAutoAdvanceRound,
         effectiveAutoAdvanceRound,
         scheduled_start_at ? toMariaDbDateTime(scheduled_start_at) : null,
         totalRounds,
@@ -415,6 +429,10 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
         `INSERT INTO tournament_unranked_maps (id, tournament_id, map_id) VALUES (?, ?, ?)`,
         [randomUUID(), tournamentId, mapId]
       );
+    }
+
+    if (format_definition !== undefined) {
+      await saveTournamentFormat(tournamentId, format_definition as TournamentFormatDefinition);
     }
 
     // Get organizer list (creator + co-organizers)
@@ -495,6 +513,10 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       await query('DELETE FROM tournament_organizers WHERE tournament_id = ?', [tournamentId]).catch(() => undefined);
       await query('DELETE FROM tournaments WHERE id = ?', [tournamentId]).catch(() => undefined);
     }
+    if (error.code === 'ER_DUP_ENTRY' && String(error.message).includes('forum_topic')) {
+      return res.status(409).json({ error: 'This forum topic is already assigned to another tournament' });
+    }
+    if (error.issues) return res.status(400).json({ error: error.message, issues: error.issues });
     res.status(500).json({ error: 'Failed to create tournament', details: error.message });
   }
 });
@@ -697,7 +719,9 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
       final_rounds_format,
       scheduled_start_at,
       rules_template_id,
-      rules_content
+      rules_content,
+      forum_topic_url,
+      format_definition
     } = req.body;
 
     if ('status' in req.body || 'started_at' in req.body || 'tournament_mode' in req.body) {
@@ -772,6 +796,15 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
     const values: any[] = [];
     let autoCopiedRulesContent: string | null = null;
 
+    if (forum_topic_url !== undefined) {
+      try {
+        updates.push(`forum_topic_id = ?`);
+        values.push(parseForumTopicUrl(forum_topic_url));
+      } catch (error: any) {
+        return res.status(400).json({ error: error.message });
+      }
+    }
+
     if (tournament_type !== undefined) {
       updates.push(`tournament_type = ?`);
       values.push(tournament_type);
@@ -830,8 +863,8 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
     }
 
     if (auto_advance_round !== undefined || effectiveTournamentType === 'league') {
-      updates.push(`auto_advance_round = ?`);
-      values.push(effectiveAutoAdvanceRound);
+      updates.push(`auto_advance_round = ?`, `auto_progress = ?`);
+      values.push(effectiveAutoAdvanceRound, effectiveAutoAdvanceRound);
     }
 
     if (scheduled_start_at !== undefined) {
@@ -859,7 +892,7 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
       values.push(final_rounds_format);
     }
 
-    if (updates.length === 0) {
+    if (updates.length === 0 && format_definition === undefined) {
       return res.status(400).json({ error: 'No fields to update' });
     }
 
@@ -873,6 +906,9 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
     `;
 
     await query(updateQuery, values);
+    if (format_definition !== undefined) {
+      await saveTournamentFormat(id, format_definition as TournamentFormatDefinition);
+    }
     const updated = await query('SELECT * FROM tournaments WHERE id = ?', [id]);
 
     if (scheduled_start_at !== undefined) {
@@ -1895,7 +1931,8 @@ router.post('/:id/prepare', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const tournamentCheck = await query(
       `SELECT creator_id, status, tournament_type, tournament_mode, total_rounds,
-              general_rounds, final_rounds, general_rounds_format, final_rounds_format
+              general_rounds, final_rounds, general_rounds_format, final_rounds_format,
+              competition_model_version
        FROM tournaments WHERE id = ?`,
       [id]
     );
@@ -1913,6 +1950,14 @@ router.post('/:id/prepare', authMiddleware, async (req: AuthRequest, res) => {
     // Verify tournament is in correct status
     if (tournament.status !== 'registration_closed') {
       return res.status(400).json({ error: `Tournament must have registration closed before preparing. Current status: ${tournament.status}` });
+    }
+    if (Number(tournament.competition_model_version) === 2) {
+      try {
+        const compiled = await preparePhaseCompetition(id);
+        return res.json({ message: 'Tournament phase competition prepared successfully', ...compiled });
+      } catch (error: any) {
+        return res.status(400).json({ error: error.message || 'Failed to compile tournament phases' });
+      }
     }
     const tournamentMode = tournament.tournament_mode;
 
@@ -2260,7 +2305,7 @@ router.post('/:id/start', authMiddleware, async (req: AuthRequest, res) => {
     // Verify tournament creator
     const tournamentCheck = await query(
       `SELECT creator_id, status, tournament_type, tournament_mode, name,
-              discord_thread_id, round_duration_days
+              discord_thread_id, round_duration_days, competition_model_version
        FROM tournaments WHERE id = ?`, 
       [id]
     );
@@ -2280,6 +2325,10 @@ router.post('/:id/start', authMiddleware, async (req: AuthRequest, res) => {
     if (tournament.status !== 'prepared') {
       console.log(`[START] Invalid status: ${tournament.status}, expected: prepared`);
       return res.status(400).json({ error: 'Tournament must be prepared before starting' });
+    }
+    if (Number(tournament.competition_model_version) === 2) {
+      const started = await startPhaseCompetition(id);
+      return res.json({ message: 'Tournament phase competition started successfully', ...started });
     }
 
     const participantsCheck = tournament.tournament_mode === 'team'

@@ -1,0 +1,13 @@
+{
+  "name": "wesnoth-tournament-manager-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:list": "playwright test --list"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.60.0"
+  }
+}
