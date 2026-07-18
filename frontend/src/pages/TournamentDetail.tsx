@@ -1905,7 +1905,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                           </div>
                         )}
                       </div>
-                      <div className="flex gap-6 items-center flex-wrap">
+                      {!usesPhaseEngine && <div className="flex gap-6 items-center flex-wrap">
                         <div className="flex flex-col items-center gap-1">
                           <span className="text-xs text-gray-600 font-semibold uppercase tracking-wider">{t('label_wins')}</span>
                           <span className="text-lg font-semibold text-gray-800">{team.tournament_wins || 0}</span>
@@ -1929,7 +1929,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                             {team.status === 'eliminated' ? 'Eliminated' : 'Active'}
                           </span>
                         </div>
-                      </div>
+                      </div>}
                     </div>
                     {team.members_with_elo && team.members_with_elo.length > 0 ? (
                       <div className="mt-4 max-md:overflow-x-auto max-md:-webkit-overflow-scrolling-touch">
@@ -2058,10 +2058,12 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                     <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_nickname')}</th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_status')}</th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_elo')}</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_classification')}</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_wins')}</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_losses')}</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_points')}</th>
+                    {!usesPhaseEngine && <>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_classification')}</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_wins')}</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_losses')}</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_points')}</th>
+                    </>}
                     {(isCreator || canManageParticipants || userId) && tournament?.status === 'registration_open' && <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_actions')}</th>}
                   </tr>
                 </thead>
@@ -2078,14 +2080,16 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                         </span>
                       </td>
                       <td className="px-4 py-3 text-gray-700">{p.elo_rating || '-'}</td>
-                      <td className="px-4 py-3 text-gray-700">
-                        <span className="inline-block px-2 py-1 bg-gray-100 rounded text-xs">
-                          {p.status ? (p.status === 'active' ? '✓ ' + t('label_active') : '✗ ' + t('label_eliminated')) : '-'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">{p.tournament_wins}</td>
-                      <td className="px-4 py-3 text-gray-700">{p.tournament_losses}</td>
-                      <td className="px-4 py-3 text-gray-700">{p.tournament_points}</td>
+                      {!usesPhaseEngine && <>
+                        <td className="px-4 py-3 text-gray-700">
+                          <span className="inline-block px-2 py-1 bg-gray-100 rounded text-xs">
+                            {p.status ? (p.status === 'active' ? '✓ ' + t('label_active') : '✗ ' + t('label_eliminated')) : '-'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">{p.tournament_wins}</td>
+                        <td className="px-4 py-3 text-gray-700">{p.tournament_losses}</td>
+                        <td className="px-4 py-3 text-gray-700">{p.tournament_points}</td>
+                      </>}
                       {tournament?.status === 'registration_open' && (
                       <td className="px-4 py-3 text-gray-700">
                         <div className="flex gap-1 flex-wrap">

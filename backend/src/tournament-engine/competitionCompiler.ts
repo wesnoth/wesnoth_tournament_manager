@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { PoolConnection } from 'mysql2/promise';
 import { pool } from '../config/database.js';
+import { notifyPhaseStarted } from '../services/tournamentPhaseDiscordService.js';
 import { buildEliminationSeedOrder } from './pairingAlgorithms.js';
 
 interface EntryRow {
@@ -495,7 +496,8 @@ export async function compileNextPhaseCompetition(tournamentId: string, complete
        WHERE phases.id = ?`,
       [phase.id]
     );
-    if (Boolean(progressRows[0]?.auto_progress) || Boolean(progressRows[0]?.auto_start)) {
+    const phaseStarted = Boolean(progressRows[0]?.auto_progress) || Boolean(progressRows[0]?.auto_start);
+    if (phaseStarted) {
       const openAll = phase.format === 'round_robin' && Boolean(progressRows[0]?.open_rounds_together);
       await connection.execute(
         `UPDATE tournament_phase_rounds rounds
@@ -508,6 +510,7 @@ export async function compileNextPhaseCompetition(tournamentId: string, complete
       await connection.execute(`UPDATE tournament_phases SET status = 'in_progress', started_at = CURRENT_TIMESTAMP WHERE id = ?`, [phase.id]);
     }
     await connection.commit();
+    if (phaseStarted) await notifyPhaseStarted(tournamentId, phase.id);
     return true;
   } catch (error) {
     await connection.rollback();
@@ -565,6 +568,7 @@ export async function startPhaseCompetition(tournamentId: string): Promise<{ act
       [phase.id]
     );
     await connection.commit();
+    await notifyPhaseStarted(tournamentId, phase.id);
     return { activeRounds: Number(counts[0].count) };
   } catch (error) {
     await connection.rollback();
@@ -610,6 +614,7 @@ export async function startReadyPhase(tournamentId: string, phaseId: string): Pr
       [phaseId]
     );
     await connection.commit();
+    await notifyPhaseStarted(tournamentId, phaseId);
     return { activeRounds: Number(counts[0].count) };
   } catch (error) {
     await connection.rollback();

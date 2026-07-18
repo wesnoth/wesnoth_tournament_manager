@@ -364,7 +364,16 @@ const TournamentList: React.FC<TournamentListProps> = ({
             <tbody>
               {tournaments.map((tournament) => (
                 <tr key={tournament.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3 font-semibold text-blue-600 hover:text-blue-800 transition-colors">{tournament.name}</td>
+                  <td className="px-4 py-3 font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => handleViewDetails(tournament.id)}
+                      className="text-left text-blue-600 hover:text-blue-800 hover:underline transition-colors"
+                      data-help-id="action-open-tournament-from-name"
+                    >
+                      {tournament.name}
+                    </button>
+                  </td>
                   <td className="px-4 py-3 text-gray-700">{tournament.creator_nickname}</td>
                   <td className="px-4 py-3 text-gray-700">
                     <span

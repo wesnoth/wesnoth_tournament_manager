@@ -387,7 +387,9 @@ test('flexible tournament accepts simulated joins and progresses through every c
     await expect(page).toHaveURL(/\/(my-tournaments|tournaments)(?:\?.*)?$/, { timeout: 30_000 });
     await expect(page.getByText(tournamentName, { exact: true })).toBeVisible();
     const tournamentRow = page.locator('tr').filter({ hasText: tournamentName }).last();
-    await tournamentRow.locator('[data-help-id="action-view-tournament-details"], button').first().click();
+    const tournamentNameLink = tournamentRow.locator('[data-help-id="action-open-tournament-from-name"]');
+    await expect(tournamentNameLink).toBeVisible();
+    await tournamentNameLink.click();
     await expect(page).toHaveURL(/\/tournament\//, { timeout: 30_000 });
     tournamentHref = page.url();
   }
@@ -414,6 +416,8 @@ test('flexible tournament accepts simulated joins and progresses through every c
     await expect(page.locator('[data-help-id="action-tab-rounds"]')).toHaveCount(0);
     await expect(page.locator('[data-help-id="action-tab-round-details"]')).toHaveCount(0);
     await expect(page.locator('[data-help-id="action-tab-ranking"]')).toHaveCount(0);
+    await page.locator('[data-help-id="action-tab-participants"]').click();
+    await expect(page.getByRole('columnheader', { name: /classification|wins|losses|points/i })).toHaveCount(0);
   }
   if (!tournamentInProgress) {
     const participantLabel = page.getByText(/^Participants \(\d+\)$/).first();

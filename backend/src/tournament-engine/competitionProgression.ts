@@ -1,5 +1,10 @@
 import { randomUUID } from 'crypto';
 import { pool } from '../config/database.js';
+import {
+  notifyPhaseCompleted,
+  notifyRoundStandings,
+  notifyTournamentFinished,
+} from '../services/tournamentPhaseDiscordService.js';
 import { compileNextPhaseCompetition } from './competitionCompiler.js';
 
 /**
@@ -161,6 +166,7 @@ export async function recordPhaseGameResult(
 ): Promise<{ seriesCompleted: boolean; phaseCompleted: boolean; tournamentCompleted: boolean }> {
   const connection = await pool.getConnection();
   let completedPhaseId: string | null = null;
+  let completedRoundId: string | null = null;
   let tournamentCompleted = false;
   let seriesCompleted = false;
   try {
@@ -250,6 +256,7 @@ export async function recordPhaseGameResult(
         [game.round_id]
       );
       if (Number(remainingRows[0].count) === 0) {
+        completedRoundId = game.round_id;
         await connection.execute(`UPDATE tournament_phase_rounds SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?`, [game.round_id]);
         await recalculateTiebreakers(connection, game.group_id);
         await rankGroup(connection, game.group_id, false);
@@ -299,7 +306,9 @@ export async function recordPhaseGameResult(
     connection.release();
   }
 
+  if (completedRoundId) await notifyRoundStandings(tournamentId, completedRoundId);
   if (completedPhaseId) {
+    await notifyPhaseCompleted(tournamentId, completedPhaseId);
     const hasNext = await compileNextPhaseCompetition(tournamentId, completedPhaseId);
     if (!hasNext) {
       const finalConnection = await pool.getConnection();
@@ -330,6 +339,7 @@ export async function recordPhaseGameResult(
       } finally {
         finalConnection.release();
       }
+      await notifyTournamentFinished(tournamentId);
     }
   }
   return { seriesCompleted, phaseCompleted: completedPhaseId !== null, tournamentCompleted };

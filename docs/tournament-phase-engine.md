@@ -22,6 +22,12 @@ The official forum topic URL is optional in every environment. The backend extra
 
 Replay resolution prefers an explicit forum code and then an exact tournament name. It then resolves the participant/team pair against one open phase game. Zero or multiple candidates remain unlinked for manual confirmation. The phase-game link is additive and never removes or replaces the ranked `replays.match_id` relationship.
 
+## Discord progression notifications
+
+Phase-engine notifications are emitted only after the corresponding database transaction commits. Starting a phase publishes its format, active rounds, and currently available pairings. Completing a round publishes that group's standings with points and OMP/GWP/OGP tiebreakers; completing a phase publishes finalized standings and marks entries that advance through configured qualification rules. Tournament completion publishes the champion, runner-up, and final-phase standings. Team entry names include their accepted members.
+
+Discord delivery is best-effort. Query, formatting, credential, or API failures are logged but never roll back a phase transition, recorded result, or completed tournament.
+
 ## Test workflow
 
 The test-only join tool writes accepted registrations to the retained participant and team tables. Preparation is the integration boundary that converts those registrations into version 2 tournament entries. The Admin Replays simulator lists only active `tournament_games` and records results through the same phase progression service used by parsed replays; it does not fall back to legacy tournament match tables.
