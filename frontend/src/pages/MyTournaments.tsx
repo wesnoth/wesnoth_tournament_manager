@@ -116,7 +116,7 @@ const MyTournaments: React.FC = () => {
 
   return (
     <MainLayout>
-      <div className="w-full px-4 py-8 bg-gradient-to-b from-gray-50 to-gray-100 min-h-screen">
+      <div data-help-id="region-my-tournaments" className="w-full px-4 py-8 bg-gradient-to-b from-gray-50 to-gray-100 min-h-screen">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-center text-4xl font-bold text-gray-800">{t('my_tournaments_title')}</h1>
           <button 

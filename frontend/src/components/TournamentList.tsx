@@ -194,7 +194,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
   }
 
   return (
-    <div className="w-full min-h-screen px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200">
+    <div data-help-id="region-tournament-list" className="w-full min-h-screen px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200">
       {title && (
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-4xl font-bold text-gray-800">{title}</h1>
@@ -253,7 +253,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
 
       {/* Filters */}
       {showFilters && (
-        <div className="bg-gray-100 p-4 rounded-lg mb-6 overflow-x-auto -webkit-overflow-scrolling-touch">
+        <div data-help-id="region-tournament-list-filters" className="bg-gray-100 p-4 rounded-lg mb-6 overflow-x-auto -webkit-overflow-scrolling-touch">
           <div className="flex gap-4 min-w-min items-end">
             <div className="flex flex-col gap-2 flex-shrink-0 min-w-[200px]">
               <label htmlFor="name" className="font-semibold text-gray-700 text-sm">{t('tournament_name')}</label>
@@ -345,7 +345,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
         <p>{t('showing_count', { count: tournaments.length, total, page: currentPage, totalPages })}</p>
       </div>
 
-      <section className="bg-white rounded-lg shadow-lg p-8 overflow-x-auto">
+      <section data-help-id="region-tournament-list-results" className="bg-white rounded-lg shadow-lg p-8 overflow-x-auto">
         {tournaments.length > 0 ? (
           <table className="w-full text-sm">
             <thead className="bg-gray-100">

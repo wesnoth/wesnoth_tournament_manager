@@ -1406,7 +1406,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
       {error && <p className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded mb-6">{error}</p>}
       {success && <p className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded mb-6">{success}</p>}
 
-      <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
+      <div data-help-id="region-tournament-details-summary" className="bg-white rounded-lg shadow-lg p-8 mb-8">
         <p>
           <strong>{t('tournament.col_organizer')}:</strong>{' '}
           {(organizers.length > 0 ? organizers : [{ user_id: tournament.creator_id, nickname: tournament.creator_nickname }]).map((organizer, index, arr) => (

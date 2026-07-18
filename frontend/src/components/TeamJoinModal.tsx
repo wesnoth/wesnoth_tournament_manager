@@ -130,10 +130,10 @@ export const TeamJoinModal: React.FC<TeamJoinModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+      <div data-help-id="region-team-tournament-join" className="bg-white rounded-lg shadow-xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold text-gray-900">Join Team Tournament</h2>
-          <button className="text-gray-500 hover:text-gray-700 text-2xl leading-none" onClick={onClose}>&times;</button>
+          <button data-help-id="action-close-team-tournament-join" className="text-gray-500 hover:text-gray-700 text-2xl leading-none" onClick={onClose}>&times;</button>
         </div>
 
         <div>
@@ -142,6 +142,7 @@ export const TeamJoinModal: React.FC<TeamJoinModalProps> = ({
           {/* Mode Tabs */}
           <div className="flex gap-2 mb-6 border-b border-gray-200">
             <button
+              data-help-id="action-create-tournament-team"
               className={`px-4 py-2 font-medium transition-colors ${joinMode === 'create' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900'}`}
                 onClick={() => { setJoinMode('create'); setError(null); setTeamName(''); setTeammateId(''); setTeammateName(''); }}
             >
@@ -149,6 +150,7 @@ export const TeamJoinModal: React.FC<TeamJoinModalProps> = ({
             </button>
             {existingTeams.length > 0 && (
               <button
+                data-help-id="action-join-existing-tournament-team"
                 className={`px-4 py-2 font-medium transition-colors ${joinMode === 'join' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900'}`}
                 onClick={() => { setJoinMode('join'); setError(null); setTeamName(''); setTeammateId(''); setTeammateName(''); }}
               >
@@ -164,6 +166,7 @@ export const TeamJoinModal: React.FC<TeamJoinModalProps> = ({
                 <div>
                   <label htmlFor="team-name" className="block text-sm font-medium text-gray-700 mb-2">Team Name *</label>
                   <input
+                    data-help-id="field-tournament-team-name"
                     id="team-name"
                     type="text"
                     value={teamName}
@@ -199,6 +202,7 @@ export const TeamJoinModal: React.FC<TeamJoinModalProps> = ({
                   <label htmlFor="existing-team-search" className="block text-sm font-medium text-gray-700 mb-2">Select Team to Join *</label>
                   <div className="relative">
                     <input
+                      data-help-id="field-existing-tournament-team"
                       id="existing-team-search"
                       type="text"
                       value={teamName}
@@ -247,6 +251,7 @@ export const TeamJoinModal: React.FC<TeamJoinModalProps> = ({
           {/* Actions */}
           <div className="flex gap-3 mt-6">
             <button
+              data-help-id="action-cancel-team-tournament-join"
               className="flex-1 px-4 py-2 bg-gray-300 text-gray-900 rounded-lg font-medium hover:bg-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={onClose}
               disabled={isLoading}
@@ -254,6 +259,7 @@ export const TeamJoinModal: React.FC<TeamJoinModalProps> = ({
               Cancel
             </button>
             <button
+              data-help-id="action-confirm-team-tournament-join"
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={handleSubmit}
               disabled={isLoading || !teamName.trim() || (joinMode === 'join' && !teamName.trim())}
