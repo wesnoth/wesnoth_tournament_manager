@@ -54,6 +54,7 @@ const AdminWiki: React.FC = () => {
   const [images, setImages] = useState<WikiImage[]>([]);
   const [orphanedImages, setOrphanedImages] = useState<Array<{ filename: string; size: number }>>([]);
   const [orphanedTotalSize, setOrphanedTotalSize] = useState(0);
+  const [orphanScanLoading, setOrphanScanLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,6 +65,7 @@ const AdminWiki: React.FC = () => {
   // Image deletion state
   const [deletingImage, setDeletingImage] = useState<string | null>(null);
   const [imageUsage, setImageUsage] = useState<ImageUsage[]>([]);
+  const unusedImages = images.filter((image) => image.usage_count === 0);
 
   useEffect(() => {
     if (activeTab === 'articles') {
@@ -117,6 +119,7 @@ const AdminWiki: React.FC = () => {
   };
 
   const fetchOrphanedImages = async () => {
+    setOrphanScanLoading(true);
     try {
       const response = await fetch('/api/admin/wiki/images/orphaned/list', {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -129,11 +132,13 @@ const AdminWiki: React.FC = () => {
       setOrphanedTotalSize(data.total_size_bytes || 0);
     } catch (err) {
       console.error('Failed to fetch orphaned images:', err);
+    } finally {
+      setOrphanScanLoading(false);
     }
   };
 
   const cleanupOrphanedImages = async (filenames: string[]) => {
-    if (!confirm(`Delete ${filenames.length} orphaned image(s)? This cannot be undone.`)) {
+    if (!confirm(`Delete ${filenames.length} unregistered image file(s)? This cannot be undone.`)) {
       return;
     }
 
@@ -156,6 +161,36 @@ const AdminWiki: React.FC = () => {
       fetchOrphanedImages();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Cleanup failed';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cleanupUnusedImages = async (filenames: string[]) => {
+    if (!confirm(`Delete ${filenames.length} unused registered image(s)? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await fetch('/api/admin/wiki/images/unused/cleanup', {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ filenames })
+      });
+
+      if (!response.ok) throw new Error('Unused image cleanup failed');
+
+      const result = await response.json();
+      setError(null);
+      alert(`Deleted ${result.deleted.length} images. ${result.failed.length > 0 ? `Skipped because they are now used or unavailable: ${result.failed.join(', ')}` : ''}`);
+      await Promise.all([fetchImages(), fetchOrphanedImages()]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unused image cleanup failed';
       setError(msg);
     } finally {
       setLoading(false);
@@ -485,7 +520,14 @@ const AdminWiki: React.FC = () => {
           Articles
         </button>
         <button
-          onClick={() => setActiveTab('images')}
+          onClick={() => {
+            if (activeTab !== 'images') {
+              setLoading(true);
+              setOrphanScanLoading(true);
+            }
+            setActiveTab('images');
+          }}
+          data-help-id="action-show-wiki-images"
           className={`px-6 py-3 font-medium transition-colors ${
             activeTab === 'images'
               ? 'text-primary border-b-2 border-primary'
@@ -599,7 +641,38 @@ const AdminWiki: React.FC = () => {
 
       {/* Images Tab */}
       {activeTab === 'images' && (
-        <div>
+        <div data-help-id="region-wiki-image-library">
+          {!loading && (
+            <div className="mb-6" data-help-id="region-unused-wiki-images">
+              {unusedImages.length > 0 ? (
+                <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-4">
+                  <h2 className="mb-2 text-lg font-bold text-amber-900">
+                    Unused registered images ({unusedImages.length})
+                  </h2>
+                  <p className="text-sm text-amber-800">
+                    These images are stored in the image library but are not referenced by any article.
+                    This commonly happens after deleting or replacing an article.
+                  </p>
+                  <button
+                    onClick={() => cleanupUnusedImages(unusedImages.map((image) => image.filename))}
+                    className="mt-4 rounded-lg bg-red-600 px-6 py-2 font-medium text-white hover:bg-red-700"
+                    disabled={loading}
+                    data-help-id="action-delete-unused-wiki-images"
+                  >
+                    🗑️ Delete All Unused Images
+                  </button>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+                  <h2 className="font-bold text-green-900">No unused registered images</h2>
+                  <p className="mt-1 text-sm text-green-800">
+                    Every registered image is currently referenced by at least one article.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           {loading ? (
             <div className="text-center py-12">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -642,6 +715,7 @@ const AdminWiki: React.FC = () => {
                               : 'text-red-600 hover:text-red-800'
                           }`}
                           disabled={image.usage_count > 0}
+                          data-help-id="action-delete-wiki-image"
                         >
                           🗑️ Delete
                         </button>
@@ -653,52 +727,69 @@ const AdminWiki: React.FC = () => {
             </div>
           )}
 
-          {/* Orphaned Images Section */}
-          {orphanedImages.length > 0 && (
-            <div className="mt-8 border-t-2 border-gray-300 pt-8">
-              <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4 mb-4">
-                <h3 className="text-lg font-bold text-yellow-900 mb-2">
-                  ⚠️ Orphaned Images Found ({orphanedImages.length})
-                </h3>
-                <p className="text-yellow-800 text-sm">
-                  These image files exist on the server but are not registered in the database. 
-                  They can be safely deleted to free up disk space.
-                </p>
-                <p className="text-yellow-800 text-sm font-semibold mt-2">
-                  Total size: {(orphanedTotalSize / 1024 / 1024).toFixed(2)} MB
-                </p>
+          {/* Files without database metadata are a separate consistency issue. */}
+          <div
+            className="mt-8 border-t-2 border-gray-300 pt-8"
+            data-help-id="region-orphaned-wiki-files"
+          >
+            {orphanScanLoading ? (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <h3 className="font-bold text-gray-900">Checking for unregistered image files…</h3>
               </div>
+            ) : orphanedImages.length > 0 ? (
+              <>
+                <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4 mb-4">
+                  <h3 className="text-lg font-bold text-yellow-900 mb-2">
+                    ⚠️ Unregistered Image Files Found ({orphanedImages.length})
+                  </h3>
+                  <p className="text-yellow-800 text-sm">
+                    These image files exist on the server but are not registered in the database.
+                    They can be safely deleted to free up disk space.
+                  </p>
+                  <p className="text-yellow-800 text-sm font-semibold mt-2">
+                    Total size: {(orphanedTotalSize / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="border-b-2 border-gray-300 bg-gray-50">
-                      <th className="text-left px-4 py-3 font-semibold text-gray-900">Filename</th>
-                      <th className="text-right px-4 py-3 font-semibold text-gray-900">Size</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {orphanedImages.map((image) => (
-                      <tr key={image.filename} className="border-b border-gray-200 hover:bg-yellow-50">
-                        <td className="px-4 py-3 font-mono text-sm text-gray-600">{image.filename}</td>
-                        <td className="px-4 py-3 text-right text-sm text-gray-600">
-                          {(image.size / 1024).toFixed(2)} KB
-                        </td>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="border-b-2 border-gray-300 bg-gray-50">
+                        <th className="text-left px-4 py-3 font-semibold text-gray-900">Filename</th>
+                        <th className="text-right px-4 py-3 font-semibold text-gray-900">Size</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {orphanedImages.map((image) => (
+                        <tr key={image.filename} className="border-b border-gray-200 hover:bg-yellow-50">
+                          <td className="px-4 py-3 font-mono text-sm text-gray-600">{image.filename}</td>
+                          <td className="px-4 py-3 text-right text-sm text-gray-600">
+                            {(image.size / 1024).toFixed(2)} KB
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
 
-              <button
-                onClick={() => cleanupOrphanedImages(orphanedImages.map((img) => img.filename))}
-                className="mt-4 px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
-                disabled={loading}
-              >
-                🗑️ Delete All Orphaned Images
-              </button>
-            </div>
-          )}
+                <button
+                  onClick={() => cleanupOrphanedImages(orphanedImages.map((img) => img.filename))}
+                  className="mt-4 px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
+                  disabled={loading}
+                  data-help-id="action-delete-orphaned-wiki-files"
+                >
+                  🗑️ Delete All Unregistered Files
+                </button>
+              </>
+            ) : (
+              <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+                <h3 className="font-bold text-green-900">No unregistered image files</h3>
+                <p className="mt-1 text-sm text-green-800">
+                  Every image file on disk has matching metadata in the image library.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       )}
       {deletingImage && (

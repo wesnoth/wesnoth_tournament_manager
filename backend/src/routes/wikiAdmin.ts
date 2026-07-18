@@ -93,6 +93,27 @@ router.delete('/images/orphaned/cleanup', moderatorOrAdminMiddleware, async (req
 });
 
 /**
+ * DELETE /api/admin/wiki/images/unused/cleanup
+ * Delete registered images that are no longer linked to any article.
+ * Body: { filenames: string[] }
+ */
+router.delete('/images/unused/cleanup', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { filenames } = req.body;
+
+    if (!Array.isArray(filenames) || filenames.length === 0) {
+      return res.status(400).json({ error: 'No filenames provided' });
+    }
+
+    const result = await wikiAdminService.deleteUnusedImages(filenames);
+    res.json(result);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
  * GET /api/admin/wiki/images/:filename/usage
  * Get articles that use this image
  */

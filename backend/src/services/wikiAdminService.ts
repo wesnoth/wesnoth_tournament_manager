@@ -42,6 +42,7 @@ interface ImageMetadata {
   original_name: string;
   uploaded_by: string | null;
   created_at: string;
+  usage_count: number;
 }
 
 interface WikiArticleRow {
@@ -370,12 +371,21 @@ export const uploadImage = async (
 export const getAllImages = async (): Promise<ImageMetadata[]> => {
   try {
     const result = await queryTournament(
-      `SELECT id, filename, original_name, uploaded_by, created_at
-       FROM wiki_images
-       ORDER BY created_at DESC`
+      `SELECT wi.id, wi.filename, wi.original_name, wi.uploaded_by, wi.created_at,
+              COUNT(wai.article_id) AS usage_count
+       FROM wiki_images wi
+       LEFT JOIN wiki_article_images wai ON wai.wiki_image_id = wi.id
+       GROUP BY wi.id, wi.filename, wi.original_name, wi.uploaded_by, wi.created_at
+       ORDER BY wi.created_at DESC`
     );
 
-    return result as ImageMetadata[];
+    // Aggregate values may be returned as strings depending on the database
+    // driver configuration. Normalize the public contract for strict frontend
+    // comparisons and JSON consumers.
+    return (result as Array<Omit<ImageMetadata, 'usage_count'> & { usage_count: number | string }>).map((image) => ({
+      ...image,
+      usage_count: Number(image.usage_count),
+    }));
   } catch (error) {
     console.error('Error fetching images:', error);
     throw error;
@@ -450,11 +460,23 @@ export const deleteImage = async (filename: string): Promise<void> => {
       throw new Error('Image is still used by one or more articles');
     }
 
-    // Delete metadata
-    await queryTournament(
-      `DELETE FROM wiki_images WHERE id = ?`,
-      [imageId]
-    );
+    // Repeat the usage check in the DELETE itself. The image library can change
+    // between the initial request and UI confirmation, so the destructive
+    // operation must enforce the zero-reference invariant again.
+    const deleteResult = (await queryTournament(
+      `DELETE FROM wiki_images
+       WHERE id = ?
+         AND NOT EXISTS (
+           SELECT 1
+           FROM wiki_article_images
+           WHERE wiki_image_id = ?
+         )`,
+      [imageId, imageId]
+    )) as { affectedRows?: number };
+
+    if (deleteResult.affectedRows !== 1) {
+      throw new Error('Image is still used by one or more articles');
+    }
 
     // Delete file from disk
     const filepath = path.join(__dirname, '../../uploads/wiki', filename);
@@ -468,6 +490,36 @@ export const deleteImage = async (filename: string): Promise<void> => {
     console.error('Error deleting image:', error);
     throw error;
   }
+};
+
+/**
+ * Delete a requested set of registered images that still have zero article links.
+ *
+ * Each image is checked independently so a concurrently reused image is reported
+ * as failed without preventing other safe deletions in the same cleanup request.
+ */
+export const deleteUnusedImages = async (filenames: string[]): Promise<{
+  deleted: string[];
+  failed: string[];
+}> => {
+  const deleted: string[] = [];
+  const failed: string[] = [];
+
+  for (const filename of [...new Set(filenames)]) {
+    if (typeof filename !== 'string' || !isSafeImageFilename(filename)) {
+      failed.push(filename);
+      continue;
+    }
+
+    try {
+      await deleteImage(filename);
+      deleted.push(filename);
+    } catch {
+      failed.push(filename);
+    }
+  }
+
+  return { deleted, failed };
 };
 
 /**

@@ -36,7 +36,9 @@ Image uploads are held in memory only for the request and are limited to 5 MiB. 
 
 ## Image lifecycle
 
-An uploaded image has a filesystem file, a `wiki_images` metadata row, and zero or more rows in `wiki_article_images`. Saving or importing an article rebuilds its image links from the Markdown content. An image that is still referenced cannot be deleted. Files present on disk without metadata are reported as orphaned and can be removed explicitly by a moderator or administrator.
+An uploaded image has a filesystem file, a `wiki_images` metadata row, and zero or more rows in `wiki_article_images`. Saving or importing an article rebuilds its image links from the Markdown content. Deleting an article removes its image links but retains the registered images for possible reuse. The image library reports their live article usage count and allows moderators or administrators to delete all registered images with zero uses after confirmation. An image that is still referenced cannot be deleted.
+
+Files present on disk without corresponding database metadata are reported separately as unregistered files. They indicate a storage consistency issue rather than ordinary unused library content and can be removed through their own explicit cleanup action.
 
 ## Import and export
 
