@@ -50,27 +50,40 @@ const TournamentCompetitionView: React.FC<Props> = ({ tournamentId, canManage = 
       }
       const series = Array.from(new Map(rows.map((row: any) => [row.series_id, { ...row, slots: [] as any[] }])).values()) as any[];
       for (const row of rows) series.find(item => item.series_id === row.series_id)?.slots.push(row);
-      const rounds = Array.from(new Set(series.map(item => item.round_number))).sort((a: any, b: any) => a - b);
+      const bracketGroups = Array.from(new Set(series.map(item => item.group_name))) as string[];
       return <section key={phase.phase_id} className="border rounded-lg p-4 bg-white">
         <div className="flex justify-between items-center mb-3"><h3 className="font-semibold text-lg">{phase.phase_name}</h3>
           {canManage && phase.phase_status === 'ready' && <button data-help-id="action-start-tournament-phase" type="button" onClick={async () => {
             try { await api.post(`/tournaments/${tournamentId}/phases/${phase.phase_id}/start`); setReloadKey(value => value + 1); } catch (startError: any) { setError(startError.response?.data?.error || 'Failed to start phase'); }
           }} className="px-3 py-1 bg-green-600 text-white rounded">Start phase</button>}
         </div>
-        <div data-help-id="region-tournament-bracket" className="flex gap-5 overflow-x-auto pb-3">
-          {rounds.map((round: any) => <div key={round} className="min-w-60 space-y-4"><h4 className="font-medium text-center">Round {round}</h4>
-            {series.filter(item => item.round_number === round).map(item => <div key={item.series_id} className="border rounded shadow-sm bg-gray-50">
-              {item.slots.sort((a: any, b: any) => a.slot_number - b.slot_number).map((slot: any) => <div key={slot.slot_number} className={`px-3 py-2 border-b last:border-b-0 ${item.winner_entry_id === slot.resolved_entry_id ? 'font-bold bg-green-50' : ''}`}>{slot.resolved_entry_name || `Seed ${slot.source_group_seed || '?'}`}</div>)}
-            </div>)}
-          </div>)}
+        <div className="space-y-5">
+          {bracketGroups.map(groupName => {
+            const groupSeries = series.filter(item => item.group_name === groupName);
+            const rounds = Array.from(new Set(groupSeries.map(item => item.round_number))).sort((a: any, b: any) => a - b);
+            return <div key={groupName} data-help-id="region-tournament-bracket" className="rounded-lg border bg-gray-50 p-3">
+              <h4 className="mb-3 font-semibold text-gray-800">{groupName}</h4>
+              <div className="flex gap-5 overflow-x-auto pb-3">
+                {rounds.map((round: any) => <div key={round} className="min-w-60 space-y-4"><h5 className="font-medium text-center">Round {round}</h5>
+                  {groupSeries.filter(item => item.round_number === round).map(item => <div key={item.series_id} className="border rounded shadow-sm bg-white">
+                    <div className="border-b bg-gray-100 px-3 py-1 text-xs text-gray-600">Bo{item.best_of}</div>
+                    {item.slots.sort((a: any, b: any) => a.slot_number - b.slot_number).map((slot: any) => <div key={slot.slot_number} className={`px-3 py-2 border-b last:border-b-0 ${item.winner_entry_id === slot.resolved_entry_id ? 'font-bold bg-green-50' : ''}`}>{slot.resolved_entry_name || `Seed ${slot.source_group_seed || '?'}`}</div>)}
+                  </div>)}
+                </div>)}
+              </div>
+            </div>;
+          })}
         </div>
       </section>;
     })}
-    {games.some(game => game.status === 'pending') && <section className="border rounded-lg p-4 bg-white">
-      <h3 className="font-semibold text-lg mb-3">Open games</h3>
-      <div className="space-y-2">{games.filter(game => game.status === 'pending').map(game => <div key={game.game_id} className="flex flex-wrap items-center justify-between gap-3 border rounded p-3">
-        <span>{game.group_name}, round {game.round_number}, game {game.game_number}: <strong>{game.entry1_name}</strong> vs <strong>{game.entry2_name}</strong></span>
-        {canManage && <div className="flex gap-2">
+    {games.length > 0 && <section data-help-id="region-tournament-phase-games" className="border rounded-lg p-4 bg-white">
+      <h3 className="font-semibold text-lg mb-3">Matches</h3>
+      <div className="space-y-2">{games.map(game => <div key={game.game_id} className="flex flex-wrap items-center justify-between gap-3 border rounded p-3">
+        <div>
+          <span>{game.group_name}, round {game.round_number}, game {game.game_number} (Bo{game.best_of}): <strong>{game.entry1_name}</strong> vs <strong>{game.entry2_name}</strong></span>
+          {game.status === 'completed' && <p className="mt-1 text-sm font-medium text-green-700">Winner: {game.winner_entry_id === game.entry1_id ? game.entry1_name : game.entry2_name}</p>}
+        </div>
+        {game.status === 'pending' && canManage && <div className="flex gap-2">
           {[{ id: game.entry1_id, name: game.entry1_name }, { id: game.entry2_id, name: game.entry2_name }].map(entry => <button key={entry.id} data-help-id="action-record-tournament-game-winner" type="button" onClick={async () => {
             if (!window.confirm(`Record ${entry.name} as the winner of this game?`)) return;
             try { await api.post(`/tournaments/${tournamentId}/games/${game.game_id}/result`, { winner_entry_id: entry.id }); setReloadKey(value => value + 1); } catch (resultError: any) { setError(resultError.response?.data?.error || 'Failed to record result'); }

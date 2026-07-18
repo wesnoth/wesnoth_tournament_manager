@@ -346,6 +346,13 @@ const TournamentDetail: React.FC = () => {
       ]);
 
       setTournament(tournamentRes.data);
+      if (Number(tournamentRes.data.competition_model_version) === 2) {
+        // Phase-engine tournaments do not populate the legacy match, round,
+        // or aggregate-ranking tables. Open their authoritative competition
+        // view unless the caller explicitly requested Participants.
+        const requestedTab = searchParams.get('tab');
+        if (requestedTab !== 'participants') setActiveTab('competition');
+      }
       console.log('📋 Tournament loaded:', {
         id: tournamentRes.data.id,
         name: tournamentRes.data.name,
@@ -1376,6 +1383,9 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
     );
   }
 
+  const usesPhaseEngine = Number(tournament.competition_model_version) === 2;
+  const phaseDefinition = editData.format_definition;
+
   return (
     <MainLayout><div className="w-full min-h-screen px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200">
       <div className="flex justify-between items-center mb-8 pb-4 border-b-2 border-gray-300">
@@ -1410,7 +1420,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
             </React.Fragment>
           ))}
         </p>
-        <p><strong>{t('tournament.col_type')}:</strong> {tournament.tournament_type}</p>
+        <p><strong>{t('tournament.col_type')}:</strong> {usesPhaseEngine ? 'Flexible phases' : tournament.tournament_type}</p>
         <p><strong>Wesnoth game name:</strong> <code className="px-1 bg-gray-100 rounded">{tournament.forum_topic_id ? `T${tournament.forum_topic_id}` : tournament.name}</code></p>
         {tournament.forum_topic_id && (
           <p><strong>Forum:</strong>{' '}
@@ -1481,6 +1491,37 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
       {/* Tournament Configuration Section */}
       <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
         <h3>{t('tournament_title')} {t('tournament.basic_info') ? '- ' + t('tournament.basic_info') : ''}</h3>
+        {usesPhaseEngine ? (
+          <div data-help-id="region-tournament-phase-format-summary" className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <strong className="font-semibold text-gray-700">{t('label_round_duration')}:</strong>
+                <span className="text-gray-600">{tournament.round_duration_days} {t('label_days')}</span>
+              </div>
+              <div className="flex flex-col gap-2">
+                <strong className="font-semibold text-gray-700">{t('label_auto_advance_rounds')}:</strong>
+                <span className="text-gray-600">{tournament.auto_advance_round ? t('yes') : t('no')}</span>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+              {(phaseDefinition?.phases || []).map((phase) => (
+                <article key={phase.id} className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+                  <h4 className="font-semibold text-gray-800">{phase.order}. {phase.name}</h4>
+                  <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+                    <dt className="text-gray-600">System</dt>
+                    <dd className="font-medium text-gray-800">{phase.format === 'single_elimination' ? 'Single elimination' : phase.format === 'round_robin' ? 'Round robin' : 'Swiss'}</dd>
+                    <dt className="text-gray-600">Groups / brackets</dt>
+                    <dd className="font-medium text-gray-800">{phase.groups.length}</dd>
+                    <dt className="text-gray-600">Match format</dt>
+                    <dd className="font-medium text-gray-800">Bo{phase.default_best_of}</dd>
+                    {phase.swiss && <><dt className="text-gray-600">Rounds</dt><dd className="font-medium text-gray-800">{phase.swiss.round_count}</dd></>}
+                    {phase.round_robin && <><dt className="text-gray-600">Cycles</dt><dd className="font-medium text-gray-800">{phase.round_robin.cycle_count}</dd></>}
+                  </dl>
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           <div className="flex flex-col gap-2">
             <strong className="font-semibold text-gray-700">{t('label_round_duration')}:</strong> <span className="text-gray-600">{tournament.round_duration_days} {t('label_days')}</span>
@@ -1539,6 +1580,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
             </>
           )}
         </div>
+        )}
       </div>
 
       {/* Tournament Actions Section */}
@@ -1595,22 +1637,22 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                 {tournament.status === 'in_progress' && (
                   <p className="text-green-600">✓ {t('tournaments.started_locked')}</p>
                 )}
-                <button
+                {!usesPhaseEngine && <button
                   data-help-id="action-recalculate-tiebreakers"
                   onClick={handleRecalculateTiebreakers}
                   className="px-6 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition-colors"
                   title={t('tournaments.btn_recalculate_tiebreakers_tooltip', 'Recalculate OMP, GWP, OGP for all participants')}
                 >
                   {t('tournaments.btn_recalculate_tiebreakers')}
-                </button>
-                <button 
+                </button>}
+                {!usesPhaseEngine && <button
                   data-help-id="action-notify-tournament-results"
                   onClick={handleNotifyResults}
                   className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
                   title={t('tournaments.btn_notify_results_tooltip', 'Send standings or results to Discord')}
                 >
                   {t('tournaments.btn_notify_results')}
-                </button>
+                </button>}
               </div>
             )}
 
@@ -1680,35 +1722,35 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
           >
             {tournament?.tournament_mode === 'team' ? 'Teams' : t('tabs.participants', { count: participants.length })}
           </button>
-          <button 
+          {!usesPhaseEngine && <button
             data-help-id="action-tab-matches"
             className={`px-4 py-2 rounded font-semibold cursor-pointer transition-all ${activeTab === 'matches' ? 'bg-blue-500 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
             onClick={() => setActiveTab('matches')}
           >
             {t('tabs.matches', { count: matches.length })}
-          </button>
-          <button 
+          </button>}
+          {!usesPhaseEngine && <button
             data-help-id="action-tab-rounds"
             className={`px-4 py-2 rounded font-semibold cursor-pointer transition-all ${activeTab === 'rounds' ? 'bg-blue-500 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
             onClick={() => setActiveTab('rounds')}
           >
             {t('tabs.rounds', { count: rounds.length })}
-          </button>
-          <button 
+          </button>}
+          {!usesPhaseEngine && <button
             data-help-id="action-tab-round-details"
             className={`px-4 py-2 rounded font-semibold cursor-pointer transition-all ${activeTab === 'roundMatches' ? 'bg-blue-500 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
             onClick={() => setActiveTab('roundMatches')}
           >
             {t('tabs.round_details')}
-          </button>
-          <button 
+          </button>}
+          {!usesPhaseEngine && <button
             data-help-id="action-tab-ranking"
             className={`px-4 py-2 rounded font-semibold cursor-pointer transition-all ${activeTab === 'ranking' ? 'bg-blue-500 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
             onClick={() => setActiveTab('ranking')}
           >
             {t('tabs.ranking')}
-          </button>
-          {Number(tournament?.competition_model_version) === 2 && (
+          </button>}
+          {usesPhaseEngine && (
             <button
               data-help-id="action-tab-competition"
               className={`px-4 py-2 rounded font-semibold cursor-pointer transition-all ${activeTab === 'competition' ? 'bg-blue-500 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}

@@ -174,7 +174,8 @@ router.get('/:id/phases/:phaseId/bracket', async (req, res) => {
 
 router.get('/:id/phases/:phaseId/games', async (req, res) => {
   const result = await query(
-    `SELECT games.id AS game_id, games.game_number, games.status, series.id AS series_id,
+    `SELECT games.id AS game_id, games.game_number, games.status, games.played_at,
+            games.winner_entry_id, series.id AS series_id, series.best_of,
             rounds.round_number, groups.name AS group_name,
             games.entry1_id, games.entry2_id,
             COALESCE(user1.nickname, team1.name) AS entry1_name,

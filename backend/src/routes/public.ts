@@ -118,6 +118,8 @@ router.get('/tournaments', optionalAuthMiddleware, async (req, res) => {
         t.status, 
         t.tournament_type,
         t.tournament_mode,
+        t.competition_model_version,
+        t.forum_topic_id,
         t.max_participants,
         t.general_rounds,
         t.final_rounds,
@@ -185,6 +187,10 @@ router.get('/tournaments', optionalAuthMiddleware, async (req, res) => {
 router.get('/tournaments/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    // The public detail contract includes the engine version so the frontend
+    // can choose the phase competition view without inferring it from legacy
+    // tournament_type fields. Forum identity is likewise part of the public
+    // tournament identity displayed to players.
     const result = await query(`
       SELECT 
         t.id, 

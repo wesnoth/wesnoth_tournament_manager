@@ -1,11 +1,13 @@
 import { expect, test } from '@playwright/test';
 
-const tournamentName = process.env.E2E_TOURNAMENT_NAME || 'test_002_flexible_phases';
+const tournamentName = process.env.E2E_TOURNAMENT_NAME || 'test_003_ranked_complex_template';
 const autoAdvanceRounds = process.env.E2E_AUTO_ADVANCE === '1';
 const formatTemplate = process.env.E2E_FORMAT_TEMPLATE || 'swiss_brackets_final';
 const tournamentMode = process.env.E2E_TOURNAMENT_MODE || 'ranked';
 const swissRounds = process.env.E2E_SWISS_ROUNDS || '3';
-const participantCount = Number(process.env.E2E_PARTICIPANTS || 8);
+const participantCount = Number(process.env.E2E_PARTICIPANTS || 16);
+const preliminaryBestOf = process.env.E2E_PRELIMINARY_BEST_OF || '1';
+const finalBestOf = process.env.E2E_FINAL_BEST_OF || '3';
 const skipJoin = process.env.E2E_SKIP_JOIN === '1';
 
 async function findRealPlayers(page: import('@playwright/test').Page, rankedOnly: boolean, requiredCount: number) {
@@ -258,6 +260,15 @@ test('flexible tournament accepts simulated joins and progresses through every c
     await page.waitForTimeout(1_000);
     await openTournamentSection(page, 'action-toggle-tournament-phase-configuration');
     await page.locator('[data-help-id="option-tournament-format-template"]').selectOption(formatTemplate);
+    if (formatTemplate === 'swiss_brackets_final') {
+      // Guard the template contract itself before exercising the engine. This
+      // catches accidental UI/template changes independently of progression.
+      const groupCounts = page.locator('[data-help-id="field-tournament-phase-group-count"]');
+      await expect(groupCounts).toHaveCount(3);
+      await expect(groupCounts.nth(0)).toHaveValue('4');
+      await expect(groupCounts.nth(1)).toHaveValue('2');
+      await expect(groupCounts.nth(2)).toHaveValue('1');
+    }
     await openTournamentSection(page, 'action-toggle-tournament-format-settings');
     await page.locator('[data-help-id="field-tournament-max-participants"]').fill(String(participantCount));
     await page.waitForTimeout(1_000);
@@ -286,8 +297,10 @@ test('flexible tournament accepts simulated joins and progresses through every c
       await page.waitForTimeout(1_000);
     }
     const bestOfControls = page.locator('[data-help-id="option-tournament-phase-best-of"]');
-    for (let index = 0; index < await bestOfControls.count(); index += 1) {
-      await bestOfControls.nth(index).selectOption('1');
+    const phaseCount = await bestOfControls.count();
+    for (let index = 0; index < phaseCount; index += 1) {
+      const bestOf = index === phaseCount - 1 ? finalBestOf : preliminaryBestOf;
+      await bestOfControls.nth(index).selectOption(bestOf);
     }
     const swissRoundControls = page.locator('[data-help-id="field-tournament-swiss-rounds"]');
     if (await swissRoundControls.count()) {
@@ -304,6 +317,25 @@ test('flexible tournament accepts simulated joins and progresses through every c
     tournamentHref = page.url();
   }
   expect(tournamentHref).toMatch(/\/tournament\//);
+  if (formatTemplate === 'swiss_brackets_final') {
+    const tournamentId = tournamentHref.split('/').pop();
+    const formatResponse = await page.request.get(`/api/tournaments/${tournamentId}/format`);
+    expect(formatResponse.ok()).toBe(true);
+    const savedFormat = await formatResponse.json();
+    expect(savedFormat.phases).toHaveLength(3);
+    expect(savedFormat.phases.map((phase: any) => phase.groups.length)).toEqual([4, 2, 1]);
+    expect(savedFormat.phases.map((phase: any) => Number(phase.default_best_of))).toEqual([
+      Number(preliminaryBestOf),
+      Number(preliminaryBestOf),
+      Number(finalBestOf),
+    ]);
+    await expect(page.locator('[data-help-id="region-tournament-phase-format-summary"]')).toBeVisible();
+    await expect(page.locator('[data-help-id="action-tab-competition"]')).toBeVisible();
+    await expect(page.locator('[data-help-id="action-tab-matches"]')).toHaveCount(0);
+    await expect(page.locator('[data-help-id="action-tab-rounds"]')).toHaveCount(0);
+    await expect(page.locator('[data-help-id="action-tab-round-details"]')).toHaveCount(0);
+    await expect(page.locator('[data-help-id="action-tab-ranking"]')).toHaveCount(0);
+  }
   if (!tournamentInProgress) {
     const participantLabel = page.getByText(/^Participants \(\d+\)$/).first();
     const existingParticipantCount = tournamentMode === 'team'
