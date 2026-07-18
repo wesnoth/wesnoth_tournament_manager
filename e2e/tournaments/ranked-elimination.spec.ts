@@ -319,6 +319,10 @@ test('flexible tournament accepts simulated joins and progresses through every c
   expect(tournamentHref).toMatch(/\/tournament\//);
   if (formatTemplate === 'swiss_brackets_final') {
     const tournamentId = tournamentHref.split('/').pop();
+    const detailResponse = await page.request.get(`/api/public/tournaments/${tournamentId}`);
+    expect(detailResponse.ok()).toBe(true);
+    const tournamentDetail = await detailResponse.json();
+    expect(Number(tournamentDetail.competition_model_version)).toBe(2);
     const formatResponse = await page.request.get(`/api/tournaments/${tournamentId}/format`);
     expect(formatResponse.ok()).toBe(true);
     const savedFormat = await formatResponse.json();

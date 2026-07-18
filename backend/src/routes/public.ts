@@ -203,6 +203,8 @@ router.get('/tournaments/:id', async (req, res) => {
         t.status, 
         t.tournament_type,
         t.tournament_mode,
+        t.competition_model_version,
+        t.forum_topic_id,
         t.max_participants,
         t.general_rounds,
         t.final_rounds,
