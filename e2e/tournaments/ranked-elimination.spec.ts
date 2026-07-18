@@ -25,10 +25,29 @@ async function findRealPlayers(page: import('@playwright/test').Page, rankedOnly
     await expect(page.locator('table').first()).toBeVisible({ timeout: 30_000 });
   }
 
-  const names = await page.locator('table').first().locator('tr').evaluateAll((rows) =>
-    rows.map((row) => row.querySelector('a')?.textContent?.trim())
-      .filter((name): name is string => Boolean(name))
-  );
+  const names: string[] = [];
+  while (names.length < requiredCount) {
+    const pageNames = await page.locator('table').first().locator('tr').evaluateAll((rows) =>
+      rows.map((row) => row.querySelector('a[data-help-id="action-view-player-profile"]')?.textContent?.trim())
+        .filter((name): name is string => Boolean(name))
+    );
+    for (const name of pageNames) {
+      if (!names.includes(name)) names.push(name);
+    }
+    if (names.length >= requiredCount) break;
+
+    // Team scenarios need twice as many users as entries. Follow the public
+    // player pagination instead of silently limiting the fixture pool to the
+    // first 20 rows rendered by the page.
+    const nextPage = page.locator('[data-help-id="action-players-pagination-next"]').first();
+    if (!(await nextPage.count()) || await nextPage.isDisabled()) break;
+    const playersResponse = page.waitForResponse(response =>
+      response.request().method() === 'GET' && response.url().includes('/api/public/players')
+    );
+    await nextPage.click();
+    await playersResponse;
+    await expect(page.locator('table').first()).toBeVisible();
+  }
   if (names.length < requiredCount) {
     throw new Error(`Players page returned ${names.length} eligible players; ${requiredCount} are required`);
   }
@@ -96,14 +115,19 @@ async function simulateTeamJoin(page: import('@playwright/test').Page, firstNick
   await joinAction.click();
   const response = await joinResponse;
   expect(response.ok()).toBe(true);
+  // Phase-engine refreshes return to Competition by default. Reopen the team
+  // list before asserting the materialized join result.
+  await page.locator('[data-help-id="action-tab-participants"]').click();
   await expect(page.locator('h3').filter({ hasText: teamName }).first()).toBeVisible({ timeout: 30_000 });
 }
 
 async function registeredTeamNames(page: import('@playwright/test').Page): Promise<string[]> {
+  const teamsTab = page.locator('[data-help-id="action-tab-participants"]');
+  if (await teamsTab.count()) await teamsTab.click();
   return page.locator('h3').evaluateAll((headings) =>
     headings.map((heading) => heading.textContent?.trim() || '')
       .filter((name) => /^team_\d+$/.test(name))
-      .sort());
+      .sort((left, right) => Number(left.slice(5)) - Number(right.slice(5))));
 }
 
 async function simulateOpenMatch(page: import('@playwright/test').Page, tournamentName: string): Promise<number> {
@@ -191,6 +215,40 @@ async function assertOverallStandings(page: import('@playwright/test').Page, exp
   await expect(region).toContainText('Runner-up');
   await expect(region).toContainText('Eliminated');
   await expect(region.locator('tbody tr').first().locator('td').first()).toHaveText('1');
+  if (tournamentMode === 'team') {
+    const labels = await region.locator('tbody tr td:nth-child(2)').allTextContents();
+    expect(labels.every(label => /\([^(),]+,\s*[^()]+\)$/.test(label.trim()))).toBe(true);
+  }
+}
+
+async function assertTeamMembersAcrossCompetition(page: import('@playwright/test').Page, tournamentId: string) {
+  if (tournamentMode !== 'team') return;
+  const competitionResponse = await page.request.get(`/api/tournaments/${tournamentId}/competition`);
+  expect(competitionResponse.ok()).toBe(true);
+  const competition = await competitionResponse.json();
+  const phases = Array.from(new Map((competition.phases || []).map((phase: any) => [phase.phase_id, phase])).values()) as any[];
+  const labels: string[] = [];
+  for (const phase of phases) {
+    const detailEndpoint = phase.format === 'single_elimination' ? 'bracket' : 'standings';
+    const detailResponse = await page.request.get(`/api/tournaments/${tournamentId}/phases/${phase.phase_id}/${detailEndpoint}`);
+    expect(detailResponse.ok()).toBe(true);
+    const detail = await detailResponse.json();
+    for (const row of detail.standings || []) labels.push(row.entry_name);
+    for (const slot of detail.slots || []) {
+      if (slot.resolved_entry_name) labels.push(slot.resolved_entry_name);
+    }
+    const gamesResponse = await page.request.get(`/api/tournaments/${tournamentId}/phases/${phase.phase_id}/games`);
+    expect(gamesResponse.ok()).toBe(true);
+    const games = await gamesResponse.json();
+    for (const game of games.games || []) labels.push(game.entry1_name, game.entry2_name);
+  }
+  expect(labels.length).toBeGreaterThan(0);
+  expect(labels.every(label => /\([^(),]+,\s*[^()]+\)$/.test(label.trim()))).toBe(true);
+
+  await page.locator('[data-help-id="action-tab-competition"]').click();
+  const competitionRegion = page.locator('[data-help-id="region-tournament-competition"]');
+  await expect(competitionRegion).toBeVisible();
+  await expect(competitionRegion).toContainText(labels[0]);
 }
 
 async function advanceTournamentUntilFinished(
@@ -256,6 +314,7 @@ test('flexible tournament accepts simulated joins and progresses through every c
       await existingRow.locator('[data-help-id="action-view-tournament-details"], button').first().click();
       await expect(page).toHaveURL(/\/tournament\//, { timeout: 30_000 });
       await assertOverallStandings(page, participantCount);
+      await assertTeamMembersAcrossCompetition(page, page.url().split('/').pop()!);
       console.log('Tournament is already finished and its overall standings are valid');
       return;
     }
@@ -437,4 +496,5 @@ test('flexible tournament accepts simulated joins and progresses through every c
   await finishedRow.locator('[data-help-id="action-view-tournament-details"], a, button').first().click();
   await expect(page).toHaveURL(/\/tournament\//, { timeout: 30_000 });
   await assertOverallStandings(page, participantCount);
+  await assertTeamMembersAcrossCompetition(page, page.url().split('/').pop()!);
 });

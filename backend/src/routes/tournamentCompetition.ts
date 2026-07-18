@@ -11,6 +11,28 @@ import { forumTopicUrl, tournamentGameName } from '../tournament-engine/forumTop
 
 const router = Router();
 
+/**
+ * Produce the canonical competition label for either an individual or a team.
+ * Team membership is resolved at read time because entries intentionally point
+ * to the stable team identity while participant replacements may change names.
+ */
+const competitionEntryNameSql = (userAlias: string, teamAlias: string): string => `
+  CASE
+    WHEN ${teamAlias}.id IS NULL THEN ${userAlias}.nickname
+    ELSE CONCAT(
+      ${teamAlias}.name,
+      ' (',
+      COALESCE((
+        SELECT GROUP_CONCAT(member_user.nickname ORDER BY member.team_position, member.created_at SEPARATOR ', ')
+        FROM tournament_participants member
+        JOIN users_extension member_user ON member_user.id = member.user_id
+        WHERE member.team_id = ${teamAlias}.id
+          AND member.participation_status = 'accepted'
+      ), 'No members'),
+      ')'
+    )
+  END`;
+
 router.post('/:id/phases/:phaseId/advance', authMiddleware, async (req: AuthRequest, res) => {
   try {
     if (!(await isTournamentOrganizer(req.params.id, req.userId!))) {
@@ -154,7 +176,7 @@ router.get('/:id/overall-standings', async (req, res) => {
       query(
         `SELECT entries.id AS entry_id, entries.initial_seed,
                 COALESCE(users.id, teams.id) AS entity_id,
-                COALESCE(users.nickname, teams.name) AS entry_name
+                ${competitionEntryNameSql('users', 'teams')} AS entry_name
          FROM tournament_entries entries
          LEFT JOIN tournament_participants participants ON participants.id = entries.participant_id
          LEFT JOIN users_extension users ON users.id = participants.user_id
@@ -353,7 +375,7 @@ router.get('/:id/overall-standings', async (req, res) => {
 router.get('/:id/phases/:phaseId/standings', async (req, res) => {
   const result = await query(
     `SELECT s.*, g.name AS group_name, e.entry_type,
-            COALESCE(u.nickname, tt.name) AS entry_name
+            ${competitionEntryNameSql('u', 'tt')} AS entry_name
      FROM tournament_phase_standings s
      JOIN tournament_phase_groups g ON g.id = s.group_id
      JOIN tournament_phases p ON p.id = g.phase_id
@@ -374,7 +396,7 @@ router.get('/:id/phases/:phaseId/bracket', async (req, res) => {
             s.id AS series_id, s.series_position, s.status, s.best_of, s.entry1_wins, s.entry2_wins,
             s.winner_entry_id, sl.slot_number, sl.source_type, sl.source_group_seed,
             sl.source_series_id, sl.source_outcome, sl.resolved_entry_id,
-            COALESCE(u.nickname, tt.name) AS resolved_entry_name
+            ${competitionEntryNameSql('u', 'tt')} AS resolved_entry_name
      FROM tournament_phase_groups g
      JOIN tournament_phases p ON p.id = g.phase_id
      JOIN tournament_phase_rounds r ON r.group_id = g.id
@@ -412,8 +434,8 @@ router.get('/:id/phases/:phaseId/games', async (req, res) => {
                WHERE replay.tournament_game_id = games.id AND replay.deleted_at IS NULL
                ORDER BY replay.detected_at DESC LIMIT 1)) AS replay_url,
             COALESCE(linked_match.replay_downloads, 0) AS replay_downloads,
-            COALESCE(user1.nickname, team1.name) AS entry1_name,
-            COALESCE(user2.nickname, team2.name) AS entry2_name
+            ${competitionEntryNameSql('user1', 'team1')} AS entry1_name,
+            ${competitionEntryNameSql('user2', 'team2')} AS entry2_name
      FROM tournament_games games
      JOIN tournament_series series ON series.id = games.series_id
      JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
