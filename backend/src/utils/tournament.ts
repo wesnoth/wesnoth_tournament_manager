@@ -2442,7 +2442,7 @@ export async function getWinnerAndRunnerUp(
   try {
     // Step 1: Detect tournament mode and type
     const tournResult = await query(
-      `SELECT tournament_mode, tournament_type FROM tournaments WHERE id = ?`,
+      `SELECT tournament_mode, tournament_type, competition_model_version FROM tournaments WHERE id = ?`,
       [tournamentId]
     );
 
@@ -2453,6 +2453,79 @@ export async function getWinnerAndRunnerUp(
 
     const isTeamMode = tournResult.rows[0].tournament_mode === 'team';
     const tournamentType = tournResult.rows[0].tournament_type?.toLowerCase() || 'swiss';
+
+    if (Number(tournResult.rows[0].competition_model_version) === 2) {
+      // Version 2 does not materialize results in tournament_round_matches or
+      // participant-level legacy totals. Resolve the terminal phase directly.
+      const phaseResult = await query(
+        `SELECT id, format FROM tournament_phases
+         WHERE tournament_id = ? ORDER BY phase_order DESC LIMIT 1`,
+        [tournamentId]
+      );
+      if (!phaseResult.rows.length) return { winner: null, runnerUp: null };
+      const terminalPhase = phaseResult.rows[0];
+      let winnerEntryId: string | null = null;
+      let runnerUpEntryId: string | null = null;
+
+      if (terminalPhase.format === 'single_elimination') {
+        // A tournament has a unique champion only when the terminal round has
+        // exactly one completed series. Multiple terminal brackets represent
+        // multiple winners and therefore cannot populate a global podium.
+        const finals = await query(
+          `SELECT series.winner_entry_id, series.loser_entry_id
+           FROM tournament_series series
+           JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+           JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+           WHERE groups.phase_id = ? AND series.status = 'completed'
+             AND rounds.round_number = (
+               SELECT MAX(final_round.round_number)
+               FROM tournament_phase_rounds final_round
+               JOIN tournament_phase_groups final_group ON final_group.id = final_round.group_id
+               WHERE final_group.phase_id = ?
+             )
+           ORDER BY groups.group_order, series.series_position`,
+          [terminalPhase.id, terminalPhase.id]
+        );
+        if (finals.rows.length !== 1) return { winner: null, runnerUp: null };
+        winnerEntryId = finals.rows[0].winner_entry_id;
+        runnerUpEntryId = finals.rows[0].loser_entry_id;
+      } else {
+        const groupResult = await query(
+          `SELECT id FROM tournament_phase_groups WHERE phase_id = ? ORDER BY group_order`,
+          [terminalPhase.id]
+        );
+        if (groupResult.rows.length !== 1) return { winner: null, runnerUp: null };
+        const standings = await query(
+          `SELECT entry_id FROM tournament_phase_standings
+           WHERE group_id = ?
+           ORDER BY rank_position IS NULL, rank_position, points DESC, omp DESC, gwp DESC, ogp DESC
+           LIMIT 2`,
+          [groupResult.rows[0].id]
+        );
+        winnerEntryId = standings.rows[0]?.entry_id || null;
+        runnerUpEntryId = standings.rows[1]?.entry_id || null;
+      }
+
+      if (!winnerEntryId) return { winner: null, runnerUp: null };
+      const entryIds = [winnerEntryId, runnerUpEntryId].filter((entryId): entryId is string => Boolean(entryId));
+      const placeholders = entryIds.map(() => '?').join(', ');
+      const entryResult = await query(
+        `SELECT entries.id AS entry_id,
+                COALESCE(users.id, teams.id) AS id,
+                COALESCE(users.nickname, teams.name) AS nickname
+         FROM tournament_entries entries
+         LEFT JOIN tournament_participants participants ON participants.id = entries.participant_id
+         LEFT JOIN users_extension users ON users.id = participants.user_id
+         LEFT JOIN tournament_teams teams ON teams.id = entries.team_id
+         WHERE entries.id IN (${placeholders})`,
+        entryIds
+      );
+      const byEntry = new Map(entryResult.rows.map((entry: any) => [entry.entry_id, { id: entry.id, nickname: entry.nickname }]));
+      return {
+        winner: byEntry.get(winnerEntryId) || null,
+        runnerUp: runnerUpEntryId ? byEntry.get(runnerUpEntryId) || null : null,
+      };
+    }
 
     // Step 2: Detect tournament type category
     const isElimination = tournamentType === 'elimination' || tournamentType === 'swiss_elimination';

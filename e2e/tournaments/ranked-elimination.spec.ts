@@ -417,4 +417,7 @@ test('flexible tournament accepts simulated joins and progresses through every c
   await page.goto('/tournaments');
   const finishedRow = page.locator('tr').filter({ hasText: tournamentName }).last();
   await expect(finishedRow).toContainText('Finished', { timeout: 30_000 });
+  const resultCells = finishedRow.locator('td');
+  await expect(resultCells.nth(5)).not.toHaveText('-');
+  await expect(resultCells.nth(6)).not.toHaveText('-');
 });
