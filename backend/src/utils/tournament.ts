@@ -2430,11 +2430,25 @@ export async function updateTeamCurrentRound(tournamentId: string, roundNumber: 
   }
 }
 
+/** Build the canonical team podium label with current accepted members. */
+const teamPodiumNameSql = (teamAlias: string): string => `
+  CONCAT(
+    ${teamAlias}.name,
+    ' (',
+    COALESCE((
+      SELECT GROUP_CONCAT(member_user.nickname ORDER BY member.team_position, member.created_at SEPARATOR ', ')
+      FROM tournament_participants member
+      JOIN users_extension member_user ON member_user.id = member.user_id
+      WHERE member.team_id = ${teamAlias}.id
+        AND member.participation_status = 'accepted'
+    ), 'No members'),
+    ')'
+  )`;
+
 /**
- * Get winner and runner-up based on tournament type
- * For elimination/swiss_elimination: uses final match participants
- * For swiss/league: uses statistics-based ranking
- * Handles both team and 1v1 modes
+ * Get winner and runner-up based on tournament type.
+ * Elimination formats use final match participants, while Swiss and league
+ * formats use standings. Team labels always include current accepted members.
  */
 export async function getWinnerAndRunnerUp(
   tournamentId: string
@@ -2512,7 +2526,10 @@ export async function getWinnerAndRunnerUp(
       const entryResult = await query(
         `SELECT entries.id AS entry_id,
                 COALESCE(users.id, teams.id) AS id,
-                COALESCE(users.nickname, teams.name) AS nickname
+                CASE
+                  WHEN teams.id IS NULL THEN users.nickname
+                  ELSE ${teamPodiumNameSql('teams')}
+                END AS nickname
          FROM tournament_entries entries
          LEFT JOIN tournament_participants participants ON participants.id = entries.participant_id
          LEFT JOIN users_extension users ON users.id = participants.user_id
@@ -2558,11 +2575,13 @@ export async function getWinnerAndRunnerUp(
 
         // Get team details
         const winnerResult = await query(
-          `SELECT id, name as nickname FROM tournament_teams WHERE id = ?`,
+          `SELECT teams.id, ${teamPodiumNameSql('teams')} AS nickname
+           FROM tournament_teams teams WHERE teams.id = ?`,
           [winnerId]
         );
         const runnerUpResult = await query(
-          `SELECT id, name as nickname FROM tournament_teams WHERE id = ?`,
+          `SELECT teams.id, ${teamPodiumNameSql('teams')} AS nickname
+           FROM tournament_teams teams WHERE teams.id = ?`,
           [runnerUpId]
         );
 
@@ -2614,10 +2633,12 @@ export async function getWinnerAndRunnerUp(
       if (isTeamMode) {
         // Team mode - top 2 teams por stats
         const topTeamsResult = await query(
-          `SELECT id, name as nickname, tournament_points, tournament_wins, omp, gwp, ogp
-           FROM tournament_teams
-           WHERE tournament_id = ? AND status = 'active'
-           ORDER BY tournament_points DESC, omp DESC, gwp DESC, ogp DESC
+          `SELECT teams.id, ${teamPodiumNameSql('teams')} AS nickname,
+                  teams.tournament_points, teams.tournament_wins,
+                  teams.omp, teams.gwp, teams.ogp
+           FROM tournament_teams teams
+           WHERE teams.tournament_id = ? AND teams.status = 'active'
+           ORDER BY teams.tournament_points DESC, teams.omp DESC, teams.gwp DESC, teams.ogp DESC
            LIMIT 2`,
           [tournamentId]
         );
