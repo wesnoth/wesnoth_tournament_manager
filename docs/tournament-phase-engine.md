@@ -28,6 +28,10 @@ Phase-engine notifications are emitted only after the corresponding database tra
 
 Discord delivery is best-effort. Query, formatting, credential, or API failures are logged but never roll back a phase transition, recorded result, or completed tournament.
 
+## Administrative results
+
+Organizers may award an unresolved version 2 series administratively. The pending game records the administrative action for audit and presentation, while the series advances with its required winning score. Administrative awards count as series wins and losses but not as played games for GWP or OGP calculations. Competition views present them separately from played matches and automatic byes. Converted legacy competitions recover the same presentation by comparing authoritative series counters with their copied played games.
+
 ## Test workflow
 
 The test-only join tool writes accepted registrations to the retained participant and team tables. Preparation is the integration boundary that converts those registrations into version 2 tournament entries. The Admin Replays simulator lists only active `tournament_games` and records results through the same phase progression service used by parsed replays; it does not fall back to legacy tournament match tables.

@@ -33,7 +33,9 @@ async function recalculateTiebreakers(connection: any, groupId: string): Promise
      FROM tournament_games games
      JOIN tournament_series series ON series.id = games.series_id
      JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
-     WHERE rounds.group_id = ? AND games.status = 'completed'`,
+     WHERE rounds.group_id = ?
+       AND games.status = 'completed'
+       AND games.organizer_action IS NULL`,
     [groupId]
   );
   const standings = new Map(standingRows.map((row: any) => [row.entry_id, row]));
@@ -157,12 +159,18 @@ async function createSwissRoundPairings(connection: any, roundId: string, bestOf
   }
 }
 
-/** Record one game and atomically progress its series, round, group, and phase. */
+/**
+ * Record one game and atomically progress its series, round, group, and phase.
+ * Administrative actions award the series immediately through its required
+ * winning score; the marked game remains presentation evidence, not a played
+ * game for percentage tiebreakers.
+ */
 export async function recordPhaseGameResult(
   tournamentId: string,
   gameId: string,
   winnerEntryId: string,
-  matchId?: string | null
+  matchId?: string | null,
+  organizerAction?: 'admin_award' | 'forfeit'
 ): Promise<{ seriesCompleted: boolean; phaseCompleted: boolean; tournamentCompleted: boolean }> {
   const connection = await pool.getConnection();
   let completedPhaseId: string | null = null;
@@ -190,15 +198,30 @@ export async function recordPhaseGameResult(
     const loserEntryId = winnerEntryId === game.entry1_id ? game.entry2_id : game.entry1_id;
     await connection.execute(
       `UPDATE tournament_games
-       SET winner_entry_id = ?, loser_entry_id = ?, match_id = ?, status = 'completed', played_at = CURRENT_TIMESTAMP
+       SET winner_entry_id = ?, loser_entry_id = ?, match_id = ?, status = 'completed',
+           organizer_action = ?, played_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [winnerEntryId, loserEntryId, matchId || null, gameId]
+      [winnerEntryId, loserEntryId, matchId || null, organizerAction || null, gameId]
     );
     const winColumn = winnerEntryId === game.entry1_id ? 'entry1_wins' : 'entry2_wins';
-    await connection.execute(
-      `UPDATE tournament_series SET ${winColumn} = ${winColumn} + 1, status = 'in_progress', started_at = COALESCE(started_at, CURRENT_TIMESTAMP) WHERE id = ?`,
-      [game.series_id]
-    );
+    if (organizerAction) {
+      // An administrative award resolves the series without fabricating the
+      // unplayed games required by its best-of format. The series score is the
+      // authoritative competition result; this marked game is audit evidence
+      // and is deliberately excluded from game-percentage tiebreakers.
+      await connection.execute(
+        `UPDATE tournament_series
+         SET ${winColumn} = wins_required, status = 'in_progress',
+             started_at = COALESCE(started_at, CURRENT_TIMESTAMP)
+         WHERE id = ?`,
+        [game.series_id]
+      );
+    } else {
+      await connection.execute(
+        `UPDATE tournament_series SET ${winColumn} = ${winColumn} + 1, status = 'in_progress', started_at = COALESCE(started_at, CURRENT_TIMESTAMP) WHERE id = ?`,
+        [game.series_id]
+      );
+    }
     const [seriesRows] = await connection.execute<any[]>(`SELECT * FROM tournament_series WHERE id = ?`, [game.series_id]);
     const series = seriesRows[0];
     const winnerWins = winnerEntryId === game.entry1_id ? series.entry1_wins : series.entry2_wins;

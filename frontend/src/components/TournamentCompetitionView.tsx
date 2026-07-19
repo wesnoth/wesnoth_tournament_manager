@@ -7,6 +7,7 @@ const TournamentCompetitionView: React.FC<Props> = ({ tournamentId, canManage = 
   const [phases, setPhases] = useState<any[]>([]);
   const [details, setDetails] = useState<Record<string, any[]>>({});
   const [games, setGames] = useState<any[]>([]);
+  const [administrativeDecisions, setAdministrativeDecisions] = useState<any[]>([]);
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -24,6 +25,7 @@ const TournamentCompetitionView: React.FC<Props> = ({ tournamentId, canManage = 
         setDetails(Object.fromEntries(loaded));
         const gameResponses = await Promise.all(uniquePhases.map(phase => api.get(`/tournaments/${tournamentId}/phases/${phase.phase_id}/games`)));
         setGames(gameResponses.flatMap(response => response.data.games || []));
+        setAdministrativeDecisions(gameResponses.flatMap(response => response.data.administrative_decisions || []));
       } catch (loadError: any) {
         setError(loadError.response?.data?.error || 'Failed to load the competition structure');
       }
@@ -86,12 +88,44 @@ const TournamentCompetitionView: React.FC<Props> = ({ tournamentId, canManage = 
         </div>
       </section>;
     })}
+    {administrativeDecisions.length > 0 && <section data-help-id="region-tournament-administrative-decisions" className="rounded-lg border border-amber-300 bg-amber-50 p-4">
+      <h3 className="mb-4 border-b-2 border-amber-500 pb-3 text-2xl font-bold text-amber-950">Administrative Decisions</h3>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        {administrativeDecisions.map(decision => {
+          const winnerIsEntry1 = decision.winner_entry_id === decision.entry1_id;
+          const winnerName = winnerIsEntry1 ? decision.entry1_name : decision.entry2_name;
+          const loserName = winnerIsEntry1 ? decision.entry2_name : decision.entry1_name;
+          const winnerScore = winnerIsEntry1 ? decision.entry1_wins : decision.entry2_wins;
+          const loserScore = winnerIsEntry1 ? decision.entry2_wins : decision.entry1_wins;
+          const actionLabel = decision.organizer_action === 'forfeit'
+            ? 'Forfeit'
+            : decision.organizer_action === 'legacy_admin_decision'
+              ? 'Migrated administrative decision'
+              : 'Result awarded by organizer';
+          return <article key={decision.decision_id} className="rounded-lg border-l-4 border-amber-600 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <div className="font-semibold text-gray-900">{decision.phase_name} · {decision.group_name}</div>
+                <div className="text-xs text-gray-500">Round {decision.round_number} · Bo{decision.best_of}</div>
+              </div>
+              <span className="rounded-full bg-amber-600 px-3 py-1 text-xs font-semibold text-white">Admin decision</span>
+            </div>
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+              <div><div className="text-xs uppercase text-gray-500">Winner</div><div className="font-semibold text-green-700">{winnerName}</div></div>
+              <div className="rounded bg-gray-100 px-3 py-1 font-mono font-bold text-gray-800">{winnerScore}–{loserScore}</div>
+              <div className="text-right"><div className="text-xs uppercase text-gray-500">Loser</div><div className="font-semibold text-red-700">{loserName}</div></div>
+            </div>
+            <div className="mt-3 text-sm font-medium text-amber-800">{actionLabel}</div>
+          </article>;
+        })}
+      </div>
+    </section>}
     {games.length > 0 && <section data-help-id="region-tournament-phase-games" className="space-y-7 rounded-lg border bg-white p-4">
       {[
         { status: 'pending', title: 'Scheduled Matches' },
         { status: 'completed', title: 'Completed Matches' },
       ].map(section => {
-        const sectionGames = games.filter(game => game.status === section.status);
+        const sectionGames = games.filter(game => game.status === section.status && !game.organizer_action);
         if (sectionGames.length === 0) return null;
         const completed = section.status === 'completed';
         return <div key={section.status}>
@@ -139,6 +173,21 @@ const TournamentCompetitionView: React.FC<Props> = ({ tournamentId, canManage = 
                       if (!window.confirm(`Record ${entry.name} as the winner of this game?`)) return;
                       try { await api.post(`/tournaments/${tournamentId}/games/${game.game_id}/result`, { winner_entry_id: entry.id }); setReloadKey(value => value + 1); } catch (resultError: any) { setError(resultError.response?.data?.error || 'Failed to record result'); }
                     }} className="rounded bg-blue-600 px-2 py-1 text-xs font-semibold text-white">{entry.name} won</button>)}
+                    {canManage && <div className="mt-2 flex w-full flex-wrap items-center gap-2 border-t border-amber-200 pt-2">
+                      <span className="text-xs font-semibold text-amber-800">Administrative:</span>
+                      {[{ id: game.entry1_id, name: game.entry1_name }, { id: game.entry2_id, name: game.entry2_name }].map(entry => <button key={entry.id} data-help-id="action-record-tournament-administrative-decision" type="button" onClick={async () => {
+                        if (!window.confirm(`Award this series to ${entry.name} by administrative decision? Unplayed games will not count towards game-percentage tiebreakers.`)) return;
+                        try {
+                          await api.post(`/tournaments/${tournamentId}/series/${game.series_id}/admin-decision`, {
+                            winner_entry_id: entry.id,
+                            action: 'forfeit',
+                          });
+                          setReloadKey(value => value + 1);
+                        } catch (resultError: any) {
+                          setError(resultError.response?.data?.error || 'Failed to record administrative decision');
+                        }
+                      }} className="rounded border border-amber-600 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100">Award to {entry.name}</button>)}
+                    </div>}
                   </div>}
                 </td>
               </tr>;

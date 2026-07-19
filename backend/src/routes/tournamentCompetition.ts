@@ -8,6 +8,7 @@ import { query } from '../config/database.js';
 import { recordPhaseGameResult } from '../tournament-engine/competitionProgression.js';
 import { compileNextPhaseCompetition, startReadyPhase } from '../tournament-engine/competitionCompiler.js';
 import { forumTopicUrl, tournamentGameName } from '../tournament-engine/forumTopic.js';
+import { getUserAgent, getUserIP, logAuditEvent } from '../middleware/audit.js';
 
 const router = Router();
 
@@ -90,6 +91,66 @@ router.post('/:id/games/:gameId/result', authMiddleware, async (req: AuthRequest
     if (error.message?.includes('already') || error.message?.includes('not part')) return res.status(409).json({ error: error.message });
     console.error('Record phase game result error:', error);
     return res.status(500).json({ error: 'Failed to record phase game result' });
+  }
+});
+
+router.post('/:id/series/:seriesId/admin-decision', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    if (!(await isTournamentOrganizer(req.params.id, req.userId!))) {
+      return res.status(403).json({ error: 'Only tournament organizers can record administrative decisions' });
+    }
+    const { winner_entry_id: winnerEntryId, action = 'admin_award' } = req.body;
+    if (typeof winnerEntryId !== 'string') {
+      return res.status(400).json({ error: 'winner_entry_id is required' });
+    }
+    if (!['admin_award', 'forfeit'].includes(action)) {
+      return res.status(400).json({ error: 'action must be admin_award or forfeit' });
+    }
+    const gameResult = await query(
+      `SELECT games.id
+       FROM tournament_games games
+       JOIN tournament_series series ON series.id = games.series_id
+       JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+       JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+       JOIN tournament_phases phases ON phases.id = groups.phase_id
+       WHERE phases.tournament_id = ? AND series.id = ?
+         AND series.status <> 'completed'
+         AND games.status IN ('pending', 'in_progress')
+       ORDER BY games.game_number DESC
+       LIMIT 1`,
+      [req.params.id, req.params.seriesId]
+    );
+    if (!gameResult.rows.length) {
+      return res.status(409).json({ error: 'Series has no unresolved game available for an administrative decision' });
+    }
+    const result = await recordPhaseGameResult(
+      req.params.id,
+      gameResult.rows[0].id,
+      winnerEntryId,
+      null,
+      action
+    );
+    await logAuditEvent({
+      event_type: 'ADMIN_ACTION',
+      user_id: req.userId,
+      ip_address: getUserIP(req),
+      user_agent: getUserAgent(req),
+      details: {
+        action: 'TOURNAMENT_SERIES_ADMIN_DECISION',
+        tournament_id: req.params.id,
+        series_id: req.params.seriesId,
+        winner_entry_id: winnerEntryId,
+        organizer_action: action,
+      },
+    });
+    return res.json({ ...result, organizer_action: action });
+  } catch (error: any) {
+    if (error.message?.includes('not found')) return res.status(404).json({ error: error.message });
+    if (error.message?.includes('already') || error.message?.includes('not part')) {
+      return res.status(409).json({ error: error.message });
+    }
+    console.error('Record phase administrative decision error:', error);
+    return res.status(500).json({ error: 'Failed to record administrative decision' });
   }
 });
 
@@ -421,6 +482,7 @@ router.get('/:id/phases/:phaseId/bracket', async (req, res) => {
 router.get('/:id/phases/:phaseId/games', async (req, res) => {
   const result = await query(
     `SELECT games.id AS game_id, games.game_number, games.status, games.played_at,
+            games.organizer_action,
             games.winner_entry_id, games.match_id, series.id AS series_id, series.best_of,
             phases.id AS phase_id, phases.name AS phase_name,
             rounds.round_number, groups.id AS group_id, groups.name AS group_name,
@@ -454,7 +516,64 @@ router.get('/:id/phases/:phaseId/games', async (req, res) => {
      ORDER BY groups.group_order, rounds.round_number, series.series_position, games.game_number`,
     [req.params.id, req.params.phaseId]
   );
-  return res.json({ games: result.rows });
+  // Administrative resolution is detected from the authoritative series score
+  // minus real completed game wins. This also recovers converted legacy series,
+  // where placeholder organizer rows intentionally remained in legacy tables.
+  const decisionResult = await query(
+    `SELECT series.id AS series_id, series.best_of, series.entry1_wins, series.entry2_wins,
+            series.winner_entry_id, series.loser_entry_id, series.completed_at,
+            phases.id AS phase_id, phases.name AS phase_name,
+            rounds.round_number, groups.id AS group_id, groups.name AS group_name,
+            slot1.resolved_entry_id AS entry1_id, slot2.resolved_entry_id AS entry2_id,
+            ${competitionEntryNameSql('user1', 'team1')} AS entry1_name,
+            ${competitionEntryNameSql('user2', 'team2')} AS entry2_name,
+            (SELECT COUNT(*) FROM tournament_games played1
+             WHERE played1.series_id = series.id AND played1.status = 'completed'
+               AND played1.organizer_action IS NULL
+               AND played1.winner_entry_id = slot1.resolved_entry_id) AS entry1_played_wins,
+            (SELECT COUNT(*) FROM tournament_games played2
+             WHERE played2.series_id = series.id AND played2.status = 'completed'
+               AND played2.organizer_action IS NULL
+               AND played2.winner_entry_id = slot2.resolved_entry_id) AS entry2_played_wins,
+            (SELECT administrative.organizer_action FROM tournament_games administrative
+             WHERE administrative.series_id = series.id
+               AND administrative.organizer_action IS NOT NULL
+             ORDER BY administrative.played_at DESC, administrative.game_number DESC LIMIT 1) AS organizer_action,
+            (SELECT administrative.played_at FROM tournament_games administrative
+             WHERE administrative.series_id = series.id
+               AND administrative.organizer_action IS NOT NULL
+             ORDER BY administrative.played_at DESC, administrative.game_number DESC LIMIT 1) AS decided_at
+     FROM tournament_series series
+     JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+     JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+     JOIN tournament_phases phases ON phases.id = groups.phase_id
+     JOIN tournament_series_slots slot1 ON slot1.series_id = series.id AND slot1.slot_number = 1
+     JOIN tournament_series_slots slot2 ON slot2.series_id = series.id AND slot2.slot_number = 2
+     JOIN tournament_entries entry1 ON entry1.id = slot1.resolved_entry_id
+     JOIN tournament_entries entry2 ON entry2.id = slot2.resolved_entry_id
+     LEFT JOIN tournament_participants participant1 ON participant1.id = entry1.participant_id
+     LEFT JOIN tournament_participants participant2 ON participant2.id = entry2.participant_id
+     LEFT JOIN users_extension user1 ON user1.id = participant1.user_id
+     LEFT JOIN users_extension user2 ON user2.id = participant2.user_id
+     LEFT JOIN tournament_teams team1 ON team1.id = entry1.team_id
+     LEFT JOIN tournament_teams team2 ON team2.id = entry2.team_id
+     WHERE phases.tournament_id = ? AND phases.id = ? AND series.status = 'completed'`,
+    [req.params.id, req.params.phaseId]
+  );
+  const administrativeDecisions = decisionResult.rows
+    .filter((series: any) =>
+      Number(series.entry1_wins) > Number(series.entry1_played_wins)
+      || Number(series.entry2_wins) > Number(series.entry2_played_wins)
+    )
+    .map((series: any) => ({
+      ...series,
+      decision_id: `admin-${series.series_id}`,
+      organizer_action: series.organizer_action || 'legacy_admin_decision',
+      decided_at: series.decided_at || series.completed_at,
+      entry1_awarded_wins: Math.max(0, Number(series.entry1_wins) - Number(series.entry1_played_wins)),
+      entry2_awarded_wins: Math.max(0, Number(series.entry2_wins) - Number(series.entry2_played_wins)),
+    }));
+  return res.json({ games: result.rows, administrative_decisions: administrativeDecisions });
 });
 
 export default router;
