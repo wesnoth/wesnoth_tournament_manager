@@ -78,6 +78,59 @@ assert.equal(leaguePlan.format, 'round_robin');
 assert.equal(leaguePlan.cycleCount, 1);
 assert.equal(leaguePlan.entities.length, 2);
 
+const administrativeLeague = baseSource();
+administrativeLeague.tournament.tournament_type = 'league';
+administrativeLeague.tournament.tournament_mode = 'team';
+administrativeLeague.teams = teamLeague.teams.map(team => ({ ...team }));
+administrativeLeague.participants = [
+  {
+    participant_id: 'tp-old', team_id: '00000000-0000-0000-0000-000000000001',
+    user_id: 'user-old', nickname: 'Former member', participation_status: 'replaced',
+    replaced_by_participant_id: 'tp-new',
+  },
+  {
+    participant_id: 'tp-new', team_id: 'team-1', user_id: 'user-new', nickname: 'Replacement',
+    participation_status: 'accepted', requested_replacement_of_id: 'tp-old',
+  },
+  { participant_id: 'tp-2', team_id: 'team-1', user_id: 'user-2', nickname: 'One B', participation_status: 'accepted' },
+  { participant_id: 'tp-3', team_id: 'team-2', user_id: 'user-3', nickname: 'Two A', participation_status: 'accepted' },
+  { participant_id: 'tp-4', team_id: 'team-2', user_id: 'user-4', nickname: 'Two B', participation_status: 'accepted' },
+];
+administrativeLeague.series = [{
+  ...completedSeries('team-1', 'team-2', 'team-1'),
+  best_of: 3,
+  wins_required: 2,
+  player1_wins: 2,
+  player2_wins: 0,
+  scheduled_datetime: new Date('2026-01-01T18:00:00Z'),
+  scheduled_status: 'confirmed',
+  scheduled_by_player_id: 'user-new',
+  scheduled_confirmed_at: new Date('2026-01-01T12:00:00Z'),
+}];
+administrativeLeague.games = [
+  {
+    ...completedGame('team-1', 'team-2', 'team-1'),
+    id: 'administrative-game-1',
+    organizer_action: 'organizer_win',
+  },
+  {
+    ...completedGame('team-1', 'team-2', 'team-1'),
+    id: 'administrative-game-2',
+    winner_id: null,
+    loser_id: null,
+    organizer_action: 'organizer_loss',
+  },
+];
+
+const administrativeLeaguePlan = buildConversionPlan(administrativeLeague);
+assert.deepEqual(administrativeLeaguePlan.errors, []);
+assert.equal(administrativeLeaguePlan.gamesToMigrate.length, 0);
+assert.equal(administrativeLeaguePlan.administrativeGameCount, 2);
+assert.equal(administrativeLeaguePlan.embeddedScheduleTargets.length, 1);
+assert.equal(administrativeLeaguePlan.embeddedScheduleTargets[0].legacyStatus, 'confirmed');
+assert.match(administrativeLeaguePlan.warnings.join('\n'), /organizer action rows/);
+assert.match(administrativeLeaguePlan.warnings.join('\n'), /embedded legacy schedules/);
+
 const individualElimination = baseSource();
 individualElimination.tournament.tournament_type = 'elimination';
 individualElimination.tournament.tournament_mode = 'unranked';

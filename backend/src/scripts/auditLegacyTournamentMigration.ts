@@ -16,10 +16,16 @@ async function main(): Promise<void> {
     console.error('Tournament not found');
     process.exitCode = 1;
   } else {
-    const [legacyRounds, legacySeries, legacyGames, legacyByes, replayLinks, schedules] = await Promise.all([
+    const [legacyRounds, legacySeries, legacyGames, legacyByes, replayLinks, schedules, embeddedSchedules, replacementHistory] = await Promise.all([
       query(`SELECT COUNT(*) AS count FROM tournament_rounds WHERE tournament_id = ?`, [tournamentId]),
       query(`SELECT COUNT(*) AS count FROM tournament_round_matches WHERE tournament_id = ?`, [tournamentId]),
-      query(`SELECT COUNT(*) AS count FROM tournament_matches WHERE tournament_id = ?`, [tournamentId]),
+      query(
+        `SELECT COUNT(*) AS count,
+                COALESCE(SUM(organizer_action IS NULL), 0) AS played_count,
+                COALESCE(SUM(organizer_action IS NOT NULL), 0) AS administrative_count
+         FROM tournament_matches WHERE tournament_id = ?`,
+        [tournamentId]
+      ),
       query(`SELECT COUNT(*) AS count FROM tournament_round_byes WHERE tournament_id = ?`, [tournamentId]),
       query(`SELECT COUNT(*) AS count FROM replays WHERE tournament_id = ? OR tournament_round_match_id IN (SELECT id FROM tournament_round_matches WHERE tournament_id = ?)`, [tournamentId, tournamentId]),
       // The historical scheduling table inherited utf8mb4_unicode_ci while
@@ -33,6 +39,17 @@ async function main(): Promise<void> {
          WHERE series.tournament_id = ?`,
         [tournamentId]
       ),
+      query(
+        `SELECT COUNT(*) AS count FROM tournament_round_matches
+         WHERE tournament_id = ? AND scheduled_datetime IS NOT NULL`,
+        [tournamentId]
+      ),
+      query(
+        `SELECT COUNT(*) AS count FROM tournament_participants
+         WHERE tournament_id = ?
+           AND (participation_status = 'replaced' OR requested_replacement_of_id IS NOT NULL)`,
+        [tournamentId]
+      ),
     ]);
     const tournament = tournamentResult.rows[0];
     const isTeamLeague = tournament.tournament_type === 'league' && tournament.tournament_mode === 'team';
@@ -43,10 +60,14 @@ async function main(): Promise<void> {
       legacy: {
         rounds: Number(legacyRounds.rows[0].count),
         series: Number(legacySeries.rows[0].count),
-        games: Number(legacyGames.rows[0].count),
+        gameRows: Number(legacyGames.rows[0].count),
+        playedGames: Number(legacyGames.rows[0].played_count),
+        administrativeGameRows: Number(legacyGames.rows[0].administrative_count),
         byes: Number(legacyByes.rows[0].count),
         replayLinks: Number(replayLinks.rows[0].count),
         scheduleProposals: Number(schedules.rows[0].count),
+        embeddedSeriesSchedules: Number(embeddedSchedules.rows[0].count),
+        replacementHistoryRows: Number(replacementHistory.rows[0].count),
       },
       recommendation: isTeamLeague
         ? 'Candidate for team round-robin migration. Compare every team, round, series result, bye, replay link, and schedule before switching the model version.'

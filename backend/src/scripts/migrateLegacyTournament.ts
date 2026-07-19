@@ -41,6 +41,17 @@ interface EntityPlan {
   source: any;
 }
 
+interface EmbeddedScheduleTarget {
+  proposalId: string;
+  slotId: string;
+  legacySeriesId: string;
+  seriesId: string;
+  proposedByUserId: string;
+  scheduledDatetime: any;
+  legacyStatus: string;
+  proposedAt: any;
+}
+
 export interface ConversionPlan {
   tournamentId: string;
   phaseId: string;
@@ -56,10 +67,13 @@ export interface ConversionPlan {
   roundByLegacy: Map<string, string>;
   seriesByLegacy: Map<string, string>;
   gameByLegacy: Map<string, string>;
+  gamesToMigrate: any[];
+  administrativeGameCount: number;
   standings: StandingPlan[];
   derivedByes: Array<{ roundId: string; entityId: string; reason: string }>;
   replayTargets: Array<{ replayId: string; gameId: string }>;
   scheduleTargets: Array<{ proposalId: string; seriesId: string }>;
+  embeddedScheduleTargets: EmbeddedScheduleTarget[];
   errors: string[];
   warnings: string[];
 }
@@ -107,7 +121,9 @@ async function loadLegacySource(
             participants.current_round, participants.tournament_ranking,
             participants.tournament_wins, participants.tournament_losses,
             participants.tournament_points, participants.omp, participants.gwp,
-            participants.ogp, participants.created_at, users.nickname, users.elo_rating
+            participants.ogp, participants.replaced_by_participant_id,
+            participants.requested_replacement_of_id, participants.created_at,
+            users.nickname, users.elo_rating
      FROM tournament_participants participants
      JOIN users_extension users ON users.id = participants.user_id
      WHERE participants.tournament_id = ?
@@ -214,7 +230,11 @@ export function buildConversionPlan(source: LegacySource): ConversionPlan {
   const groupId = randomUUID();
   const roundByLegacy = new Map(source.rounds.map(round => [round.id as string, randomUUID()]));
   const seriesByLegacy = new Map(source.series.map(series => [series.id as string, randomUUID()]));
-  const gameByLegacy = new Map(source.games.map(game => [game.id as string, randomUUID()]));
+  // Organizer actions are administrative evidence attached to a series, not
+  // played games. Their authoritative outcome is already stored on the series.
+  const gamesToMigrate = source.games.filter(game => !game.organizer_action);
+  const administrativeGames = source.games.filter(game => Boolean(game.organizer_action));
+  const gameByLegacy = new Map(gamesToMigrate.map(game => [game.id as string, randomUUID()]));
 
   if (Number(source.tournament.competition_model_version) !== 1) errors.push('Tournament is not a legacy version 1 competition');
   if (source.tournament.status !== 'finished') errors.push('Only finished legacy tournaments can be converted');
@@ -287,10 +307,12 @@ export function buildConversionPlan(source: LegacySource): ConversionPlan {
   const pairCounts = new Map<string, number>();
   const seriesByRound = new Map<string, any[]>();
   const gamesBySeries = new Map<string, any[]>();
+  const administrativeGamesBySeries = new Map<string, any[]>();
   for (const game of source.games) {
-    const values = gamesBySeries.get(game.tournament_round_match_id) || [];
+    const target = game.organizer_action ? administrativeGamesBySeries : gamesBySeries;
+    const values = target.get(game.tournament_round_match_id) || [];
     values.push(game);
-    gamesBySeries.set(game.tournament_round_match_id, values);
+    target.set(game.tournament_round_match_id, values);
   }
   for (const series of source.series) {
     const values = seriesByRound.get(series.round_id) || [];
@@ -320,6 +342,7 @@ export function buildConversionPlan(source: LegacySource): ConversionPlan {
     }
 
     const games = gamesBySeries.get(series.id) || [];
+    const administrativeSeriesGames = administrativeGamesBySeries.get(series.id) || [];
     const player1GameWins = games.filter(game => game.winner_id === series.player1_id).length;
     const player2GameWins = games.filter(game => game.winner_id === series.player2_id).length;
     if (games.some(game => !game.winner_id || ![series.player1_id, series.player2_id].includes(game.winner_id))) {
@@ -328,18 +351,37 @@ export function buildConversionPlan(source: LegacySource): ConversionPlan {
     if (games.some(game => game.match_status !== 'completed')) {
       errors.push(`Series ${series.id} contains a game that is not completed`);
     }
-    if (games.some(game => unorderedPair(game.player1_id, game.player2_id) !== unorderedPair(series.player1_id, series.player2_id))) {
+    if ([...games, ...administrativeSeriesGames].some(game =>
+      unorderedPair(game.player1_id, game.player2_id) !== unorderedPair(series.player1_id, series.player2_id)
+    )) {
       errors.push(`Series ${series.id} contains a game whose entries do not match the series`);
     }
     if (games.some(game => game.loser_id && game.loser_id !== (game.winner_id === series.player1_id ? series.player2_id : series.player1_id))) {
       errors.push(`Series ${series.id} contains a game with an inconsistent loser`);
     }
-    if (player1GameWins !== Number(series.player1_wins) || player2GameWins !== Number(series.player2_wins)) {
-      errors.push(`Series ${series.id} game wins do not match its legacy counters`);
+    if (administrativeSeriesGames.some(game =>
+      !['organizer_win', 'organizer_loss'].includes(game.organizer_action)
+      || game.match_status !== 'completed'
+    )) {
+      errors.push(`Series ${series.id} contains an unsupported administrative game row`);
     }
-    if (games.length !== player1GameWins + player2GameWins) {
-      errors.push(`Series ${series.id} contains non-completed games`);
+    const seriesPlayer1Wins = Number(series.player1_wins);
+    const seriesPlayer2Wins = Number(series.player2_wins);
+    if (player1GameWins > seriesPlayer1Wins || player2GameWins > seriesPlayer2Wins) {
+      errors.push(`Series ${series.id} has fewer legacy counter wins than its played games`);
     }
+    if (administrativeSeriesGames.length === 0
+      && (player1GameWins !== seriesPlayer1Wins || player2GameWins !== seriesPlayer2Wins)) {
+      errors.push(`Series ${series.id} played game wins do not match its legacy counters`);
+    }
+    const winnerCounter = series.winner_id === series.player1_id ? seriesPlayer1Wins : seriesPlayer2Wins;
+    const loserCounter = series.winner_id === series.player1_id ? seriesPlayer2Wins : seriesPlayer1Wins;
+    if (winnerCounter <= loserCounter) {
+      errors.push(`Series ${series.id} counters do not support its declared winner`);
+    }
+  }
+  if (administrativeGames.length) {
+    warnings.push(`${administrativeGames.length} organizer action rows will remain in legacy history but will not be represented as played v2 games`);
   }
 
   let cycleCount: 1 | 2 | null = null;
@@ -482,7 +524,7 @@ export function buildConversionPlan(source: LegacySource): ConversionPlan {
   }
 
   const gamesByMatchId = new Map<string, any[]>();
-  for (const game of source.games) {
+  for (const game of gamesToMigrate) {
     if (!game.match_id) continue;
     const values = gamesByMatchId.get(game.match_id) || [];
     values.push(game);
@@ -491,7 +533,7 @@ export function buildConversionPlan(source: LegacySource): ConversionPlan {
   const replayTargets: Array<{ replayId: string; gameId: string }> = [];
   for (const replay of source.replays) {
     const directGame = replay.tournament_match_id
-      ? source.games.find(game => game.id === replay.tournament_match_id)
+      ? gamesToMigrate.find(game => game.id === replay.tournament_match_id)
       : undefined;
     const matchCandidates = replay.match_id ? gamesByMatchId.get(replay.match_id) || [] : [];
     const seriesCandidates = replay.tournament_round_match_id
@@ -516,6 +558,7 @@ export function buildConversionPlan(source: LegacySource): ConversionPlan {
 
   const gameById = new Map(source.games.map(game => [game.id, game]));
   const scheduleTargets: Array<{ proposalId: string; seriesId: string }> = [];
+  const legacySeriesWithProposal = new Set<string>();
   for (const proposal of source.schedules) {
     const legacySeriesIds = new Set<string>();
     if (proposal.tournament_round_match_id && seriesByLegacy.has(proposal.tournament_round_match_id)) {
@@ -534,7 +577,37 @@ export function buildConversionPlan(source: LegacySource): ConversionPlan {
         errors.push(`Schedule proposal ${proposal.id} already points to a different phase-engine series`);
       }
       scheduleTargets.push({ proposalId: proposal.id, seriesId: targetSeries });
+      legacySeriesWithProposal.add(legacySeriesId!);
     }
+  }
+
+  const participantUserIds = new Set(source.participants.map(participant => participant.user_id));
+  const embeddedScheduleTargets: EmbeddedScheduleTarget[] = [];
+  for (const series of source.series.filter(value => value.scheduled_datetime)) {
+    if (legacySeriesWithProposal.has(series.id)) continue;
+    if (!series.scheduled_by_player_id || !participantUserIds.has(series.scheduled_by_player_id)) {
+      errors.push(`Embedded schedule on series ${series.id} has no valid proposing participant`);
+      continue;
+    }
+    if (!['confirmed', 'pending_confirmation'].includes(series.scheduled_status)) {
+      errors.push(`Embedded schedule on series ${series.id} has unsupported status ${series.scheduled_status}`);
+      continue;
+    }
+    embeddedScheduleTargets.push({
+      proposalId: randomUUID(),
+      slotId: randomUUID(),
+      legacySeriesId: series.id,
+      seriesId: seriesByLegacy.get(series.id)!,
+      proposedByUserId: series.scheduled_by_player_id,
+      scheduledDatetime: series.scheduled_datetime,
+      legacyStatus: series.scheduled_status,
+      // The legacy row did not persist proposal creation time. Its last known
+      // scheduling event is the narrowest non-invented timestamp available.
+      proposedAt: series.scheduled_confirmed_at || series.updated_at || series.created_at,
+    });
+  }
+  if (embeddedScheduleTargets.length) {
+    warnings.push(`${embeddedScheduleTargets.length} embedded legacy schedules will be materialized as v2 proposals with one slot each`);
   }
 
   const legacyRanking = entities.map(entity => Number(entity.source.tournament_ranking));
@@ -598,10 +671,13 @@ export function buildConversionPlan(source: LegacySource): ConversionPlan {
     roundByLegacy,
     seriesByLegacy,
     gameByLegacy,
+    gamesToMigrate,
+    administrativeGameCount: administrativeGames.length,
     standings,
     derivedByes,
     replayTargets,
     scheduleTargets,
+    embeddedScheduleTargets,
     errors,
     warnings,
   };
@@ -630,13 +706,19 @@ function publicReport(source: LegacySource, plan: ConversionPlan, applied: boole
     sourceCounts: {
       competitionEntries: plan.entities.length,
       registrations: source.participants.length,
+      replacementHistoryRows: source.participants.filter(participant =>
+        participant.participation_status === 'replaced' || participant.requested_replacement_of_id
+      ).length,
       rounds: source.rounds.length,
       series: source.series.length,
-      games: source.games.length,
+      gameRows: source.games.length,
+      playedGamesToMigrate: plan.gamesToMigrate.length,
+      administrativeGameRowsRetainedAsLegacyEvidence: plan.administrativeGameCount,
       byesStored: source.byes.length,
       byesDerived: plan.derivedByes.length,
       replays: source.replays.length,
-      scheduleProposals: source.schedules.length,
+      existingScheduleProposals: source.schedules.length,
+      embeddedSchedulesToMaterialize: plan.embeddedScheduleTargets.length,
     },
     standings: plan.standings.map(standing => {
       const entity = plan.entities.find(value => value.entityId === standing.entityId);
@@ -654,7 +736,8 @@ function publicReport(source: LegacySource, plan: ConversionPlan, applied: boole
     }),
     mappedLinks: {
       replays: plan.replayTargets.length,
-      scheduleProposals: plan.scheduleTargets.length,
+      existingScheduleProposals: plan.scheduleTargets.length,
+      materializedScheduleProposals: plan.embeddedScheduleTargets.length,
     },
     warnings: plan.warnings,
     errors: plan.errors,
@@ -824,7 +907,7 @@ async function insertConversion(connection: PoolConnection, source: LegacySource
           );
         }
       }
-      const legacyGames = source.games.filter(game => game.tournament_round_match_id === series.id);
+      const legacyGames = plan.gamesToMigrate.filter(game => game.tournament_round_match_id === series.id);
       for (const [gameIndex, game] of legacyGames.entries()) {
         const winner = plan.entryByEntity.get(game.winner_id)!;
         // Derive the loser from the validated series pair. This avoids carrying
@@ -876,6 +959,26 @@ async function insertConversion(connection: PoolConnection, source: LegacySource
       [schedule.seriesId, schedule.proposalId]
     );
   }
+  for (const schedule of plan.embeddedScheduleTargets) {
+    const migratedStatus = schedule.legacyStatus === 'confirmed' ? 'confirmed' : 'pending';
+    await connection.execute(
+      `INSERT INTO match_schedule_proposals
+         (id, tournament_series_id, proposed_by_user_id, proposed_at, status,
+          user_id, challenge_mode, visibility, notes, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'tournament', 'private', ?, ?, ?)`,
+      [schedule.proposalId, schedule.seriesId, schedule.proposedByUserId,
+        schedule.proposedAt, migratedStatus, schedule.proposedByUserId,
+        'Migrated from an embedded legacy series schedule; individual confirmation history was not available.',
+        schedule.proposedAt, schedule.proposedAt]
+    );
+    await connection.execute(
+      `INSERT INTO match_schedule_slots
+         (id, proposal_id, slot_datetime, slot_duration_minutes, status, created_at)
+       VALUES (?, ?, ?, 30, ?, ?)`,
+      [schedule.slotId, schedule.proposalId, schedule.scheduledDatetime,
+        migratedStatus, schedule.proposedAt]
+    );
+  }
 }
 
 async function reconcileConversion(connection: PoolConnection, source: LegacySource, plan: ConversionPlan): Promise<string[]> {
@@ -891,7 +994,7 @@ async function reconcileConversion(connection: PoolConnection, source: LegacySou
     ['rounds', `SELECT COUNT(*) AS count FROM tournament_phase_rounds WHERE group_id = ?`, source.rounds.length],
     ['series', `SELECT COUNT(*) AS count FROM tournament_series series JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id WHERE rounds.group_id = ?`, source.series.length],
     ['series slots', `SELECT COUNT(*) AS count FROM tournament_series_slots slots JOIN tournament_series series ON series.id = slots.series_id JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id WHERE rounds.group_id = ?`, source.series.length * 2],
-    ['games', `SELECT COUNT(*) AS count FROM tournament_games games JOIN tournament_series series ON series.id = games.series_id JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id WHERE rounds.group_id = ?`, source.games.length],
+    ['games', `SELECT COUNT(*) AS count FROM tournament_games games JOIN tournament_series series ON series.id = games.series_id JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id WHERE rounds.group_id = ?`, plan.gamesToMigrate.length],
     ['byes', `SELECT COUNT(*) AS count FROM tournament_byes byes JOIN tournament_phase_rounds rounds ON rounds.id = byes.round_id WHERE rounds.group_id = ?`, plan.derivedByes.length],
   ];
   for (const [label, sql, expected] of countChecks) {
@@ -1043,21 +1146,25 @@ async function reconcileConversion(connection: PoolConnection, source: LegacySou
   }
   checks.push(`series slot provenance: ${convertedSlots.length} exact rows`);
 
-  const convertedGames = source.games.length
+  const convertedGames = plan.gamesToMigrate.length
     ? await rows(
       connection,
-      `SELECT id, series_id, entry1_id, entry2_id, winner_entry_id, loser_entry_id, match_id
-       FROM tournament_games WHERE id IN (${source.games.map(() => '?').join(',')})`,
-      source.games.map(game => plan.gameByLegacy.get(game.id))
+      `SELECT id, series_id, game_number, entry1_id, entry2_id, winner_entry_id, loser_entry_id, match_id
+       FROM tournament_games WHERE id IN (${plan.gamesToMigrate.map(() => '?').join(',')})`,
+      plan.gamesToMigrate.map(game => plan.gameByLegacy.get(game.id))
     )
     : [];
   const legacySeriesById = new Map(source.series.map(series => [series.id, series]));
-  for (const legacy of source.games) {
+  const gameNumberBySeries = new Map<string, number>();
+  for (const legacy of plan.gamesToMigrate) {
     const series = legacySeriesById.get(legacy.tournament_round_match_id)!;
     const loserEntityId = legacy.winner_id === series.player1_id ? series.player2_id : series.player1_id;
     const actual = convertedGames.find(game => game.id === plan.gameByLegacy.get(legacy.id));
+    const expectedGameNumber = (gameNumberBySeries.get(legacy.tournament_round_match_id) || 0) + 1;
+    gameNumberBySeries.set(legacy.tournament_round_match_id, expectedGameNumber);
     if (!actual
       || actual.series_id !== plan.seriesByLegacy.get(legacy.tournament_round_match_id)
+      || numberValue(actual.game_number) !== expectedGameNumber
       || actual.entry1_id !== plan.entryByEntity.get(series.player1_id)
       || actual.entry2_id !== plan.entryByEntity.get(series.player2_id)
       || actual.winner_entry_id !== plan.entryByEntity.get(legacy.winner_id)
@@ -1066,7 +1173,8 @@ async function reconcileConversion(connection: PoolConnection, source: LegacySou
       throw new Error(`Game reconciliation failed for legacy game ${legacy.id}`);
     }
   }
-  checks.push(`game outcomes and ranked links: ${convertedGames.length} exact rows`);
+  checks.push(`played game outcomes and ranked links: ${convertedGames.length} exact rows`);
+  checks.push(`administrative legacy game rows intentionally not copied: ${plan.administrativeGameCount}`);
 
   if (plan.replayTargets.length) {
     const replayIds = plan.replayTargets.map(replay => replay.replayId);
@@ -1096,7 +1204,40 @@ async function reconcileConversion(connection: PoolConnection, source: LegacySou
       }
     }
   }
-  checks.push(`schedule proposals: ${plan.scheduleTargets.length}`);
+  checks.push(`existing schedule proposals: ${plan.scheduleTargets.length}`);
+
+  if (plan.embeddedScheduleTargets.length) {
+    const proposalIds = plan.embeddedScheduleTargets.map(schedule => schedule.proposalId);
+    const linked = await rows(
+      connection,
+      `SELECT proposals.id, proposals.tournament_series_id, proposals.proposed_by_user_id,
+              proposals.proposed_at, proposals.status,
+              slots.id AS slot_id, slots.slot_datetime, slots.status AS slot_status,
+              (SELECT COUNT(*) FROM match_schedule_confirmations confirmations
+               WHERE confirmations.proposal_id = proposals.id) AS confirmation_count
+       FROM match_schedule_proposals proposals
+       JOIN match_schedule_slots slots ON slots.proposal_id = proposals.id
+       WHERE proposals.id IN (${proposalIds.map(() => '?').join(',')})`,
+      proposalIds
+    );
+    const timestamp = (value: any): number => new Date(value).getTime();
+    for (const expected of plan.embeddedScheduleTargets) {
+      const actual = linked.find(proposal => proposal.id === expected.proposalId);
+      const expectedStatus = expected.legacyStatus === 'confirmed' ? 'confirmed' : 'pending';
+      if (!actual
+        || actual.tournament_series_id !== expected.seriesId
+        || actual.proposed_by_user_id !== expected.proposedByUserId
+        || actual.status !== expectedStatus
+        || actual.slot_id !== expected.slotId
+        || actual.slot_status !== expectedStatus
+        || timestamp(actual.proposed_at) !== timestamp(expected.proposedAt)
+        || timestamp(actual.slot_datetime) !== timestamp(expected.scheduledDatetime)
+        || numberValue(actual.confirmation_count) !== 0) {
+        throw new Error(`Materialized schedule reconciliation failed for legacy series ${expected.legacySeriesId}`);
+      }
+    }
+  }
+  checks.push(`materialized embedded schedules: ${plan.embeddedScheduleTargets.length} exact proposals and slots`);
   return checks;
 }
 
