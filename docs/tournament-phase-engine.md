@@ -47,6 +47,15 @@ The expansion migration is intentionally reversible at application level by swit
 
 Before migrating a retained legacy tournament, run the read-only audit with an explicit deployment environment: `npm run audit:tournament-migration:test -- --tournament=<uuid>` in TEST or `npm run audit:tournament-migration:production -- --tournament=<uuid>` in production. The report never mutates tournament data.
 
+The legacy converter is deliberately limited to the two retained production formats: completed version 1 team leagues become one- or two-cycle round-robin phases, and completed version 1 individual elimination tournaments become single-elimination brackets. League elimination and individual round-robin combinations are rejected. It preserves registrations, copies rounds, series, games, rankings and tiebreakers, keeps ranked `matches` links, and adds version 2 replay and scheduling links without removing their legacy links. For elimination, it reconstructs each round from actual winners and byes, records bracket slot provenance, and materializes only champion and runner-up so lower positions continue to use the phase engine's elimination-round and game-margin rules. Any incomplete, inconsistent, ambiguous, or already partially converted history blocks the conversion.
+
+Run conversion as a two-step operation:
+
+1. Build the backend and run `npm run test:tournament-migration`, then generate a read-only reconciliation plan with `npm run migrate:tournament:legacy:test -- --tournament=<uuid>` in TEST or `npm run migrate:tournament:legacy:production -- --tournament=<uuid>` in production. Dry-run is the default and rolls back its transaction.
+2. After reviewing a plan with no errors, apply it with the same environment-specific command plus `--apply --confirm=<same-uuid>`. The UUID confirmation prevents accidental writes to a different tournament.
+
+Apply mode locks the legacy tournament row, writes the complete version 2 graph in one transaction, reconciles every copied count, standing, series result, game result, ranked match link, replay link, and schedule link, and changes `competition_model_version` only after all checks pass. Any failure rolls back the complete operation. Retain a database backup and the dry-run JSON report as release evidence even though legacy rows are not deleted.
+
 ## Deferred streaming scope
 
 Streams remain a low-priority follow-up. The intended model attaches multiple stream records to a scheduled series, game, or broad round time window and introduces a streamer role. No stream field is embedded in a round or game because a round can span days and may have several simultaneous broadcasts.

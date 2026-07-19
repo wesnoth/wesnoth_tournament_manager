@@ -16,10 +16,11 @@ async function main(): Promise<void> {
     console.error('Tournament not found');
     process.exitCode = 1;
   } else {
-    const [legacyRounds, legacySeries, legacyGames, replayLinks, schedules] = await Promise.all([
+    const [legacyRounds, legacySeries, legacyGames, legacyByes, replayLinks, schedules] = await Promise.all([
       query(`SELECT COUNT(*) AS count FROM tournament_rounds WHERE tournament_id = ?`, [tournamentId]),
       query(`SELECT COUNT(*) AS count FROM tournament_round_matches WHERE tournament_id = ?`, [tournamentId]),
       query(`SELECT COUNT(*) AS count FROM tournament_matches WHERE tournament_id = ?`, [tournamentId]),
+      query(`SELECT COUNT(*) AS count FROM tournament_round_byes WHERE tournament_id = ?`, [tournamentId]),
       query(`SELECT COUNT(*) AS count FROM replays WHERE tournament_id = ? OR tournament_round_match_id IN (SELECT id FROM tournament_round_matches WHERE tournament_id = ?)`, [tournamentId, tournamentId]),
       // The historical scheduling table inherited utf8mb4_unicode_ci while
       // tournament UUIDs use utf8mb4_general_ci. Make the read-only comparison
@@ -34,18 +35,24 @@ async function main(): Promise<void> {
       ),
     ]);
     const tournament = tournamentResult.rows[0];
+    const isTeamLeague = tournament.tournament_type === 'league' && tournament.tournament_mode === 'team';
+    const isIndividualElimination = tournament.tournament_type === 'elimination'
+      && ['ranked', 'unranked'].includes(tournament.tournament_mode);
     const report = {
       tournament,
       legacy: {
         rounds: Number(legacyRounds.rows[0].count),
         series: Number(legacySeries.rows[0].count),
         games: Number(legacyGames.rows[0].count),
+        byes: Number(legacyByes.rows[0].count),
         replayLinks: Number(replayLinks.rows[0].count),
         scheduleProposals: Number(schedules.rows[0].count),
       },
-      recommendation: tournament.tournament_type === 'league' && tournament.tournament_mode === 'team'
-        ? 'Candidate for round-robin migration. Compare every team, round, series result, replay link, and schedule before switching the model version.'
-        : 'Prefer purge/recreation unless this tournament has business value.',
+      recommendation: isTeamLeague
+        ? 'Candidate for team round-robin migration. Compare every team, round, series result, bye, replay link, and schedule before switching the model version.'
+        : isIndividualElimination
+          ? 'Candidate for individual single-elimination migration. Reconstruct and compare every bracket path, bye, series result, replay link, and schedule before switching the model version.'
+          : 'Unsupported by the focused converter; prefer purge/recreation unless this tournament has business value.',
       safeForAutomaticMigration: false,
       reason: 'Historical result and scheduling mappings require an explicit reconciliation report; this audit never mutates data.',
     };
