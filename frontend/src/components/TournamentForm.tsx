@@ -416,9 +416,9 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
               data-help-id="field-tournament-max-participants"
               type="number"
               placeholder={t('label_max_participants', 'Max Participants')}
-              min="2"
+              min="0"
               max="256"
-              value={formData.max_participants || ''}
+              value={formData.max_participants ?? ''}
               onChange={(e) => onFormDataChange({ 
                 ...formData, 
                 max_participants: e.target.value ? parseInt(e.target.value) : null 

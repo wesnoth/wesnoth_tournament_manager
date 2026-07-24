@@ -59,9 +59,9 @@ function validateTournamentConfiguration(config: TournamentConfiguration): strin
   }
   if (
     config.max_participants !== null &&
-    (!Number.isInteger(config.max_participants) || config.max_participants < 2 || config.max_participants > 256)
+    (!Number.isInteger(config.max_participants) || config.max_participants < 0 || config.max_participants === 1 || config.max_participants > 256)
   ) {
-    return 'Max participants must be an integer between 2 and 256';
+    return 'Max participants must be 0 or an integer between 2 and 256';
   }
   if (!Number.isInteger(config.round_duration_days) || config.round_duration_days < 1 || config.round_duration_days > 365) {
     return 'Round duration must be an integer between 1 and 365 days';
@@ -205,10 +205,11 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Invalid scheduled_start_at date' });
     }
 
-    // max_participants is now optional - can be set during tournament preparation
-    // If provided, must be greater than 0
-    if (max_participants !== null && max_participants !== undefined && max_participants <= 0) {
-      return res.status(400).json({ error: 'Max participants must be greater than 0 if provided' });
+    // A tournament must declare its capacity at creation time. Zero is the
+    // explicit unlimited value; null/omitted means the organizer did not
+    // provide the required reference value.
+    if (max_participants === null || max_participants === undefined) {
+      return res.status(400).json({ error: 'Max participants is required; use 0 for unlimited' });
     }
 
     // Validate round configuration - only validate if max_participants is set
@@ -273,6 +274,10 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
 
     if (factionIds.length !== (unranked_factions || []).length || mapIds.length !== (unranked_maps || []).length) {
       return res.status(400).json({ error: 'Tournament assets contain invalid or duplicate identifiers' });
+    }
+
+    if (factionIds.length === 0 || mapIds.length === 0) {
+      return res.status(400).json({ error: 'At least one faction and one map must be selected' });
     }
 
     if (factionIds.length > 0) {

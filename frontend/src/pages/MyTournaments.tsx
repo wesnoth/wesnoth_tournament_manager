@@ -70,6 +70,19 @@ const MyTournaments: React.FC = () => {
       return;
     }
 
+    // Keep the client-side rule aligned with the API: zero means unlimited,
+    // while one and values outside the supported capacity range are invalid.
+    if (formData.max_participants === null || formData.max_participants === undefined ||
+        formData.max_participants === 1 || formData.max_participants < 0 || formData.max_participants > 256) {
+      setError(t('error_max_participants_required', 'Max participants is required: use 0 for unlimited or a value from 2 to 256'));
+      return;
+    }
+
+    if (unrankedFactions.length === 0 || unrankedMaps.length === 0) {
+      setError(t('error_tournament_assets_required', 'Select at least one faction and one map'));
+      return;
+    }
+
     try {
       const payload: TournamentCreatePayload = {
         ...formData,
