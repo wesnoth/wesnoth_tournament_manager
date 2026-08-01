@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { adminService } from '../services/api';
+import { adminService, featureService } from '../services/api';
 import MainLayout from '../components/MainLayout';
 import { SimulateMatchPanel } from '../components/TestSimulationControls';
 
@@ -83,6 +83,7 @@ const AdminReplays: React.FC = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [showSimulation, setShowSimulation] = useState(false);
+  const [simulationEnabled, setSimulationEnabled] = useState(false);
   
   // System settings state
   const [systemSettings, setSystemSettings] = useState<any[]>([]);
@@ -102,6 +103,14 @@ const AdminReplays: React.FC = () => {
   useEffect(() => {
     if (isAuthenticated && isAdmin) fetchSystemSettings();
   }, [isAuthenticated, isAdmin]);
+
+  useEffect(() => {
+    if (isAuthenticated && (isAdmin || isTournamentModerator)) {
+      featureService.getFeatures()
+        .then((response) => setSimulationEnabled(response.data?.tournament_simulation === true))
+        .catch(() => setSimulationEnabled(false));
+    }
+  }, [isAuthenticated, isAdmin, isTournamentModerator]);
 
   const fetchReplays = async () => {
     try {
@@ -264,7 +273,7 @@ const AdminReplays: React.FC = () => {
           <h1 className="text-3xl font-bold text-gray-800">
             {t('admin.replays_title', 'Manage Replays')}
           </h1>
-          {import.meta.env.MODE === 'test' && (
+          {simulationEnabled && (isAdmin || isTournamentModerator) && (
             <button
               data-help-id="action-open-test-simulate-match"
               onClick={() => setShowSimulation((visible) => !visible)}

@@ -1675,7 +1675,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
         )}
       </div>
 
-      {import.meta.env.MODE === 'test' && isCreator && tournament.status === 'registration_open' && (
+      {isCreator && (isAdmin || isTournamentModerator) && tournament.status === 'registration_open' && (
         <SimulateJoinPanel tournament={tournament} onCompleted={() => fetchTournamentData()} />
       )}
 

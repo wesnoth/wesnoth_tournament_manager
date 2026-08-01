@@ -25,11 +25,17 @@ dotenv.config({ path: envPath });
  * - wesnothd_game_content_info: Content (maps, addons) used in games
  */
 const forumPool = mysql.createPool({
-  host: process.env.FORUM_DB_HOST || process.env.DB_HOST || 'localhost',
-  user: process.env.FORUM_DB_USER || process.env.DB_USER,
-  password: process.env.FORUM_DB_PASSWORD || process.env.DB_PASSWORD,
-  database: process.env.FORUM_DB_NAME || 'forum',
-  port: parseInt(process.env.FORUM_DB_PORT || process.env.DB_PORT || '3306'),
+  // phpBB and wesnothd_* tables share this database. PHPBB_DB_* is the
+  // canonical configuration; FORUM_DB_* remains a backwards-compatible
+  // fallback for older development environments.
+  host: process.env.PHPBB_DB_HOST || process.env.FORUM_DB_HOST || process.env.DB_HOST || 'localhost',
+  user: process.env.PHPBB_DB_USER || process.env.FORUM_DB_USER || process.env.DB_USER,
+  password: process.env.PHPBB_DB_PASSWORD || process.env.FORUM_DB_PASSWORD || process.env.DB_PASSWORD,
+  database: process.env.PHPBB_DB_NAME || process.env.FORUM_DB_NAME || 'forum',
+  port: parseInt(process.env.PHPBB_DB_PORT || process.env.FORUM_DB_PORT || process.env.DB_PORT || '3306'),
+  // Keep SQL timestamp conversion independent of the backend host timezone.
+  // wesnothd_game_info timestamps are exchanged by the integration in UTC.
+  timezone: 'Z',
   waitForConnections: true,
   connectionLimit: 5,
   queueLimit: 0,
@@ -45,6 +51,10 @@ const forumPool = mysql.createPool({
 export async function queryForum(sql: string, values?: any[]): Promise<any[]> {
   const connection = await forumPool.getConnection();
   try {
+    // TIMESTAMP values use the MariaDB session timezone. Force UTC so a
+    // Docker database and a host running in Europe/Madrid compare the same
+    // replay checkpoint.
+    await connection.query("SET time_zone = '+00:00'");
     const [results] = await connection.execute(sql, values || []);
     return results as any[];
   } finally {
@@ -80,7 +90,10 @@ export async function getNewGamesFromForum(
     FROM wesnothd_game_info
     WHERE END_TIME > ?`;
 
-    const params: any[] = [lastCheckTimestamp];
+    // Avoid passing a JavaScript Date, which mysql2 would serialize through
+    // the host's local timezone before comparing it with END_TIME.
+    const checkpointUtc = lastCheckTimestamp.toISOString().slice(0, 19).replace('T', ' ');
+    const params: any[] = [checkpointUtc];
 
     // Filter by version(s) if provided
     // Supports both single version string and array of versions
@@ -91,18 +104,20 @@ export async function getNewGamesFromForum(
         : [wesnothVersions];
 
       if (versions.length > 0) {
-        // Build OR condition: INSTANCE_VERSION LIKE '1.18.%' OR INSTANCE_VERSION LIKE '1.19.%'
+        // Match exact versions, patch releases (1.19.x), and development
+        // variants (1.19-dev) when a base version such as 1.19 is configured.
         // Also handle versions without patch part (e.g., "1.18" matches "1.18" exactly)
         const conditions = versions.map(
           version =>
-            `(INSTANCE_VERSION = ? OR INSTANCE_VERSION LIKE ?)`
+            `(INSTANCE_VERSION = ? OR INSTANCE_VERSION LIKE ? OR INSTANCE_VERSION LIKE ?)`
         );
         query_str += ` AND (${conditions.join(' OR ')})`;
 
-        // Add both exact match and LIKE pattern for each version
+        // Add exact, patch-release, and development-variant patterns for each version.
         for (const version of versions) {
           params.push(version);
           params.push(`${version}.%`);
+          params.push(`${version}-%`);
         }
       }
     }

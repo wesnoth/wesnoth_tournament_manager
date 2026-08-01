@@ -4,7 +4,7 @@
  * 
  * Purpose: Background job that runs every 60 seconds to:
  * 1. Query forum database (wesnothd_game_info) for new games
- * 2. Filter by tournament addon presence
+ * 2. Accept the legacy Ranked add-on or new ranked/tournament content markers
  * 3. Insert new games into replays table as pending parse
  * 4. Update last_check_timestamp in system_settings
  * 
@@ -21,8 +21,7 @@ import {
   getNewGamesFromForum, 
   getGamePlayers, 
   getGameContent,
-  hasGameTournamentAddon,
-  getTournamentAddonVersion
+  hasGameTournamentAddon
 } from '../config/forumDatabase.js';
 import { parseWesnothVersions, getBaseVersion } from '../utils/versionParser.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -116,27 +115,18 @@ export class SyncGamesFromForumJob {
 
       console.log(`🌐 [FORUM SYNC] Found ${gamesResult.length} new games from forum`);
 
-      // The "Ranked" addon is used to mark games for auto-reporting
-      // This includes both ranked global matches and tournament-specific matches
+      // Keep the legacy add-on marker while accepting the new server-side
+      // content metadata during the migration to the new client protocol.
       const rankedAddonName = 'Ranked';
 
-      let processedWithAddon = 0;
-      let skippedWithoutAddon = 0;
+      let processedWithMarker = 0;
+      let skippedWithoutMarker = 0;
       let skippedDuplicateNicknames = 0;
-      let latestGameTimestamp = lastCheckTimestamp; // Track the newest game processed
-
       // Process each game
       for (const game of gamesResult) {
         try {
           const instanceUuid = game.INSTANCE_UUID;
           const gameId = game.GAME_ID;
-
-          // Track the latest game timestamp for updating sync checkpoint
-          // Do this for EVERY game, regardless of whether it has addon or is processed
-          const gameEndTime = new Date(game.end_time);
-          if (gameEndTime > latestGameTimestamp) {
-            latestGameTimestamp = gameEndTime;
-          }
 
           // Check if game already exists in replays table
           const existsResult = await query(
@@ -149,16 +139,33 @@ export class SyncGamesFromForumJob {
             continue; // Skip silently if already processed
           }
 
-          // Check if tournament addon is present in this game
+          // The legacy Ranked add-on remains valid. The new client writes
+          // ranked=yes or tournament=<id> into game content metadata.
           const hasRankedAddon = await hasGameTournamentAddon(instanceUuid, gameId, rankedAddonName);
+          const gameContent = await getGameContent(instanceUuid, gameId);
+          const normalize = (value: unknown): string => String(value ?? '').trim().toLowerCase();
+          const hasRankedMetadata = gameContent.some(content =>
+            normalize(content.TYPE) === 'ranked' && normalize(content.ID) === 'yes'
+          );
+          const hasTournamentMetadata = gameContent.some(content => {
+            if(normalize(content.TYPE) !== 'tournament') {
+              return false;
+            }
+            const tournamentId = normalize(content.ID);
+            return tournamentId !== '' && tournamentId !== 'none';
+          });
 
-          if (!hasRankedAddon) {
-            skippedWithoutAddon++;
-            continue; // Skip silently if no addon (don't log to reduce noise)
+          if(!hasRankedAddon && !hasRankedMetadata && !hasTournamentMetadata) {
+            skippedWithoutMarker++;
+            continue; // Skip games unrelated to ranked/tournament processing.
           }
 
-          // Log only games that have the addon
-          console.log(`🌐 [FORUM SYNC] Processing: ${game.game_name} (${instanceUuid}:${gameId})`);
+          const markers = [
+            hasRankedAddon ? 'Ranked addon' : '',
+            hasRankedMetadata ? 'ranked=yes' : '',
+            hasTournamentMetadata ? 'tournament metadata' : ''
+          ].filter(Boolean).join(', ');
+          console.log(`🌐 [FORUM SYNC] Processing: ${game.game_name} (${instanceUuid}:${gameId}) [${markers}]`);
 
           // Get game players and check for duplicate nicknames
           const playersResult = await getGamePlayers(instanceUuid, gameId);
@@ -171,9 +178,6 @@ export class SyncGamesFromForumJob {
             skippedDuplicateNicknames++;
             continue;
           }
-
-          // Get Ranked addon version
-          const addonVersion = await getTournamentAddonVersion(instanceUuid, gameId, rankedAddonName);
 
           // Create replay record
           const replayId = uuidv4();
@@ -223,7 +227,7 @@ export class SyncGamesFromForumJob {
             ]
           );
 
-          processedWithAddon++;
+          processedWithMarker++;
           console.log(`✅ [FORUM SYNC] Created replay: ${game.game_name}`);
 
         } catch (error) {
@@ -235,12 +239,11 @@ export class SyncGamesFromForumJob {
         }
       }
 
-      console.log(`✅ [FORUM SYNC] Processed ${processedWithAddon} games with addon, ${skippedWithoutAddon} without addon, ${skippedDuplicateNicknames} with duplicate nicknames`);
+      console.log(`✅ [FORUM SYNC] Processed ${processedWithMarker} marked games, ${skippedWithoutMarker} without valid marker, ${skippedDuplicateNicknames} with duplicate nicknames`);
       console.log(`❌ [FORUM SYNC] ${this.errorCount} errors during processing`);
 
-      // Update checkpoint to syncStartTime (not latestGameTimestamp)
-      // This ensures the next sync starts exactly where this one started, with no gaps
-      // latestGameTimestamp is only tracked for logging purposes
+      // Use the cycle start as the checkpoint. Games created while this cycle
+      // was running will be picked up by the next cycle, preventing gaps.
       await this.updateLastCheckTimestamp(syncStartTime);
 
     } catch (error) {
@@ -254,11 +257,11 @@ export class SyncGamesFromForumJob {
 
   /**
    * Update last_check_timestamp in system_settings
-   * @param latestGameTimestamp - Use the latest game's end_time instead of current time
+   * @param checkpointTimestamp - Timestamp at which the sync cycle began
    */
-  private async updateLastCheckTimestamp(latestGameTimestamp: Date = new Date()): Promise<void> {
+  private async updateLastCheckTimestamp(checkpointTimestamp: Date = new Date()): Promise<void> {
     try {
-      const timestamp = latestGameTimestamp.toISOString();
+      const timestamp = checkpointTimestamp.toISOString();
       await query(
         `UPDATE system_settings 
          SET setting_value = ?, updated_at = NOW()
@@ -275,9 +278,9 @@ export class SyncGamesFromForumJob {
    * Format date as YYYY/MM/DD for replay URL
    */
   private formatDate(date: Date): string {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
     return `${year}/${month}/${day}`;
   }
 

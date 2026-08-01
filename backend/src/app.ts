@@ -59,6 +59,16 @@ app.use(cors({
   credentials: true,
 }));
 
+// Expose only this non-sensitive feature flag to the frontend. The simulator
+// routes below still enforce authentication and authorization independently.
+app.get('/api/config/features', (_req, res) => {
+  res.json({
+    tournament_simulation: ['on', 'true', '1'].includes(
+      String(process.env.TOURNAMENT_SIMULATION || '').toLowerCase()
+    ),
+  });
+});
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -87,7 +97,7 @@ app.use('/api/replays', replaysRoutes);
 app.use('/api/tournament-scheduling', schedulingRoutes);
 app.use('/api/challenges', challengesRoutes);
 app.use('/api/notifications', notificationsRoutes);
-if (process.env.NODE_ENV === 'test') {
+if (['on', 'true', '1'].includes(String(process.env.TOURNAMENT_SIMULATION || '').toLowerCase())) {
   app.use('/api/test-tools', testToolsRoutes);
 }
 

@@ -21,6 +21,7 @@ import {
 } from '../services/statisticsCalculator.js';
 import { updateTournamentRoundMatch } from '../services/matchCreationService.js';
 import { validateAndCorrectFactions, handlePostConfirmation } from '../services/replayConfirmationService.js';
+import { recordPhaseGameResult } from '../tournament-engine/competitionProgression.js';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
 import multer from 'multer';
 import path from 'path';
@@ -1563,7 +1564,7 @@ router.post('/report-confidence-1-replay', authMiddleware, async (req: AuthReque
     console.log(`📥 [CONFIDENCE-1] Fetching replay from database...`);
     const replayResult = await query(
       `SELECT id, parse_summary, integration_confidence, parsed,
-              game_id, wesnoth_version, instance_uuid, tournament_round_match_id,
+              game_id, wesnoth_version, instance_uuid, tournament_round_match_id, tournament_game_id,
               replay_url, tournament_id
        FROM replays WHERE id = ? AND integration_confidence = 1 AND parsed = 1 AND parse_status NOT IN ('rejected', 'due')`,
       [replayId]
@@ -1633,6 +1634,53 @@ router.post('/report-confidence-1-replay', authMiddleware, async (req: AuthReque
     }
 
     console.log(`✅ [CONFIDENCE-1] Security check passed - user is a participant (side ${currentUserInReplay.side_number})`);
+
+    // Phase-engine team games are confirmed on tournament_games. Keep them out
+    // of the legacy match/ELO flow, which requires tournament_round_match_id.
+    if (replay.tournament_game_id && parseSummary?.detectedTournament?.tournament_mode === 'team') {
+      const detectedTeams = parseSummary.detectedTeams || {};
+      const userTeam = Object.values(detectedTeams).find((team: any) =>
+        (team.members || []).some((member: string) => member.toLowerCase() === currentUserNickname)
+      ) as any;
+      const opponentTeam = Object.values(detectedTeams).find((team: any) => team.team_id !== userTeam?.team_id) as any;
+      if (!userTeam || !opponentTeam) {
+        return res.status(400).json({ error: 'Could not determine both tournament teams from replay data' });
+      }
+
+      // detectedTeams is keyed by team_id, while the phase engine expects the
+      // tournament_entries.id stored in tournament_games.entry*_id.
+      const gameEntryResult = await query(
+        `SELECT games.entry1_id, games.entry2_id,
+                entry1.team_id AS entry1_team_id, entry2.team_id AS entry2_team_id
+         FROM tournament_games games
+         JOIN tournament_entries entry1 ON entry1.id = games.entry1_id
+         JOIN tournament_entries entry2 ON entry2.id = games.entry2_id
+         WHERE games.id = ?
+         LIMIT 1`,
+        [replay.tournament_game_id]
+      );
+      const gameEntry = gameEntryResult.rows?.[0];
+      if (!gameEntry) {
+        return res.status(404).json({ error: 'Tournament game entries not found' });
+      }
+
+      const selectedTeamId = winner_choice === 'I won' ? userTeam.team_id : opponentTeam.team_id;
+      const winnerEntryId = selectedTeamId === gameEntry.entry1_team_id
+        ? gameEntry.entry1_id
+        : selectedTeamId === gameEntry.entry2_team_id
+          ? gameEntry.entry2_id
+          : null;
+      if (!winnerEntryId) {
+        return res.status(400).json({ error: 'Selected team is not part of this tournament game' });
+      }
+      const progression = await recordPhaseGameResult(
+        parseSummary.linkedTournamentId || replay.tournament_id,
+        replay.tournament_game_id,
+        winnerEntryId
+      );
+      await query(`UPDATE replays SET parse_status = 'completed', updated_at = NOW() WHERE id = ?`, [replayId]);
+      return res.json({ success: true, status: 'completed', replay_id: replayId, progression });
+    }
 
     // Determine winner/loser based on tournament_match structure
     let winnerId: string = userId;
@@ -2486,11 +2534,12 @@ router.post('/cancel-confidence-1-replay', authMiddleware, async (req: AuthReque
     }
     const currentUserNickname = currentUserResult.rows[0].nickname?.toLowerCase() || '';
 
-    const player1Nickname = forumPlayers[0]?.user_name?.toLowerCase() || '';
-    const player2Nickname = forumPlayers[1]?.user_name?.toLowerCase() || '';
-
-    // Security: user must be one of the 2 players
-    if (currentUserNickname !== player1Nickname && currentUserNickname !== player2Nickname) {
+    // Team replays can contain more than two participants. Any participant
+    // may request cancellation; a different participant must confirm it.
+    const isParticipant = forumPlayers.some(
+      (player: any) => player?.user_name?.toLowerCase() === currentUserNickname
+    );
+    if (!isParticipant) {
       return res.status(403).json({ error: 'You are not a participant in this replay' });
     }
 

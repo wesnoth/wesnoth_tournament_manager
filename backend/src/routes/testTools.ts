@@ -1,7 +1,7 @@
 /**
- * Test-only tools for creating realistic tournament fixtures without replay files.
- * The route is mounted only by app.ts in NODE_ENV=test, and keeps a second guard
- * here so accidental reuse of the router cannot expose mutation endpoints.
+ * Development-only tools for creating realistic tournament fixtures without
+ * replay files. The router is mounted only when TOURNAMENT_SIMULATION is on,
+ * and keeps a second guard here so accidental reuse cannot expose mutations.
  */
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
@@ -16,9 +16,9 @@ const router = Router();
 const TEST_MODES = ['ranked', 'tournament_ranked', 'tournament_unranked', 'tournament_team'] as const;
 type TestMatchMode = typeof TEST_MODES[number];
 
-function requireTestEnvironment(res: any): boolean {
-  if (process.env.NODE_ENV !== 'test') {
-    res.status(404).json({ error: 'Test tools are not available in this environment' });
+function requireSimulationEnabled(res: any): boolean {
+  if (!['on', 'true', '1'].includes(String(process.env.TOURNAMENT_SIMULATION || '').toLowerCase())) {
+    res.status(404).json({ error: 'Tournament simulation is not enabled in this environment' });
     return false;
   }
   return true;
@@ -58,7 +58,7 @@ async function getAssets(tournamentId: string | null, rankedOnly: boolean) {
 }
 
 router.use(authMiddleware, moderatorOrAdminMiddleware, (req, res, next) => {
-  if (requireTestEnvironment(res)) next();
+  if (requireSimulationEnabled(res)) next();
 });
 
 router.get('/users', async (req, res) => {

@@ -99,6 +99,10 @@ export const authService = {
     api.get('/auth/validate-token'),
 };
 
+export const featureService = {
+  getFeatures: () => api.get('/config/features'),
+};
+
 export const userService = {
   getProfile: () => api.get('/users/profile'),
   updateDiscordId: (discordId: string) => api.put('/users/profile/discord', { discord_id: discordId }),

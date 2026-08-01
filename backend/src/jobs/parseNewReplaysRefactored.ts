@@ -1,9 +1,10 @@
 /**
  * Background Job: Parse New Replays (FORUM-FIRST APPROACH)
- * File: backend/src/jobs/parseNewReplaysRefactorized.ts
+ * File: backend/src/jobs/parseNewReplaysRefactored.ts
  * 
  * Data Flow:
- * 1. Query wesnothd_game_content_info for addon confirmation (Ranked addon)
+ * 1. Query wesnothd_game_content_info for the legacy Ranked add-on or the
+ *    new ranked/tournament metadata markers
  * 2. Query wesnothd_game_player_info for player nicknames, sides, factions  
  * 3. Query wesnothd_game_content_info for scenario/map name
  * 4. If forum factions are "Custom" → search replay for actual factions
@@ -14,9 +15,10 @@
  */
 
 import { query } from '../config/database.js';
+import { queryForum } from '../config/forumDatabase.js';
 import ReplayParser from '../services/replayParser.js';
 import { parseRankedReplay, ParsedRankedReplay } from '../utils/replayRankedParser.js';
-import { createMatch, createTournamentUnrankedMatch, updateTournamentRoundMatch } from '../services/matchCreationService.js';
+import { createMatch } from '../services/matchCreationService.js';
 import { checkForumBanlist } from '../services/phpbbAuth.js';
 import { queryPhpbb } from '../config/phpbbDatabase.js';
 import * as fs from 'fs';
@@ -48,6 +50,19 @@ async function findTournamentForGameName(gameName: string, modes: string[]): Pro
   return result.rows.length === 1 ? result.rows[0] : null;
 }
 
+/** Resolve a tournament from the explicit ID written by the Wesnoth server. */
+async function findTournamentById(tournamentId: string, modes: string[]): Promise<any | null> {
+  const modePlaceholders = modes.map(() => '?').join(', ');
+  const result = await query(
+    `SELECT id, name, tournament_mode, tournament_type, competition_model_version
+     FROM tournaments
+     WHERE id = ? AND status = 'in_progress' AND tournament_mode IN (${modePlaceholders})
+     LIMIT 1`,
+    [tournamentId, ...modes]
+  );
+  return (result as any).rows?.[0] || null;
+}
+
 interface UnparsedReplay {
   id: string;
   instance_uuid: string;
@@ -64,6 +79,12 @@ interface UnparsedReplay {
 
 interface ParseSummary {
   forumAddon: any | null;
+  // New server-side markers. These allow processing replays without the
+  // Ranked add-on while the legacy add-on remains supported.
+  forumRankedMarker: boolean;
+  forumTournamentMarker: boolean;
+  forumTournamentId: string | null;
+  forumTournamentGameId: string | null;
   forumPlayers: Array<any>;
   forumMap: string | null;
   forumMapId: string | null;
@@ -93,14 +114,15 @@ interface ParseSummary {
   finalMap: string | null;
   confidenceLevel: 1 | 2;
   matchType: 'ranked' | 'tournament_ranked' | 'tournament_unranked' | 'rejected';
-  // Set when matchType is tournament_* and a matching tournament_round_match is found
+  // Kept null for new-model links; the column remains for old replay records.
   linkedTournamentId: string | null;
   linkedTournamentRoundMatchId: string | null;
   linkedTournamentGameId: string | null;
+  tournamentLinkMethod: 'tournament_game' | 'participants' | null;
   linkedWinnerEntryId: string | null;
   // Cached tournament record found during match type detection (avoid double DB lookup)
   detectedTournament: { id: string; name: string; tournament_mode: string; tournament_type: string; competition_model_version?: number } | null;
-  // Team information for team tournaments (populated during linkToTeamTournament)
+  // Team information used when displaying a team replay awaiting confirmation.
   detectedTeams?: Record<string, {
     team_id: string;
     team_name: string;
@@ -250,9 +272,9 @@ export class ParseNewReplaysRefactorized {
             continue;
           }
 
-          // For tournament matches, link to the specific tournament_round_match
+          // For tournament matches, link to the specific tournament_game.
           if (parseSummary.matchType === 'tournament_ranked' || parseSummary.matchType === 'tournament_unranked') {
-            const linked = await this.linkToTournament(replay, parseSummary);
+            const linked = await this.linkToTournament(parseSummary);
             if (!linked) {
               console.log(`❌ [PARSE] Tournament link failed → REJECTED`);
               await query(
@@ -273,7 +295,7 @@ export class ParseNewReplaysRefactorized {
                tournament_link_method = ?, tournament_linked_at = CURRENT_TIMESTAMP,
                parse_error_message = NULL, parse_summary = ? WHERE id = ?`,
               [parseSummary.confidenceLevel, parseSummary.linkedTournamentId, parseSummary.linkedTournamentRoundMatchId,
-                parseSummary.linkedTournamentGameId, parseSummary.linkedTournamentGameId ? 'participants' : null,
+                parseSummary.linkedTournamentGameId, parseSummary.tournamentLinkMethod,
                 JSON.stringify(parseSummary), replay.id]
             );
             parsedCount++;
@@ -298,28 +320,10 @@ export class ParseNewReplaysRefactorized {
             );
             matchCreateResult = { success: true, matchId: null };
           } else if (parseSummary.matchType === 'tournament_unranked') {
-            // Unranked tournament: insert into tournament_matches only, no ELO/stats update
-            const winnerUser = await this.getUserDataByNickname(parseSummary.replayVictory!.winner_name);
-            if (!winnerUser) {
-              console.error(`❌ [PARSE] Winner user not found for unranked match`);
-              await query(
-                `UPDATE replays SET parse_status = 'error', parsed = 1, parse_error_message = ?, parse_summary = ? WHERE id = ?`,
-                ['Winner user not found', JSON.stringify(parseSummary), replay.id]
-              );
-              errorCount++;
-              continue;
-            }
-
-            // Get loser user for tournament_matches record
-            const loserUser = await this.getUserDataByNickname(parseSummary.replayVictory!.loser_name);
-            const loserId = loserUser?.id || '';
-
-            matchCreateResult = await createTournamentUnrankedMatch({
-              winnerId: winnerUser.id,
-              loserId: loserId,
-              linkedTournamentId: parseSummary.linkedTournamentId!,
-              linkedTournamentRoundMatchId: parseSummary.linkedTournamentRoundMatchId!,
-            });
+            // New-model tournament games are completed through tournament_games.
+            // linkToTournament() rejects a tournament replay that cannot be linked
+            // to a pending game, so reaching this branch indicates inconsistent data.
+            throw new Error('Tournament replay has no linked tournament_game');
           } else {
             matchCreateResult = await this.createMatchFromParseSummary(replay, parseSummary);
             if (matchCreateResult.success && parseSummary.linkedTournamentGameId) {
@@ -349,7 +353,7 @@ export class ParseNewReplaysRefactorized {
                tournament_link_method = ?, tournament_linked_at = CURRENT_TIMESTAMP,
                match_id = ?, parse_error_message = NULL, parse_summary = ? WHERE id = ?`,
               [parseSummary.confidenceLevel, parseSummary.linkedTournamentId, parseSummary.linkedTournamentRoundMatchId,
-                parseSummary.linkedTournamentGameId, parseSummary.linkedTournamentGameId ? 'participants' : null,
+                parseSummary.linkedTournamentGameId, parseSummary.tournamentLinkMethod,
                 replayMatchId, JSON.stringify(parseSummary), replay.id]
             );
             
@@ -431,6 +435,10 @@ export class ParseNewReplaysRefactorized {
   private async parseReplayForumFirst(replay: UnparsedReplay): Promise<ParseSummary> {
     const parseSummary: ParseSummary = {
       forumAddon: null,
+      forumRankedMarker: false,
+      forumTournamentMarker: false,
+      forumTournamentId: null,
+      forumTournamentGameId: null,
       forumPlayers: [],
       forumMap: null,
       forumMapId: null,
@@ -456,44 +464,88 @@ export class ParseNewReplaysRefactorized {
       linkedTournamentId: null,
       linkedTournamentRoundMatchId: null,
       linkedTournamentGameId: null,
+      tournamentLinkMethod: null,
       linkedWinnerEntryId: null,
       detectedTournament: null
     };
 
-    // ======== STEP 1: Query forum for addon ========
-    console.log(`📋 [FORUM] Step 1: Checking for Ranked addon...`);
-    const addonResult = await query(
-      `SELECT addon_id, addon_version FROM forum.wesnothd_game_content_info 
+    // ======== STEP 1: Query forum for competitive markers ========
+    // The Ranked add-on is retained for backwards compatibility. Newer
+    // servers identify competitive games with explicit content records:
+    // TYPE=ranked, ID=yes or TYPE=tournament, ID=<real tournament id>.
+    console.log(`📋 [FORUM] Step 1: Checking competitive game markers...`);
+    const addonResult = await queryForum(
+      `SELECT addon_id, addon_version FROM wesnothd_game_content_info
        WHERE instance_uuid = ? AND game_id = ? AND type = 'modification' AND addon_id = 'Ranked' LIMIT 1`,
       [replay.instance_uuid, replay.game_id]
     );
 
-    if ((addonResult as any).rows?.length > 0) {
-      parseSummary.forumAddon = (addonResult as any).rows[0];
+    const markerResult = await queryForum(
+      `SELECT TYPE AS content_type, ID AS content_id
+       FROM wesnothd_game_content_info
+       WHERE instance_uuid = ? AND game_id = ?
+         AND TYPE IN ('ranked', 'tournament', 'tournament_game')`,
+      [replay.instance_uuid, replay.game_id]
+    );
+
+    const normalizeMarker = (value: unknown): string =>
+      String(value ?? '').trim().toLowerCase();
+    const markerRows = markerResult || [];
+    parseSummary.forumRankedMarker = markerRows.some((content: any) =>
+      normalizeMarker(content.content_type) === 'ranked' &&
+      normalizeMarker(content.content_id) === 'yes'
+    );
+    parseSummary.forumTournamentMarker = markerRows.some((content: any) => {
+      if (normalizeMarker(content.content_type) !== 'tournament') {
+        return false;
+      }
+      const tournamentId = normalizeMarker(content.content_id);
+      return tournamentId !== '' && tournamentId !== 'none';
+    });
+    parseSummary.forumTournamentId = markerRows.find((content: any) =>
+      normalizeMarker(content.content_type) === 'tournament' &&
+      normalizeMarker(content.content_id) !== '' &&
+      normalizeMarker(content.content_id) !== 'none'
+    )?.content_id || null;
+    parseSummary.forumTournamentGameId = markerRows.find((content: any) =>
+      normalizeMarker(content.content_type) === 'tournament_game' &&
+      normalizeMarker(content.content_id) !== '' &&
+      normalizeMarker(content.content_id) !== 'none'
+    )?.content_id || null;
+
+    if (addonResult.length > 0) {
+      parseSummary.forumAddon = addonResult[0];
       console.log(`   ✅ Found Ranked addon in forum`);
+    } else if (parseSummary.forumRankedMarker || parseSummary.forumTournamentMarker) {
+      console.log(
+        `   ✅ Found new competitive metadata: ` +
+        `${parseSummary.forumRankedMarker ? 'ranked=yes' : ''}` +
+        `${parseSummary.forumRankedMarker && parseSummary.forumTournamentMarker ? ', ' : ''}` +
+        `${parseSummary.forumTournamentMarker ? 'tournament=<id>' : ''}`
+      );
     } else {
-      console.log(`   ⚠️  No Ranked addon found in forum`);
+      console.log(`   ⚠️  No Ranked addon or valid competitive metadata found`);
       parseSummary.matchType = 'rejected';
       return parseSummary;
     }
 
     // ======== STEP 2: Query forum for players, sides, factions ========
     console.log(`📋 [FORUM] Step 2: Querying players...`);
-    const playersResult = await query(
+    const playersResult = await queryForum(
       `SELECT user_id, user_name, faction, side_number 
-       FROM forum.wesnothd_game_player_info 
+       FROM wesnothd_game_player_info
        WHERE instance_uuid = ? AND game_id = ? AND user_id != -1 AND user_id IS NOT NULL
        ORDER BY side_number`,
       [replay.instance_uuid, replay.game_id]
     );
 
-    if ((playersResult as any).rows?.length < 2) {
+    if (playersResult.length < 2) {
       console.log(`   ❌ Less than 2 players found in forum`);
       parseSummary.matchType = 'rejected';
       return parseSummary;
     }
 
-    parseSummary.forumPlayers = (playersResult as any).rows;
+    parseSummary.forumPlayers = playersResult;
     for (const player of parseSummary.forumPlayers) {
       let faction = player.faction;
       // Normalize "Ranked " prefix when ranked_era is detected (will be detected in Step 3)
@@ -529,15 +581,15 @@ export class ParseNewReplaysRefactorized {
 
     // ======== STEP 3: Query forum for map/scenario & detect special addons ========
     console.log(`📋 [FORUM] Step 3: Querying map and detecting special addons...`);
-    const mapResult = await query(
-      `SELECT id, name FROM forum.wesnothd_game_content_info 
+    const mapResult = await queryForum(
+      `SELECT id, name FROM wesnothd_game_content_info
        WHERE instance_uuid = ? AND game_id = ? AND type = 'scenario' LIMIT 1`,
       [replay.instance_uuid, replay.game_id]
     );
 
     // Detect ranked_era and ranked_map_picker addons, fetch scenario ID and addon_id
-    const addonCheckResult = await query(
-      `SELECT addon_id, id FROM forum.wesnothd_game_content_info 
+    const addonCheckResult = await queryForum(
+      `SELECT addon_id, id FROM wesnothd_game_content_info
        WHERE instance_uuid = ? AND game_id = ? AND type = 'scenario' LIMIT 2`,
       [replay.instance_uuid, replay.game_id]
     );
@@ -545,8 +597,8 @@ export class ParseNewReplaysRefactorized {
     let scenarioId: string | null = null;
     let eraAddonId: string | null = null;
 
-    if ((addonCheckResult as any).rows?.length > 0) {
-      for (const addon of (addonCheckResult as any).rows) {
+    if (addonCheckResult.length > 0) {
+      for (const addon of addonCheckResult) {
         scenarioId = addon.id;
         eraAddonId = addon.addon_id;
         if (addon.addon_id === 'ranked_era' || addon.addon_id === 'ladder_era') {
@@ -569,9 +621,9 @@ export class ParseNewReplaysRefactorized {
       }
     }
 
-    if ((mapResult as any).rows?.length > 0) {
-      const forumMapFromDb = (mapResult as any).rows[0].name;
-      const mapId = (mapResult as any).rows[0].id;
+    if (mapResult.length > 0) {
+      const forumMapFromDb = mapResult[0].name;
+      const mapId = mapResult[0].id;
       const mapIdWithoutPrefix = mapId.startsWith('multiplayer_') ? mapId.substring(12) : mapId;
       parseSummary.forumMapId = mapIdWithoutPrefix;
 
@@ -609,11 +661,20 @@ export class ParseNewReplaysRefactorized {
       if (parsed) {
         // 5.1 Extract ranked_mode and tournament flag
         if (parsed.addon) {
-          parseSummary.replayRankedMode = parsed.addon.ranked_mode || false;
+          // Combine replay WML with forum metadata. The metadata is the
+          // authoritative fallback for replays created without the add-on.
+          parseSummary.replayRankedMode = Boolean(parsed.addon.ranked_mode) || parseSummary.forumRankedMarker;
           // Tournament flag indicates whether the game was marked as a tournament game in WML
           // Tournament name always comes from game_name in forum DB, never from WML
-          parseSummary.replayTournamentFlag = parsed.addon.tournament || false;
+          parseSummary.replayTournamentFlag = Boolean(parsed.addon.tournament) || parseSummary.forumTournamentMarker;
           console.log(`   ✅ 5.1 ranked_mode=${parseSummary.replayRankedMode}, tournament_flag=${parseSummary.replayTournamentFlag}`);
+        } else {
+          parseSummary.replayRankedMode = parseSummary.forumRankedMarker;
+          parseSummary.replayTournamentFlag = parseSummary.forumTournamentMarker;
+          console.log(
+            `   ✅ 5.1 Using forum metadata: ranked_mode=${parseSummary.replayRankedMode}, ` +
+            `tournament_flag=${parseSummary.replayTournamentFlag}`
+          );
         }
 
         // 5.1b Extract team information (for team tournaments)
@@ -670,11 +731,12 @@ export class ParseNewReplaysRefactorized {
     }
 
     // ======== DETERMINE MATCH TYPE ========
-    // Logic based on ranked_mode from addon WML + tournament_mode from DB (if tournament)
+    // Logic based on replay WML when available, with forum metadata as the
+    // fallback for games created without the legacy Ranked add-on.
     console.log(`📊 [PARSE] Determining match type...`);
-    if (!parseSummary.forumAddon) {
+    if (!parseSummary.forumAddon && !parseSummary.forumRankedMarker && !parseSummary.forumTournamentMarker) {
       parseSummary.matchType = 'rejected';
-      console.log(`   ❌ No Ranked addon in forum → REJECTED`);
+      console.log(`   ❌ No valid competitive marker in forum → REJECTED`);
       return parseSummary;
     }
 
@@ -696,7 +758,16 @@ export class ParseNewReplaysRefactorized {
         const searchName = (replay.game_name || '').trim();
         console.log(`   [TOURNAMENT] Searching by game_name: "${searchName}"`);
         
-        if (!searchName) {
+        const metadataTournament = parseSummary.forumTournamentId
+          ? await findTournamentById(parseSummary.forumTournamentId, ['unranked', 'team'])
+          : null;
+
+        if (metadataTournament) {
+          parseSummary.detectedTournament = metadataTournament;
+          console.log(`   🏆 Detected tournament by metadata ID: "${metadataTournament.name}"`);
+          parseSummary.matchType = 'tournament_unranked';
+          console.log(`   ✅ New tournament metadata → TOURNAMENT_UNRANKED`);
+        } else if (!searchName) {
           console.log(`   ⚠️  No game_name available, cannot link tournament → REJECTED`);
           parseSummary.matchType = 'rejected';
           return parseSummary;
@@ -730,7 +801,16 @@ export class ParseNewReplaysRefactorized {
         const searchName = (replay.game_name || '').trim();
         console.log(`   [TOURNAMENT] Searching by game_name: "${searchName}"`);
         
-        if (!searchName) {
+        const metadataTournament = parseSummary.forumTournamentId
+          ? await findTournamentById(parseSummary.forumTournamentId, ['ranked'])
+          : null;
+
+        if (metadataTournament) {
+          parseSummary.detectedTournament = metadataTournament;
+          console.log(`   🏆 Detected ranked tournament by metadata ID: "${metadataTournament.name}"`);
+          parseSummary.matchType = 'tournament_ranked';
+          console.log(`   ✅ New tournament metadata → TOURNAMENT_RANKED`);
+        } else if (!searchName) {
           console.log(`   ⚠️  No game_name available, treating as direct ranked`);
           parseSummary.matchType = 'ranked';
         } else {
@@ -945,14 +1025,149 @@ export class ParseNewReplaysRefactorized {
   }
 
   /**
-   * Link a tournament replay to the correct tournament and tournament_round_match.
+   * Link a tournament replay to the correct tournament and tournament_game.
    * Uses the tournament already detected during match type determination (parseSummary.detectedTournament).
    * For team tournaments (tournament_mode='team'), finds each player's team via tournament_participants
    * and then looks up the match by team IDs. For 1v1 tournaments, uses player IDs directly.
-   * Mutates parseSummary.linkedTournamentId and parseSummary.linkedTournamentRoundMatchId.
+   * Mutates the tournament_game linkage fields in parseSummary.
    * Returns true on success, false if the replay should be rejected.
    */
-  private async linkToTournament(replay: UnparsedReplay, parseSummary: ParseSummary): Promise<boolean> {
+  private async linkToExplicitTournamentGame(
+    parseSummary: ParseSummary,
+    tournament: any
+  ): Promise<boolean> {
+    if (!parseSummary.forumTournamentGameId) {
+      return false;
+    }
+
+    // Team entries have no participant_id, therefore participant joins must be
+    // optional. The entry team IDs are sufficient for team tournaments.
+    const result = await query(
+      `SELECT games.id, games.entry1_id, games.entry2_id,
+              entry1.participant_id AS participant1_id, entry2.participant_id AS participant2_id,
+              entry1.team_id AS team1_id, entry2.team_id AS team2_id,
+              participant1.user_id AS user1_id, participant2.user_id AS user2_id
+       FROM tournament_games games
+       JOIN tournament_series series ON series.id = games.series_id
+       JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+       JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+       JOIN tournament_phases phases ON phases.id = groups.phase_id
+       JOIN tournament_entries entry1 ON entry1.id = games.entry1_id
+       JOIN tournament_entries entry2 ON entry2.id = games.entry2_id
+       LEFT JOIN tournament_participants participant1 ON participant1.id = entry1.participant_id
+       LEFT JOIN tournament_participants participant2 ON participant2.id = entry2.participant_id
+       WHERE games.id = ? AND phases.tournament_id = ? AND games.status = 'pending'
+       LIMIT 1`,
+      [parseSummary.forumTournamentGameId, tournament.id]
+    );
+    const game = (result as any).rows?.[0];
+
+    if (!game) {
+      console.log(`   ❌ [TOURNAMENT LINK] Explicit tournament_game not found or not pending`);
+      return false;
+    }
+
+    parseSummary.linkedTournamentId = tournament.id;
+    parseSummary.linkedTournamentGameId = game.id;
+    parseSummary.tournamentLinkMethod = 'tournament_game';
+
+    if (tournament.tournament_mode === 'team' || game.team1_id || game.team2_id) {
+      // Team victories still require manual confirmation because the replay
+      // does not reliably identify the winning team from a single side.
+      await this.populateTeamReplayMetadata(parseSummary, tournament, [game.team1_id, game.team2_id]);
+      parseSummary.confidenceLevel = 1;
+      return true;
+    }
+
+    const winnerName = parseSummary.replayVictory?.winner_name;
+    const winner = winnerName ? await this.getUserDataByNickname(winnerName) : null;
+    if (!winner) {
+      console.log(`   ❌ [TOURNAMENT LINK] Cannot map replay winner to explicit tournament_game`);
+      return false;
+    }
+
+    if (winner.id === game.user1_id) {
+      parseSummary.linkedWinnerEntryId = game.entry1_id;
+    } else if (winner.id === game.user2_id) {
+      parseSummary.linkedWinnerEntryId = game.entry2_id;
+    } else {
+      console.log(`   ❌ [TOURNAMENT LINK] Replay winner is not in explicit tournament_game`);
+      return false;
+    }
+
+    console.log(`   ✅ [TOURNAMENT LINK] Linked explicitly to tournament_game id=${game.id}`);
+    return true;
+  }
+
+  /**
+   * Build the team-level replay data shown during manual confirmation.
+   * Forum player rows provide the authoritative nicknames, sides and factions;
+   * WML team names provide the alliance mapping for maps with four or more sides.
+   */
+  private async populateTeamReplayMetadata(
+    parseSummary: ParseSummary,
+    tournament: any,
+    teamIds: Array<string | null>
+  ): Promise<void> {
+    const validTeamIds = teamIds.filter((teamId): teamId is string => Boolean(teamId));
+    if (validTeamIds.length !== 2) return;
+
+    const teamResult = await query(
+      `SELECT id, name FROM tournament_teams
+       WHERE tournament_id = ? AND id IN (?, ?)`,
+      [tournament.id, validTeamIds[0], validTeamIds[1]]
+    );
+    const teamNames = new Map((teamResult.rows || []).map((row: any) => [row.id, row.name]));
+
+    const nicknames = parseSummary.forumPlayers.map(player => player.user_name);
+    const usersResult = await query(
+      `SELECT id, nickname FROM users_extension
+       WHERE LOWER(nickname) IN (${nicknames.map(() => 'LOWER(?)').join(', ')})`,
+      nicknames
+    );
+    const nicknameToUserId = new Map((usersResult.rows || []).map((row: any) => [row.nickname.toLowerCase(), row.id]));
+    const userIds = Array.from(nicknameToUserId.values());
+    if (userIds.length === 0) return;
+
+    const participantsResult = await query(
+      `SELECT user_id, team_id FROM tournament_participants
+       WHERE tournament_id = ? AND user_id IN (${userIds.map(() => '?').join(', ')})
+         AND status = 'active' AND participation_status = 'accepted'`,
+      [tournament.id, ...userIds]
+    );
+    const userToTeam = new Map((participantsResult.rows || []).map((row: any) => [row.user_id, row.team_id]));
+
+    parseSummary.detectedTeams = {};
+    for (const teamId of validTeamIds) {
+      const members = parseSummary.forumPlayers.filter(player => {
+        const userId = nicknameToUserId.get(player.user_name.toLowerCase());
+        return userId && userToTeam.get(userId) === teamId;
+      });
+      const sides = members.map(player => Number(player.side_number));
+      const wmlNames = new Set(sides.map(side => parseSummary.wmlTeams[side]).filter(Boolean));
+      parseSummary.detectedTeams[teamId] = {
+        team_id: teamId,
+        team_name: teamNames.get(teamId) || teamId,
+        team_wml_name: Array.from(wmlNames)[0] || 'unknown',
+        members: members.map(player => player.user_name),
+        sides,
+        factions: members.map(player => player.faction).filter(Boolean),
+      };
+    }
+
+    // Team tournaments do not validate ranked assets, but their detected map
+    // and faction labels are still needed by the competition confirmation UI.
+    parseSummary.finalMap = parseSummary.forumMap;
+    parseSummary.resolvedMap = parseSummary.forumMap;
+    for (const player of parseSummary.forumPlayers) {
+      const side = `side${player.side_number}`;
+      parseSummary.replayFactions[side] = player.faction;
+      parseSummary.resolvedFactions[side] = player.faction;
+      parseSummary.finalFactions[side] = player.faction;
+    }
+  }
+
+  private async linkToTournament(parseSummary: ParseSummary): Promise<boolean> {
     // Reuse tournament detected during match type determination to avoid a second DB lookup
     const tournament = parseSummary.detectedTournament;
 
@@ -963,6 +1178,15 @@ export class ParseNewReplaysRefactorized {
 
     console.log(`   ✅ [TOURNAMENT LINK] Using detected tournament: "${tournament.name}" (id=${tournament.id}, mode=${tournament.tournament_mode})`);
 
+    if (parseSummary.forumTournamentGameId) {
+      const linkedExplicitly = await this.linkToExplicitTournamentGame(parseSummary, tournament);
+      if (linkedExplicitly) {
+        return true;
+      }
+      console.log(`   ❌ [TOURNAMENT LINK] Explicit tournament_game is invalid or no longer pending`);
+      return false;
+    }
+
     // ========== TEAM TOURNAMENTS ==========
     // For team tournaments: cannot determine winner without knowing side-to-team mapping
     // Always mark as confidence=1 and let players confirm via UI
@@ -970,7 +1194,7 @@ export class ParseNewReplaysRefactorized {
     // For 1v1 tournaments: can determine winner from parsed replay data
     // Use confidence level from victory detection (may be 1 or 2)
     if (tournament.tournament_mode === 'team') {
-      return await this.linkToTeamTournament(replay, parseSummary, tournament);
+      return await this.linkTeamTournamentGameByParticipants(parseSummary, tournament);
     }
 
     // For 1v1 tournaments, use winner/loser detection
@@ -993,7 +1217,7 @@ export class ParseNewReplaysRefactorized {
 
     // Verify both players are active approved participants in this tournament
     const participantsResult = await query(
-      `SELECT user_id, team_id FROM tournament_participants
+      `SELECT id, user_id, team_id FROM tournament_participants
        WHERE tournament_id = ?
          AND user_id IN (?, ?)
          AND status = 'active'
@@ -1007,86 +1231,43 @@ export class ParseNewReplaysRefactorized {
       return false;
     }
 
-    if (Number(tournament.competition_model_version) === 2) {
-      const phaseGames = await query(
-        `SELECT games.id, games.entry1_id, games.entry2_id,
-                participant1.user_id AS user1_id, participant2.user_id AS user2_id
-         FROM tournament_games games
-         JOIN tournament_series series ON series.id = games.series_id
-         JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
-         JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
-         JOIN tournament_phases phases ON phases.id = groups.phase_id
-         JOIN tournament_entries entry1 ON entry1.id = games.entry1_id
-         JOIN tournament_entries entry2 ON entry2.id = games.entry2_id
-         JOIN tournament_participants participant1 ON participant1.id = entry1.participant_id
-         JOIN tournament_participants participant2 ON participant2.id = entry2.participant_id
-         WHERE phases.tournament_id = ? AND rounds.status = 'in_progress' AND games.status = 'pending'
-           AND ((participant1.user_id = ? AND participant2.user_id = ?) OR (participant1.user_id = ? AND participant2.user_id = ?))
-         ORDER BY phases.phase_order, rounds.round_number, games.game_number
-         LIMIT 2`,
-        [tournament.id, winnerUser.id, loserUser.id, loserUser.id, winnerUser.id]
-      );
-      if (phaseGames.rows.length !== 1) {
-        console.log(`   ❌ [TOURNAMENT LINK] Phase game resolution is ${phaseGames.rows.length === 0 ? 'missing' : 'ambiguous'}`);
-        return false;
-      }
-      parseSummary.linkedTournamentId = tournament.id;
-      parseSummary.linkedTournamentGameId = phaseGames.rows[0].id;
-      parseSummary.linkedWinnerEntryId = phaseGames.rows[0].user1_id === winnerUser.id
-        ? phaseGames.rows[0].entry1_id
-        : phaseGames.rows[0].entry2_id;
-      return true;
-    }
-
-    // 1v1 tournament: search by player IDs directly
-    // For league tournaments all rounds are open simultaneously, so we search across all rounds
-    // and use ORDER BY round_number ASC to resolve double round-robin ambiguity (earliest pending first)
-    const isLeague = tournament.tournament_type === 'league';
-    const roundMatchResult = await query(
-      isLeague
-        ? `SELECT trm.id, trm.player1_id, trm.player2_id
-           FROM tournament_round_matches trm
-           JOIN tournament_rounds tr ON trm.round_id = tr.id
-           WHERE trm.tournament_id = ?
-             AND trm.series_status = 'in_progress'
-             AND (
-               (trm.player1_id = ? AND trm.player2_id = ?)
-               OR
-               (trm.player1_id = ? AND trm.player2_id = ?)
-             )
-           ORDER BY tr.round_number ASC
-           LIMIT 1`
-        : `SELECT trm.id, trm.player1_id, trm.player2_id
-           FROM tournament_round_matches trm
-           JOIN tournament_rounds tr ON trm.round_id = tr.id
-           WHERE trm.tournament_id = ?
-             AND trm.series_status = 'in_progress'
-             AND tr.round_status = 'in_progress'
-             AND (
-               (trm.player1_id = ? AND trm.player2_id = ?)
-               OR
-               (trm.player1_id = ? AND trm.player2_id = ?)
-             )
-           LIMIT 1`,
-      [tournament.id, winnerUser.id, loserUser.id, loserUser.id, winnerUser.id]
+    const phaseGames = await query(
+      `SELECT games.id, games.entry1_id, games.entry2_id,
+              participant1.user_id AS user1_id, participant2.user_id AS user2_id
+       FROM tournament_games games
+       JOIN tournament_series series ON series.id = games.series_id
+       JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+       JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+       JOIN tournament_phases phases ON phases.id = groups.phase_id
+       JOIN tournament_entries entry1 ON entry1.id = games.entry1_id
+       JOIN tournament_entries entry2 ON entry2.id = games.entry2_id
+       LEFT JOIN tournament_participants participant1 ON participant1.id = entry1.participant_id
+       LEFT JOIN tournament_participants participant2 ON participant2.id = entry2.participant_id
+       WHERE phases.tournament_id = ? AND rounds.status = 'in_progress' AND games.status = 'pending'
+         AND ((entry1.participant_id = ? AND entry2.participant_id = ?)
+           OR (entry1.participant_id = ? AND entry2.participant_id = ?))
+       ORDER BY phases.phase_order, rounds.round_number, games.game_number
+       LIMIT 2`,
+      [tournament.id, participants.find((p: any) => p.user_id === winnerUser.id).id,
+        participants.find((p: any) => p.user_id === loserUser.id).id,
+        participants.find((p: any) => p.user_id === loserUser.id).id,
+        participants.find((p: any) => p.user_id === winnerUser.id).id]
     );
-
-    const roundMatches = (roundMatchResult as any).rows || [];
-    if (roundMatches.length === 0) {
-      console.log(`   ❌ [TOURNAMENT LINK] No open tournament_round_match found for ${winnerName} vs ${loserName}`);
+    if (phaseGames.rows.length !== 1) {
+      console.log(`   ❌ [TOURNAMENT LINK] Pending tournament_game resolution is ${phaseGames.rows.length === 0 ? 'missing' : 'ambiguous'}`);
       return false;
     }
 
-    const roundMatch = roundMatches[0];
-    console.log(`   ✅ [TOURNAMENT LINK] Linked to round_match id=${roundMatch.id}`);
-
-    parseSummary.linkedTournamentId           = tournament.id;
-    parseSummary.linkedTournamentRoundMatchId = roundMatch.id;
+    const game = phaseGames.rows[0];
+    parseSummary.linkedTournamentId = tournament.id;
+    parseSummary.linkedTournamentGameId = game.id;
+    parseSummary.tournamentLinkMethod = 'participants';
+    parseSummary.linkedWinnerEntryId = game.user1_id === winnerUser.id ? game.entry1_id : game.entry2_id;
     return true;
   }
 
   /**
-   * Link team tournament replays without determining winner/loser
+   * Resolve a named team replay against a pending tournament_games row.
    * 
    * CRITICAL: For team tournaments, we CANNOT reliably determine which team won
    * because we don't know the side-to-team mapping. Example:
@@ -1095,11 +1276,11 @@ export class ParseNewReplaysRefactorized {
    * - Without knowing the alliance structure, we can't map side 1 to its team
    * 
    * Solution: ALWAYS mark as confidence=1 (requires manual confirmation)
-   * Players will confirm the result via UI, then updateTournamentRoundMatch() handles progression
+   * The phase-game confirmation flow handles progression after manual review.
    * 
    * In contrast, 1v1 tournaments CAN determine winner reliably (two players, clear victory)
    */
-  private async linkToTeamTournament(replay: UnparsedReplay, parseSummary: ParseSummary, tournament: any): Promise<boolean> {
+  private async linkTeamTournamentGameByParticipants(parseSummary: ParseSummary, tournament: any): Promise<boolean> {
     console.log(`   [TEAM TOURNAMENT] Extracting all players and their teams...`);
 
     // Get ALL players in the replay
@@ -1155,6 +1336,11 @@ export class ParseNewReplaysRefactorized {
 
     console.log(`   ✅ [TEAM TOURNAMENT] Teams identified: ${team1} vs ${team2}`);
 
+    if (Number(tournament.competition_model_version) !== 2) {
+      console.log(`   ❌ [TEAM TOURNAMENT] Tournament is not using the competition model`);
+      return false;
+    }
+
     if (Number(tournament.competition_model_version) === 2) {
       const phaseGames = await query(
         `SELECT games.id
@@ -1174,115 +1360,9 @@ export class ParseNewReplaysRefactorized {
       if (phaseGames.rows.length !== 1) return false;
       parseSummary.linkedTournamentId = tournament.id;
       parseSummary.linkedTournamentGameId = phaseGames.rows[0].id;
+      parseSummary.tournamentLinkMethod = 'participants';
       parseSummary.confidenceLevel = 1;
-      return true;
     }
-
-    // Verify both teams have players
-    const team1Players = participants.filter((p: any) => p.team_id === team1);
-    const team2Players = participants.filter((p: any) => p.team_id === team2);
-    console.log(`   [TEAM TOURNAMENT] Team 1 has ${team1Players.length} players, Team 2 has ${team2Players.length} players`);
-
-    if (team1Players.length === 0 || team2Players.length === 0) {
-      console.log(`   ❌ [TEAM TOURNAMENT] One or both teams have no players`);
-      return false;
-    }
-
-    // Find active round (for non-league) or search across all rounds (for league)
-    // League tournaments have all rounds open simultaneously
-    const isLeagueTournament = tournament.tournament_type === 'league';
-
-    let roundMatchResult;
-    if (isLeagueTournament) {
-      // League: search across all rounds, earliest pending round first (resolves double round-robin ambiguity)
-      console.log(`   [TEAM TOURNAMENT] League tournament — searching across all rounds...`);
-      roundMatchResult = await query(
-        `SELECT trm.id, trm.player1_id, trm.player2_id FROM tournament_round_matches trm
-         JOIN tournament_rounds tr ON trm.round_id = tr.id
-         WHERE trm.tournament_id = ?
-           AND trm.series_status = 'in_progress'
-           AND (
-             (trm.player1_id = ? AND trm.player2_id = ?)
-             OR
-             (trm.player1_id = ? AND trm.player2_id = ?)
-           )
-         ORDER BY tr.round_number ASC
-         LIMIT 1`,
-        [tournament.id, team1, team2, team2, team1]
-      );
-    } else {
-      // Non-league: search only in the currently active round
-      console.log(`   [TEAM TOURNAMENT] Searching for active round...`);
-      const roundResult = await query(
-        `SELECT id FROM tournament_rounds
-         WHERE tournament_id = ?
-           AND round_status = 'in_progress'
-         LIMIT 1`,
-        [tournament.id]
-      );
-
-      const rounds = (roundResult as any).rows || [];
-      if (rounds.length === 0) {
-        console.log(`   ❌ [TEAM TOURNAMENT] No active round found`);
-        return false;
-      }
-
-      const roundId = rounds[0].id;
-      console.log(`   ✅ [TEAM TOURNAMENT] Active round: ${roundId}`);
-
-      // Search for tournament_round_match with these 2 teams in the active round
-      console.log(`   [TEAM TOURNAMENT] Searching for tournament_round_match between teams...`);
-      roundMatchResult = await query(
-        `SELECT id, player1_id, player2_id FROM tournament_round_matches
-         WHERE tournament_id = ?
-           AND round_id = ?
-           AND series_status = 'in_progress'
-           AND (
-             (player1_id = ? AND player2_id = ?)
-             OR
-             (player1_id = ? AND player2_id = ?)
-           )
-         LIMIT 1`,
-        [tournament.id, roundId, team1, team2, team2, team1]
-      );
-    }
-
-    const roundMatches = (roundMatchResult as any).rows || [];
-    if (roundMatches.length === 0) {
-      console.log(`   ❌ [TEAM TOURNAMENT] No pending tournament_round_match found for:`);
-      console.log(`      Tournament ID: ${tournament.id}`);
-      console.log(`      Team 1: ${team1}`);
-      console.log(`      Team 2: ${team2}`);
-      console.log(`   [TEAM TOURNAMENT] Showing all in-progress matches in tournament...`);
-      
-      // Debug: show all in-progress matches in tournament
-      const allMatchesResult = await query(
-        `SELECT trm.id, trm.player1_id, trm.player2_id, trm.series_status, tr.round_number
-         FROM tournament_round_matches trm
-         JOIN tournament_rounds tr ON trm.round_id = tr.id
-         WHERE trm.tournament_id = ? AND trm.series_status = 'in_progress'
-         ORDER BY tr.round_number ASC`,
-        [tournament.id]
-      );
-      const allMatches = (allMatchesResult as any).rows || [];
-      console.log(`   [TEAM TOURNAMENT] Available in-progress matches:`, allMatches.map((m: any) => ({ 
-        id: m.id, 
-        round: m.round_number,
-        player1_id: m.player1_id, 
-        player2_id: m.player2_id, 
-        series_status: m.series_status 
-      })));
-      
-      return false;
-    }
-
-    const roundMatch = roundMatches[0];
-    console.log(`   ✅ [TEAM TOURNAMENT] Linked to round_match id=${roundMatch.id}`);
-
-    parseSummary.linkedTournamentId           = tournament.id;
-    parseSummary.linkedTournamentRoundMatchId = roundMatch.id;
-    parseSummary.confidenceLevel              = 1;  // Requires manual confirmation
-    console.log(`   ℹ️  [TEAM TOURNAMENT] Marked as confidence=1 (requires manual confirmation)`);
 
     // Enrich parseSummary with detected team information
     console.log(`   [TEAM TOURNAMENT] Building detectedTeams structure...`);
@@ -1436,10 +1516,16 @@ export class ParseNewReplaysRefactorized {
       const year = urlParts[urlParts.length - 4];
       const urlVersion = urlParts[urlParts.length - 5];
 
-      const localPath = `/scratch/wesnothd-public-replays/${urlVersion}/${year}/${month}/${day}/${filename}`;
+      // Production publishes replays below a dated public tree. Local
+      // wesnothd writes the same files directly into replay_save_path, so
+      // accept both layouts while keeping one configurable root directory.
+      const replayRoot = process.env.REPLAY_SAVE_PATH || '/scratch/wesnothd-public-replays';
+      const datedPath = path.join(replayRoot, urlVersion, year, month, day, filename);
+      const flatPath = path.join(replayRoot, filename);
+      const localPath = fs.existsSync(datedPath) ? datedPath : flatPath;
 
       if (!fs.existsSync(localPath)) {
-        throw new Error(`Replay file not found: ${localPath}`);
+        throw new Error(`Replay file not found in '${datedPath}' or '${flatPath}'`);
       }
 
       const tmpPath = path.join(tmpDir, `${Date.now()}_${filename}`);

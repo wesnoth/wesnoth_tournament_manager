@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
+import { useAuthStore } from '../store/authStore';
+import ReplayConfirmationModal from './ReplayConfirmationModal';
 
 interface Props { tournamentId: string; canManage?: boolean }
 
@@ -10,6 +12,9 @@ const TournamentCompetitionView: React.FC<Props> = ({ tournamentId, canManage = 
   const [administrativeDecisions, setAdministrativeDecisions] = useState<any[]>([]);
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const [selectedReplay, setSelectedReplay] = useState<any | null>(null);
+  const [replayChoice, setReplayChoice] = useState<'I won' | 'I lost' | 'cancel'>('I won');
+  const { user } = useAuthStore();
 
   useEffect(() => {
     const load = async () => {
@@ -125,7 +130,12 @@ const TournamentCompetitionView: React.FC<Props> = ({ tournamentId, canManage = 
         { status: 'pending', title: 'Scheduled Matches' },
         { status: 'completed', title: 'Completed Matches' },
       ].map(section => {
-        const sectionGames = games.filter(game => game.status === section.status && !game.organizer_action);
+        const sectionGames = games.filter(game => {
+          const hasPendingReplay = Boolean(game.pending_replay_id);
+          return !game.organizer_action && (section.status === 'completed'
+            ? game.status === 'completed' || hasPendingReplay
+            : game.status === section.status && !hasPendingReplay);
+        });
         if (sectionGames.length === 0) return null;
         const completed = section.status === 'completed';
         return <div key={section.status}>
@@ -139,12 +149,48 @@ const TournamentCompetitionView: React.FC<Props> = ({ tournamentId, canManage = 
               <th className="px-4 py-3 text-left font-semibold text-gray-700">Status / Actions</th>
             </tr></thead>
             <tbody>{sectionGames.map(game => {
+              const pendingReplay = Boolean(game.pending_replay_id);
+              let pendingSummary: any = null;
+              try {
+                pendingSummary = typeof game.pending_replay_summary === 'string'
+                  ? JSON.parse(game.pending_replay_summary)
+                  : game.pending_replay_summary;
+              } catch { pendingSummary = null; }
               const winnerIsEntry1 = game.winner_entry_id === game.entry1_id;
-              const winnerName = completed ? (winnerIsEntry1 ? game.entry1_name : game.entry2_name) : game.entry1_name;
-              const loserName = completed ? (winnerIsEntry1 ? game.entry2_name : game.entry1_name) : game.entry2_name;
+              const winnerName = !completed || pendingReplay
+                ? game.entry1_name
+                : (winnerIsEntry1 ? game.entry1_name : game.entry2_name);
+              const loserName = !completed || pendingReplay
+                ? game.entry2_name
+                : (winnerIsEntry1 ? game.entry2_name : game.entry1_name);
               const winnerSide = Number(game.winner_side);
               const loserSide = winnerSide === 1 ? 2 : winnerSide === 2 ? 1 : null;
-              return <tr key={game.game_id} className="border-b border-gray-200 hover:bg-gray-50">
+              const detectedTeams = pendingSummary?.detectedTeams || {};
+              // tournament_entries.id identifies the bracket entry; detectedTeams
+              // is indexed by the entry's team_id.
+              const entry1Team = detectedTeams[game.entry1_team_id || game.entry1_id];
+              const entry2Team = detectedTeams[game.entry2_team_id || game.entry2_id];
+              const pendingFactionLabels = [entry1Team, entry2Team]
+                .filter(Boolean)
+                .map((team: any) => `${team.team_name}: ${(team.factions || []).join(', ')}`);
+              const currentUserNickname = user?.nickname?.toLowerCase() || '';
+              const currentUserTeam = Object.values(detectedTeams).find((team: any) =>
+                (team.members || []).some((member: string) => member.toLowerCase() === currentUserNickname)
+              ) as any;
+              const canConfirmReplay = pendingReplay && game.pending_replay_parse_status !== 'due' && Boolean(currentUserTeam);
+              const openReplayAction = (choice: 'I won' | 'I lost' | 'cancel') => {
+                setSelectedReplay({
+                  ...game,
+                  pending_replay_summary: pendingSummary,
+                  player1_nickname: game.entry1_name,
+                  player2_nickname: game.entry2_name,
+                  current_user_team_name: currentUserTeam?.team_id === game.entry1_team_id ? game.entry1_name : game.entry2_name,
+                  player1_faction: entry1Team?.factions?.join(', ') || '—',
+                  player2_faction: entry2Team?.factions?.join(', ') || '—',
+                });
+                setReplayChoice(choice);
+              };
+              return <tr key={game.game_id} className={`border-b border-gray-200 ${pendingReplay ? 'bg-yellow-50 hover:bg-yellow-100' : 'hover:bg-gray-50'}`}>
                 <td className="px-4 py-3 text-gray-700">
                   <div className="font-medium">{game.phase_name}</div>
                   <div className="text-xs text-gray-500">{game.group_name} · Round {game.round_number} · Game {game.game_number} · Bo{game.best_of}</div>
@@ -152,21 +198,31 @@ const TournamentCompetitionView: React.FC<Props> = ({ tournamentId, canManage = 
                 <td className={`px-4 py-3 font-semibold ${completed ? 'text-green-700' : 'text-gray-800'}`}>{winnerName}</td>
                 <td className={`px-4 py-3 font-semibold ${completed ? 'text-red-700' : 'text-gray-800'}`}>{loserName}</td>
                 <td className="px-4 py-3 text-gray-700">
-                  <div>{game.map || '—'}</div>
-                  {completed && <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
-                    <span className="rounded bg-blue-100 px-1.5 py-0.5 font-semibold text-blue-700">{game.winner_faction || '—'}</span>
-                    {winnerSide > 0 && <span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-700">S{winnerSide}</span>}
-                    <span>vs</span>
-                    <span className="rounded bg-red-100 px-1.5 py-0.5 font-semibold text-red-700">{game.loser_faction || '—'}</span>
-                    {loserSide && <span className="rounded bg-purple-100 px-1.5 py-0.5 font-semibold text-purple-700">S{loserSide}</span>}
+                  <div>{pendingSummary?.finalMap || pendingSummary?.forumMap || game.map || '—'}</div>
+                  {(completed || pendingReplay) && <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
+                    {pendingReplay && pendingFactionLabels.length > 0
+                      ? pendingFactionLabels.map((label: string, index: number) => <span key={index} className="rounded bg-blue-100 px-1.5 py-0.5 font-semibold text-blue-700">{label}</span>)
+                      : <>
+                        <span className="rounded bg-blue-100 px-1.5 py-0.5 font-semibold text-blue-700">{game.winner_faction || '—'}</span>
+                        {winnerSide > 0 && <span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-700">S{winnerSide}</span>}
+                        <span>vs</span>
+                        <span className="rounded bg-red-100 px-1.5 py-0.5 font-semibold text-red-700">{game.loser_faction || '—'}</span>
+                        {loserSide && <span className="rounded bg-purple-100 px-1.5 py-0.5 font-semibold text-purple-700">S{loserSide}</span>}
+                      </>}
                   </div>}
                 </td>
                 <td className="px-4 py-3 text-gray-700">
                   {completed ? <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full bg-green-500 px-3 py-1 text-xs font-semibold text-white">Completed</span>
-                    {game.replay_url
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold text-white ${pendingReplay ? 'bg-yellow-500' : 'bg-green-500'}`}>{pendingReplay ? 'Pending confirmation' : 'Completed'}</span>
+                    {canConfirmReplay && <>
+                      <button type="button" onClick={() => openReplayAction('I won')} className="rounded bg-green-600 px-2 py-1 text-xs font-semibold text-white hover:bg-green-700">I won</button>
+                      <button type="button" onClick={() => openReplayAction('I lost')} className="rounded bg-red-600 px-2 py-1 text-xs font-semibold text-white hover:bg-red-700">I lost</button>
+                      <button type="button" onClick={() => openReplayAction('cancel')} className="rounded bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700">Discard</button>
+                    </>}
+                    {pendingReplay && game.pending_replay_url && <a href={game.pending_replay_url} target="_blank" rel="noopener noreferrer" className="rounded bg-yellow-600 px-2 py-1 text-xs font-semibold text-white hover:bg-yellow-700">Replay ⬇</a>}
+                    {!pendingReplay && game.replay_url
                       ? <a data-help-id="action-download-phase-game-replay" href={game.replay_url} target="_blank" rel="noopener noreferrer" className="rounded bg-green-600 px-2 py-1 text-xs font-semibold text-white hover:bg-green-700" title={`Downloads: ${game.replay_downloads || 0}`}>Replay ⬇</a>
-                      : <span className="text-xs text-gray-500">No replay</span>}
+                      : !pendingReplay && <span className="text-xs text-gray-500">No replay</span>}
                   </div> : <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full bg-yellow-500 px-3 py-1 text-xs font-semibold text-white">Pending</span>
                     {canManage && [{ id: game.entry1_id, name: game.entry1_name }, { id: game.entry2_id, name: game.entry2_name }].map(entry => <button key={entry.id} data-help-id="action-record-tournament-game-winner" type="button" onClick={async () => {
@@ -196,6 +252,19 @@ const TournamentCompetitionView: React.FC<Props> = ({ tournamentId, canManage = 
         </div>;
       })}
     </section>}
+    {selectedReplay && <ReplayConfirmationModal
+      isOpen={Boolean(selectedReplay)}
+      replayId={selectedReplay.pending_replay_id}
+      player1_nickname={selectedReplay.player1_nickname}
+      player2_nickname={selectedReplay.player2_nickname}
+      currentUserNickname={selectedReplay.current_user_team_name.toLowerCase()}
+      your_choice={replayChoice}
+      map={selectedReplay.pending_replay_summary?.finalMap || selectedReplay.pending_replay_summary?.forumMap || '—'}
+      player1_faction={selectedReplay.player1_faction}
+      player2_faction={selectedReplay.player2_faction}
+      onClose={() => setSelectedReplay(null)}
+      onSuccess={() => { setSelectedReplay(null); setReloadKey(value => value + 1); }}
+    />}
   </div>;
 };
 

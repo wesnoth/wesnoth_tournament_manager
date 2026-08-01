@@ -1,9 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { testToolsService } from '../services/api';
+import { featureService, testToolsService } from '../services/api';
 
 interface UserOption { id: string; nickname: string; elo_rating?: number; enable_ranked?: boolean; }
 
-const isTestBuild = import.meta.env.MODE === 'test';
+function useTournamentSimulationEnabled(): boolean {
+  const [enabled, setEnabled] = useState(false);
+
+  useEffect(() => {
+    featureService.getFeatures()
+      .then((response) => setEnabled(response.data?.tournament_simulation === true))
+      .catch(() => setEnabled(false));
+  }, []);
+
+  return enabled;
+}
 
 function UserSearch({
   label,
@@ -16,6 +26,7 @@ function UserSearch({
   value: UserOption | null;
   onChange: (user: UserOption | null) => void;
 }) {
+  const simulationEnabled = useTournamentSimulationEnabled();
   const [input, setInput] = useState(value?.nickname || '');
   const [options, setOptions] = useState<UserOption[]>([]);
   const [loading, setLoading] = useState(false);
@@ -36,9 +47,9 @@ function UserSearch({
       }
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [input, rankedOnly, value?.nickname]);
+  }, [input, rankedOnly, simulationEnabled, value?.nickname]);
 
-  if (!isTestBuild) return null;
+  if (!simulationEnabled) return null;
   return (
     <div className="relative flex flex-col gap-1">
       <label className="text-sm font-semibold text-gray-700">{label}</label>
@@ -70,6 +81,7 @@ function UserSearch({
 }
 
 export function SimulateMatchPanel({ onCompleted }: { onCompleted?: () => void }) {
+  const simulationEnabled = useTournamentSimulationEnabled();
   const [mode, setMode] = useState(() => sessionStorage.getItem('test-simulate-match-mode') || 'ranked');
   const [tournaments, setTournaments] = useState<any[]>([]);
   const [tournamentId, setTournamentId] = useState(() => sessionStorage.getItem('test-simulate-match-tournament') || '');
@@ -85,7 +97,7 @@ export function SimulateMatchPanel({ onCompleted }: { onCompleted?: () => void }
 
   const tournamentMode = mode !== 'ranked';
   useEffect(() => {
-    if (!isTestBuild || !tournamentMode) return;
+    if (!simulationEnabled || !tournamentMode) return;
     if (initialModeLoad.current) {
       initialModeLoad.current = false;
     } else {
@@ -94,14 +106,14 @@ export function SimulateMatchPanel({ onCompleted }: { onCompleted?: () => void }
     }
     setOpenMatches([]);
     testToolsService.getTournaments(mode).then((response) => setTournaments(response.data || [])).catch(() => setError('Failed to load active tournaments'));
-  }, [mode, tournamentMode]);
+  }, [mode, simulationEnabled, tournamentMode]);
 
   useEffect(() => {
     if (!tournamentId) { setOpenMatches([]); return; }
     testToolsService.getOpenMatches(tournamentId).then((response) => setOpenMatches(response.data || [])).catch(() => setError('Failed to load open matches'));
   }, [tournamentId]);
 
-  if (!isTestBuild) return null;
+  if (!simulationEnabled) return null;
   const selectedMatch = openMatches.find((match) => match.id === competitionMatchId);
   const canSubmit = mode === 'ranked' ? Boolean(winner?.id && loser?.id && winner.id !== loser.id) : Boolean(selectedMatch && winnerId);
 
@@ -196,13 +208,14 @@ export function SimulateMatchPanel({ onCompleted }: { onCompleted?: () => void }
 }
 
 export function SimulateJoinPanel({ tournament, onCompleted }: { tournament: any; onCompleted?: () => void }) {
+  const simulationEnabled = useTournamentSimulationEnabled();
   const [first, setFirst] = useState<UserOption | null>(null);
   const [second, setSecond] = useState<UserOption | null>(null);
   const [teamName, setTeamName] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
-  if (!isTestBuild || !tournament || tournament.status !== 'registration_open') return null;
+  if (!simulationEnabled || !tournament || tournament.status !== 'registration_open') return null;
   const isTeam = tournament.tournament_mode === 'team';
   const canSubmit = Boolean(first?.id && (!isTeam || (second?.id && teamName.trim().length >= 2)));
 

@@ -15,6 +15,8 @@ const pool: Pool = mysql.createPool({
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME || 'wesnoth_db',
   port: parseInt(process.env.DB_PORT || '3306'),
+  // Keep timestamps written by the replay integration in UTC.
+  timezone: 'Z',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,

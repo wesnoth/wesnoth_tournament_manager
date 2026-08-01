@@ -14,6 +14,7 @@ const pool = mysql.createPool({
   user: process.env.PHPBB_DB_USER || process.env.DB_USER,
   password: process.env.PHPBB_DB_PASSWORD || process.env.DB_PASSWORD,
   database: process.env.PHPBB_DB_NAME || 'forum',
+  port: parseInt(process.env.PHPBB_DB_PORT || process.env.DB_PORT || '3306'),
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,

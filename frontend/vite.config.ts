@@ -4,6 +4,8 @@ import { visualizer } from 'rollup-plugin-visualizer';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
+  const apiUrl = env.VITE_API_BASE_URL || 'http://localhost:3000/api';
+  const apiOrigin = new URL(apiUrl).origin;
 
   return {
   plugins: [
@@ -17,7 +19,7 @@ export default defineConfig(({ mode }) => {
   ],
   define: {
     'process.env.VITE_API_BASE_URL': JSON.stringify(
-      env.VITE_API_BASE_URL || 'http://localhost:3000/api'
+      apiUrl
     ),
   },
   css: {
@@ -43,7 +45,7 @@ export default defineConfig(({ mode }) => {
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: apiOrigin,
         changeOrigin: true,
       },
     },

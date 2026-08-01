@@ -34,7 +34,8 @@ export function parseWesnothVersions(versionStr: string): string[] {
 
   // Validate each version format (should be like "1.18" or "1.18.0")
   // Accept patterns: X.Y, X.Y.Z, X.Y.Z.W
-  const versionRegex = /^\d+\.\d+(\.\d+)?(\.\d+)?$/;
+  // Accept stable versions and development suffixes such as 1.19-dev or 1.19.25+dev.
+  const versionRegex = /^\d+\.\d+(\.\d+)?(\.\d+)?(?:[-+][0-9A-Za-z.-]+)?$/;
   for (const version of versions) {
     if (!versionRegex.test(version)) {
       throw new Error(

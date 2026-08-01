@@ -496,8 +496,15 @@ router.get('/:id/phases/:phaseId/games', async (req, res) => {
                WHERE replay.tournament_game_id = games.id AND replay.deleted_at IS NULL
                ORDER BY replay.detected_at DESC LIMIT 1)) AS replay_url,
             COALESCE(linked_match.replay_downloads, 0) AS replay_downloads,
+            pending_replay.id AS pending_replay_id,
+            pending_replay.parse_summary AS pending_replay_summary,
+            pending_replay.integration_confidence AS pending_replay_confidence,
+            pending_replay.parse_status AS pending_replay_parse_status,
+            pending_replay.replay_url AS pending_replay_url,
             ${competitionEntryNameSql('user1', 'team1')} AS entry1_name,
-            ${competitionEntryNameSql('user2', 'team2')} AS entry2_name
+            ${competitionEntryNameSql('user2', 'team2')} AS entry2_name,
+            entry1.team_id AS entry1_team_id,
+            entry2.team_id AS entry2_team_id
      FROM tournament_games games
      JOIN tournament_series series ON series.id = games.series_id
      JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
@@ -512,6 +519,17 @@ router.get('/:id/phases/:phaseId/games', async (req, res) => {
      LEFT JOIN tournament_teams team1 ON team1.id = entry1.team_id
      LEFT JOIN tournament_teams team2 ON team2.id = entry2.team_id
      LEFT JOIN matches linked_match ON linked_match.id = games.match_id
+     LEFT JOIN replays pending_replay
+       ON pending_replay.id = (
+         SELECT replay.id FROM replays replay
+         WHERE replay.tournament_game_id = games.id
+           AND replay.parse_status IN ('parsed', 'due')
+           AND replay.integration_confidence = 1
+           AND replay.match_id IS NULL
+           AND replay.deleted_at IS NULL
+         ORDER BY replay.detected_at DESC, replay.created_at DESC
+         LIMIT 1
+       )
      WHERE phases.tournament_id = ? AND phases.id = ?
      ORDER BY groups.group_order, rounds.round_number, series.series_position, games.game_number`,
     [req.params.id, req.params.phaseId]
