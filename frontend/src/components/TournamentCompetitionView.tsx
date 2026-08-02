@@ -5,6 +5,24 @@ import ReplayConfirmationModal from './ReplayConfirmationModal';
 
 interface Props { tournamentId: string; canManage?: boolean }
 
+// Bracket spacing assumes equal-height match cards. Each later round doubles
+// the vertical interval between card centers, so a match remains centered
+// between the two matches that feed it.
+const BRACKET_CARD_HEIGHT = 112;
+const BRACKET_CARD_GAP = 16;
+
+function getBracketRoundSpacing(roundIndex: number): React.CSSProperties {
+  if (roundIndex === 0) return { gap: `${BRACKET_CARD_GAP}px` };
+  const centerInterval = (BRACKET_CARD_HEIGHT + BRACKET_CARD_GAP) * (2 ** roundIndex);
+  const cardGap = centerInterval - BRACKET_CARD_HEIGHT;
+  const verticalInset = ((2 ** roundIndex) - 1) * (BRACKET_CARD_HEIGHT + BRACKET_CARD_GAP) / 2;
+  return {
+    gap: `${cardGap}px`,
+    paddingTop: `${verticalInset}px`,
+    paddingBottom: `${verticalInset}px`,
+  };
+}
+
 const TournamentCompetitionView: React.FC<Props> = ({ tournamentId, canManage = false }) => {
   const [phases, setPhases] = useState<any[]>([]);
   const [details, setDetails] = useState<Record<string, any[]>>({});
@@ -80,13 +98,64 @@ const TournamentCompetitionView: React.FC<Props> = ({ tournamentId, canManage = 
             const rounds = Array.from(new Set(groupSeries.map(item => item.round_number))).sort((a: any, b: any) => a - b);
             return <div key={groupName} data-help-id="region-tournament-bracket" className="rounded-lg border bg-gray-50 p-3">
               <h4 className="mb-3 font-semibold text-gray-800">{groupName}</h4>
-              <div className="flex gap-5 overflow-x-auto pb-3">
-                {rounds.map((round: any) => <div key={round} className="min-w-60 space-y-4"><h5 className="font-medium text-center">Round {round}</h5>
-                  {groupSeries.filter(item => item.round_number === round).map(item => <div key={item.series_id} className="border rounded shadow-sm bg-white">
-                    <div className="border-b bg-gray-100 px-3 py-1 text-xs text-gray-600">Bo{item.best_of}</div>
-                    {item.slots.sort((a: any, b: any) => a.slot_number - b.slot_number).map((slot: any) => <div key={slot.slot_number} className={`px-3 py-2 border-b last:border-b-0 ${item.winner_entry_id === slot.resolved_entry_id ? 'font-bold bg-green-50' : ''}`}>{slot.resolved_entry_name || `Seed ${slot.source_group_seed || '?'}`}</div>)}
-                  </div>)}
-                </div>)}
+              <div className="flex items-stretch gap-3 overflow-x-auto pb-3">
+                {rounds.map((round: any, roundIndex: number) => {
+                  const nextRoundSeries = groupSeries.filter(item => item.round_number === rounds[roundIndex + 1]);
+                  return <React.Fragment key={round}>
+                  <div className="flex min-w-64 flex-col">
+                    <h5 className="text-center font-medium">Round {round}</h5>
+                    <div className="flex flex-1 flex-col" style={getBracketRoundSpacing(roundIndex)}>
+                      {groupSeries.filter(item => item.round_number === round).map(item => {
+                        const slots = [...item.slots].sort((a: any, b: any) => a.slot_number - b.slot_number);
+                        const status = item.status === 'completed'
+                          ? 'completed'
+                          : item.status === 'in_progress'
+                            ? 'in_progress'
+                            : item.status === 'ready'
+                              ? 'ready'
+                              : 'waiting';
+                        const statusStyles = {
+                          completed: 'border-green-300 bg-white',
+                          ready: 'border-green-300 bg-green-50',
+                          in_progress: 'border-yellow-300 bg-yellow-50',
+                          waiting: 'border-gray-300 bg-gray-100',
+                        }[status];
+                        const statusLabel = {
+                          completed: 'Completed',
+                          ready: 'Open',
+                          in_progress: 'In progress',
+                          waiting: 'Waiting',
+                        }[status];
+                        return <div key={item.series_id} className={`relative h-28 overflow-hidden rounded border shadow-sm ${statusStyles}`}>
+                          <div className="flex items-center justify-between border-b border-inherit px-3 py-1 text-xs text-gray-600">
+                            <span>Bo{item.best_of}</span>
+                            <span className={`rounded-full px-2 py-0.5 font-semibold ${status === 'ready' ? 'bg-green-200 text-green-900' : status === 'in_progress' ? 'bg-yellow-200 text-yellow-900' : status === 'completed' ? 'bg-gray-200 text-gray-700' : 'bg-gray-200 text-gray-600'}`}>{statusLabel}</span>
+                          </div>
+                          {slots.map((slot: any) => {
+                            const isWinner = item.winner_entry_id === slot.resolved_entry_id;
+                            const score = slot.slot_number === 1 ? item.entry1_wins : item.entry2_wins;
+                            return <div key={slot.slot_number} className={`flex items-center justify-between gap-3 border-b border-inherit px-3 py-2 last:border-b-0 ${isWinner ? 'font-bold text-green-800' : 'text-gray-800'}`}>
+                              <span className="min-w-0 truncate">{slot.resolved_entry_name || `Seed ${slot.source_group_seed || '?'}`}</span>
+                              <span className={`min-w-6 text-right font-mono text-sm ${isWinner ? 'text-green-800' : 'text-gray-600'}`}>{Number(score || 0)}</span>
+                            </div>;
+                          })}
+                        </div>;
+                      })}
+                    </div>
+                  </div>
+                  {roundIndex < rounds.length - 1 && <div aria-hidden="true" className="flex min-w-8 flex-col">
+                    <div className="h-6 shrink-0" />
+                    <div className="flex flex-1 flex-col" style={getBracketRoundSpacing(roundIndex + 1)}>
+                      {nextRoundSeries.map(item => <div key={item.series_id} className="flex h-28 items-center justify-center text-2xl font-bold text-blue-400">→</div>)}
+                    </div>
+                  </div>}
+                </React.Fragment>;
+                })}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-600">
+                <span className="rounded bg-green-100 px-2 py-1 text-green-900">Green: open</span>
+                <span className="rounded bg-yellow-100 px-2 py-1 text-yellow-900">Yellow: in progress</span>
+                <span className="rounded bg-gray-200 px-2 py-1 text-gray-700">Gray: waiting for previous round</span>
               </div>
             </div>;
           })}
