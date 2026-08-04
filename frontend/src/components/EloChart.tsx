@@ -216,7 +216,8 @@ const EloChart: React.FC<EloChartProps> = ({ matches, currentPlayerId }) => {
           <label htmlFor="elo-window" className="text-sm font-semibold text-gray-700">
             {t('label_time_range') || 'Time range'}
           </label>
-          <select
+      <select
+            data-help-id="field-elo-time-range"
             id="elo-window"
             value={window}
             onChange={(event) => setWindow(event.target.value as TimeWindow)}

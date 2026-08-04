@@ -21,7 +21,7 @@ const TimezoneSelector: React.FC<TimezoneSelecterProps> = ({ value, onChange }) 
   const selectedLabel = value || 'UTC';
 
   return (
-    <div className="relative">
+    <div data-help-id="region-profile-timezone" className="relative">
       <label className="block text-sm font-semibold text-gray-700 mb-2">
         {t('timezone') || 'Timezone'}
       </label>

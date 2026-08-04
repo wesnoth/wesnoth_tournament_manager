@@ -65,7 +65,7 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
   }
 
   return (
-    <div className="w-full">
+    <div data-help-id="region-avatar-selector" className="w-full">
       <label className="block text-sm font-medium text-gray-700 mb-3">
         {t('profile.avatar') || 'Avatar'}
       </label>

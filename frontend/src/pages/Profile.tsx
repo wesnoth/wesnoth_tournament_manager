@@ -230,35 +230,35 @@ const Profile: React.FC = () => {
 
   return (
     <MainLayout>
-      <div className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-300 py-8 px-4">
+      <div data-help-id="region-my-profile" className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-300 py-8 px-4">
         <div className="max-w-4xl mx-auto">
           <h1 className="text-4xl font-bold text-gray-800 mb-8 text-center">{t('profile.title')}</h1>
 
           {profile && (
             <>
-              <ProfileStats player={profile} />
+              <div data-help-id="region-my-profile-statistics"><ProfileStats player={profile} /></div>
 
-              <section className="bg-white rounded-lg shadow-md p-8 mb-8">
+              <section data-help-id="region-profile-discord" className="bg-white rounded-lg shadow-md p-8 mb-8">
                 <h2 className="text-2xl font-semibold text-gray-800 mb-6 pb-4 border-b-2 border-gray-200">{t('profile.discord_title')}</h2>
                 {profileMessage && <p className="bg-green-100 text-green-800 px-4 py-3 rounded-lg mb-4 border-l-4 border-green-600">{profileMessage}</p>}
                 {discordValidationMessage && <p className="bg-blue-100 text-blue-800 px-4 py-3 rounded-lg mb-4 border-l-4 border-blue-600">{discordValidationMessage}</p>}
                 {profileError && <p className="bg-red-100 text-red-800 px-4 py-3 rounded-lg mb-4 border-l-4 border-red-600">{profileError}</p>}
                 <div className="flex gap-3 max-md:flex-col">
-                  <input
+                  <input data-help-id="field-profile-discord-id"
                     type="text"
                     placeholder={t('profile.discord_placeholder')}
                     value={discordId}
                     onChange={(e) => setDiscordId(e.target.value)}
                     className="flex-1 px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
                   />
-                  <button 
+                  <button data-help-id="action-update-discord-id"
                     onClick={handleDiscordUpdate} 
                     disabled={updatingDiscord || validatingDiscord}
                     className="px-6 py-3 max-md:w-full bg-gradient-to-r from-purple-500 to-purple-700 text-white rounded-lg font-semibold hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap"
                   >
                     {updatingDiscord ? t('profile.updating') : t('profile.update_discord_button')}
                   </button>
-                  <button
+                  <button data-help-id="action-validate-discord-id"
                     onClick={handleValidateDiscordId}
                     disabled={updatingDiscord || validatingDiscord || !isValidDiscordIdFormat(discordId)}
                     className="px-6 py-3 max-md:w-full bg-gradient-to-r from-blue-500 to-blue-700 text-white rounded-lg font-semibold hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap"
@@ -268,10 +268,10 @@ const Profile: React.FC = () => {
                 </div>
               </section>
 
-              <section className="bg-white rounded-lg shadow-md p-8 mb-8">
+              <section data-help-id="region-profile-language" className="bg-white rounded-lg shadow-md p-8 mb-8">
                 <h2 className="text-2xl font-semibold text-gray-800 mb-6 pb-4 border-b-2 border-gray-200">{t('profile_language_settings')}</h2>
                 <div className="relative inline-block">
-                  <button 
+                  <button data-help-id="action-open-language-selector"
                     className="px-4 py-2 border border-gray-200 rounded-lg bg-white text-gray-800 font-semibold hover:border-blue-500 hover:bg-gray-50 transition-all flex items-center gap-2"
                     onClick={() => setLanguageDropdownOpen(!languageDropdownOpen)}
                   >
@@ -307,9 +307,9 @@ const Profile: React.FC = () => {
                 </div>
               </section>
 
-              <section className="bg-white rounded-lg shadow-md mb-8">
+              <section data-help-id="region-profile-preferences" className="bg-white rounded-lg shadow-md mb-8">
                 <div 
-                  className="p-8 cursor-pointer flex justify-between items-center hover:bg-gray-50 transition-colors"
+                  data-help-id="action-toggle-profile-preferences" className="p-8 cursor-pointer flex justify-between items-center hover:bg-gray-50 transition-colors"
                   onClick={() => setPreferencesCollapsed(!preferencesCollapsed)}
                 >
                   <h2 className="text-2xl font-semibold text-gray-800 pb-0">{t('profile.preferences_title') || 'Preferences'}</h2>
@@ -323,7 +323,7 @@ const Profile: React.FC = () => {
                   </svg>
                 </div>
                 {!preferencesCollapsed && (
-                  <div className="p-8 pt-0 border-t border-gray-200">
+                  <div data-help-id="region-profile-preferences-body" className="p-8 pt-0 border-t border-gray-200">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <CountrySelector
                         value={selectedCountry}
@@ -335,8 +335,8 @@ const Profile: React.FC = () => {
                 )}
               </section>
 
-              <section className="bg-white rounded-lg shadow-md mb-8">
-                <div className="p-8 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between" onClick={() => setAvatarSectionCollapsed(!avatarSectionCollapsed)}>
+              <section data-help-id="region-profile-avatar" className="bg-white rounded-lg shadow-md mb-8">
+                <div data-help-id="action-toggle-profile-avatar" className="p-8 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between" onClick={() => setAvatarSectionCollapsed(!avatarSectionCollapsed)}>
                   <h2 className="text-2xl font-semibold text-gray-800 pb-0">{t('profile.avatar') || 'Avatar'}</h2>
                   <svg 
                     className={`w-6 h-6 text-gray-600 transition-transform ${avatarSectionCollapsed ? 'rotate-180' : ''}`}
@@ -348,7 +348,7 @@ const Profile: React.FC = () => {
                   </svg>
                 </div>
                 {!avatarSectionCollapsed && (
-                  <div className="p-8 pt-0 border-t border-gray-200">
+                  <div data-help-id="region-profile-avatar-body" className="p-8 pt-0 border-t border-gray-200">
                     <AvatarSelector
                       value={selectedAvatar}
                       onChange={handleAvatarChange}
@@ -357,7 +357,7 @@ const Profile: React.FC = () => {
                 )}
               </section>
 
-              <section className="bg-white rounded-lg shadow-md p-8 mb-8">
+              <section data-help-id="region-profile-ranked" className="bg-white rounded-lg shadow-md p-8 mb-8">
                 <h2 className="text-2xl font-semibold text-gray-800 mb-6 pb-4 border-b-2 border-gray-200">{t('profile.ranked_title', 'Ranked Matches')}</h2>
                 <p className="text-gray-600 mb-4">
                   {enableRanked 
@@ -366,7 +366,7 @@ const Profile: React.FC = () => {
                 </p>
                 <label className="flex items-center gap-3 cursor-pointer select-none">
                   <div className="relative">
-                    <input
+                    <input data-help-id="option-enable-ranked-matches"
                       type="checkbox"
                       className="sr-only"
                       checked={enableRanked}
@@ -386,9 +386,9 @@ const Profile: React.FC = () => {
                 )}
               </section>
 
-              <section className="bg-white rounded-lg shadow-md mb-8">
+              <section data-help-id="region-profile-scheduling" className="bg-white rounded-lg shadow-md mb-8">
                 <div 
-                  className="p-8 cursor-pointer flex justify-between items-center hover:bg-gray-50 transition-colors"
+                  data-help-id="action-toggle-profile-scheduling" className="p-8 cursor-pointer flex justify-between items-center hover:bg-gray-50 transition-colors"
                   onClick={() => setSchedulingCollapsed(!schedulingCollapsed)}
                 >
                   <h2 className="text-2xl font-semibold text-gray-800 pb-0">{t('availability.title') || 'Scheduling Preferences'}</h2>
@@ -402,7 +402,7 @@ const Profile: React.FC = () => {
                   </svg>
                 </div>
                 {!schedulingCollapsed && (
-                  <div className="p-8 pt-0 border-t border-gray-200">
+                  <div data-help-id="region-profile-scheduling-body" className="p-8 pt-0 border-t border-gray-200">
                     {schedulingMessage && (
                       <p className={`mb-4 px-4 py-3 rounded-lg border-l-4 ${
                         schedulingMessage.includes('Error') || schedulingMessage.includes('error')
@@ -423,7 +423,7 @@ const Profile: React.FC = () => {
                         onChange={setAvailabilitySchedule}
                       />
 
-                      <button
+                      <button data-help-id="action-save-profile-scheduling"
                         onClick={handleSaveScheduling}
                         disabled={savingScheduling}
                         className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-green-700 text-white rounded-lg font-semibold hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-60 disabled:cursor-not-allowed"

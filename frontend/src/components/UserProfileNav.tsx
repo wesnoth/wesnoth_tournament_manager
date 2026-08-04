@@ -1,11 +1,13 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { getHelpSlugFromPath } from '../utils/helpNavigation';
 
 const UserProfileNav: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const { isAdmin, isTournamentModerator } = useAuthStore();
   const isModerator = isTournamentModerator && !isAdmin;
 
@@ -15,11 +17,12 @@ const UserProfileNav: React.FC = () => {
   };
 
   return (
-    <nav className="w-full bg-gradient-dark-blue border-b-2 border-blue-900 py-3 px-4 sticky top-0 z-100 shadow-md max-md:overflow-x-auto max-md:-webkit-overflow-scrolling-touch">
+    <nav data-help-id="region-user-navigation" className="w-full bg-gradient-dark-blue border-b-2 border-blue-900 py-3 px-4 sticky top-0 z-100 shadow-md max-md:overflow-x-auto max-md:-webkit-overflow-scrolling-touch">
       <div className="max-w-7xl mx-auto w-full">
         <div className="flex flex-wrap max-md:flex-nowrap items-center gap-2 justify-start w-full max-md:overflow-x-auto max-md:-webkit-overflow-scrolling-touch">
           {/* My Profile */}
           <button 
+            data-help-id="action-nav-my-profile"
             className="flex items-center gap-2 px-3 py-2 bg-white/10 border border-white/20 text-white text-sm font-medium rounded hover:bg-white/20 hover:border-white/40 active:bg-white/25 transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-md:px-2.5"
             onClick={() => handleNavigate('/profile')}
             title={t('sidebar.my_profile')}
@@ -30,6 +33,7 @@ const UserProfileNav: React.FC = () => {
 
           {/* My Tournaments */}
           <button 
+            data-help-id="action-nav-my-tournaments"
             className="flex items-center gap-2 px-3 py-2 bg-white/10 border border-white/20 text-white text-sm font-medium rounded hover:bg-white/20 hover:border-white/40 active:bg-white/25 transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-md:px-2.5"
             onClick={() => handleNavigate('/my-tournaments')}
             title={t('sidebar.my_tournaments')}
@@ -40,6 +44,7 @@ const UserProfileNav: React.FC = () => {
 
           {/* My Notifications */}
           <button 
+            data-help-id="action-nav-my-notifications"
             className="flex items-center gap-2 px-3 py-2 bg-white/10 border border-white/20 text-white text-sm font-medium rounded hover:bg-white/20 hover:border-white/40 active:bg-white/25 transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-md:px-2.5"
             onClick={() => handleNavigate('/notifications')}
             title={t('sidebar.my_notifications')}
@@ -51,7 +56,8 @@ const UserProfileNav: React.FC = () => {
           {/* Help */}
           <button 
             className="flex items-center gap-2 px-3 py-2 bg-white/10 border border-white/20 text-white text-sm font-medium rounded hover:bg-white/20 hover:border-white/40 active:bg-white/25 transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-md:px-2.5"
-            onClick={() => handleNavigate('/help')}
+            data-help-id="action-open-contextual-help"
+            onClick={() => handleNavigate(`/help/${getHelpSlugFromPath(location.pathname)}`)}
             title={t('help')}
           >
             <span className="text-lg flex items-center justify-center min-w-5 max-sm:text-base">❓</span>

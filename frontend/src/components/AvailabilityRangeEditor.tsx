@@ -107,12 +107,13 @@ const AvailabilityRangeEditor: React.FC<AvailabilityRangeEditorProps> = ({ value
   };
 
   return (
-    <div className="space-y-2">
+    <div data-help-id="region-availability-schedule" className="space-y-2">
       <div className="flex justify-between items-center mb-2">
         <label className="block text-sm font-semibold text-gray-700">
           {t('availability.title') || 'Availability Schedule'}
         </label>
         <button
+          data-help-id="action-clear-availability"
           onClick={clearAllSchedule}
           className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition"
           title={t('availability.clear_all_help') || 'Clear all time ranges'}
@@ -150,6 +151,7 @@ const AvailabilityRangeEditor: React.FC<AvailabilityRangeEditorProps> = ({ value
                             onChange={(val) => updateRange(day, index, 'end', val)}
                           />
                           <button
+                            data-help-id="action-remove-availability-range"
                             onClick={() => removeRange(day, index)}
                             className="px-1 py-0 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition flex-shrink-0"
                             title={t('common.remove') || 'Remove'}
@@ -160,6 +162,7 @@ const AvailabilityRangeEditor: React.FC<AvailabilityRangeEditorProps> = ({ value
                       ))
                     )}
                     <button
+                      data-help-id="action-add-availability-range"
                       onClick={() => addRange(day)}
                       className="px-2 py-0.5 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100 transition flex-shrink-0"
                       title={t('availability.add_time_range_help') || 'Add another time range'}

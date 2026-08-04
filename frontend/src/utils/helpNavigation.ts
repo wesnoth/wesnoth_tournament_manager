@@ -11,6 +11,8 @@ const CONTEXTUAL_HELP_ROUTES: Record<string, string> = {
   '/help': DEFAULT_HELP_SLUG,
   '/players': 'players',
   '/player': 'player',
+  '/profile': 'my-profile',
+  '/user': 'user',
   '/rankings': 'rankings',
   '/statistics': 'statistics',
   '/tournaments': 'tournaments',

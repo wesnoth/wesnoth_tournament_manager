@@ -172,7 +172,7 @@ const PlayerProfile: React.FC = () => {
     return (
       <div className="w-full max-w-6xl mx-auto px-4 py-8">
         <p className="text-red-600">{error}</p>
-        <button onClick={() => navigate('/players')}>{t('back_to_players')}</button>
+        <button data-help-id="action-back-to-players" onClick={() => navigate('/players')}>{t('back_to_players')}</button>
       </div>
     );
   }
@@ -181,7 +181,7 @@ const PlayerProfile: React.FC = () => {
     return (
       <div className="w-full max-w-6xl mx-auto px-4 py-8">
         <p>Profile not found</p>
-        <button onClick={() => navigate('/players')}>{t('back_to_players')}</button>
+        <button data-help-id="action-back-to-players" onClick={() => navigate('/players')}>{t('back_to_players')}</button>
       </div>
     );
   }
@@ -196,18 +196,18 @@ const PlayerProfile: React.FC = () => {
   ];
 
   return (
-    <div className="bg-gradient-to-br from-gray-100 to-gray-300 min-h-screen py-8 px-4">
+    <div data-help-id="region-player-profile" className="bg-gradient-to-br from-gray-100 to-gray-300 min-h-screen py-8 px-4">
       <div className="max-w-6xl mx-auto">
         <h1 className="text-4xl font-bold text-gray-800 mb-8 text-center">{profile?.nickname}'s Profile</h1>
         
         {profile && (
           <>
-            <ProfileStats player={profile} />
+            <div data-help-id="region-player-profile-statistics"><ProfileStats player={profile} /></div>
             
             <div className="mb-8">
               <div className="mb-3 flex justify-end">
                 {isAuthenticated && currentUser?.id !== id && (
-                  <button
+                  <button data-help-id="action-challenge-player"
                     onClick={() => setShowChallengeModal(true)}
                     className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors font-semibold"
                   >
@@ -225,7 +225,7 @@ const PlayerProfile: React.FC = () => {
             {/* Tab Navigation */}
             <div className="flex flex-wrap gap-2 mb-8 border-b border-gray-300">
               {tabs.map((tab) => (
-                <button
+                <button data-help-id={`action-player-profile-tab-${tab.id}`}
                   key={tab.id}
                   className={`px-4 py-3 font-semibold transition-all cursor-pointer ${
                     activeTab === tab.id
@@ -248,13 +248,15 @@ const PlayerProfile: React.FC = () => {
           <div className="space-y-6">
             {/* Overall Tab */}
             {activeTab === 'overall' && (
-              <div className="bg-white rounded-lg shadow-md p-8">
-                <Suspense fallback={<RouteLoader />}>
-                  <EloChart 
-                    matches={eloHistoryMatches}
-                    currentPlayerId={id || ''}
-                  />
-                </Suspense>
+              <div data-help-id="region-player-tab-overall" className="bg-white rounded-lg shadow-md p-8">
+                <div data-help-id="region-player-elo-chart">
+                  <Suspense fallback={<RouteLoader />}>
+                    <EloChart
+                      matches={eloHistoryMatches}
+                      currentPlayerId={id || ''}
+                    />
+                  </Suspense>
+                </div>
 
                 <div className="mt-8">
                   <h2 className="text-2xl font-semibold text-gray-800 mb-6">{t('recent_games')}</h2>
@@ -292,7 +294,7 @@ const PlayerProfile: React.FC = () => {
 
             {/* Matches Tab */}
             {activeTab === 'matches' && (
-              <div className="bg-white rounded-lg shadow-md p-8">
+              <div data-help-id="region-player-tab-matches" className="bg-white rounded-lg shadow-md p-8">
                 <h2 className="text-2xl font-semibold text-gray-800 mb-6">{t('all_matches')}</h2>
                 
                 {/* Filters */}
@@ -411,7 +413,7 @@ const PlayerProfile: React.FC = () => {
 
             {/* Opponents Tab */}
             {activeTab === 'opponents' && (
-              <div className="bg-white rounded-lg shadow-md p-8">
+              <div data-help-id="region-player-tab-opponents" className="bg-white rounded-lg shadow-md p-8">
                 <div className="flex flex-wrap items-center justify-between gap-4 mb-6 pb-4 border-b-2 border-gray-200">
                   <h2 className="text-2xl font-semibold text-gray-800">{t('my_opponents') || 'Opponents'}</h2>
                   <div className="flex items-center gap-2">
@@ -589,7 +591,7 @@ const PlayerProfile: React.FC = () => {
 
             {/* Performance by Map Tab */}
             {activeTab === 'by-map' && (
-              <div className="bg-white rounded-lg shadow-md p-8">
+              <div data-help-id="region-player-tab-by-map" className="bg-white rounded-lg shadow-md p-8">
                 <Suspense fallback={<RouteLoader />}>
                   <PlayerStatsByMap playerId={id || ''} />
                 </Suspense>
@@ -598,7 +600,7 @@ const PlayerProfile: React.FC = () => {
 
             {/* Performance by Faction Tab */}
             {activeTab === 'by-faction' && (
-              <div className="bg-white rounded-lg shadow-md p-8">
+              <div data-help-id="region-player-tab-by-faction" className="bg-white rounded-lg shadow-md p-8">
                 <Suspense fallback={<RouteLoader />}>
                   <PlayerStatsByFaction playerId={id || ''} />
                 </Suspense>
@@ -607,7 +609,7 @@ const PlayerProfile: React.FC = () => {
 
             {/* Matchup Analysis Tab */}
             {activeTab === 'by-matchup' && (
-              <div className="bg-white rounded-lg shadow-md p-8">
+              <div data-help-id="region-player-tab-by-matchup" className="bg-white rounded-lg shadow-md p-8">
                 <Suspense fallback={<RouteLoader />}>
                   <PlayerStatsByMatchup playerId={id || ''} />
                 </Suspense>

@@ -200,7 +200,7 @@ const Players: React.FC = () => {
   }
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 py-8 bg-white/50 backdrop-blur-sm rounded-lg">
+    <div data-help-id="region-players" className="w-full max-w-6xl mx-auto px-4 py-8 bg-white/50 backdrop-blur-sm rounded-lg">
       <h1>{t('players_title')}</h1>
 
       {error && <p className="bg-red-100 border border-red-300 text-red-700 p-4 rounded-lg mb-6">{error}</p>}
