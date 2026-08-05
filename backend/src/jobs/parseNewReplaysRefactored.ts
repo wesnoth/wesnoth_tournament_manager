@@ -114,9 +114,7 @@ interface ParseSummary {
   finalMap: string | null;
   confidenceLevel: 1 | 2;
   matchType: 'ranked' | 'tournament_ranked' | 'tournament_unranked' | 'rejected';
-  // Kept null for new-model links; the column remains for old replay records.
   linkedTournamentId: string | null;
-  linkedTournamentRoundMatchId: string | null;
   linkedTournamentGameId: string | null;
   tournamentLinkMethod: 'tournament_game' | 'participants' | null;
   linkedWinnerEntryId: string | null;
@@ -291,10 +289,10 @@ export class ParseNewReplaysRefactorized {
             console.log(`⏳ [PARSE] Confidence=1 → Parsed but no match created (awaiting player confirmation)`);
             await query(
               `UPDATE replays SET parse_status = 'parsed', parsed = 1, need_integration = 1, integration_confidence = ?,
-               tournament_id = ?, tournament_round_match_id = ?, tournament_game_id = ?,
+               tournament_id = ?, tournament_game_id = ?,
                tournament_link_method = ?, tournament_linked_at = CURRENT_TIMESTAMP,
                parse_error_message = NULL, parse_summary = ? WHERE id = ?`,
-              [parseSummary.confidenceLevel, parseSummary.linkedTournamentId, parseSummary.linkedTournamentRoundMatchId,
+              [parseSummary.confidenceLevel, parseSummary.linkedTournamentId,
                 parseSummary.linkedTournamentGameId, parseSummary.tournamentLinkMethod,
                 JSON.stringify(parseSummary), replay.id]
             );
@@ -357,10 +355,10 @@ export class ParseNewReplaysRefactorized {
             const replayMatchId = parseSummary.matchType === 'tournament_unranked' ? null : matchCreateResult.matchId;
             await query(
               `UPDATE replays SET parse_status = 'completed', parsed = 1, integration_confidence = ?,
-               tournament_id = ?, tournament_round_match_id = ?, tournament_game_id = ?,
+               tournament_id = ?, tournament_game_id = ?,
                tournament_link_method = ?, tournament_linked_at = CURRENT_TIMESTAMP,
                match_id = ?, parse_error_message = NULL, parse_summary = ? WHERE id = ?`,
-              [parseSummary.confidenceLevel, parseSummary.linkedTournamentId, parseSummary.linkedTournamentRoundMatchId,
+              [parseSummary.confidenceLevel, parseSummary.linkedTournamentId,
                 parseSummary.linkedTournamentGameId, parseSummary.tournamentLinkMethod,
                 replayMatchId, JSON.stringify(parseSummary), replay.id]
             );
@@ -470,7 +468,6 @@ export class ParseNewReplaysRefactorized {
       confidenceLevel: 1,
       matchType: 'rejected',
       linkedTournamentId: null,
-      linkedTournamentRoundMatchId: null,
       linkedTournamentGameId: null,
       tournamentLinkMethod: null,
       linkedWinnerEntryId: null,
@@ -1025,7 +1022,6 @@ export class ParseNewReplaysRefactorized {
       replayFilePath,
       matchType:                      parseSummary.matchType,
       linkedTournamentId:             parseSummary.linkedTournamentId,
-      linkedTournamentRoundMatchId:   parseSummary.linkedTournamentRoundMatchId,
       linkedTournamentGameId:         parseSummary.linkedTournamentGameId,
       gameId:                         replay.game_id,
       wesnothVersion:                 replay.wesnoth_version,

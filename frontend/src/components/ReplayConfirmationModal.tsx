@@ -15,8 +15,6 @@ interface ReplayConfirmationModalProps {
   player2_faction: string;
   onClose: () => void;
   onSuccess: () => void;
-  /** Optional: when set, the backend will also associate the match to this tournament_match */
-  tournament_match_id?: string;
 }
 
 export const ReplayConfirmationModal: React.FC<ReplayConfirmationModalProps> = ({
@@ -31,7 +29,6 @@ export const ReplayConfirmationModal: React.FC<ReplayConfirmationModalProps> = (
   player2_faction,
   onClose,
   onSuccess,
-  tournament_match_id,
 }) => {
   const { t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -49,7 +46,7 @@ export const ReplayConfirmationModal: React.FC<ReplayConfirmationModalProps> = (
       if (your_choice === 'cancel') {
         await cancelConfidence1Replay(replayId);
       } else {
-        await reportConfidence1Replay(replayId, your_choice, comments, rating, tournament_match_id);
+        await reportConfidence1Replay(replayId, your_choice, comments, rating);
       }
       onSuccess();
       onClose();

@@ -84,250 +84,67 @@ export interface BalanceTrendPoint {
  * Calculate league tournament tiebreakers
  * Returns: total_points, OMP, GWP, OGP for each player
  */
-export async function calculateLeagueTiebreakers(
-  tournamentId: string
-): Promise<TiebreakerResult[]> {
-  try {
-    // Get all participants
-    const participantsResult = await query(
-      `SELECT DISTINCT tp.user_id
-       FROM tournament_participants tp
-       WHERE tp.tournament_id = ?
-         AND tp.participation_status = 'accepted'
-       ORDER BY tp.user_id`,
-      [tournamentId]
-    );
-
-    const results: TiebreakerResult[] = [];
-
-    for (const participant of participantsResult.rows) {
-      const userId = participant.user_id;
-
-      // 1. TOTAL POINTS = tournament_wins
-      const pointsResult = await query(
-        `SELECT COALESCE(tp.tournament_wins, 0) as total_points
-         FROM tournament_participants tp
-         WHERE tp.tournament_id = ? AND tp.user_id = ?`,
-        [tournamentId, userId]
-      );
-      const totalPoints = pointsResult.rows[0]?.total_points || 0;
-
-      // 2. OMP (Opponent Match Points) = Average wins of all opponents faced
-      const ompResult = await query(
-        `SELECT COALESCE(AVG(COALESCE(tp.tournament_wins, 0)), 0) as omp
-         FROM (
-           SELECT DISTINCT
-             CASE 
-               WHEN tm.player1_id = ? THEN tm.player2_id
-               ELSE tm.player1_id
-             END as opponent_id
-           FROM tournament_round_matches tm
-           WHERE tm.tournament_id = ?
-             AND (tm.player1_id = ? OR tm.player2_id = ?)
-             AND tm.series_status = 'completed'
-         ) opponents
-         LEFT JOIN tournament_participants tp ON tp.tournament_id = ? 
-           AND tp.user_id = opponents.opponent_id
-           AND tp.participation_status = 'accepted'`,
-        [userId, tournamentId, userId, userId, tournamentId]
-      );
-      const omp = parseFloat(ompResult.rows[0]?.omp || 0);
-
-      // 3. GWP (Game Win Percentage) = (games won / total games) * 100
-      const gwpResult = await query(
-        `SELECT 
-           COALESCE(SUM(CASE WHEN tm.player1_id = ? THEN tm.player1_wins ELSE tm.player2_wins END), 0) as games_won,
-           COALESCE(SUM(CASE WHEN tm.player1_id = ? THEN tm.player2_wins ELSE tm.player1_wins END), 0) as games_lost
-         FROM tournament_round_matches tm
-         WHERE tm.tournament_id = ?
-           AND (tm.player1_id = ? OR tm.player2_id = ?)
-           AND tm.series_status = 'completed'`,
-        [userId, userId, tournamentId, userId, userId]
-      );
-      
-      const gamesWon = gwpResult.rows[0]?.games_won || 0;
-      const gamesLost = gwpResult.rows[0]?.games_lost || 0;
-      const totalGames = gamesWon + gamesLost;
-      const gwp = totalGames > 0 ? Math.round((gamesWon / totalGames) * 10000) / 100 : 0;
-
-      // 4. OGP (Opponent Game Win Percentage) = Average GWP of opponents
-      const ogpResult = await query(
-        `SELECT COALESCE(AVG(
-           CASE 
-             WHEN (opp_wins + opp_losses) > 0 
-             THEN (opp_wins / (opp_wins + opp_losses) * 100)
-             ELSE 0
-           END
-         ), 0) as ogp
-         FROM (
-           SELECT DISTINCT
-             CASE 
-               WHEN tm.player1_id = ? THEN tm.player2_id
-               ELSE tm.player1_id
-             END as opponent_id,
-             CASE 
-               WHEN tm.player1_id = ? THEN tm.player2_wins
-               ELSE tm.player1_wins
-             END as opp_wins,
-             CASE 
-               WHEN tm.player1_id = ? THEN tm.player1_wins
-               ELSE tm.player2_wins
-             END as opp_losses
-           FROM tournament_round_matches tm
-           WHERE tm.tournament_id = ?
-             AND (tm.player1_id = ? OR tm.player2_id = ?)
-             AND tm.series_status = 'completed'
-         ) opponent_data`,
-        [userId, userId, userId, tournamentId, userId, userId]
-      );
-      const ogp = parseFloat(ogpResult.rows[0]?.ogp || 0);
-
-      results.push({
-        user_id: userId,
-        total_points: totalPoints,
-        omp,
-        gwp,
-        ogp
-      });
-    }
-
-    return results;
-  } catch (error) {
-    console.error('Error calculating league tiebreakers:', error);
-    throw error;
-  }
+/**
+ * Calculate phase-engine standings tiebreakers from materialized v2 standings.
+ * The phase engine owns series and game progression; this service only reads
+ * its aggregate standings and never reconstructs results from legacy tables.
+ */
+export async function calculateLeagueTiebreakers(tournamentId: string): Promise<TiebreakerResult[]> {
+  const result = await query(
+    `SELECT entries.participant_id AS user_id,
+            COALESCE(SUM(standings.points), 0) AS total_points,
+            COALESCE(AVG(standings.omp), 0) AS omp,
+            COALESCE(AVG(standings.gwp), 0) AS gwp,
+            COALESCE(AVG(standings.ogp), 0) AS ogp
+     FROM tournament_entries entries
+     JOIN tournament_phase_entries phase_entries ON phase_entries.entry_id = entries.id
+     LEFT JOIN tournament_phase_standings standings
+       ON standings.entry_id = phase_entries.entry_id
+      AND standings.group_id = phase_entries.group_id
+     WHERE entries.tournament_id = ? AND entries.entry_type = 'player'
+     GROUP BY entries.participant_id`,
+    [tournamentId]
+  );
+  return result.rows.map((row: any) => ({
+    user_id: row.user_id,
+    total_points: Number(row.total_points || 0),
+    omp: Number(row.omp || 0),
+    gwp: Number(row.gwp || 0),
+    ogp: Number(row.ogp || 0),
+  }));
 }
 
-/**
- * Calculate swiss tournament tiebreakers (same as league for now)
- */
-export async function calculateSwissTiebreakers(
-  tournamentId: string
-): Promise<TiebreakerResult[]> {
-  // Swiss uses same calculation as league
+/** Swiss uses the same materialized phase standings as league competition. */
+export async function calculateSwissTiebreakers(tournamentId: string): Promise<TiebreakerResult[]> {
   return calculateLeagueTiebreakers(tournamentId);
 }
 
-/**
- * Calculate team swiss tournament tiebreakers
- */
-export async function calculateTeamSwissTiebreakers(
-  tournamentId: string
-): Promise<TiebreakerResult[]> {
-  try {
-    // Include eliminated teams as well as the active champion. Filtering to
-    // active teams would make elimination tournaments calculate tiebreakers
-    // only for the final winner. Exclude the administrative rejection bucket,
-    // which is not a competitive team.
-    const teamsResult = await query(
-      `SELECT DISTINCT tt.id
-       FROM tournament_teams tt
-       WHERE tt.tournament_id = ?
-         AND tt.name <> 'Rejected players'
-       ORDER BY tt.id`,
-      [tournamentId]
-    );
-
-    const results: TiebreakerResult[] = [];
-
-    for (const team of teamsResult.rows) {
-      const teamId = team.id;
-
-      // 1. TOTAL POINTS = tournament_wins * 3
-      const pointsResult = await query(
-        `SELECT COALESCE(tt.tournament_wins, 0) * 3 as total_points
-         FROM tournament_teams tt
-         WHERE tt.tournament_id = ? AND tt.id = ?`,
-        [tournamentId, teamId]
-      );
-      const totalPoints = pointsResult.rows[0]?.total_points || 0;
-
-      // 2. OMP = Average wins of all opponent teams * 3
-      const ompResult = await query(
-        `SELECT COALESCE(AVG(COALESCE(tt.tournament_wins, 0) * 3), 0) as omp
-         FROM (
-           SELECT DISTINCT
-             CASE 
-               WHEN tm.player1_id = ? THEN tm.player2_id
-               ELSE tm.player1_id
-             END as opponent_id
-           FROM tournament_round_matches tm
-           WHERE tm.tournament_id = ?
-             AND (tm.player1_id = ? OR tm.player2_id = ?)
-             AND tm.series_status = 'completed'
-         ) opponents
-         LEFT JOIN tournament_teams tt ON tt.tournament_id = ? 
-           AND tt.id = opponents.opponent_id`,
-        [teamId, tournamentId, teamId, teamId, tournamentId]
-      );
-      const omp = parseFloat(ompResult.rows[0]?.omp || 0);
-
-      // 3. GWP (Game Win Percentage)
-      const gwpResult = await query(
-        `SELECT 
-           COALESCE(SUM(CASE WHEN tm.player1_id = ? THEN tm.player1_wins ELSE tm.player2_wins END), 0) as games_won,
-           COALESCE(SUM(CASE WHEN tm.player1_id = ? THEN tm.player2_wins ELSE tm.player1_wins END), 0) as games_lost
-         FROM tournament_round_matches tm
-         WHERE tm.tournament_id = ?
-           AND (tm.player1_id = ? OR tm.player2_id = ?)
-           AND tm.series_status = 'completed'`,
-        [teamId, teamId, tournamentId, teamId, teamId]
-      );
-      
-      const gamesWon = gwpResult.rows[0]?.games_won || 0;
-      const gamesLost = gwpResult.rows[0]?.games_lost || 0;
-      const totalGames = gamesWon + gamesLost;
-      const gwp = totalGames > 0 ? Math.round((gamesWon / totalGames) * 10000) / 100 : 0;
-
-      // 4. OGP (Opponent Game Win Percentage)
-      const ogpResult = await query(
-        `SELECT COALESCE(AVG(
-           CASE 
-             WHEN (opp_wins + opp_losses) > 0 
-             THEN (opp_wins / (opp_wins + opp_losses) * 100)
-             ELSE 0
-           END
-         ), 0) as ogp
-         FROM (
-           SELECT DISTINCT
-             CASE 
-               WHEN tm.player1_id = ? THEN tm.player2_id
-               ELSE tm.player1_id
-             END as opponent_id,
-             CASE 
-               WHEN tm.player1_id = ? THEN tm.player2_wins
-               ELSE tm.player1_wins
-             END as opp_wins,
-             CASE 
-               WHEN tm.player1_id = ? THEN tm.player1_wins
-               ELSE tm.player2_wins
-             END as opp_losses
-           FROM tournament_round_matches tm
-           WHERE tm.tournament_id = ?
-             AND (tm.player1_id = ? OR tm.player2_id = ?)
-             AND tm.series_status = 'completed'
-         ) opponent_data`,
-        [teamId, teamId, teamId, tournamentId, teamId, teamId]
-      );
-      const ogp = parseFloat(ogpResult.rows[0]?.ogp || 0);
-
-      results.push({
-        team_id: teamId,
-        total_points: totalPoints,
-        omp,
-        gwp,
-        ogp
-      });
-    }
-
-    return results;
-  } catch (error) {
-    console.error('Error calculating team swiss tiebreakers:', error);
-    throw error;
-  }
+/** Calculate team tiebreakers from phase-engine standings. */
+export async function calculateTeamSwissTiebreakers(tournamentId: string): Promise<TiebreakerResult[]> {
+  const result = await query(
+    `SELECT entries.team_id,
+            COALESCE(SUM(standings.points), 0) AS total_points,
+            COALESCE(AVG(standings.omp), 0) AS omp,
+            COALESCE(AVG(standings.gwp), 0) AS gwp,
+            COALESCE(AVG(standings.ogp), 0) AS ogp
+     FROM tournament_entries entries
+     JOIN tournament_phase_entries phase_entries ON phase_entries.entry_id = entries.id
+     LEFT JOIN tournament_phase_standings standings
+       ON standings.entry_id = phase_entries.entry_id
+      AND standings.group_id = phase_entries.group_id
+     WHERE entries.tournament_id = ? AND entries.entry_type = 'team'
+     GROUP BY entries.team_id`,
+    [tournamentId]
+  );
+  return result.rows.map((row: any) => ({
+    team_id: row.team_id,
+    total_points: Number(row.total_points || 0),
+    omp: Number(row.omp || 0),
+    gwp: Number(row.gwp || 0),
+    ogp: Number(row.ogp || 0),
+  }));
 }
 
-// ============================================================================
 // TEAM MEMBER VALIDATIONS
 // ============================================================================
 
@@ -1206,37 +1023,26 @@ export async function getTournamentSnapshot(
   total_participants: number;
   final_date: Date;
 }> {
-  try {
-    const result = await query(
-      `SELECT
-        ? as tournament_id,
-        COUNT(DISTINCT tm.id) as total_matches,
-        SUM(tm.player1_wins + tm.player2_wins) as total_games,
-        ROUND(AVG(tm.player1_wins + tm.player2_wins), 2) as avg_games_per_match,
-        COUNT(DISTINCT tp.user_id) as total_participants,
-        MAX(tm.completed_at) as final_date
-       FROM tournament_round_matches tm
-       LEFT JOIN tournament_participants tp ON tp.tournament_id = ?
-       WHERE tm.tournament_id = ?
-       AND tm.series_status = 'completed'`,
-      [tournamentId]
-    );
-
-    if (result.rows.length === 0) {
-      throw new Error('Tournament not found');
-    }
-
-    return result.rows[0] as any;
-  } catch (error) {
-    console.error('Error getting tournament snapshot:', error);
-    throw error;
-  }
+  const result = await query(
+    `SELECT ? AS tournament_id,
+            COUNT(DISTINCT series.id) AS total_matches,
+            COUNT(games.id) AS total_games,
+            COALESCE(ROUND(COUNT(games.id) / NULLIF(COUNT(DISTINCT series.id), 0), 2), 0) AS avg_games_per_match,
+            (SELECT COUNT(*) FROM tournament_participants participants
+             WHERE participants.tournament_id = ?
+               AND participants.participation_status = 'accepted') AS total_participants,
+            MAX(games.played_at) AS final_date
+     FROM tournament_series series
+     JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+     JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+     JOIN tournament_phases phases ON phases.id = groups.phase_id
+     LEFT JOIN tournament_games games ON games.series_id = series.id AND games.status = 'completed'
+     WHERE phases.tournament_id = ?`,
+    [tournamentId, tournamentId, tournamentId]
+  );
+  return result.rows[0] as any;
 }
 
-/**
- * Create the cumulative snapshot immediately after a balance event.
- * The date is derived from the event and is never supplied by a regular user.
- */
 export async function createBalanceEventAfterSnapshot(
   eventId: string
 ): Promise<number> {

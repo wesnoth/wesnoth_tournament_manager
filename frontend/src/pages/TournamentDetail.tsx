@@ -205,7 +205,6 @@ interface TournamentMatch {
   pending_replay_game_name?: string;
   pending_replay_cancel_requested_by?: string | null;
   pending_replay_parse_status?: string;
-  tournament_round_match_id?: string;
   replay_url?: string;
   // Team members for mapping (team tournaments only)
   team1_members?: string[] | null;
@@ -1156,7 +1155,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
   // No longer needed - schedule data comes from roundMatches endpoint
   const loadAllMatchSchedules = async (matchIds: string[]) => {
     // This function is now deprecated - schedule data is included in roundMatches
-    console.log('📌 Schedule data now included in round-matches endpoint, no separate requests needed');
+    console.log('📌 Schedule data is loaded from phase-engine series endpoints');
   };
 
   // Helper to get proposal and filter slots based on proposal status
@@ -2048,7 +2047,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                 <tbody>
                   {participants.map((p) => (
                     <tr key={p.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 text-gray-700"><PlayerLink nickname={p.nickname} userId={p.id} /></td>
+                      <td className="px-4 py-3 text-gray-700"><PlayerLink nickname={p.nickname} userId={p.user_id} /></td>
                       <td className="px-4 py-3 text-gray-700">
                         <span 
                           className="inline-block px-3 py-1 text-white rounded-full text-xs font-semibold"
@@ -2168,9 +2167,9 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                             </thead>
                             <tbody>
                               {scheduledMatches.map((match, matchIndex) => {
-                                const seriesId = match.tournament_round_match_id || match.id;
+                                const seriesId = match.series_id || match.id;
                                 const firstSeriesRow = scheduledMatches.findIndex(
-                                  (candidate) => (candidate.tournament_round_match_id || candidate.id) === seriesId
+                                  (candidate) => (candidate.series_id || candidate.id) === seriesId
                                 ) === matchIndex;
                                 // Check if current user is one of the players/teams
                                 let isPlayer = false;
@@ -2219,7 +2218,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                           data-help-id="action-determine-match-winner"
                                           className="px-3 py-1 bg-orange-500 text-white rounded text-xs font-semibold hover:bg-orange-600 transition-colors whitespace-nowrap"
                                           onClick={() => openDetermineWinnerModal({
-                                            id: match.tournament_round_match_id || match.id,
+                                            id: match.series_id || match.id,
                                             player1_id: match.player1_id,
                                             player2_id: match.player2_id,
                                             player1_nickname: match.player1_nickname,
@@ -2861,7 +2860,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                 <>
                                   {(() => {
                                     const schedStatus = getScheduleStatus(match);
-                                    const cacheKey = match.tournament_round_match_id || match.id;
+                                    const cacheKey = match.series_id || match.id;
                                     const cachedProposal = proposalCache[cacheKey];
                                     
                                     if (schedStatus.status === 'confirmed') {
@@ -2871,7 +2870,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                            <button
                                              data-help-id="action-schedule-match"
                                              className="px-3 py-1 bg-green-500 text-white rounded text-xs font-semibold hover:bg-green-600 transition-colors whitespace-nowrap"
-                                             onClick={() => handlePreloadSchedulingData(match.tournament_round_match_id || match.id, true)}
+                                             onClick={() => handlePreloadSchedulingData(match.series_id || match.id, true)}
                                              disabled={isLoadingScheduling}
                                              title="Click to reschedule the match"
                                            >
@@ -2906,7 +2905,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                            <button
                                              data-help-id="action-schedule-match"
                                              className="px-3 py-1 bg-purple-500 text-white rounded text-xs font-semibold hover:bg-purple-600 transition-colors whitespace-nowrap"
-                                             onClick={() => handlePreloadSchedulingData(match.tournament_round_match_id || match.id, true)}
+                                             onClick={() => handlePreloadSchedulingData(match.series_id || match.id, true)}
                                              disabled={isLoadingScheduling}
                                              title={schedStatus.isUserProposer ? 'View proposed schedule' : 'Confirm opponent proposal'}
                                            >
@@ -3191,7 +3190,6 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
           map={selectedTournamentReplay.map}
           player1_faction={selectedTournamentReplay.winner_faction}
           player2_faction={selectedTournamentReplay.loser_faction}
-          tournament_match_id={selectedTournamentReplay.tournament_match_id}
           onClose={() => { setShowReplayConfirmModal(false); setSelectedTournamentReplay(null); }}
           onSuccess={handleReplayConfirmSuccess}
         />

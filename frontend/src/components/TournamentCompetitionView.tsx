@@ -4,7 +4,7 @@ import { api } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import ReplayConfirmationModal from './ReplayConfirmationModal';
 import PhaseGameConfirmationModal from './PhaseGameConfirmationModal';
-import PlayerLink from './PlayerLink';
+import TournamentEntryName from './TournamentEntryName';
 import StarDisplay from './StarDisplay';
 import { tournamentSchedulingService } from '../services/tournamentSchedulingService';
 import { groupSlotsIntoRanges } from '../utils/slotGrouping';
@@ -122,7 +122,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
               <h4 className="border-b border-blue-200 bg-blue-100 px-4 py-3 font-semibold text-blue-900">{group.name}</h4>
               <div className="overflow-x-auto"><table className="w-full bg-white text-sm">
                 <thead><tr className="bg-gray-100"><th className="p-2 text-left">Pos.</th><th className="p-2 text-left">Entry</th><th className="p-2">Played</th><th className="p-2">W</th><th className="p-2">L</th><th className="p-2">Points</th><th className="p-2">OMP</th><th className="p-2">GWP</th><th className="p-2">OGP</th></tr></thead>
-                <tbody>{group.rows.map((row: any) => <tr key={row.entry_id} className="border-t"><td className="p-2">{row.rank_position || '—'}</td><td className="p-2 font-medium">{row.entry_name}</td><td className="p-2 text-center">{row.matches_played}</td><td className="p-2 text-center">{row.wins}</td><td className="p-2 text-center">{row.losses}</td><td className="p-2 text-center font-semibold">{row.points}</td><td className="p-2 text-center">{row.omp}</td><td className="p-2 text-center">{row.gwp}</td><td className="p-2 text-center">{row.ogp}</td></tr>)}</tbody>
+                <tbody>{group.rows.map((row: any) => <tr key={row.entry_id} className="border-t"><td className="p-2">{row.rank_position || '—'}</td><td className="p-2 font-medium"><TournamentEntryName name={row.entry_name} userId={row.entry_user_id} members={row.entry_members} /></td><td className="p-2 text-center">{row.matches_played}</td><td className="p-2 text-center">{row.wins}</td><td className="p-2 text-center">{row.losses}</td><td className="p-2 text-center font-semibold">{row.points}</td><td className="p-2 text-center">{row.omp}</td><td className="p-2 text-center">{row.gwp}</td><td className="p-2 text-center">{row.ogp}</td></tr>)}</tbody>
               </table></div>
             </article>)}
           </div>
@@ -180,7 +180,11 @@ const TournamentCompetitionView: React.FC<Props> = ({
                             const isWinner = item.winner_entry_id === slot.resolved_entry_id;
                             const score = slot.slot_number === 1 ? item.entry1_wins : item.entry2_wins;
                             return <div key={slot.slot_number} className={`flex items-center justify-between gap-3 border-b border-inherit px-3 py-2 last:border-b-0 ${isWinner ? 'font-bold text-green-800' : 'text-gray-800'}`}>
-                              <span className="min-w-0 truncate">{slot.resolved_entry_name || `Seed ${slot.source_group_seed || '?'}`}</span>
+                              <span className="min-w-0 truncate"><TournamentEntryName
+                                name={slot.resolved_entry_name || `Seed ${slot.source_group_seed || '?'}`}
+                                userId={slot.resolved_entry_user_id}
+                                members={slot.resolved_entry_members}
+                              /></span>
                               <span className={`min-w-6 text-right font-mono text-sm ${isWinner ? 'text-green-800' : 'text-gray-600'}`}>{Number(score || 0)}</span>
                             </div>;
                           })}
@@ -271,6 +275,9 @@ const TournamentCompetitionView: React.FC<Props> = ({
                   : game.pending_replay_summary;
               } catch { pendingSummary = null; }
               const winnerIsEntry1 = game.winner_entry_id === game.entry1_id;
+              // Scheduled games are displayed as Player 1 / Player 2. Only
+              // completed games reorder the columns to winner / loser.
+              const displayedWinnerIsEntry1 = !completed || pendingReplay ? true : winnerIsEntry1;
               const winnerName = !completed || pendingReplay
                 ? game.entry1_name
                 : (winnerIsEntry1 ? game.entry1_name : game.entry2_name);
@@ -322,8 +329,8 @@ const TournamentCompetitionView: React.FC<Props> = ({
                 || (game.loser_comments || game.loser_rating ? 'confirmed' : game.winner_comments || game.winner_rating ? 'reported' : 'unconfirmed');
               // Match history displays the rating received by each player next
               // to their name, while comments remain the feedback they wrote.
-              const winnerUserId = winnerIsEntry1 ? game.entry1_user_id : game.entry2_user_id;
-              const loserUserId = winnerIsEntry1 ? game.entry2_user_id : game.entry1_user_id;
+              const winnerUserId = displayedWinnerIsEntry1 ? game.entry1_user_id : game.entry2_user_id;
+              const loserUserId = displayedWinnerIsEntry1 ? game.entry2_user_id : game.entry1_user_id;
               const scheduleStatus = proposal?.status === 'confirmed'
                 ? 'confirmed'
                 : proposal
@@ -349,7 +356,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
                 <td className={`px-4 py-3 font-semibold ${completed ? 'text-green-700' : 'text-gray-800'}`}>
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                      <div className="min-w-0 flex-1"><PlayerLink nickname={winnerName} userId={winnerUserId} /></div>
+                      <div className="min-w-0 flex-1"><TournamentEntryName name={winnerName} userId={winnerUserId} members={displayedWinnerIsEntry1 ? game.entry1_members : game.entry2_members} /></div>
                       <StarDisplay rating={game.loser_rating} size="sm" />
                     </div>
                   {completed && game.winner_comments && <div className="text-xs font-normal italic text-gray-500 whitespace-normal break-words">{game.winner_comments}</div>}
@@ -358,7 +365,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
                 <td className={`px-4 py-3 font-semibold ${completed ? 'text-red-700' : 'text-gray-800'}`}>
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                      <div className="min-w-0 flex-1"><PlayerLink nickname={loserName} userId={loserUserId} /></div>
+                      <div className="min-w-0 flex-1"><TournamentEntryName name={loserName} userId={loserUserId} members={displayedWinnerIsEntry1 ? game.entry2_members : game.entry1_members} /></div>
                       <StarDisplay rating={game.winner_rating} size="sm" />
                     </div>
                   {completed && game.loser_comments && <div className="text-xs font-normal italic text-gray-500 whitespace-normal break-words">{game.loser_comments}</div>}

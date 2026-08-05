@@ -319,6 +319,14 @@ router.get('/:id/overall-standings', async (req, res) => {
       query(
         `SELECT entries.id AS entry_id, entries.initial_seed,
                 COALESCE(users.id, teams.id) AS entity_id,
+                users.id AS entry_user_id,
+                CASE WHEN teams.id IS NULL THEN JSON_ARRAY() ELSE COALESCE((
+                  SELECT JSON_ARRAYAGG(JSON_OBJECT('user_id', member_user.id, 'nickname', member_user.nickname))
+                  FROM tournament_participants member
+                  JOIN users_extension member_user ON member_user.id = member.user_id
+                  WHERE member.team_id = teams.id
+                    AND member.participation_status = 'accepted'
+                ), JSON_ARRAY()) END AS entry_members,
                 ${competitionEntryNameSql('users', 'teams')} AS entry_name
          FROM tournament_entries entries
          LEFT JOIN tournament_participants participants ON participants.id = entries.participant_id
@@ -476,6 +484,8 @@ router.get('/:id/overall-standings', async (req, res) => {
       return {
         entry_id: entry.entry_id,
         entity_id: entry.entity_id,
+        entry_user_id: entry.entry_user_id,
+        entry_members: typeof entry.entry_members === 'string' ? JSON.parse(entry.entry_members) : (entry.entry_members || []),
         entry_name: entry.entry_name,
         initial_seed: Number(entry.initial_seed || 0),
         status,
@@ -518,6 +528,14 @@ router.get('/:id/overall-standings', async (req, res) => {
 router.get('/:id/phases/:phaseId/standings', async (req, res) => {
   const result = await query(
     `SELECT s.*, g.name AS group_name, e.entry_type,
+            u.id AS entry_user_id,
+            CASE WHEN tt.id IS NULL THEN JSON_ARRAY() ELSE COALESCE((
+              SELECT JSON_ARRAYAGG(JSON_OBJECT('user_id', member_user.id, 'nickname', member_user.nickname))
+              FROM tournament_participants member
+              JOIN users_extension member_user ON member_user.id = member.user_id
+              WHERE member.team_id = tt.id
+                AND member.participation_status = 'accepted'
+            ), JSON_ARRAY()) END AS entry_members,
             ${competitionEntryNameSql('u', 'tt')} AS entry_name
      FROM tournament_phase_standings s
      JOIN tournament_phase_groups g ON g.id = s.group_id
@@ -539,6 +557,13 @@ router.get('/:id/phases/:phaseId/bracket', async (req, res) => {
             s.id AS series_id, s.series_position, s.status, s.best_of, s.entry1_wins, s.entry2_wins,
             s.winner_entry_id, sl.slot_number, sl.source_type, sl.source_group_seed,
             sl.source_series_id, sl.source_outcome, sl.resolved_entry_id,
+            u.id AS resolved_entry_user_id,
+            CASE WHEN tt.id IS NULL THEN JSON_ARRAY() ELSE COALESCE((
+              SELECT JSON_ARRAYAGG(JSON_OBJECT('user_id', member_user.id, 'nickname', member_user.nickname))
+              FROM tournament_participants member
+              JOIN users_extension member_user ON member_user.id = member.user_id
+              WHERE member.team_id = tt.id AND member.participation_status = 'accepted'
+            ), JSON_ARRAY()) END AS resolved_entry_members,
             ${competitionEntryNameSql('u', 'tt')} AS resolved_entry_name
      FROM tournament_phase_groups g
      JOIN tournament_phases p ON p.id = g.phase_id
@@ -571,6 +596,18 @@ router.get('/:id/phases/:phaseId/games', async (req, res) => {
             games.entry1_id, games.entry2_id,
             participant1.user_id AS entry1_user_id,
             participant2.user_id AS entry2_user_id,
+            CASE WHEN team1.id IS NULL THEN JSON_ARRAY() ELSE COALESCE((
+              SELECT JSON_ARRAYAGG(JSON_OBJECT('user_id', member_user.id, 'nickname', member_user.nickname))
+              FROM tournament_participants member
+              JOIN users_extension member_user ON member_user.id = member.user_id
+              WHERE member.team_id = team1.id AND member.participation_status = 'accepted'
+            ), JSON_ARRAY()) END AS entry1_members,
+            CASE WHEN team2.id IS NULL THEN JSON_ARRAY() ELSE COALESCE((
+              SELECT JSON_ARRAYAGG(JSON_OBJECT('user_id', member_user.id, 'nickname', member_user.nickname))
+              FROM tournament_participants member
+              JOIN users_extension member_user ON member_user.id = member.user_id
+              WHERE member.team_id = team2.id AND member.participation_status = 'accepted'
+            ), JSON_ARRAY()) END AS entry2_members,
             games.map,
             games.winner_faction,
             games.loser_faction,
@@ -590,6 +627,18 @@ router.get('/:id/phases/:phaseId/games', async (req, res) => {
             pending_replay.replay_url AS pending_replay_url,
             ${competitionEntryNameSql('user1', 'team1')} AS entry1_name,
             ${competitionEntryNameSql('user2', 'team2')} AS entry2_name,
+            CASE WHEN team1.id IS NULL THEN JSON_ARRAY() ELSE COALESCE((
+              SELECT JSON_ARRAYAGG(JSON_OBJECT('user_id', member_user.id, 'nickname', member_user.nickname))
+              FROM tournament_participants member
+              JOIN users_extension member_user ON member_user.id = member.user_id
+              WHERE member.team_id = team1.id AND member.participation_status = 'accepted'
+            ), JSON_ARRAY()) END AS entry1_members,
+            CASE WHEN team2.id IS NULL THEN JSON_ARRAY() ELSE COALESCE((
+              SELECT JSON_ARRAYAGG(JSON_OBJECT('user_id', member_user.id, 'nickname', member_user.nickname))
+              FROM tournament_participants member
+              JOIN users_extension member_user ON member_user.id = member.user_id
+              WHERE member.team_id = team2.id AND member.participation_status = 'accepted'
+            ), JSON_ARRAY()) END AS entry2_members,
             entry1.team_id AS entry1_team_id,
             entry2.team_id AS entry2_team_id
      FROM tournament_games games

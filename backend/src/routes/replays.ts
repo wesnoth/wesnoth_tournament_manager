@@ -11,8 +11,9 @@
 import express from 'express';
 import { query } from '../config/database.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
-import { createMatch, updateTournamentRoundMatch } from '../services/matchCreationService.js';
-import { validateAndCorrectFactions, handlePostConfirmation } from '../services/replayConfirmationService.js';
+import { createMatch } from '../services/matchCreationService.js';
+import { validateAndCorrectFactions } from '../services/replayConfirmationService.js';
+import { recordPhaseGameResult } from '../tournament-engine/competitionProgression.js';
 
 const router = express.Router();
 
@@ -40,7 +41,7 @@ router.get('/pending-confirmation', authMiddleware, async (req: AuthRequest, res
     // Find replays awaiting this player's confirmation
     const result = await query(
       `SELECT id, game_name, replay_filename, wesnoth_version,
-              parse_summary, integration_confidence, tournament_round_match_id,
+              parse_summary, integration_confidence, tournament_game_id,
               end_time
        FROM replays
        WHERE parse_status = 'parsed'
@@ -62,7 +63,7 @@ router.get('/pending-confirmation', authMiddleware, async (req: AuthRequest, res
         version: row.wesnoth_version,
         summary: typeof row.parse_summary === 'string' ? JSON.parse(row.parse_summary) : row.parse_summary,
         confidence: row.integration_confidence,
-        tournament_round_match_id: row.tournament_round_match_id,
+        tournament_game_id: row.tournament_game_id,
         end_time: row.end_time,
       })),
     });
@@ -98,7 +99,7 @@ router.post('/:replayId/confirm-winner', authMiddleware, async (req: AuthRequest
     // Fetch the replay
     const replayResult = await query(
       `SELECT id, parse_status, integration_confidence, parse_summary,
-              tournament_round_match_id, replay_filename, replay_url,
+              tournament_game_id, replay_filename, replay_url,
               game_id, wesnoth_version, instance_uuid, end_time
        FROM replays
        WHERE id = ?`,
@@ -194,8 +195,7 @@ router.post('/:replayId/confirm-winner', authMiddleware, async (req: AuthRequest
     // Validate and correct factions for team tournaments
     const factionsResult = await validateAndCorrectFactions(
       {
-        tournamentRoundMatchId: replay.tournament_round_match_id,
-        tournamentMatchId: undefined, // Will be set after match creation
+        tournamentGameId: summary.linkedTournamentGameId,
         winnerName,
         parseSummary: summary,
         matchType: summary.matchType || 'ranked'
@@ -206,37 +206,66 @@ router.post('/:replayId/confirm-winner', authMiddleware, async (req: AuthRequest
     winnerFaction = factionsResult.winnerFaction;
     loserFaction = factionsResult.loserFaction;
 
-    const result = await createMatch({
-      winnerId:                     winnerDbRow.id,
-      loserId:                      loserDbRow.id,
-      winnerFaction,
-      loserFaction,
-      map,
-      winnerSide:                   winnerForumData?.side_number ?? 1,
-      replayRowId:                  replay.id,
-      replayFilePath,
-      matchType:                    summary.matchType || 'ranked',
-      linkedTournamentId:           summary.linkedTournamentId   || null,
-      linkedTournamentRoundMatchId: replay.tournament_round_match_id || null,
-      updateTournamentRoundMatch:   false,
-      gameId:                       replay.game_id,
-      wesnothVersion:               replay.wesnoth_version,
-      instanceUuid:                 replay.instance_uuid,
-    });
+    const result = summary.matchType === 'tournament_unranked'
+      ? { success: true, matchId: undefined }
+      : await createMatch({
+          winnerId:                     winnerDbRow.id,
+          loserId:                      loserDbRow.id,
+          winnerFaction,
+          loserFaction,
+          map,
+          winnerSide:                   winnerForumData?.side_number ?? 1,
+          replayRowId:                  replay.id,
+          replayFilePath,
+          matchType:                    summary.matchType || 'ranked',
+          linkedTournamentId:           summary.linkedTournamentId || null,
+          linkedTournamentGameId:       summary.linkedTournamentGameId || null,
+          gameId:                       replay.game_id,
+          wesnothVersion:               replay.wesnoth_version,
+          instanceUuid:                 replay.instance_uuid,
+        });
 
     if (!result.success) {
       console.error('[CONFIRM-WINNER] Match creation failed:', result.error);
       return res.status(500).json({ error: `Failed to create match: ${result.error}` });
     }
 
-    // Handle post-confirmation: create next match in BO3, check round completion
-    if (replay.tournament_round_match_id) {
-      await handlePostConfirmation(
-        replay.tournament_round_match_id,
-        winnerName,
-        summary,
-        summary.matchType || 'ranked'
+    if (summary.linkedTournamentId && summary.linkedTournamentGameId) {
+      const gameResult = await query(
+        `SELECT games.entry1_id, games.entry2_id,
+                entry1.participant_id AS entry1_participant_id,
+                entry2.participant_id AS entry2_participant_id,
+                entry1.team_id AS entry1_team_id,
+                entry2.team_id AS entry2_team_id
+         FROM tournament_games games
+         JOIN tournament_entries entry1 ON entry1.id = games.entry1_id
+         JOIN tournament_entries entry2 ON entry2.id = games.entry2_id
+         WHERE games.id = ? AND games.status = 'pending'`,
+        [summary.linkedTournamentGameId]
       );
+      const game = gameResult.rows?.[0];
+      if (!game) return res.status(409).json({ error: 'Tournament game is no longer pending' });
+
+      const winnerParticipant = await query(
+        `SELECT id, team_id
+         FROM tournament_participants
+         WHERE tournament_id = ? AND user_id = ?
+           AND (id IN (?, ?) OR team_id IN (?, ?))
+         LIMIT 1`,
+        [summary.linkedTournamentId, winnerDbRow.id,
+          game.entry1_participant_id, game.entry2_participant_id,
+          game.entry1_team_id, game.entry2_team_id]
+      );
+      const winnerParticipantRow = winnerParticipant.rows?.[0];
+      const winnerEntryId = winnerParticipantRow?.id === game.entry1_participant_id
+        || winnerParticipantRow?.team_id === game.entry1_team_id
+        ? game.entry1_id
+        : winnerParticipantRow?.id === game.entry2_participant_id
+          || winnerParticipantRow?.team_id === game.entry2_team_id
+          ? game.entry2_id
+          : null;
+      if (!winnerEntryId) return res.status(400).json({ error: 'Could not map winner to tournament entry' });
+      await recordPhaseGameResult(summary.linkedTournamentId, summary.linkedTournamentGameId, winnerEntryId, result.matchId);
     }
 
     // Mark replay as completed

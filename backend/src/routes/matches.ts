@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../config/database.js';
 import { authMiddleware, moderatorOrAdminMiddleware, AuthRequest } from '../middleware/auth.js';
@@ -11,16 +11,13 @@ import {
   getKFactorWithReason,
   getPlayerRankingPosition,
 } from '../utils/elo.js';
-import { updateBestOfSeriesDB, createNextMatchInSeries } from '../utils/bestOf.js';
-import { checkAndCompleteRound } from '../utils/tournament.js';
 import {
   updateFactionMapStatistics,
   recalculatePlayerMatchStatistics,
   recalculateFactionMapStatistics,
   updatePlayerElo
 } from '../services/statisticsCalculator.js';
-import { updateTournamentRoundMatch } from '../services/matchCreationService.js';
-import { validateAndCorrectFactions, handlePostConfirmation } from '../services/replayConfirmationService.js';
+import { validateAndCorrectFactions } from '../services/replayConfirmationService.js';
 import { recordPhaseGameResult } from '../tournament-engine/competitionProgression.js';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
 import multer from 'multer';
@@ -365,78 +362,6 @@ async function performGlobalStatsRecalculation() {
   }
 }
 
-// Helper function to check if a round is complete and update round_end_date
-async function checkAndUpdateRoundCompletion(roundId: string, tournamentId: string) {
-  try {
-    // Get all tournament_round_matches for this round
-    const matchesResult = await query(
-      `SELECT COUNT(*) as total_matches, 
-              COUNT(CASE WHEN winner_id IS NOT NULL THEN 1 END) as completed_matches
-       FROM tournament_round_matches 
-       WHERE round_id = ?`,
-      [roundId]
-    );
-
-    if (matchesResult.rows.length === 0) return;
-
-    const { total_matches, completed_matches } = matchesResult.rows[0];
-
-    // If all matches are completed, update round_end_date
-    if (total_matches > 0 && parseInt(total_matches) === parseInt(completed_matches)) {
-      await query(
-        `UPDATE tournament_rounds 
-         SET round_end_date = CURRENT_TIMESTAMP, round_status = 'completed', updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?`,
-        [roundId]
-      );
-      console.log(`✅ Round ${roundId} completed - updated round_end_date`);
-    }
-  } catch (error) {
-    console.error('Error checking round completion:', error);
-    // Don't throw - this is a background check
-  }
-}
-
-// Helper function to handle series completion and check round completion
-async function handleSeriesAndRoundCompletion(seriesUpdate: any, tournamentRoundMatchId: string, roundId: string, tournamentId: string, tournament_match_id: string) {
-  try {
-    // If series not complete and we need another match, create it
-    if (seriesUpdate.shouldCreateNextMatch) {
-      try {
-        const nextMatchId = await createNextMatchInSeries(tournamentRoundMatchId, tournamentId, roundId);
-        if (nextMatchId) {
-          console.log(`Created next match in series: ${nextMatchId}`);
-        }
-      } catch (nextMatchError) {
-        console.error('Error creating next match in series:', nextMatchError);
-        // Don't fail if next match creation fails
-      }
-    } else {
-      // Series is complete, check if round is complete
-      try {
-        const roundNumberResult = await query(
-          `SELECT round_number FROM tournament_rounds WHERE id = ?`,
-          [roundId]
-        );
-        const roundNumber = roundNumberResult.rows[0]?.round_number;
-        
-        if (roundNumber) {
-          const isRoundComplete = await checkAndCompleteRound(tournamentId, roundNumber);
-          if (isRoundComplete) {
-            console.log(`✅ Round ${roundNumber} for tournament ${tournamentId} is now complete`);
-          }
-        }
-      } catch (roundCompleteError) {
-        console.error('Error checking round completion:', roundCompleteError);
-        // Don't fail if round check fails
-      }
-    }
-  } catch (error) {
-    console.error('Error handling series and round completion:', error);
-    // Don't throw - this is a background operation
-  }
-}
-
 /**
  * Preview replay file (decompress and extract data)
  * Handles .gz and .bz2 files
@@ -757,265 +682,55 @@ router.post('/preview-replay', authMiddleware, upload.single('replay'), async (r
 });
 
 // Confirm/dispute match - MUST be BEFORE generic /:id routes
-router.post('/:id/confirm', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/:id/confirm', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    console.log('✅ POST /:id/confirm alcanzado', req.params.id, req.body.action);
     const { id } = req.params;
     const { comments, rating, action } = req.body;
-
-    // First check if this is a tournament_match to detect if ranked or unranked
-    const tournamentMatchResult = await query(
-      'SELECT * FROM tournament_matches WHERE id = ?',
-      [id]
-    );
-
-    let match;
-    let isUnranked = false;
-    let tournamentMatchId = null;
-
-    if (tournamentMatchResult.rows.length > 0) {
-      // Found in tournament_matches
-      const tm = tournamentMatchResult.rows[0];
-      tournamentMatchId = tm.id;
-
-      if (tm.match_id === null) {
-        // This is an UNRANKED tournament match (match_id is NULL)
-        isUnranked = true;
-        match = tm;
-        console.log('Found unranked tournament match in tournament_matches');
-      } else {
-        // This is a RANKED tournament match (match_id IS NOT NULL)
-        // Get the actual match data from matches table
-        const rankedMatchResult = await query(
-          'SELECT * FROM matches WHERE id = ?',
-          [tm.match_id]
-        );
-        
-        if (rankedMatchResult.rows.length === 0) {
-          console.log('❌ Ranked match not found:', tm.match_id);
-          return res.status(404).json({ error: 'Match not found' });
-        }
-
-        match = rankedMatchResult.rows[0];
-        isUnranked = false;
-        console.log('Found ranked tournament match in matches table');
-      }
-    } else {
-      // Not a tournament match, try to find in matches table (RANKED only)
-      const rankedMatchResult = await query(
-        'SELECT * FROM matches WHERE id = ?',
-        [id]
-      );
-
-      if (rankedMatchResult.rows.length === 0) {
-        console.log('❌ Match not found:', id);
-        return res.status(404).json({ error: 'Match not found' });
-      }
-
-      match = rankedMatchResult.rows[0];
-      isUnranked = false;
-      console.log('Found ranked match (non-tournament)');
-    }
-
-    // Calculate loser_id if not present (for team tournaments where it's null)
-    let loserId = match.loser_id;
-    if (!loserId && match.player1_id && match.player2_id && match.winner_id) {
-      loserId = match.winner_id === match.player1_id ? match.player2_id : match.player1_id;
-    }
-
-    console.log('Match loser_id:', loserId, 'Current user:', req.userId);
-    console.log('Match winner_id:', match.winner_id);
-    console.log('Is unranked:', isUnranked);
-
-    // Verify that the user confirming is either the loser or winner
-    let isWinner = match.winner_id === req.userId;
-    let isLoser = loserId === req.userId;
-    
-    // For unranked tournament matches with team IDs, get the user's team_id
-    if (isUnranked && tournamentMatchId && !isWinner && !isLoser) {
-      // Check if this is a team tournament and get user's team_id
-      const userTeamResult = await query(
-        `SELECT tp.team_id 
-         FROM tournament_participants tp 
-         WHERE tp.user_id = ? AND tp.tournament_id = ?`,
-        [req.userId, match.tournament_id]
-      );
-      
-      if (userTeamResult.rows.length > 0) {
-        const userTeamId = userTeamResult.rows[0].team_id;
-        console.log('User team_id for tournament:', userTeamId);
-        isWinner = match.winner_id === userTeamId;
-        isLoser = loserId === userTeamId;
-      }
-    }
-    
-    if (!isWinner && !isLoser) {
-      console.log('❌ User is neither winner nor loser');
-      return res.status(403).json({ error: 'Only match participants can confirm this match' });
-    }
+    const matchResult = await query('SELECT * FROM matches WHERE id = ?', [id]);
+    if (!matchResult.rows.length) return res.status(404).json({ error: 'Match not found' });
+    const match = matchResult.rows[0];
+    const loserId = match.loser_id || (match.winner_id === match.player1_id ? match.player2_id : match.player1_id);
+    const isWinner = match.winner_id === req.userId;
+    const isLoser = loserId === req.userId;
+    if (!isWinner && !isLoser) return res.status(403).json({ error: 'Only match participants can confirm this match' });
 
     if (action === 'confirm') {
-      // Validate rating if provided
-      if (rating && (rating < 1 || rating > 5)) {
+      if (rating !== undefined && rating !== null && (rating < 1 || rating > 5)) {
         return res.status(400).json({ error: 'Rating must be between 1 and 5' });
       }
-
-      if (isUnranked) {
-        // UNRANKED: update only tournament_matches based on winner/loser
-        if (isWinner) {
-          await query(
-            `UPDATE tournament_matches 
-             SET winner_comments = ?, 
-                 winner_rating = ?,
-                 match_status = 'completed',
-                 status = 'confirmed',
-                 updated_at = CURRENT_TIMESTAMP 
-             WHERE id = ?`,
-            [comments || null, rating || null, id]
-          );
-        } else {
-          await query(
-            `UPDATE tournament_matches 
-             SET loser_comments = ?, 
-                 loser_rating = ?,
-                 match_status = 'completed',
-                 status = 'confirmed',
-                 updated_at = CURRENT_TIMESTAMP 
-             WHERE id = ?`,
-            [comments || null, rating || null, id]
-          );
-        }
-      } else {
-        // RANKED: update matches table with appropriate columns based on winner/loser
-        if (isWinner) {
-          // Winner confirming - update winner columns
-          await query(
-            `UPDATE matches 
-             SET winner_comments = ?, 
-                 winner_rating = ?,
-                 updated_at = CURRENT_TIMESTAMP 
-             WHERE id = ?`,
-            [comments || null, rating || null, id]
-          );
-        } else {
-          // Loser confirming - update loser columns
-          await query(
-            `UPDATE matches 
-             SET loser_comments = ?, 
-                 loser_rating = ?,
-                 updated_at = CURRENT_TIMESTAMP 
-             WHERE id = ?`,
-            [comments || null, rating || null, id]
-          );
-        }
-
-        // Check if both have now confirmed - update status to 'confirmed' if both ratings are present
-        const updatedMatch = await query(
-          'SELECT loser_rating, winner_rating FROM matches WHERE id = ?',
-          [id]
-        );
-        
-        if (updatedMatch.rows.length > 0 && updatedMatch.rows[0].loser_rating && updatedMatch.rows[0].winner_rating) {
-          // Both have confirmed - update status to confirmed
-          await query(
-            'UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-            ['confirmed', id]
-          );
-          console.log(`✅ Match ${id} fully confirmed by both players`);
-        } else {
-          console.log(`⏳ Match ${id} partially confirmed - waiting for other player`);
-        }
-
-        // Also update tournament_matches if this is a tournament ranked match
-        if (tournamentMatchId) {
-          if (isWinner) {
-            await query(
-              `UPDATE tournament_matches 
-               SET winner_comments = ?, 
-                   winner_rating = ?,
-                   updated_at = CURRENT_TIMESTAMP 
-               WHERE id = ?`,
-              [comments || null, rating || null, tournamentMatchId]
-            );
-          } else {
-            await query(
-              `UPDATE tournament_matches 
-               SET loser_comments = ?, 
-                   loser_rating = ?,
-                   updated_at = CURRENT_TIMESTAMP 
-               WHERE id = ?`,
-              [comments || null, rating || null, tournamentMatchId]
-            );
-          }
-        }
-      }
-
-      console.log(
-        `Match ${id} confirmed: ${isWinner ? 'Winner' : 'Loser'} ${req.userId} confirmed the match result`
+      const updateColumn = isWinner ? 'winner' : 'loser';
+      await query(
+        'UPDATE matches SET ' + updateColumn + '_comments = ?, ' + updateColumn + '_rating = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [comments || null, rating || null, id]
       );
-
-      console.log('✅ Respondiendo con éxito - confirm');
-      res.json({ message: 'Match confirmed successfully with your comments and rating' });
-    } else if (action === 'dispute') {
-      if (!isLoser) {
-        return res.status(403).json({ error: 'Only the losing player can dispute this match' });
+      const updatedMatch = await query('SELECT loser_rating, winner_rating FROM matches WHERE id = ?', [id]);
+      if (updatedMatch.rows[0]?.loser_rating && updatedMatch.rows[0]?.winner_rating) {
+        await query('UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', ['confirmed', id]);
       }
-
-      if (isUnranked) {
-        // UNRANKED: save comment in the appropriate column and mark as disputed
-        await query(
-          `UPDATE tournament_matches SET match_status = 'completed', status = 'disputed',
-            loser_comments = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-          [comments || null, id]
-        );
-
-        console.log(`Unranked tournament match ${id} marked as disputed by loser ${req.userId}`);
-        await logAuditEvent({
-          event_type: 'ADMIN_ACTION',
-          user_id: req.userId,
-          username: req.username,
-          ip_address: getUserIP(req),
-          user_agent: getUserAgent(req),
-          details: { action: 'MATCH_DISPUTED', tournament_match_id: id },
-        });
-        res.json({ message: 'Match disputed. Awaiting organizer review.' });
-      } else {
-        // RANKED: only the losing player may dispute the reported result.
-        await query(
-          `UPDATE matches SET status = 'disputed', loser_comments = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-          [comments || null, id]
-        );
-
-        // Also update tournament_matches if this is a tournament ranked match
-        if (tournamentMatchId) {
-          await query(
-            `UPDATE tournament_matches SET status = 'disputed', loser_comments = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [comments || null, tournamentMatchId]
-          );
-        }
-
-        await logAuditEvent({
-          event_type: 'ADMIN_ACTION',
-          user_id: req.userId,
-          username: req.username,
-          ip_address: getUserIP(req),
-          user_agent: getUserAgent(req),
-          details: { action: 'MATCH_DISPUTED', match_id: id, tournament_match_id: tournamentMatchId },
-        });
-
-        console.log(
-          `Match ${id} disputed by loser ${req.userId}: Awaiting admin review. Stats remain unchanged.`
-        );
-
-        console.log('✅ Respondiendo con éxito - dispute');
-        res.json({ message: 'Match disputed. Awaiting admin review.' });
-      }
-    } else {
-      res.status(400).json({ error: 'Invalid action. Use "confirm" or "dispute"' });
+      return res.json({ message: 'Match confirmed successfully with your comments and rating' });
     }
+
+    if (action === 'dispute') {
+      if (!isLoser) return res.status(403).json({ error: 'Only the losing player can dispute this match' });
+      await query(
+        "UPDATE matches SET status = 'disputed', loser_comments = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        [comments || null, id]
+      );
+      await logAuditEvent({
+        event_type: 'ADMIN_ACTION',
+        user_id: req.userId,
+        username: req.username,
+        ip_address: getUserIP(req),
+        user_agent: getUserAgent(req),
+        details: { action: 'MATCH_DISPUTED', match_id: id },
+      });
+      return res.json({ message: 'Match disputed. Awaiting admin review.' });
+    }
+
+    return res.status(400).json({ error: 'Invalid action. Use "confirm" or "dispute"' });
   } catch (error) {
     console.error('Match confirmation error:', error);
-    res.status(500).json({ error: 'Failed to update match' });
+    return res.status(500).json({ error: 'Failed to update match' });
   }
 });
 
@@ -1368,23 +1083,6 @@ router.post('/admin/:id/dispute', moderatorOrAdminMiddleware, async (req: AuthRe
         console.error('⚠️  Warning: Failed to recalculate player of month after dispute:', error.message);
       }
 
-      // STEP 8: Reopen linked tournament match for re-reporting
-      const tournamentMatchResult = await query(
-        `SELECT tm.id as tm_id FROM tournament_matches tm WHERE tm.match_id = ?`,
-        [id]
-      );
-
-      if (tournamentMatchResult.rows.length > 0) {
-        const tournamentMatch = tournamentMatchResult.rows[0];
-        await query(
-          `UPDATE tournament_matches
-           SET match_status = 'pending', status = 'unconfirmed', winner_id = NULL, match_id = NULL, played_at = NULL
-           WHERE id = ?`,
-          [tournamentMatch.tm_id]
-        );
-        console.log(`Match ${id} reopened in tournament_matches ${tournamentMatch.tm_id} for re-reporting`);
-      }
-
       console.log(`Match ${id} dispute validated by admin ${req.userId}: Cancelled, cascade recalculated ${matchesRecalculated} subsequent matches, updated ${affectedPlayers.size} affected players`);
       await logAuditEvent({
         event_type: 'ADMIN_ACTION',
@@ -1396,7 +1094,7 @@ router.post('/admin/:id/dispute', moderatorOrAdminMiddleware, async (req: AuthRe
       });
       res.json({
         message: 'Dispute validated. Match cancelled, ELO recalculated for all affected players, and reopened for re-reporting.',
-        reopened: tournamentMatchResult.rows.length > 0,
+        reopened: false,
         affectedPlayers: affectedPlayers.size,
         matchesRecalculated
       });
@@ -1411,13 +1109,6 @@ router.post('/admin/:id/dispute', moderatorOrAdminMiddleware, async (req: AuthRe
              admin_reviewed_by = ? 
          WHERE id = ?`,
         ['confirmed', req.userId, id]
-      );
-
-      await query(
-        `UPDATE tournament_matches
-         SET status = 'confirmed', match_status = 'completed', updated_at = CURRENT_TIMESTAMP
-         WHERE match_id = ?`,
-        [id]
       );
 
       await logAuditEvent({
@@ -1525,961 +1216,83 @@ function extractMatchDataFromReplay(parseSummary: any, replayUrl: string, winner
 // POST endpoint to report a confidence=1 replay (unparsed match)
 // User says "I won" or "I lost" to help determine the winner
 // ============================================================================
-router.post('/report-confidence-1-replay', authMiddleware, async (req: AuthRequest, res) => {
+// Report the winner of a confidence-one replay linked to a phase-engine game.
+router.post('/report-confidence-1-replay', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const { replayId, winner_choice, rating, comments, tournament_match_id } = req.body;
+    const { replayId, winner_choice } = req.body;
     const userId = req.userId;
-
-    console.log(`\n${'='.repeat(80)}`);
-    console.log(`📋 [CONFIDENCE-1] ===== STARTING REPLAY CONFIRMATION FLOW =====`);
-    console.log(`📋 [CONFIDENCE-1] Request received:`);
-    console.log(`   replayId: ${replayId}`);
-    console.log(`   userId: ${userId}`);
-    console.log(`   winner_choice: ${winner_choice}`);
-    console.log(`   rating: ${rating}`);
-    console.log(`   comments: ${comments ? comments.substring(0, 50) : 'null'}`);
-    console.log(`   tournament_match_id: ${tournament_match_id}`);
-    console.log(`${'='.repeat(80)}\n`);
-
-    // Validate user is authenticated
-    if (!userId) {
-      console.error(`❌ [CONFIDENCE-1] User not authenticated`);
-      return res.status(401).json({ error: 'User not authenticated' });
-    }
-
-    // Validate inputs
-    if (!replayId) {
-      console.error(`❌ [CONFIDENCE-1] Missing replayId`);
-      return res.status(400).json({ error: 'Missing replayId in request body' });
-    }
-
-    if (!winner_choice || !['I won', 'I lost'].includes(winner_choice)) {
-      console.error(`❌ [CONFIDENCE-1] Invalid winner_choice: ${winner_choice}`);
+    if (!userId) return res.status(401).json({ error: 'User not authenticated' });
+    if (!replayId) return res.status(400).json({ error: 'Missing replayId in request body' });
+    if (!['I won', 'I lost'].includes(winner_choice)) {
       return res.status(400).json({ error: 'winner_choice must be "I won" or "I lost"' });
     }
 
-    console.log(`✅ [CONFIDENCE-1] Input validation passed`);
-
-    // Get the replay from database
-    console.log(`📥 [CONFIDENCE-1] Fetching replay from database...`);
     const replayResult = await query(
-      `SELECT id, parse_summary, integration_confidence, parsed,
-              game_id, wesnoth_version, instance_uuid, tournament_round_match_id, tournament_game_id,
-              replay_url, tournament_id
-       FROM replays WHERE id = ? AND integration_confidence = 1 AND parsed = 1 AND parse_status NOT IN ('rejected', 'due')`,
+      `SELECT id, parse_summary, integration_confidence, parsed, tournament_game_id, tournament_id
+       FROM replays
+       WHERE id = ? AND integration_confidence = 1 AND parsed = 1
+         AND parse_status NOT IN ('rejected', 'due')`,
       [replayId]
     );
-
-    if (replayResult.rows.length === 0) {
-      console.error(`❌ [CONFIDENCE-1] Replay not found: ${replayId}`);
-      return res.status(404).json({ error: 'Replay not found or not a confidence=1 replay' });
+    const replay = replayResult.rows?.[0];
+    if (!replay) return res.status(404).json({ error: 'Replay not found or not a confidence=1 replay' });
+    if (!replay.tournament_game_id || !replay.tournament_id) {
+      return res.status(410).json({ error: 'Only phase-engine tournament replays can be confirmed here' });
     }
 
-    const replay = replayResult.rows[0];
-    console.log(`✅ [CONFIDENCE-1] Replay loaded:`, {
-      replayId: replay.id,
-      tournament_id: replay.tournament_id,
-      tournament_round_match_id: replay.tournament_round_match_id,
-      has_tournament_round_match: !!replay.tournament_round_match_id
-    });
-    
-    console.log(`[DEBUG] About to parse parse_summary...`);
-    let parseSummary: any;
-
-    try {
-      console.log(`[DEBUG] parse_summary type: ${typeof replay.parse_summary}, length: ${replay.parse_summary?.length}`);
-      parseSummary = typeof replay.parse_summary === 'string' 
-        ? JSON.parse(replay.parse_summary) 
-        : replay.parse_summary;
-      console.log(`[DEBUG] parse_summary parsed successfully`);
-    } catch (parseError) {
-      console.error('❌ [CONFIDENCE-1] Failed to parse parse_summary JSON:', parseError);
-      return res.status(500).json({ error: 'Invalid parse_summary data in replay' });
-    }
-
-    console.log(`📥 [CONFIDENCE-1] Parsing forumPlayers from replay...`);
-    // Extract player information from parse_summary
-    const forumPlayers = parseSummary?.forumPlayers || [];
-    if (forumPlayers.length < 2) {
-      console.error(`❌ [CONFIDENCE-1] Replay does not have at least 2 players, got ${forumPlayers.length}`);
-      return res.status(400).json({ error: 'Replay does not have at least 2 players' });
-    }
-
-    console.log(`✅ [CONFIDENCE-1] Total players in replay: ${forumPlayers.length}`);
-    const allPlayerNames = forumPlayers.map((p: any) => `${p?.user_name} (side ${p?.side_number})`).join(', ');
-    console.log(`✅ [CONFIDENCE-1] All players from replay: ${allPlayerNames}`);
-
-    // Get current user's nickname
-    console.log(`📥 [CONFIDENCE-1] Fetching current user nickname (userId: ${userId})...`);
-    const currentUserResult = await query(
-      `SELECT nickname FROM users_extension WHERE id = ?`,
-      [userId]
-    );
-    
-    if (currentUserResult.rows.length === 0) {
-      console.error(`❌ [CONFIDENCE-1] Current user not found in database`);
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    const currentUserNickname = currentUserResult.rows[0].nickname?.toLowerCase() || '';
-    console.log(`✅ [CONFIDENCE-1] Current user: "${currentUserNickname}"`);
-
-    // Security check: user must be one of all players in the replay
-    const currentUserInReplay = forumPlayers.find((p: any) => p?.user_name?.toLowerCase() === currentUserNickname);
-    
-    if (!currentUserInReplay) {
-      const replayPlayerNames = forumPlayers.map((p: any) => p?.user_name).join(', ');
-      console.error(`❌ [CONFIDENCE-1] SECURITY CHECK FAILED: User "${currentUserNickname}" is not in replay (players: ${replayPlayerNames})`);
+    const parseSummary = typeof replay.parse_summary === 'string'
+      ? JSON.parse(replay.parse_summary)
+      : (replay.parse_summary || {});
+    const userResult = await query('SELECT nickname FROM users_extension WHERE id = ?', [userId]);
+    const nickname = userResult.rows?.[0]?.nickname?.toLowerCase();
+    const forumPlayers = parseSummary.forumPlayers || [];
+    if (!nickname || !forumPlayers.some((player: any) => player?.user_name?.toLowerCase() === nickname)) {
       return res.status(403).json({ error: 'You are not a participant in this replay' });
     }
 
-    console.log(`✅ [CONFIDENCE-1] Security check passed - user is a participant (side ${currentUserInReplay.side_number})`);
-
-    // Phase-engine team games are confirmed on tournament_games. Keep them out
-    // of the legacy match/ELO flow, which requires tournament_round_match_id.
-    if (replay.tournament_game_id && parseSummary?.detectedTournament?.tournament_mode === 'team') {
-      const detectedTeams = parseSummary.detectedTeams || {};
-      const userTeam = Object.values(detectedTeams).find((team: any) =>
-        (team.members || []).some((member: string) => member.toLowerCase() === currentUserNickname)
-      ) as any;
-      const opponentTeam = Object.values(detectedTeams).find((team: any) => team.team_id !== userTeam?.team_id) as any;
-      if (!userTeam || !opponentTeam) {
-        return res.status(400).json({ error: 'Could not determine both tournament teams from replay data' });
-      }
-
-      // detectedTeams is keyed by team_id, while the phase engine expects the
-      // tournament_entries.id stored in tournament_games.entry*_id.
-      const gameEntryResult = await query(
-        `SELECT games.entry1_id, games.entry2_id,
-                entry1.team_id AS entry1_team_id, entry2.team_id AS entry2_team_id
-         FROM tournament_games games
-         JOIN tournament_entries entry1 ON entry1.id = games.entry1_id
-         JOIN tournament_entries entry2 ON entry2.id = games.entry2_id
-         WHERE games.id = ?
-         LIMIT 1`,
-        [replay.tournament_game_id]
-      );
-      const gameEntry = gameEntryResult.rows?.[0];
-      if (!gameEntry) {
-        return res.status(404).json({ error: 'Tournament game entries not found' });
-      }
-
-      const selectedTeamId = winner_choice === 'I won' ? userTeam.team_id : opponentTeam.team_id;
-      const winnerEntryId = selectedTeamId === gameEntry.entry1_team_id
-        ? gameEntry.entry1_id
-        : selectedTeamId === gameEntry.entry2_team_id
-          ? gameEntry.entry2_id
-          : null;
-      if (!winnerEntryId) {
-        return res.status(400).json({ error: 'Selected team is not part of this tournament game' });
-      }
-      const progression = await recordPhaseGameResult(
-        parseSummary.linkedTournamentId || replay.tournament_id,
-        replay.tournament_game_id,
-        winnerEntryId
-      );
-      await query(`UPDATE replays SET parse_status = 'completed', updated_at = NOW() WHERE id = ?`, [replayId]);
-      return res.json({ success: true, status: 'completed', replay_id: replayId, progression });
-    }
-
-    // Determine winner/loser based on tournament_match structure
-    let winnerId: string = userId;
-    let loserId: string = '';
-
-    // For team tournaments, we need to get the team IDs from detectedTeams
-    const detectedTeams = parseSummary?.detectedTeams || {};
-    const tournamentMode = parseSummary?.detectedTournament?.tournament_mode || 'individual';
-    
-    console.log(`📥 [CONFIDENCE-1] Tournament mode: ${tournamentMode}`);
-
-    if (tournamentMode === 'team') {
-      // Team tournament: find which team the current user belongs to
-      let userTeamId: string | null = null;
-      
-      for (const [teamId, teamData] of Object.entries(detectedTeams)) {
-        const teamMembers = (teamData as any)?.members || [];
-        if (teamMembers.some((member: string) => member.toLowerCase() === currentUserNickname)) {
-          userTeamId = teamId;
-          console.log(`✅ [CONFIDENCE-1] User "${currentUserNickname}" belongs to team ${teamId} (${(teamData as any)?.team_name})`);
-          break;
-        }
-      }
-
-      if (!userTeamId) {
-        console.error(`❌ [CONFIDENCE-1] Could not find user's team in detectedTeams`);
-        return res.status(400).json({ error: 'Could not determine user\'s team from replay' });
-      }
-
-      // Get the tournament_match to see player1_id and player2_id (which are team IDs for team tournaments)
-      console.log(`📥 [CONFIDENCE-1] Looking up tournament_match: ${replay.tournament_round_match_id}...`);
-      const matchResult = await query(
-        `SELECT player1_id, player2_id FROM tournament_matches 
-         WHERE tournament_round_match_id = ? AND match_status = 'pending' LIMIT 1`,
-        [replay.tournament_round_match_id]
-      );
-
-      if (matchResult.rows.length === 0) {
-        console.error(`❌ [CONFIDENCE-1] No pending tournament_match found for round_match ${replay.tournament_round_match_id}`);
-        return res.status(400).json({ error: 'No pending match found' });
-      }
-
-      const matchData = matchResult.rows[0];
-      const matchPlayer1Id = matchData.player1_id;
-      const matchPlayer2Id = matchData.player2_id;
-
-      // Determine winner based on which team the user belongs to
-      if (userTeamId === matchPlayer1Id) {
-        winnerId = matchPlayer1Id;
-        loserId = matchPlayer2Id;
-        console.log(`✅ [CONFIDENCE-1] User's team is player1 (${matchPlayer1Id}). Setting winner=${winnerId}, loser=${loserId}`);
-      } else if (userTeamId === matchPlayer2Id) {
-        winnerId = matchPlayer2Id;
-        loserId = matchPlayer1Id;
-        console.log(`✅ [CONFIDENCE-1] User's team is player2 (${matchPlayer2Id}). Setting winner=${winnerId}, loser=${loserId}`);
-      } else {
-        console.error(`❌ [CONFIDENCE-1] User's team ${userTeamId} does not match either team in tournament_match (${matchPlayer1Id} vs ${matchPlayer2Id})`);
-        return res.status(403).json({ error: 'Your team is not a participant in this match' });
-      }
-
-      if (winner_choice === 'I lost') {
-        // Swap winner and loser
-        [winnerId, loserId] = [loserId, winnerId];
-        console.log(`✅ [CONFIDENCE-1] User selected "I lost", swapped winner/loser. Now winner=${winnerId}, loser=${loserId}`);
-      }
-    } else {
-      // 1v1 tournament: player1_id and player2_id are user IDs
-      console.log(`📥 [CONFIDENCE-1] 1v1 tournament - looking up opponent...`);
-      
-      const opponentPlayers = forumPlayers.filter((p: any) => p?.user_name?.toLowerCase() !== currentUserNickname);
-      
-      if (opponentPlayers.length === 0) {
-        console.error(`❌ [CONFIDENCE-1] Could not identify opponent player from replay data`);
-        return res.status(400).json({ error: 'Could not identify opponent player from replay data' });
-      }
-
-      const primaryOpponentNickname = opponentPlayers[0]?.user_name || '';
-      
-      console.log(`📥 [CONFIDENCE-1] Looking up opponent player: "${primaryOpponentNickname}"...`);
-      const otherPlayerResult = await query(
-        `SELECT id FROM users_extension WHERE LOWER(nickname) = LOWER(?)`,
-        [primaryOpponentNickname]
-      );
-
-      if (otherPlayerResult.rows.length === 0) {
-        return res.status(400).json({
-          error: `Player ${primaryOpponentNickname} must log in and create an application profile before the replay can be integrated`
-        });
-      }
-
-      const otherPlayerId = otherPlayerResult.rows[0].id;
-
-      winnerId = userId;
-      loserId = otherPlayerId;
-
-      if (winner_choice === 'I lost') {
-        [winnerId, loserId] = [loserId, winnerId];
-        console.log(`✅ [CONFIDENCE-1] User selected "I lost", winner=${winnerId}, loser=${loserId}`);
-      }
-    }
-
-    console.log(`✅ [CONFIDENCE-1] Winner/loser determined: winner=${winnerId}, loser=${loserId}`);
-
-    // Determine winner information based on tournament mode
-    let winnerUser: any = null;
-    let loserUser: any = null;
-
-    if (tournamentMode === 'team') {
-      // For team tournaments: winnerId and loserId are team IDs
-      // We need to get one user from the winning team to determine faction/side
-      const teamInfo = Object.values(detectedTeams).find(
-        (team: any) => team.team_id === winnerId
-      ) as any;
-      
-      if (!teamInfo) {
-        console.error(`❌ [CONFIDENCE-1] Could not find winning team info for team ${winnerId}`);
-        return res.status(400).json({ error: 'Could not find winning team' });
-      }
-
-      // Get first team member's forum data
-      const teamMemberName = teamInfo.members?.[0];
-      const teamMemberForumData = forumPlayers.find(
-        (p: any) => p.user_name?.toLowerCase() === teamMemberName?.toLowerCase()
-      );
-
-      console.log(`📥 [CONFIDENCE-1] Team tournament - winning team: ${teamInfo.team_name}, sample member: ${teamMemberName}, side: ${teamMemberForumData?.side_number}`);
-
-      // Get the actual user record for ELO calculation - use the logged-in user
-      const winnerUserResult = await query(
-        `SELECT elo_rating, is_rated, matches_played, trend, level FROM users_extension WHERE id = ?`,
-        [userId]
-      );
-      const loserTeamInfo = Object.values(detectedTeams).find(
-        (team: any) => team.team_id === loserId
-      ) as any;
-      
-      if (!loserTeamInfo) {
-        console.error(`❌ [CONFIDENCE-1] Could not find losing team info for team ${loserId}`);
-        return res.status(400).json({ error: 'Could not find losing team' });
-      }
-
-      const loserTeamMemberName = loserTeamInfo.members?.[0];
-      const loserUserResult = await query(
-        `SELECT id, elo_rating, is_rated, matches_played, trend, level FROM users_extension WHERE LOWER(nickname) = LOWER(?)`,
-        [loserTeamMemberName]
-      );
-
-      if (winnerUserResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Winner player not found' });
-      }
-      if (loserUserResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Loser player not found' });
-      }
-
-      winnerUser = winnerUserResult.rows[0];
-      loserUser = loserUserResult.rows[0];
-
-    } else {
-      // For 1v1 tournaments: winnerId and loserId are user IDs
-      const winnerUserResult = await query(
-        `SELECT elo_rating, is_rated, matches_played, trend, level FROM users_extension WHERE id = ?`,
-        [winnerId]
-      );
-      const loserUserResult = await query(
-        `SELECT elo_rating, is_rated, matches_played, trend, level FROM users_extension WHERE id = ?`,
-        [loserId]
-      );
-
-      if (winnerUserResult.rows.length === 0 || loserUserResult.rows.length === 0) {
-        return res.status(404).json({ error: 'One or more players not found' });
-      }
-
-      winnerUser = winnerUserResult.rows[0];
-      loserUser = loserUserResult.rows[0];
-    }
-
-    // Determine winner side from forumPlayers
-    // For team tournaments, find any member of the winning team
-    let winnerSide: number | null = null;
-    let winnerNickname: string = '';
-    
-    if (tournamentMode === 'team') {
-      const teamInfo = Object.values(detectedTeams).find(
-        (team: any) => team.team_id === winnerId
-      ) as any;
-      const teamMemberName = teamInfo?.members?.[0];
-      const teamMemberForumData = forumPlayers.find(
-        (p: any) => p.user_name?.toLowerCase() === teamMemberName?.toLowerCase()
-      );
-      winnerSide = teamMemberForumData?.side_number ?? null;
-      winnerNickname = teamMemberName || '';
-    } else {
-      // For 1v1, find the winner's forum player data
-      // The winner is one of the players in forumPlayers
-      // Determine by checking which player is NOT the loser or by using winner_choice
-      const isWinner = winner_choice === 'I won';
-      
-      if (isWinner) {
-        // Current user is the winner
-        winnerNickname = currentUserNickname;
-      } else {
-        // Current user is the loser, so find the opponent
-        const opponentPlayer = forumPlayers.find(
-          (p: any) => p?.user_name?.toLowerCase() !== currentUserNickname
-        );
-        winnerNickname = opponentPlayer?.user_name || '';
-      }
-      
-      const winnerForumPlayer = forumPlayers.find(
-        (p: any) => p.user_name?.toLowerCase() === winnerNickname.toLowerCase()
-      );
-      winnerSide = winnerForumPlayer?.side_number ?? null;
-    }
-
-    const winner = winnerUser;
-    const loser = loserUser;
-
-    // Get map and factions from parse_summary (use resolved values - same as displayed in frontend)
-    const map = parseSummary?.resolvedMap || parseSummary?.finalMap || 'Unknown Map';
-    
-    // Map factions based on winner's side
-    const winnerFactionKey = winnerSide === 2 ? 'side2' : 'side1';
-    const loserFactionKey = winnerSide === 2 ? 'side1' : 'side2';
-    let winner_faction = parseSummary?.resolvedFactions?.[winnerFactionKey] || parseSummary?.finalFactions?.[winnerFactionKey] || 'Unknown';
-    let loser_faction = parseSummary?.resolvedFactions?.[loserFactionKey] || parseSummary?.finalFactions?.[loserFactionKey] || 'Unknown';
-
-    // Note: tournamentMode was already determined earlier (line 1588)
-    // If we have a tournament_round_match_id and tournamentMode wasn't set from parseSummary,
-    // verify it by querying the database
-    if (replay.tournament_round_match_id && tournamentMode === 'individual') {
-      const tournamentResult = await query(
-        `SELECT t.tournament_mode FROM tournaments t 
-         JOIN tournament_rounds tr ON tr.tournament_id = t.id 
-         JOIN tournament_round_matches trm ON trm.round_id = tr.id
-         WHERE trm.id = ?`,
-        [replay.tournament_round_match_id]
-      );
-      if (tournamentResult.rows.length > 0) {
-        const mode = tournamentResult.rows[0].tournament_mode;
-        if (mode) {
-          console.log(`📥 [CONFIDENCE-1] Tournament mode from DB: ${mode}`);
-          // tournamentMode was set from parseSummary, this is just verification
-        }
-      }
-    }
-
-    // Validate and correct factions for team tournaments
-    const factionsResult = await validateAndCorrectFactions(
-      {
-        tournamentRoundMatchId: replay.tournament_round_match_id,
-        tournamentMatchId: replay.tournament_match_id,
-        winnerName: winner.username || '',
-        parseSummary,
-        matchType: tournamentMode === 'team' ? 'tournament_unranked' : 'ranked'
-      },
-      winner_faction,
-      loser_faction
+    const gameResult = await query(
+      `SELECT games.entry1_id, games.entry2_id,
+              entry1.team_id AS entry1_team_id, entry2.team_id AS entry2_team_id,
+              participant1.user_id AS entry1_user_id, participant2.user_id AS entry2_user_id
+       FROM tournament_games games
+       JOIN tournament_entries entry1 ON entry1.id = games.entry1_id
+       JOIN tournament_entries entry2 ON entry2.id = games.entry2_id
+       LEFT JOIN tournament_participants participant1 ON participant1.id = entry1.participant_id
+       LEFT JOIN tournament_participants participant2 ON participant2.id = entry2.participant_id
+       WHERE games.id = ? AND games.status = 'pending'`,
+      [replay.tournament_game_id]
     );
-    winner_faction = factionsResult.winnerFaction;
-    loser_faction = factionsResult.loserFaction;
+    const game = gameResult.rows?.[0];
+    if (!game) return res.status(404).json({ error: 'Pending tournament game not found' });
 
-    // Calculate FIDE ELO ratings
-    const winnerNewRating = calculateNewRating(winner.elo_rating, loser.elo_rating, 'win', winner.matches_played);
-    const loserNewRating = calculateNewRating(loser.elo_rating, winner.elo_rating, 'loss', loser.matches_played);
-    const eloChange = winnerNewRating - winner.elo_rating;
+    const membership = await query(
+      `SELECT team_id FROM tournament_participants
+       WHERE tournament_id = ? AND user_id = ? AND participation_status = 'accepted'`,
+      [replay.tournament_id, userId]
+    );
+    const teamId = membership.rows?.[0]?.team_id || null;
+    const userEntryId = game.entry1_user_id === userId || game.entry1_team_id === teamId
+      ? game.entry1_id
+      : game.entry2_user_id === userId || game.entry2_team_id === teamId
+        ? game.entry2_id
+        : null;
+    if (!userEntryId) return res.status(403).json({ error: 'You are not a participant in this tournament game' });
 
-    // Calculate levels before match
-    const winnerLevelBefore = getUserLevel(winner.elo_rating);
-    const loserLevelBefore = getUserLevel(loser.elo_rating);
-    const winnerLevelAfter = getUserLevel(winnerNewRating);
-    const loserLevelAfter = getUserLevel(loserNewRating);
-
-    // Calculate ranking positions BEFORE the match
-    const winnerPosBefore = await getPlayerRankingPosition(query, winnerId, winner.elo_rating);
-    const loserPosBefore = await getPlayerRankingPosition(query, loserId, loser.elo_rating);
-
-    // Calculate ranking positions AFTER the match (with new ratings)
-    const winnerPosAfter = await getPlayerRankingPosition(query, winnerId, winnerNewRating);
-    const loserPosAfter = await getPlayerRankingPosition(query, loserId, loserNewRating);
-
-    // Calculate position changes
-    const winnerRankingChange = winnerPosBefore - winnerPosAfter;
-    const loserRankingChange = loserPosBefore - loserPosAfter;
-
-    // Get replay URL (already properly formatted in replays table)
-    const replayFilePath = replay.replay_url || '';
-
-    // Generate match ID
-    const matchId = uuidv4();
-
-    // Validate and sanitize optional fields
-    // Determine where comments and rating should go based on winner_choice
-    let userComments: string | null = null;
-    let userRating: number | null = null;
-    if (comments) {
-      userComments = String(comments).substring(0, 500);
-    }
-    if (rating) {
-      userRating = parseInt(rating, 10);
-    }
-
-    // Assign comments and rating to the correct columns based on whether user won or lost
-    const winnerComments = winner_choice === 'I won' ? userComments : null;
-    const winnerRating = winner_choice === 'I won' ? userRating : null;
-    const loserComments = winner_choice === 'I lost' ? userComments : null;
-    const loserRating = winner_choice === 'I lost' ? userRating : null;
-
-    // Determine if this is a tournament match or a normal ranked match
-    const isTournamentMatch = replay.tournament_round_match_id !== null;
-    
-    // Only create in global matches table for:
-    // 1. Normal ranked matches (not a tournament match)
-    // 2. RANKED tournaments (tournament_round_match_id exists AND tournament_mode === 'ranked')
-    const shouldUpdateGlobalElo = !isTournamentMatch || tournamentMode === 'ranked';
-    
-    if (shouldUpdateGlobalElo) {
-      if (isTournamentMatch) {
-        console.log(`🎯 [CONFIDENCE-1] Ranked tournament - updating global ELO updates`);
-      } else {
-        console.log(`🎯 [CONFIDENCE-1] Normal ranked match (not tournament) - updating global ELO`);
-      }
-      
-      // Create match record with all necessary fields
-      await query(
-        `INSERT INTO matches (
-          id,
-          replay_id,
-          winner_id,
-          loser_id,
-          map,
-          winner_faction,
-          loser_faction,
-          winner_elo_before,
-          loser_elo_before,
-          winner_elo_after,
-          loser_elo_after,
-          winner_level_before,
-          loser_level_before,
-          winner_level_after,
-          loser_level_after,
-          winner_ranking_pos,
-          winner_ranking_change,
-          loser_ranking_pos,
-          loser_ranking_change,
-          winner_comments,
-          winner_rating,
-          elo_change,
-          tournament_mode,
-          status,
-          replay_file_path,
-          auto_reported,
-          winner_side,
-          game_id,
-          wesnoth_version,
-          instance_uuid
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          matchId,
-          replayId,
-          winnerId,
-          loserId,
-          map,
-          winner_faction,
-          loser_faction,
-          winner.elo_rating,
-          loser.elo_rating,
-          winnerNewRating,
-          loserNewRating,
-          winnerLevelBefore,
-          loserLevelBefore,
-          winnerLevelAfter,
-          loserLevelAfter,
-          winnerPosAfter,
-          winnerRankingChange,
-          loserPosAfter,
-          loserRankingChange,
-          winnerComments,
-          winnerRating,
-          eloChange,
-          isTournamentMatch ? tournamentMode : 'ranked',
-          'reported',
-          replayFilePath,
-          1,
-          winnerSide,                  // winner_side (1 or 2)
-          replay.game_id ?? null,      // game_id from forum
-          replay.wesnoth_version ?? null,  // wesnoth_version
-          replay.instance_uuid ?? null     // instance_uuid
-        ]
-      );
-
-      console.log(`✅ [CONFIDENCE-1] Match created in global table: ${matchId}`);
-
-      // Calculate new trends
-      const winnerTrend = calculateTrend(winner.trend || '-', true);
-      const loserTrend = calculateTrend(loser.trend || '-', false);
-
-      // Update winner stats
-      const newWinnerMatches = winner.matches_played + 1;
-      let winnerIsNowRated = winner.is_rated;
-      let finalWinnerRating = winnerNewRating;
-
-      if (winner.is_rated && finalWinnerRating < 1400) {
-        winnerIsNowRated = false;
-      } else if (!winner.is_rated && newWinnerMatches >= 10 && finalWinnerRating >= 1400) {
-        winnerIsNowRated = true;
-      }
-
-      await query(
-        `UPDATE users_extension 
-         SET elo_rating = ?, 
-             is_rated = ?, 
-             matches_played = ?,
-             total_wins = total_wins + 1,
-             trend = ?,
-             level = ?,
-             is_active = 1,
-             last_match_date = NOW(),
-             updated_at = CURRENT_TIMESTAMP 
-         WHERE id = ?`,
-        [finalWinnerRating, winnerIsNowRated, newWinnerMatches, winnerTrend, getUserLevel(finalWinnerRating), winnerId]
-      );
-
-      // Update loser stats
-      const newLoserMatches = loser.matches_played + 1;
-      let loserIsNowRated = loser.is_rated;
-      let finalLoserRating = loserNewRating;
-
-      if (loser.is_rated && finalLoserRating < 1400) {
-        loserIsNowRated = false;
-      } else if (!loser.is_rated && newLoserMatches >= 10 && finalLoserRating >= 1400) {
-        loserIsNowRated = true;
-      }
-
-      await query(
-        `UPDATE users_extension 
-         SET elo_rating = ?, 
-             is_rated = ?, 
-             matches_played = ?,
-             total_losses = total_losses + 1,
-             trend = ?,
-             level = ?,
-             is_active = 1,
-             last_match_date = NOW(),
-             updated_at = CURRENT_TIMESTAMP 
-         WHERE id = ?`,
-        [finalLoserRating, loserIsNowRated, newLoserMatches, loserTrend, getUserLevel(finalLoserRating), loserId]
-      );
-
-      // Update faction/map statistics for this match (incremental update)
-      try {
-        if (map && winner_faction && loser_faction) {
-          await updateFactionMapStatistics(map, winner_faction, loser_faction, winnerSide);
-        }
-      } catch (statsError) {
-        console.error('Warning: Error updating faction/map statistics:', statsError);
-      }
-    } else {
-      // UNRANKED tournament - don't update global ELO
-      console.log(`🎯 [CONFIDENCE-1] Unranked tournament - skipping global ELO updates`);
-      
-      // Still need to mark the replay as having a match (but with null match_id for unranked)
-    }
-
-    // Mark the replay as having a match
+    const winnerEntryId = winner_choice === 'I won'
+      ? userEntryId
+      : userEntryId === game.entry1_id ? game.entry2_id : game.entry1_id;
+    const progression = await recordPhaseGameResult(replay.tournament_id, replay.tournament_game_id, winnerEntryId);
     await query(
-      `UPDATE replays SET match_id = ? WHERE id = ?`,
-      [shouldUpdateGlobalElo ? matchId : null, replayId]
+      `UPDATE replays SET parse_status = 'completed', need_integration = 0, updated_at = NOW() WHERE id = ?`,
+      [replayId]
     );
-
-    // STEP 1: If this replay is linked to a tournament_round_match, map winner ID properly
-    console.log(`\n📊 [CONFIDENCE-1] ===== STEP 1: TOURNAMENT ID MAPPING =====`);
-    let winnerIdForTournament = winnerId;  // Default: player ID for 1v1 tournaments
-    let loserIdForTournament = loserId;    // Default: player ID for 1v1 tournaments
-    
-    if (replay.tournament_round_match_id) {
-      console.log(`📥 [CONFIDENCE-1] Fetching tournament mode for round match ${replay.tournament_round_match_id}...`);
-      const tmodeResult = await query(
-        `SELECT t.tournament_mode, t.id as tournament_id 
-         FROM tournaments t 
-         JOIN tournament_rounds tr ON tr.tournament_id = t.id 
-         JOIN tournament_round_matches trm ON trm.round_id = tr.id
-         WHERE trm.id = ?`,
-        [replay.tournament_round_match_id]
-      );
-      
-      if (tmodeResult.rows.length > 0) {
-        const { tournament_mode, tournament_id } = (tmodeResult as any).rows[0];
-        console.log(`✅ [CONFIDENCE-1] Tournament found: mode=${tournament_mode}, id=${tournament_id}`);
-        
-        if (tournament_mode === 'team') {
-          console.log(`📥 [CONFIDENCE-1] Team tournament detected - winner and loser are already team IDs`);
-          // For team tournaments, winnerId and loserId are already team IDs (set earlier at lines 1628-1635)
-          // No additional mapping needed
-          winnerIdForTournament = winnerId;
-          loserIdForTournament = loserId;
-          console.log(`✅ [CONFIDENCE-1] Winner team: ${winnerIdForTournament}, Loser team: ${loserIdForTournament}`);
-        } else {
-          console.log(`✅ [CONFIDENCE-1] 1v1 tournament - no team mapping needed`);
-        }
-      } else {
-        console.warn(`⚠️  [CONFIDENCE-1] Tournament round match ${replay.tournament_round_match_id} not found`);
-      }
-    } else {
-      console.log(`ℹ️  [CONFIDENCE-1] No tournament_round_match - this is a direct match`);
-    }
-    
-    // Update last_match_date for team members if this is a team tournament
-    if (replay.tournament_round_match_id && winnerId !== loserId) {
-      // Check if this is a team tournament
-      const teamCheckResult = await query(
-        `SELECT t.tournament_mode FROM tournaments t 
-         JOIN tournament_rounds tr ON tr.tournament_id = t.id 
-         JOIN tournament_round_matches trm ON trm.round_id = tr.id
-         WHERE trm.id = ?`,
-        [replay.tournament_round_match_id]
-      );
-      
-      if (teamCheckResult.rows.length > 0 && (teamCheckResult as any).rows[0].tournament_mode === 'team') {
-        console.log(`🎯 [CONFIDENCE-1] Team tournament - updating last_match_date for all 4 team members`);
-        
-        // Get tournament_id for querying participants
-        const tourneyIdResult = await query(
-          `SELECT tournament_id FROM tournament_round_matches WHERE id = ?`,
-          [replay.tournament_round_match_id]
-        );
-        
-        if (tourneyIdResult.rows.length > 0) {
-          const tournamentId = (tourneyIdResult as any).rows[0].tournament_id;
-          
-          // Update winner team members
-          try {
-            await query(
-              `UPDATE users_extension ue
-               SET ue.last_match_date = NOW(), ue.is_active = 1, ue.updated_at = NOW()
-               WHERE ue.id IN (
-                 SELECT user_id FROM tournament_participants 
-                 WHERE tournament_id = ? AND team_id = ?
-               )`,
-              [tournamentId, winnerIdForTournament]
-            );
-            console.log(`✅ [CONFIDENCE-1] Updated last_match_date for winner team members`);
-          } catch (err) {
-            console.error(`❌ [CONFIDENCE-1] Error updating winner team members:`, err);
-          }
-          
-          // Update loser team members
-          try {
-            await query(
-              `UPDATE users_extension ue
-               SET ue.last_match_date = NOW(), ue.is_active = 1, ue.updated_at = NOW()
-               WHERE ue.id IN (
-                 SELECT user_id FROM tournament_participants 
-                 WHERE tournament_id = ? AND team_id = ?
-               )`,
-              [tournamentId, loserIdForTournament]
-            );
-            console.log(`✅ [CONFIDENCE-1] Updated last_match_date for loser team members`);
-          } catch (err) {
-            console.error(`❌ [CONFIDENCE-1] Error updating loser team members:`, err);
-          }
-        }
-      }
-    }
-
-    console.log(`${'='.repeat(80)}\n`);
-
-    // STEP 2: Create/update tournament_matches entry (use mapped winnerIdForTournament)
-    console.log(`📊 [CONFIDENCE-1] ===== STEP 2: TOURNAMENT MATCHES UPDATE =====`);
-    let tournamentMatchId: string | null = null;  // Track the tournament_match ID for replay linking
-    
-    if (replay.tournament_round_match_id) {
-      console.log(`📥 [CONFIDENCE-1] Processing tournament_matches for round match ${replay.tournament_round_match_id}`);
-      
-      // Get player names for faction extraction (use forum players data)
-      const player1Name = forumPlayers[0]?.user_name || 'Unknown';
-      const player2Name = forumPlayers.length > 1 ? forumPlayers[1]?.user_name : 'Unknown';
-      
-      // Extract map and faction data from replay (use pre-calculated replayFilePath)
-      const { map, winnerFaction, loserFaction, replayFilePathForDb } = extractMatchDataFromReplay(
-        parseSummary,
-        replayFilePath,
-        player1Name,
-        player2Name
-      );
-      console.log(`✅ [CONFIDENCE-1] Extracted match data:`, { map, winnerFaction, loserFaction, replayFilePathForDb });
-      
-      // Get tournament_round_match details AND tournament type
-      console.log(`📥 [CONFIDENCE-1] Fetching tournament_round_match details...`);
-      const roundMatchResult = await query(
-        `SELECT trm.tournament_id, trm.round_id, trm.player1_id, trm.player2_id, t.tournament_type
-         FROM tournament_round_matches trm
-         JOIN tournaments t ON trm.tournament_id = t.id
-         WHERE trm.id = ?`,
-        [replay.tournament_round_match_id]
-      );
-      
-      if (roundMatchResult.rows.length > 0) {
-        const roundMatch = (roundMatchResult as any).rows[0];
-        const isLeagueTournament = roundMatch.tournament_type === 'league';
-        console.log(`✅ [CONFIDENCE-1] Tournament round match found: type=${roundMatch.tournament_type}, player1=${roundMatch.player1_id}, player2=${roundMatch.player2_id}`);
-        
-        // For league tournaments: tournament_matches are PRE-GENERATED
-        // For other types: tournament_matches are created on demand
-        if (isLeagueTournament) {
-          console.log(`🎯 [CONFIDENCE-1] League tournament - finding pending match for this series...`);
-          
-          // Search for pending tournament_matches linked to this round_match_id
-          // (pre-generated matches already have tournament_round_match_id set)
-          console.log(`📥 [CONFIDENCE-1] Querying tournament_matches with tournament_round_match_id=${replay.tournament_round_match_id} and match_status='pending'...`);
-          const existingMatchResult = await query(
-            `SELECT id FROM tournament_matches
-             WHERE tournament_round_match_id = ?
-               AND match_status = 'pending'
-             LIMIT 1`,
-            [replay.tournament_round_match_id]
-          );
-          
-          console.log(`✅ [CONFIDENCE-1] Query returned ${existingMatchResult.rows.length} results`);
-          
-          if (existingMatchResult.rows.length > 0) {
-            // UPDATE existing record (expected for league)
-            const existingId = (existingMatchResult as any).rows[0].id;
-            tournamentMatchId = existingId;  // Save for replay linking
-            
-            console.log(`📤 [CONFIDENCE-1] UPDATING tournament_match: ${existingId}`);
-            console.log(`   Parameters:`);
-            console.log(`   - match_id: ${tournamentMode === 'ranked' ? matchId : null}`);
-            console.log(`   - winner_id: ${winnerIdForTournament}`);
-            console.log(`   - map: ${map}`);
-            console.log(`   - winner_faction: ${winnerFaction}`);
-            console.log(`   - loser_faction: ${loserFaction}`);
-            console.log(`   - replay_file_path: ${replayFilePathForDb}`);
-            console.log(`   - winner_comments: ${winnerComments ? winnerComments.substring(0, 30) : 'null'}`);
-            console.log(`   - winner_rating: ${winnerRating}`);
-            console.log(`   - loser_comments: ${loserComments ? loserComments.substring(0, 30) : 'null'}`);
-            console.log(`   - loser_rating: ${loserRating}`);
-            
-            try {
-              await query(
-                `UPDATE tournament_matches 
-                 SET match_id = ?, winner_id = ?, match_status = 'completed', played_at = CURRENT_TIMESTAMP,
-                     map = ?, winner_faction = ?, loser_faction = ?, replay_file_path = ?,
-                     winner_comments = ?, winner_rating = ?, loser_comments = ?, loser_rating = ?
-                 WHERE id = ?`,
-                [tournamentMode === 'ranked' ? matchId : null, winnerIdForTournament, map, winnerFaction, loserFaction, replayFilePathForDb, winnerComments, winnerRating, loserComments, loserRating, existingId]
-              );
-              console.log(`✅ [CONFIDENCE-1] League tournament_matches updated successfully: ${existingId}`);
-            } catch (err) {
-              console.error(`❌ [CONFIDENCE-1] FAILED to update tournament_matches:`, err);
-              throw err;
-            }
-          } else {
-            console.error(`❌ [CONFIDENCE-1] League tournament but NO pending tournament_matches found for round_match ${replay.tournament_round_match_id}`);
-          }
-        } else {
-          // Non-league tournament: check if record exists (shouldn't normally, but handle resumable matches)
-          const existingMatchResult = await query(
-            `SELECT id FROM tournament_matches WHERE tournament_round_match_id = ?`,
-            [replay.tournament_round_match_id]
-          );
-          
-          if (existingMatchResult.rows.length > 0) {
-            // UPDATE existing record (resumable match)
-            const existingId = (existingMatchResult as any).rows[0].id;
-            tournamentMatchId = existingId;  // Save for replay linking
-            await query(
-              `UPDATE tournament_matches 
-               SET match_id = ?, winner_id = ?, match_status = 'completed', played_at = CURRENT_TIMESTAMP,
-                   map = ?, winner_faction = ?, loser_faction = ?, replay_file_path = ?,
-                   winner_comments = ?, winner_rating = ?, loser_comments = ?, loser_rating = ?
-               WHERE id = ?`,
-              [tournamentMode === 'ranked' ? matchId : null, winnerIdForTournament, map, winnerFaction, loserFaction, replayFilePathForDb, winnerComments, winnerRating, loserComments, loserRating, existingId]
-            );
-            console.log(`✅ [CONFIDENCE-1] Non-league tournament_matches updated (resumable): ${existingId}`);
-          } else {
-            // INSERT new record (normal case for non-league)
-            const newTournamentMatchId = uuidv4();
-            tournamentMatchId = newTournamentMatchId;  // Save for replay linking
-            await query(
-              `INSERT INTO tournament_matches 
-               (id, tournament_id, round_id, player1_id, player2_id, match_id, winner_id, match_status, played_at, tournament_round_match_id, map, winner_faction, loser_faction, replay_file_path, winner_comments, winner_rating, loser_comments, loser_rating)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 'completed', CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [
-                newTournamentMatchId,
-                roundMatch.tournament_id,
-                roundMatch.round_id,
-                roundMatch.player1_id,
-                roundMatch.player2_id,
-                tournamentMode === 'ranked' ? matchId : null,
-                winnerIdForTournament,
-                replay.tournament_round_match_id,
-                map,
-                winnerFaction,
-                loserFaction,
-                replayFilePathForDb,
-                winnerComments,
-                winnerRating,
-                loserComments,
-                loserRating
-              ]
-            );
-            console.log(`✅ [CONFIDENCE-1] Non-league tournament_matches created: ${newTournamentMatchId}`);
-          }
-        }
-      }
-    }
-
-    // If this replay belongs to a tournament match (old flow), associate and close it
-    if (tournament_match_id) {
-      await query(
-        `UPDATE tournament_matches
-         SET match_id = ?,
-             winner_id = ?,
-             match_status = 'completed',
-             played_at = CURRENT_TIMESTAMP
-         WHERE id = ?`,
-        [matchId, winnerId, tournament_match_id]
-      );
-      console.log(`✅ [CONFIDENCE-1] Tournament match ${tournament_match_id} updated with match_id ${matchId}`);
-    }
-
-    // STEP 3: Handle post-confirmation (BO3 creation, round completion)
-    console.log(`\n📊 [CONFIDENCE-1] ===== STEP 3: POST-CONFIRMATION HANDLING =====`);
-    console.log(`📥 [CONFIDENCE-1] Calling handlePostConfirmation with:`, {
-      roundMatchId: replay.tournament_round_match_id,
-      winnerId: winnerIdForTournament,
-      isMappedTeamId: winnerIdForTournament !== winnerId,
-      tournamentMode: tournamentMode
-    });
-    
-    if (replay.tournament_round_match_id) {
-      try {
-        await handlePostConfirmation(
-          replay.tournament_round_match_id,
-          winnerIdForTournament,
-          parseSummary,
-          tournamentMode === 'team' ? 'tournament_unranked' : tournamentMode
-        );
-        console.log(`✅ [CONFIDENCE-1] handlePostConfirmation completed`);
-      } catch (postErr) {
-        console.error(`❌ [CONFIDENCE-1] handlePostConfirmation failed:`, postErr);
-        throw postErr;
-      }
-    }
-
-    // Mark replay as reported with proper status
-    console.log(`📤 [CONFIDENCE-1] Updating replay status to 'completed'...`);
-    console.log(`   tournament_match_id: ${tournamentMatchId}`);
-    await query(
-      `UPDATE replays 
-       SET parse_status = 'completed', 
-           need_integration = 0,
-           tournament_match_id = ?,
-           updated_at = NOW() 
-       WHERE id = ?`,
-      [tournamentMatchId, replayId]
-    );
-    console.log(`✅ [CONFIDENCE-1] Replay marked as completed`);
-
-    console.log(`\n${'='.repeat(80)}`);
-    console.log(`✅ [CONFIDENCE-1] ===== REPLAY CONFIRMATION SUCCESSFUL =====`);
-    console.log(`✅ Winner: ${winnerId} (mapped to ${winnerIdForTournament} for tournament)`);
-    console.log(`✅ Loser: ${loserId}`);
-    console.log(`✅ Tournament Mode: ${tournamentMode}`);
-    console.log(`✅ ELO Change: ${tournamentMode === 'ranked' ? eloChange : 0} (unranked tournament - no ELO impact)`);
-    console.log(`${'='.repeat(80)}\n`);
-    
-    res.status(201).json({ 
-      success: true,
-      matchId: tournamentMode === 'ranked' ? matchId : null,
-      message: 'Replay reported successfully. Match created and ELO calculated.',
-      winner_rating_change: tournamentMode === 'ranked' ? eloChange : 0
-    });
-
+    return res.json({ success: true, status: 'completed', replay_id: replayId, progression });
   } catch (error) {
-    console.error(`\n${'='.repeat(80)}`);
-    console.error(`❌ [CONFIDENCE-1] ===== ERROR DURING REPLAY CONFIRMATION =====`);
-    console.error(`❌ Error:`, error);
-    if (error instanceof Error) {
-      console.error(`❌ Message: ${error.message}`);
-      console.error(`❌ Stack: ${error.stack}`);
-    }
-    console.error(`${'='.repeat(80)}\n`);
-    res.status(500).json({ error: 'Failed to report replay', details: error instanceof Error ? error.message : String(error) });
+    console.error('❌ Error reporting confidence-1 replay:', error);
+    return res.status(500).json({ error: 'Failed to report replay', details: error instanceof Error ? error.message : String(error) });
   }
 });
 
-/**
- * POST /api/matches/cancel-confidence-1-replay
- *
- * Request or confirm cancellation of a confidence=1 replay (game saved mid-match).
- * Both players must call this endpoint to fully cancel the replay.
- *
- * Flow:
- *   - First player calls → cancel_requested_by = userId  (status: waiting_confirmation)
- *   - Second player calls → the replay row is DELETED     (status: cancelled)
- *
- * Requires: User authentication + must be a participant in the replay
- */
 router.post('/cancel-confidence-1-replay', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { replayId } = req.body;
@@ -2681,11 +1494,11 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
         r.cancel_requested_by,
         r.parse_status
        FROM replays r
-       WHERE r.integration_confidence = 1 
+       WHERE r.integration_confidence = 1
          AND r.parsed = 1
          AND r.parse_status NOT IN ('rejected')
          AND r.match_id IS NULL
-         AND (r.tournament_round_match_id IS NULL AND (r.parse_summary IS NULL OR JSON_UNQUOTE(JSON_EXTRACT(r.parse_summary, '$.linkedTournamentRoundMatchId')) IS NULL OR JSON_UNQUOTE(JSON_EXTRACT(r.parse_summary, '$.linkedTournamentRoundMatchId')) = 'null'))
+         AND r.tournament_game_id IS NULL
        ORDER BY r.created_at DESC
        LIMIT ? OFFSET ?`,
       [limit, offset]
@@ -2696,8 +1509,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
     // DEBUG: log raw replay rows before filtering
     if (process.env.BACKEND_DEBUG_LOGS === 'true') {
       const debugReplays = await query(
-        `SELECT r.id, r.tournament_round_match_id, r.integration_confidence, r.parsed, r.match_id, r.parse_status,
-                JSON_UNQUOTE(JSON_EXTRACT(r.parse_summary, '$.linkedTournamentRoundMatchId')) as json_linked
+        `SELECT r.id, r.tournament_game_id, r.integration_confidence, r.parsed, r.match_id, r.parse_status
          FROM replays r
          WHERE r.integration_confidence = 1 AND r.parsed = 1 AND r.parse_status NOT IN ('rejected') AND r.match_id IS NULL
          ORDER BY r.created_at DESC LIMIT 10`,

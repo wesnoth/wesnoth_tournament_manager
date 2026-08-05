@@ -256,7 +256,7 @@ router.post('/simulate-match', async (req: AuthRequest, res) => {
         winnerId: phaseWinnerUserId, loserId: phaseLoserUserId, winnerFaction, loserFaction, map, winnerSide: 1,
         replayRowId: null, replayFilePath: null,
         matchType: mode === 'ranked' ? 'ranked' : 'tournament_ranked',
-        linkedTournamentId: tournamentId || null, linkedTournamentRoundMatchId: null,
+        linkedTournamentId: tournamentId || null,
         linkedTournamentGameId: mode === 'tournament_ranked' ? selectedMatchId : null,
         gameId: null, wesnothVersion: null, instanceUuid: null, autoReported: false,
       });

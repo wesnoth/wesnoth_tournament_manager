@@ -2289,10 +2289,19 @@ router.delete('/tournaments/:id/teams/:teamId', authMiddleware, async (req: Auth
       return res.status(403).json({ success: false, error: 'Only tournament organizers can delete teams' });
     }
 
-    // Check if team has matches
+    // A team cannot be removed after it has been assigned to a phase-engine game.
+    // The deprecated team-match table is no longer part of the v2 model.
     const matchResult = await query(
-      'SELECT COUNT(*) as count FROM team_tournament_matches WHERE team_a_id = ? OR team_b_id = ?',
-      [teamId]
+      `SELECT COUNT(*) AS count
+       FROM tournament_games games
+       JOIN tournament_series series ON series.id = games.series_id
+       JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+       JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+       JOIN tournament_phases phases ON phases.id = groups.phase_id
+       WHERE phases.tournament_id = ?
+         AND (games.entry1_id IN (SELECT id FROM tournament_entries WHERE team_id = ?)
+           OR games.entry2_id IN (SELECT id FROM tournament_entries WHERE team_id = ?))`,
+      [id, teamId, teamId]
     );
 
     if (matchResult.rows[0].count > 0) {

@@ -173,10 +173,9 @@ export const matchService = {
     replayId: string, 
     winner_choice: 'I won' | 'I lost',
     comments?: string,
-    rating?: number,
-    tournament_match_id?: string
+    rating?: number
   ) => 
-    api.post('/matches/report-confidence-1-replay', { replayId, winner_choice, comments, rating, tournament_match_id }),
+    api.post('/matches/report-confidence-1-replay', { replayId, winner_choice, comments, rating }),
   cancelConfidence1Replay: (replayId: string) =>
     api.post('/matches/cancel-confidence-1-replay', { replayId }),
   adminDiscardReplay: (replayId: string) =>
@@ -207,7 +206,6 @@ export const tournamentService = {
     api.get(`/tournaments/${id}/standings`, { params: roundId ? { round_id: roundId } : {} }),
   calculateTournamentTiebreakers: (id: string) => api.post(`/tournaments/${id}/calculate-tiebreakers`, {}),
   getTournamentMatches: (id: string) => api.get(`/tournaments/${id}/matches`),
-  getTournamentRoundMatches: (id: string) => api.get(`/tournaments/${id}/round-matches`),
   getTournamentScheduledSeries: (id: string) => api.get(`/tournaments/${id}/scheduled-series`),
   getRoundMatches: (tournamentId: string, roundId: string) => 
     api.get(`/tournaments/${tournamentId}/rounds/${roundId}/matches`),
@@ -346,9 +344,8 @@ export const reportConfidence1Replay = (
   replayId: string,
   winner_choice: 'I won' | 'I lost',
   comments?: string,
-  rating?: number,
-  tournament_match_id?: string
-) => matchService.reportConfidence1Replay(replayId, winner_choice, comments, rating, tournament_match_id);
+  rating?: number
+) => matchService.reportConfidence1Replay(replayId, winner_choice, comments, rating);
 
 export const cancelConfidence1Replay = (replayId: string) =>
   matchService.cancelConfidence1Replay(replayId);

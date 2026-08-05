@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
+import TournamentEntryName from './TournamentEntryName';
 
 interface PhaseHistory {
   phase_id: string;
@@ -26,6 +27,8 @@ interface PhaseHistory {
 interface OverallStanding {
   entry_id: string;
   entity_id: string;
+  entry_user_id?: string | null;
+  entry_members?: Array<{ user_id: string; nickname: string }> | string | null;
   entry_name: string;
   placement: number;
   status: 'champion' | 'runner_up' | 'active' | 'eliminated';
@@ -83,7 +86,7 @@ const TournamentOverallStandings: React.FC<Props> = ({ tournamentId }) => {
         </tr></thead>
         <tbody>{standings.map(standing => <tr key={standing.entry_id} className={`border-b ${standing.status === 'champion' ? 'bg-yellow-50' : standing.status === 'runner_up' ? 'bg-slate-50' : 'hover:bg-gray-50'}`}>
           <td className="px-4 py-3 text-xl font-bold text-gray-800">{standing.placement}</td>
-          <td className="px-4 py-3 font-semibold text-gray-900">{standing.entry_name}</td>
+          <td className="px-4 py-3 font-semibold text-gray-900"><TournamentEntryName name={standing.entry_name} userId={standing.entry_user_id} members={standing.entry_members} /></td>
           <td className="px-4 py-3"><span className={`inline-block rounded-full border px-3 py-1 text-xs font-semibold ${statusStyle[standing.status]}`}>{standing.status === 'runner_up' ? 'Runner-up' : standing.status.charAt(0).toUpperCase() + standing.status.slice(1)}</span></td>
           <td className="px-4 py-3 text-gray-700">{standing.outcome}</td>
           <td className="px-4 py-3">

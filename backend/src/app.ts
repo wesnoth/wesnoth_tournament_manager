@@ -110,6 +110,7 @@ app.use('/api/admin/rule-templates', adminRuleTemplatesRoutes);
 app.use('/api/public/tournaments/:id/matches', legacyTournamentEndpoint);
 app.use('/api/public/tournaments/:id/pending-replays', legacyTournamentEndpoint);
 app.use('/api/public/tournament-matches/:id', legacyTournamentEndpoint);
+app.use('/api/public/tournament-matches/:id/replay/download-count', legacyTournamentEndpoint);
 app.use('/api/public', publicRoutes);
 app.use('/api/public/wiki', wikiRoutes);
 app.use('/api/rule-templates', ruleTemplatesRoutes);

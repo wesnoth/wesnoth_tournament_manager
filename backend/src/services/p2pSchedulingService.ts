@@ -70,8 +70,8 @@ export const createP2PProposal = async (
 
   await query(
     `INSERT INTO match_schedule_proposals
-      (id, tournament_round_match_id, tournament_match_id, proposed_by_user_id, proposed_at, status, expires_at, cancelled_at, user_id, challenge_mode, challenged_user_id, visibility, notes)
-     VALUES (?, NULL, NULL, ?, ?, 'pending', ?, NULL, ?, 'p2p', ?, ?, ?)`,
+      (id, proposed_by_user_id, proposed_at, status, expires_at, cancelled_at, user_id, challenge_mode, challenged_user_id, visibility, notes)
+     VALUES (?, ?, ?, 'pending', ?, NULL, ?, 'p2p', ?, ?, ?)`,
     [proposalId, proposedByUserId, now, expiresAt, challengedUserId, challengedUserId, visibility, notes || null]
   );
 
