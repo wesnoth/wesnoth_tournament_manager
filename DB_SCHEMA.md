@@ -29,11 +29,7 @@ context.
 | `tournament_organizers` | Co-organizers per tournament | (`tournament_id`,`user_id`) | `tournament_id`, `user_id`, `created_by` |
 | `tournament_rule_templates` | Reusable markdown rules templates | `id` | `title`, `content_markdown`, `is_active` |
 | `tournament_participants` | Players in tournaments | `id` | `user_id`, `team_id`, `status` |
-| `tournament_rounds` | Tournament rounds | `id` | `round_number`, `match_format`, `round_status` |
-| `tournament_matches` | Matches within tournaments | `id` | `player1_id`, `player2_id`, `winner_id`, `match_id`, `status`, `match_status` |
 | `tournament_teams` | Team records (2v2) | `id` | `name`, `tournament_id`, `status` |
-| `tournament_round_matches` | Round-level match aggregates | `id` | `player1_id`, `player2_id`, `winner_id` |
-| `tournament_round_byes` | Automatic bye events per round | `id` | `tournament_id`, `round_id`, `participant_id`, `team_id` |
 | `match_schedule_proposals` | Series-level tournament and P2P schedule proposals | `id` | `tournament_series_id`, `proposed_by_user_id`, `challenge_mode`, `challenged_user_id`, `status` |
 | `match_schedule_slots` | Time slots within a proposal | `id` | `proposal_id`, `slot_datetime`, `status` |
 | `match_schedule_confirmations` | User confirmations of proposals | `id` | `proposal_id`, `user_id`, `confirmed_at` |
@@ -71,7 +67,7 @@ The application uses **two MariaDB schemas** on the same server:
 
 Tournament identity, registration, participants, teams, ranked `matches`, and `replays.match_id` remain stable. Tournaments with `competition_model_version=2` use an ordered acyclic phase graph. A phase owns one or more parallel groups; each group owns rounds; rounds own best-of series; and series own individual games. Advancement rules map a finalized source rank to a target group preclassification.
 
-The rollout follows expand, migrate, switch, and contract. The expansion is additive: legacy round and match tables remain readable while version 2 tournaments are validated. Contract migrations must be separate and must not run until production has completed its compatibility window.
+The rollout follows expand, migrate, switch, and contract. Version 2 tournaments now use the phase-engine tables as their sole competition source of truth. Legacy round and match tables are removed by the contract migration after all tournaments have been migrated.
 
 `forum_topic_id` is optional. When present, Wesnoth game rooms use `T<topic-id>` and replay resolution prefers that code. Without it, the exact tournament name remains the fallback; ambiguous matches require manual integration.
 
@@ -485,99 +481,6 @@ Co-organizers with full organizer permissions for a tournament.
 
 ---
 
-### `tournament_rounds`
-
-Rounds within a tournament.
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | char(36) PK | UUID |
-| `tournament_id` | char(36) FK→tournaments | |
-| `round_number` | int | Sequential round number |
-| `match_format` | varchar(10) | `bo1` / `bo3` / `bo5` |
-| `round_status` | varchar(20) | `pending` / `in_progress` / `completed` |
-| `round_type` | varchar(20) | `general` / `final` |
-| `round_classification` | varchar(50) | E.g., `quarterfinal`, `semifinal`, `final` |
-| `round_start_date` | datetime | |
-| `round_end_date` | datetime | |
-| `players_remaining` | int | Players remaining at start of this round |
-| `players_advancing_to_next` | int | How many advance to the next round |
-| `round_phase_label` | varchar(100) | Human-readable phase label |
-| `round_phase_description` | varchar(255) | Human-readable phase description |
-| `created_at` | datetime | |
-| `updated_at` | datetime | |
-
----
-
-### `tournament_round_matches`
-
-Best-of series pairing within a tournament round. Supports match scheduling with proposals and confirmations.
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | char(36) PK | UUID |
-| `tournament_id` | char(36) FK→tournaments | |
-| `round_id` | char(36) FK→tournament_rounds | |
-| `player1_id` | char(36) FK→users_extension or tournament_teams | Player UUID (1v1) or Team UUID (2v2) |
-| `player2_id` | char(36) FK→users_extension or tournament_teams | Player UUID (1v1) or Team UUID (2v2) |
-| `best_of` | int | Total games in the series (e.g., 3, 5) |
-| `wins_required` | int | Wins needed to claim the series |
-| `player1_wins` | int | Games won by player1 |
-| `player2_wins` | int | Games won by player2 |
-| `matches_scheduled` | int | Total individual games scheduled so far |
-| `series_status` | varchar(50) | `pending` / `in_progress` / `completed` |
-| `winner_id` | char(36) | Series winner (NULL while in progress) |
-| `scheduled_datetime` | datetime | Proposed/confirmed match time (UTC) |
-| `scheduled_status` | varchar(20) | `pending` / `player1_proposed` / `player2_proposed` / `confirmed` |
-| `scheduled_by_player_id` | char(36) | User who proposed the schedule |
-| `scheduled_confirmed_at` | datetime | When both players confirmed the schedule |
-| `created_at` | datetime | |
-| `updated_at` | datetime | |
-
----
-
-### `tournament_round_byes`
-
-Automatic advancement events for participants or teams that do not receive a pairing in a round with an odd number of competitive entities.
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | char(36) PK | UUID |
-| `tournament_id` | char(36) FK->tournaments | Owning tournament |
-| `round_id` | char(36) FK->tournament_rounds | Round that awarded the bye |
-| `participant_id` | char(36) FK->tournament_participants | Set for individual tournaments |
-| `team_id` | char(36) FK->tournament_teams | Set for team tournaments |
-| `reason` | varchar(50) | Automatic bye reason |
-| `created_at` | datetime | |
-
-Exactly one of `participant_id` and `team_id` is populated. The table is the source of truth for bye history and allows Round Details to display byes without inferring them from missing match rows.
-
----
-
-### `tournament_matches`
-
-Individual games within a tournament round. Each record is one game in a best-of series.
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | char(36) PK | UUID |
-| `tournament_id` | char(36) FK→tournaments | |
-| `round_id` | char(36) FK→tournament_rounds | |
-| `player1_id` | char(36) FK→users_extension | |
-| `player2_id` | char(36) FK→users_extension | |
-| `winner_id` | char(36) | NULL until reported |
-| `loser_id` | char(36) | NULL until reported |
-| `match_id` | char(36) FK→matches | Link to the main matches record |
-| `tournament_round_match_id` | char(36) FK→tournament_round_matches | Parent series |
-| `match_status` | varchar(20) | `pending` / `in_progress` / `completed` / `cancelled` |
-| `organizer_action` | varchar(50) | Admin action taken (e.g., `force_win`) |
-| `map` | varchar(255) | |
-| `winner_faction` | varchar(255) | |
-| `loser_faction` | varchar(255) | |
-| `winner_comments` | text | |
-| `winner_rating` | int | |
-| `loser_comments` | text | |
-| `loser_rating` | int | |
 | `replay_file_path` | varchar(500) | |
 | `status` | varchar(20) | `unconfirmed` / `confirmed` / `disputed` |
 | `replay_downloads` | int | |
@@ -955,14 +858,12 @@ Tracks which SQL migrations have been executed.
 
 ### `match_schedule_proposals`
 
-Schedule proposals for phase-engine tournament series and P2P challenges. In new tournament flows, `tournament_series_id` is the canonical reference and `challenged_user_id` remains NULL. In P2P flows, `challenge_mode='p2p'` and `challenged_user_id` identifies the target player. Legacy round-match and direct-tournament-match references remain only during the compatibility removal migration.
+Schedule proposals for phase-engine tournament series and P2P challenges. In tournament flows, `tournament_series_id` is the canonical reference and `challenged_user_id` remains NULL. In P2P flows, `challenge_mode='p2p'` and `challenged_user_id` identifies the target player.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | char(36) PK | UUID |
 | `tournament_series_id` | char(36) FK→tournament_series | Series scheduled by this proposal; canonical for the phase-engine tournament model |
-| `tournament_round_match_id` | char(36) FK→tournament_round_matches | Target round match (NULL if for direct match) |
-| `tournament_match_id` | char(36) FK→tournament_matches | Target direct match (NULL if for round match) |
 | `proposed_by_user_id` | char(36) FK→users_extension | User who proposed this schedule |
 | `proposed_at` | datetime | When proposal was created |
 | `status` | varchar(20) | `pending` = awaiting confirmation, `confirmed` = at least one slot accepted, `rejected` = no slot accepted, `cancelled` = withdrawn, `expired` = no longer actionable; `superseded` is legacy-only |

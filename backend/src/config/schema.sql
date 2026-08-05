@@ -678,10 +678,8 @@ CREATE TABLE `replays` (
   KEY `idx_cancel_requested_by` (`cancel_requested_by`),
   KEY `idx_replay_trm_id` (`tournament_round_match_id`),
   KEY `idx_replay_tournament_id` (`tournament_id`),
-  KEY `fk_replays_tournament_match_id` (`tournament_match_id`),
   KEY `idx_replays_tournament_game_id` (`tournament_game_id`),
-  CONSTRAINT `fk_replays_match_id` FOREIGN KEY (`match_id`) REFERENCES `matches` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `fk_replays_tournament_match_id` FOREIGN KEY (`tournament_match_id`) REFERENCES `tournament_matches` (`id`) ON DELETE SET NULL
+  CONSTRAINT `fk_replays_match_id` FOREIGN KEY (`match_id`) REFERENCES `matches` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -724,46 +722,6 @@ CREATE TABLE `team_substitutes` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `tournament_matches`
---
-
-DROP TABLE IF EXISTS `tournament_matches`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
-CREATE TABLE `tournament_matches` (
-  `id` char(36) NOT NULL,
-  `tournament_id` char(36) NOT NULL,
-  `round_id` char(36) NOT NULL,
-  `player1_id` char(36) NOT NULL,
-  `player2_id` char(36) NOT NULL,
-  `winner_id` char(36) DEFAULT NULL,
-  `loser_id` char(36) DEFAULT NULL,
-  `match_id` char(36) DEFAULT NULL,
-  `match_status` varchar(20) DEFAULT 'pending',
-  `played_at` datetime DEFAULT NULL,
-  `created_at` datetime DEFAULT current_timestamp(),
-  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  `tournament_round_match_id` char(36) DEFAULT NULL,
-  `organizer_action` varchar(50) DEFAULT NULL,
-  `map` varchar(255) DEFAULT NULL,
-  `winner_faction` varchar(255) DEFAULT NULL,
-  `loser_faction` varchar(255) DEFAULT NULL,
-  `winner_comments` text DEFAULT NULL,
-  `winner_rating` int(11) DEFAULT NULL,
-  `loser_comments` text DEFAULT NULL,
-  `loser_rating` int(11) DEFAULT NULL,
-  `replay_file_path` varchar(500) DEFAULT NULL,
-  `status` varchar(20) DEFAULT 'unconfirmed',
-  `replay_downloads` int(11) DEFAULT 0,
-  PRIMARY KEY (`id`),
-  KEY `idx_tournament_id` (`tournament_id`),
-  KEY `idx_round_id` (`round_id`),
-  KEY `idx_player1_id` (`player1_id`),
-  KEY `idx_player2_id` (`player2_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
 -- Table structure for table `tournament_participants`
 --
 
@@ -797,68 +755,6 @@ CREATE TABLE `tournament_participants` (
   KEY `idx_tournament_participants_replacement_requested_at` (`replacement_requested_at`),
   KEY `idx_tournament_participants_replaced_by` (`replaced_by_participant_id`),
   KEY `idx_tournament_participants_replacement_of` (`requested_replacement_of_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `tournament_round_matches`
---
-
-DROP TABLE IF EXISTS `tournament_round_matches`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
-CREATE TABLE `tournament_round_matches` (
-  `id` char(36) NOT NULL,
-  `tournament_id` char(36) NOT NULL,
-  `round_id` char(36) NOT NULL,
-  `player1_id` char(36) NOT NULL,
-  `player2_id` char(36) NOT NULL,
-  `best_of` int(11) NOT NULL,
-  `wins_required` int(11) NOT NULL,
-  `player1_wins` int(11) DEFAULT 0,
-  `player2_wins` int(11) DEFAULT 0,
-  `matches_scheduled` int(11) DEFAULT 0,
-  `series_status` varchar(50) DEFAULT 'in_progress',
-  `winner_id` char(36) DEFAULT NULL,
-  `created_at` datetime DEFAULT current_timestamp(),
-  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  `scheduled_datetime` datetime DEFAULT NULL COMMENT 'Proposed/confirmed schedule time (UTC)',
-  `scheduled_status` varchar(20) DEFAULT 'pending' COMMENT 'pending, player1_proposed, player2_proposed, confirmed',
-  `scheduled_by_player_id` char(36) DEFAULT NULL COMMENT 'Which player proposed the schedule',
-  `scheduled_confirmed_at` datetime DEFAULT NULL COMMENT 'When both players confirmed (UTC)',
-  PRIMARY KEY (`id`),
-  KEY `idx_tournament_id` (`tournament_id`),
-  KEY `idx_round_id` (`round_id`),
-  KEY `idx_scheduled_status` (`scheduled_status`),
-  KEY `idx_scheduled_datetime` (`scheduled_datetime`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `tournament_rounds`
---
-
-DROP TABLE IF EXISTS `tournament_rounds`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
-CREATE TABLE `tournament_rounds` (
-  `id` char(36) NOT NULL,
-  `tournament_id` char(36) NOT NULL,
-  `round_number` int(11) NOT NULL,
-  `match_format` varchar(10) NOT NULL,
-  `round_status` varchar(20) DEFAULT 'pending',
-  `round_start_date` datetime DEFAULT NULL,
-  `round_end_date` datetime DEFAULT NULL,
-  `created_at` datetime DEFAULT current_timestamp(),
-  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  `round_type` varchar(20) DEFAULT 'general',
-  `round_classification` varchar(50) DEFAULT 'standard',
-  `players_remaining` int(11) DEFAULT NULL,
-  `players_advancing_to_next` int(11) DEFAULT NULL,
-  `round_phase_label` varchar(100) DEFAULT NULL,
-  `round_phase_description` varchar(255) DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `idx_tournament_id` (`tournament_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -1104,34 +1000,6 @@ CREATE TABLE `wiki_images` (
   UNIQUE KEY `uq_filename` (`filename`),
   KEY `idx_uploaded_by` (`uploaded_by`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Wiki image metadata - tracks uploaded images and their authors';
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `tournament_round_byes`
---
-
-DROP TABLE IF EXISTS `tournament_round_byes`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
-CREATE TABLE `tournament_round_byes` (
-  `id` char(36) NOT NULL,
-  `tournament_id` char(36) NOT NULL,
-  `round_id` char(36) NOT NULL,
-  `participant_id` char(36) DEFAULT NULL,
-  `team_id` char(36) DEFAULT NULL,
-  `reason` varchar(50) NOT NULL DEFAULT 'automatic_bye',
-  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_tournament_round_bye_participant` (`round_id`,`participant_id`),
-  UNIQUE KEY `uq_tournament_round_bye_team` (`round_id`,`team_id`),
-  KEY `idx_tournament_round_byes_tournament` (`tournament_id`),
-  KEY `idx_tournament_round_byes_round` (`round_id`),
-  CONSTRAINT `chk_tournament_round_bye_entity` CHECK ((`participant_id` is not null and `team_id` is null) or (`participant_id` is null and `team_id` is not null)),
-  CONSTRAINT `fk_tournament_round_byes_tournament` FOREIGN KEY (`tournament_id`) REFERENCES `tournaments` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_tournament_round_byes_round` FOREIGN KEY (`round_id`) REFERENCES `tournament_rounds` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_tournament_round_byes_participant` FOREIGN KEY (`participant_id`) REFERENCES `tournament_participants` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_tournament_round_byes_team` FOREIGN KEY (`team_id`) REFERENCES `tournament_teams` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --

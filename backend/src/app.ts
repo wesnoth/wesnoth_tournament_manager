@@ -84,16 +84,50 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/matches', matchRoutes);
 app.use('/api/tournaments', tournamentCompetitionRoutes);
+
+// Legacy tournament endpoints were replaced by the phase-engine competition
+// API. Keep an explicit 410 response while old route implementations are
+// removed from the source tree, so no request can reach legacy-table queries.
+const legacyTournamentEndpoint = (_req: express.Request, res: express.Response) =>
+  res.status(410).json({ error: 'Legacy tournament endpoint has been removed' });
+app.use('/api/tournaments/:id/rounds', legacyTournamentEndpoint);
+app.use('/api/tournaments/:id/round-matches', legacyTournamentEndpoint);
+app.use('/api/tournaments/:id/matches', legacyTournamentEndpoint);
+app.use('/api/tournaments/:id/standings', legacyTournamentEndpoint);
+app.use('/api/tournaments/:id/ranking', legacyTournamentEndpoint);
+app.use('/api/tournaments/:id/prepare', legacyTournamentEndpoint);
+app.use('/api/tournaments/:id/start', legacyTournamentEndpoint);
+app.use('/api/tournaments/:id/next-round', legacyTournamentEndpoint);
+app.use('/api/tournaments/:id/calculate-tiebreakers', legacyTournamentEndpoint);
+app.use('/api/tournaments/:id/notify-results', legacyTournamentEndpoint);
 app.use('/api/tournaments', tournamentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/wiki', wikiAdminRoutes);
 app.use('/api/admin/rule-templates', adminRuleTemplatesRoutes);
+
+// Public legacy tournament match feeds are superseded by the public phase
+// competition and events endpoints.
+app.use('/api/public/tournaments/:id/matches', legacyTournamentEndpoint);
+app.use('/api/public/tournaments/:id/pending-replays', legacyTournamentEndpoint);
+app.use('/api/public/tournament-matches/:id', legacyTournamentEndpoint);
 app.use('/api/public', publicRoutes);
 app.use('/api/public/wiki', wikiRoutes);
 app.use('/api/rule-templates', ruleTemplatesRoutes);
 app.use('/api/statistics', statisticsRoutes);
 app.use('/api/player-statistics', playerStatisticsRoutes);
 app.use('/api/replays', replaysRoutes);
+
+// Scheduling is now defined only for tournament_series and P2P challenges.
+// These route prefixes belong to the removed round-match/direct-match model.
+const legacySchedulingEndpoint = (_req: express.Request, res: express.Response) =>
+  res.status(410).json({ error: 'Legacy scheduling endpoint has been removed' });
+app.use('/api/tournament-scheduling/:id/schedule', legacySchedulingEndpoint);
+app.use('/api/tournament-scheduling/:id/propose-schedule', legacySchedulingEndpoint);
+app.use('/api/tournament-scheduling/:id/confirm-schedule', legacySchedulingEndpoint);
+app.use('/api/tournament-scheduling/:id/cancel-schedule', legacySchedulingEndpoint);
+app.use('/api/tournament-scheduling/:id/matches-pending-schedule', legacySchedulingEndpoint);
+app.use('/api/tournament-scheduling/tournament/:id/round-match', legacySchedulingEndpoint);
+app.use('/api/tournament-scheduling/tournament/:id/match', legacySchedulingEndpoint);
 app.use('/api/tournament-scheduling', schedulingRoutes);
 app.use('/api/challenges', challengesRoutes);
 app.use('/api/notifications', notificationsRoutes);
