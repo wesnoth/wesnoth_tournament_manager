@@ -464,6 +464,8 @@
     "bo5": "五局三胜 (先得3胜)"
   },
   "match_inform": "📋 通报比赛",
+  "match_confirm_result": "确认比赛",
+  "match_dispute_result": "争议比赛",
   "match_status_cancelled": "✗ 已取消",
   "match_status_confirmed": "✓ 已确认",
   "match_status_disputed": "⚠ 有争议",

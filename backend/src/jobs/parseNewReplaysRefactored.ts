@@ -318,6 +318,10 @@ export class ParseNewReplaysRefactorized {
               parseSummary.linkedTournamentGameId,
               parseSummary.linkedWinnerEntryId!
             );
+            await query(
+              `UPDATE tournament_games SET confirmation_status = 'reported' WHERE id = ?`,
+              [parseSummary.linkedTournamentGameId]
+            );
             matchCreateResult = { success: true, matchId: null };
           } else if (parseSummary.matchType === 'tournament_unranked') {
             // New-model tournament games are completed through tournament_games.
@@ -339,6 +343,10 @@ export class ParseNewReplaysRefactorized {
                 parseSummary.linkedTournamentGameId,
                 parseSummary.linkedWinnerEntryId!,
                 matchCreateResult.matchId
+              );
+              await query(
+                `UPDATE tournament_games SET confirmation_status = 'reported' WHERE id = ?`,
+                [parseSummary.linkedTournamentGameId]
               );
             }
           }

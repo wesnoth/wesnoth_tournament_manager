@@ -1380,6 +1380,7 @@ CREATE TABLE `tournament_games` (
   `loser_entry_id` char(36) DEFAULT NULL,
   `match_id` char(36) DEFAULT NULL,
   `status` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',
+  `confirmation_status` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'unconfirmed' COMMENT 'Manual result confirmation: unconfirmed | reported | confirmed | disputed',
   `organizer_action` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `map` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `winner_faction` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -1397,6 +1398,7 @@ CREATE TABLE `tournament_games` (
   UNIQUE KEY `uq_tournament_games_number` (`series_id`,`game_number`),
   KEY `idx_tournament_games_match` (`match_id`),
   KEY `idx_tournament_games_status` (`status`),
+  KEY `idx_tournament_games_confirmation_status` (`confirmation_status`),
   KEY `idx_tournament_games_winner` (`winner_entry_id`),
   KEY `idx_tournament_games_loser` (`loser_entry_id`),
   CONSTRAINT `chk_tournament_games_winner_side` CHECK (`winner_side` is null or `winner_side` in (1,2))

@@ -464,6 +464,8 @@
     "bo5": "Best of 5 (Первый до 3 побед)"
   },
   "match_inform": "📋 Сообщить о матче",
+  "match_confirm_result": "Подтвердить матч",
+  "match_dispute_result": "Оспорить матч",
   "match_status_cancelled": "✗ Отменено",
   "match_status_confirmed": "✓ Подтверждено",
   "match_status_disputed": "⚠ Оспаривается",

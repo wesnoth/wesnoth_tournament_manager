@@ -94,6 +94,88 @@ router.post('/:id/games/:gameId/result', authMiddleware, async (req: AuthRequest
   }
 });
 
+/** Record the winner's report or the loser's manual confirmation/dispute for a phase game. */
+router.post('/:id/games/:gameId/confirm', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const { action, comments } = req.body;
+    const rating = req.body.rating === undefined || req.body.rating === null ? null : Number(req.body.rating);
+    if (!['report', 'confirm', 'dispute'].includes(action)) {
+      return res.status(400).json({ error: 'action must be report, confirm, or dispute' });
+    }
+    if (rating !== null && (!Number.isInteger(rating) || rating < 1 || rating > 5)) {
+      return res.status(400).json({ error: 'rating must be an integer between 1 and 5' });
+    }
+    if (comments !== undefined && comments !== null && (typeof comments !== 'string' || comments.length > 500)) {
+      return res.status(400).json({ error: 'comments must not exceed 500 characters' });
+    }
+
+    const gameResult = await query(
+      `SELECT games.winner_entry_id, games.loser_entry_id, games.confirmation_status,
+              (SELECT replay.integration_confidence FROM replays replay
+               WHERE replay.tournament_game_id = games.id AND replay.deleted_at IS NULL
+               ORDER BY replay.detected_at DESC, replay.created_at DESC LIMIT 1) AS replay_confidence,
+              winner_entry.participant_id AS winner_participant_id, winner_entry.team_id AS winner_team_id,
+              loser_entry.participant_id AS loser_participant_id, loser_entry.team_id AS loser_team_id
+       FROM tournament_games games
+       JOIN tournament_series series ON series.id = games.series_id
+       JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+       JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+       JOIN tournament_phases phases ON phases.id = groups.phase_id
+       JOIN tournament_entries winner_entry ON winner_entry.id = games.winner_entry_id
+       JOIN tournament_entries loser_entry ON loser_entry.id = games.loser_entry_id
+       WHERE games.id = ? AND phases.tournament_id = ? AND games.status = 'completed'
+       LIMIT 1`,
+      [req.params.gameId, req.params.id]
+    );
+    if (!gameResult.rows?.length) return res.status(404).json({ error: 'Completed tournament game not found' });
+    const game = gameResult.rows[0];
+
+    const participantResult = await query(
+      `SELECT 1 FROM tournament_participants
+       WHERE user_id = ? AND participation_status = 'accepted'
+         AND (id IN (?, ?) OR team_id IN (?, ?)) LIMIT 1`,
+      [req.userId, game.winner_participant_id, game.loser_participant_id, game.winner_team_id, game.loser_team_id]
+    );
+    if (!participantResult.rows?.length) return res.status(403).json({ error: 'You are not a participant in this game' });
+
+    const winnerParticipantResult = await query(
+      `SELECT 1 FROM tournament_participants
+       WHERE user_id = ? AND participation_status = 'accepted'
+         AND (id = ? OR team_id = ?) LIMIT 1`,
+      [req.userId, game.winner_participant_id, game.winner_team_id]
+    );
+    const loserParticipantResult = await query(
+      `SELECT 1 FROM tournament_participants
+       WHERE user_id = ? AND participation_status = 'accepted'
+         AND (id = ? OR team_id = ?) LIMIT 1`,
+      [req.userId, game.loser_participant_id, game.loser_team_id]
+    );
+    const isWinner = Boolean(winnerParticipantResult.rows?.length);
+    const isLoser = Boolean(loserParticipantResult.rows?.length);
+    if (action === 'report' && !isWinner) return res.status(403).json({ error: 'Only the winning participant can report this game' });
+    if (['confirm', 'dispute'].includes(action) && !isLoser) return res.status(403).json({ error: 'Only the losing participant can confirm or dispute this game' });
+    if (action === 'report' && !['unconfirmed', 'reported'].includes(game.confirmation_status)) {
+      return res.status(409).json({ error: 'This game is no longer awaiting a result report' });
+    }
+    if (['confirm', 'dispute'].includes(action) && !['unconfirmed', 'reported'].includes(game.confirmation_status)) {
+      return res.status(409).json({ error: 'This game is no longer awaiting opponent confirmation' });
+    }
+    if (action === 'dispute' && Number(game.replay_confidence) !== 1) {
+      return res.status(409).json({ error: 'Only replay results with confidence 1 can be disputed' });
+    }
+
+    const nextStatus = action === 'report' ? 'reported' : action === 'confirm' ? 'confirmed' : 'disputed';
+    const update = action === 'report'
+      ? `UPDATE tournament_games SET winner_comments = ?, winner_rating = ?, confirmation_status = ? WHERE id = ?`
+      : `UPDATE tournament_games SET loser_comments = ?, loser_rating = ?, confirmation_status = ? WHERE id = ?`;
+    await query(update, [comments || null, rating, nextStatus, req.params.gameId]);
+    return res.json({ success: true, confirmation_status: nextStatus });
+  } catch (error) {
+    console.error('Confirm phase game error:', error);
+    return res.status(500).json({ error: 'Failed to update phase game confirmation' });
+  }
+});
+
 router.post('/:id/series/:seriesId/admin-decision', authMiddleware, async (req: AuthRequest, res) => {
   try {
     if (!(await isTournamentOrganizer(req.params.id, req.userId!))) {
@@ -481,7 +563,7 @@ router.get('/:id/phases/:phaseId/bracket', async (req, res) => {
  */
 router.get('/:id/phases/:phaseId/games', async (req, res) => {
   const result = await query(
-    `SELECT games.id AS game_id, games.game_number, games.status, games.played_at,
+    `SELECT games.id AS game_id, games.game_number, games.status, games.confirmation_status, games.played_at,
             games.organizer_action,
             games.winner_entry_id, series.id AS series_id, series.best_of,
             phases.id AS phase_id, phases.name AS phase_name,
@@ -493,6 +575,10 @@ router.get('/:id/phases/:phaseId/games', async (req, res) => {
             games.winner_faction,
             games.loser_faction,
             games.winner_side,
+            games.winner_comments, games.winner_rating, games.loser_comments, games.loser_rating,
+            (SELECT replay.integration_confidence FROM replays replay
+             WHERE replay.tournament_game_id = games.id AND replay.deleted_at IS NULL
+             ORDER BY replay.detected_at DESC, replay.created_at DESC LIMIT 1) AS replay_confidence,
             (SELECT replay.replay_url FROM replays replay
              WHERE replay.tournament_game_id = games.id AND replay.deleted_at IS NULL
              ORDER BY replay.detected_at DESC LIMIT 1) AS replay_url,

@@ -468,6 +468,8 @@
   "map_balance_title": "Análisis de Balance de Mapas",
   "maps_played": "Mapas",
   "match_inform": "📋 Informar partido",
+  "match_confirm_result": "Confirmar partido",
+  "match_dispute_result": "Disputar partido",
   "match_status_cancelled": "✗ Cancelado",
   "match_status_confirmed": "✓ Confirmado",
   "match_status_disputed": "⚠ En disputa",

@@ -24,7 +24,7 @@ context.
 | `tournament_phase_rounds` | Rounds scoped to one group/bracket | `id` | `group_id`, `round_number`, `best_of`, `status` |
 | `tournament_series` | Best-of competitive series | `id` | `round_id`, `best_of`, `winner_entry_id`, `status` |
 | `tournament_series_slots` | Direct or derived bracket positions | `id` | `series_id`, `slot_number`, `source_type`, `resolved_entry_id` |
-| `tournament_games` | Individual games belonging to a series, including map, factions and winner side | `id` | `series_id`, `game_number`, `match_id`, `status` |
+| `tournament_games` | Individual games belonging to a series, including result feedback and manual confirmation state | `id` | `series_id`, `game_number`, `match_id`, `status`, `confirmation_status` |
 | `tournament_phase_standings` | Materialized group standings | (`group_id`,`entry_id`) | `points`, `omp`, `gwp`, `ogp`, `rank_position` |
 | `tournament_organizers` | Co-organizers per tournament | (`tournament_id`,`user_id`) | `tournament_id`, `user_id`, `created_by` |
 | `tournament_rule_templates` | Reusable markdown rules templates | `id` | `title`, `content_markdown`, `is_active` |

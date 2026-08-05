@@ -464,6 +464,8 @@
     "bo5": "Best of 5 (Erster zu 3 Siegen)"
   },
   "match_inform": "📋 Spiel melden",
+  "match_confirm_result": "Match bestätigen",
+  "match_dispute_result": "Match anfechten",
   "match_status_cancelled": "✗ Abgebrochen",
   "match_status_confirmed": "✓ Bestätigt",
   "match_status_disputed": "⚠ Umstritten",

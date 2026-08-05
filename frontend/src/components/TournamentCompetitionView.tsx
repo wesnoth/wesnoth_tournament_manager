@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import ReplayConfirmationModal from './ReplayConfirmationModal';
+import PhaseGameConfirmationModal from './PhaseGameConfirmationModal';
+import PlayerLink from './PlayerLink';
+import StarDisplay from './StarDisplay';
 import { tournamentSchedulingService } from '../services/tournamentSchedulingService';
 import { groupSlotsIntoRanges } from '../utils/slotGrouping';
 
@@ -40,6 +44,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
   onScheduleGame,
   highlightedSeriesId = null,
 }) => {
+  const { t } = useTranslation();
   const [phases, setPhases] = useState<any[]>([]);
   const [details, setDetails] = useState<Record<string, any[]>>({});
   const [games, setGames] = useState<any[]>([]);
@@ -47,6 +52,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedReplay, setSelectedReplay] = useState<any | null>(null);
+  const [selectedGameConfirmation, setSelectedGameConfirmation] = useState<{ game: any; action: 'report' | 'respond' } | null>(null);
   const [replayChoice, setReplayChoice] = useState<'I won' | 'I lost' | 'cancel'>('I won');
   const [scheduleProposals, setScheduleProposals] = useState<Record<string, any>>({});
   const { user } = useAuthStore();
@@ -300,6 +306,24 @@ const TournamentCompetitionView: React.FC<Props> = ({
                   participantTeamIds.includes(game.entry2_team_id)
                 )
               );
+              const isCurrentUserWinner = Boolean(currentUserId && (
+                currentUserId === game.entry1_user_id && winnerIsEntry1
+                || currentUserId === game.entry2_user_id && !winnerIsEntry1
+                || participantTeamIds.includes(game.entry1_team_id) && winnerIsEntry1
+                || participantTeamIds.includes(game.entry2_team_id) && !winnerIsEntry1
+              ));
+              const isCurrentUserLoser = Boolean(currentUserId && (
+                currentUserId === game.entry1_user_id && !winnerIsEntry1
+                || currentUserId === game.entry2_user_id && winnerIsEntry1
+                || participantTeamIds.includes(game.entry1_team_id) && !winnerIsEntry1
+                || participantTeamIds.includes(game.entry2_team_id) && winnerIsEntry1
+              ));
+              const confirmationStatus = game.confirmation_status
+                || (game.loser_comments || game.loser_rating ? 'confirmed' : game.winner_comments || game.winner_rating ? 'reported' : 'unconfirmed');
+              // Match history displays the rating received by each player next
+              // to their name, while comments remain the feedback they wrote.
+              const winnerUserId = winnerIsEntry1 ? game.entry1_user_id : game.entry2_user_id;
+              const loserUserId = winnerIsEntry1 ? game.entry2_user_id : game.entry1_user_id;
               const scheduleStatus = proposal?.status === 'confirmed'
                 ? 'confirmed'
                 : proposal
@@ -322,8 +346,24 @@ const TournamentCompetitionView: React.FC<Props> = ({
                   <div className="font-medium">{game.phase_name}</div>
                   <div className="text-xs text-gray-500">{game.group_name} · Round {game.round_number} · Game {game.game_number} · Bo{game.best_of}</div>
                 </td>
-                <td className={`px-4 py-3 font-semibold ${completed ? 'text-green-700' : 'text-gray-800'}`}>{winnerName}</td>
-                <td className={`px-4 py-3 font-semibold ${completed ? 'text-red-700' : 'text-gray-800'}`}>{loserName}</td>
+                <td className={`px-4 py-3 font-semibold ${completed ? 'text-green-700' : 'text-gray-800'}`}>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1"><PlayerLink nickname={winnerName} userId={winnerUserId} /></div>
+                      <StarDisplay rating={game.loser_rating} size="sm" />
+                    </div>
+                  {completed && game.winner_comments && <div className="text-xs font-normal italic text-gray-500 whitespace-normal break-words">{game.winner_comments}</div>}
+                  </div>
+                </td>
+                <td className={`px-4 py-3 font-semibold ${completed ? 'text-red-700' : 'text-gray-800'}`}>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1"><PlayerLink nickname={loserName} userId={loserUserId} /></div>
+                      <StarDisplay rating={game.winner_rating} size="sm" />
+                    </div>
+                  {completed && game.loser_comments && <div className="text-xs font-normal italic text-gray-500 whitespace-normal break-words">{game.loser_comments}</div>}
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-gray-700">
                   <div>{pendingSummary?.finalMap || pendingSummary?.forumMap || game.map || '—'}</div>
                   {(completed || pendingReplay) && <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
@@ -346,6 +386,24 @@ const TournamentCompetitionView: React.FC<Props> = ({
                       <button type="button" onClick={() => openReplayAction('I lost')} className="rounded bg-red-600 px-2 py-1 text-xs font-semibold text-white hover:bg-red-700">I lost</button>
                       <button type="button" onClick={() => openReplayAction('cancel')} className="rounded bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700">Discard</button>
                     </>}
+                    {!pendingReplay && !game.organizer_action && confirmationStatus === 'unconfirmed' && isCurrentUserWinner && <button
+                      data-help-id="action-inform-phase-game-result"
+                      type="button"
+                      onClick={() => setSelectedGameConfirmation({ game, action: 'report' })}
+                      className="rounded bg-orange-500 px-2 py-1 text-xs font-semibold text-white hover:bg-orange-600"
+                    >
+                      {t('match_inform') || 'Inform Match'}
+                    </button>}
+                    {!pendingReplay && !game.organizer_action && isCurrentUserLoser && confirmationStatus !== 'confirmed' && confirmationStatus !== 'disputed' && <button
+                        data-help-id="action-report-phase-game-result"
+                        type="button"
+                        onClick={() => setSelectedGameConfirmation({ game, action: 'respond' })}
+                        className="rounded bg-orange-500 px-2 py-1 text-xs font-semibold text-white hover:bg-orange-600"
+                      >
+                        {t('report_match_link') || 'Report Match'}
+                      </button>}
+                    {!pendingReplay && (confirmationStatus === 'reported' || confirmationStatus === 'unconfirmed') && !isCurrentUserLoser && !isCurrentUserWinner && <span className="text-xs text-gray-500">Waiting for opponent confirmation</span>}
+                    {!pendingReplay && confirmationStatus === 'disputed' && <span className="rounded-full bg-red-500 px-3 py-1 text-xs font-semibold text-white">Disputed</span>}
                     {pendingReplay && game.pending_replay_url && <a href={game.pending_replay_url} target="_blank" rel="noopener noreferrer" className="rounded bg-yellow-600 px-2 py-1 text-xs font-semibold text-white hover:bg-yellow-700">Replay ⬇</a>}
                     {!pendingReplay && game.replay_url
                       ? <a data-help-id="action-download-phase-game-replay" href={game.replay_url} target="_blank" rel="noopener noreferrer" className="rounded bg-green-600 px-2 py-1 text-xs font-semibold text-white hover:bg-green-700" title={`Downloads: ${game.replay_downloads || 0}`}>Replay ⬇</a>
@@ -407,6 +465,14 @@ const TournamentCompetitionView: React.FC<Props> = ({
       player2_faction={selectedReplay.player2_faction}
       onClose={() => setSelectedReplay(null)}
       onSuccess={() => { setSelectedReplay(null); setReloadKey(value => value + 1); }}
+    />}
+    {selectedGameConfirmation && <PhaseGameConfirmationModal
+      isOpen={Boolean(selectedGameConfirmation)}
+      tournamentId={tournamentId}
+      game={selectedGameConfirmation.game}
+      action={selectedGameConfirmation.action}
+      onClose={() => setSelectedGameConfirmation(null)}
+      onSuccess={() => setReloadKey(value => value + 1)}
     />}
   </div>;
 };

@@ -478,6 +478,8 @@
     "bo5": "Best of 5 (First to 3 wins)"
   },
   "match_inform": "📋 Inform Match",
+  "match_confirm_result": "Confirm Match",
+  "match_dispute_result": "Dispute Match",
   "match_status_cancelled": "✗ Cancelled",
   "match_status_confirmed": "✓ Confirmed",
   "match_status_disputed": "⚠ Disputed",
