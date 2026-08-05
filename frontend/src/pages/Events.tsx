@@ -69,6 +69,16 @@ const Events: React.FC = () => {
   const [myEventsOnly, setMyEventsOnly] = useState(false);
   const [scheduleModal, setScheduleModal] = useState<any>({ isOpen: false });
 
+  const getEventStatusLabel = (status: string): string => {
+    const normalizedStatus = String(status || '').trim().toLowerCase();
+    const translationKey = `events_status_${normalizedStatus}`;
+    const translatedStatus = t(translationKey);
+    if (translatedStatus !== translationKey) return translatedStatus;
+    return normalizedStatus
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  };
+
   const openSeriesSchedule = useCallback(async (event: EventItem) => {
     const seriesId = event.raw?.series_id;
     const tournamentId = event.raw?.tournament_id;
@@ -460,7 +470,7 @@ const Events: React.FC = () => {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <span>{event.status}</span>
+                        <span>{getEventStatusLabel(event.status)}</span>
                         {event.type === 'tournament' && (
                           <div className="mt-2 flex flex-wrap gap-2">
                             <button
@@ -538,7 +548,7 @@ const Events: React.FC = () => {
                        renderScheduleSlots(event.raw, userTimezone)
                      )}
                      <p className="text-xs text-gray-500 mt-2">
-                       {t('events_table_status') || 'Status'}: {event.status}
+                       {t('events_table_status') || 'Status'}: {getEventStatusLabel(event.status)}
                        {event.type === 'p2p' && event.visibility ? ` • ${event.visibility}` : ''}
                      </p>
                      <div className="mt-3 pt-3 border-t border-gray-300 space-y-2">
