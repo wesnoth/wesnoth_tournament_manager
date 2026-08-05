@@ -33,6 +33,8 @@ export interface CreateMatchInput {
   linkedTournamentId: string | null;
   /** If set, update win counters in tournament_round_matches after match creation */
   linkedTournamentRoundMatchId: string | null;
+  /** Phase-engine game ID. Phase-engine results are progressed separately and never touch legacy tables. */
+  linkedTournamentGameId?: string | null;
   gameId: number | null;
   wesnothVersion: string | null;
   instanceUuid: string | null;
@@ -162,7 +164,7 @@ export async function createMatch(input: CreateMatchInput): Promise<CreateMatchR
     );
 
     // Update tournament round match if linked
-    if (input.linkedTournamentRoundMatchId && input.updateTournamentRoundMatch !== false) {
+    if (input.linkedTournamentRoundMatchId && !input.linkedTournamentGameId && input.updateTournamentRoundMatch !== false) {
       await updateTournamentRoundMatch(input.linkedTournamentRoundMatchId, winner.id);
     }
 

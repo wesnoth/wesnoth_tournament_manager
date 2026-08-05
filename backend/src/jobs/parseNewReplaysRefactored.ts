@@ -1026,6 +1026,7 @@ export class ParseNewReplaysRefactorized {
       matchType:                      parseSummary.matchType,
       linkedTournamentId:             parseSummary.linkedTournamentId,
       linkedTournamentRoundMatchId:   parseSummary.linkedTournamentRoundMatchId,
+      linkedTournamentGameId:         parseSummary.linkedTournamentGameId,
       gameId:                         replay.game_id,
       wesnothVersion:                 replay.wesnoth_version,
       instanceUuid:                   replay.instance_uuid,

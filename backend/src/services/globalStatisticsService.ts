@@ -87,14 +87,14 @@ export async function calculateGlobalStatistics(): Promise<GlobalStatistics> {
       stats.matches_total = row.total || 0;
     }
 
-    // Tournament matches statistics (from tournament_matches, excluding pending)
+    // Tournament game statistics from the phase-engine model, excluding pending games.
     const tournamentMatchesResult = await query(
       `SELECT 
-        SUM(CASE WHEN created_at >= DATE_SUB(CURDATE(), INTERVAL 29 DAY) THEN 1 ELSE 0 END) as month,
-        SUM(CASE WHEN created_at >= DATE_SUB(CURDATE(), INTERVAL 364 DAY) THEN 1 ELSE 0 END) as year,
+        SUM(CASE WHEN COALESCE(played_at, created_at) >= DATE_SUB(CURDATE(), INTERVAL 29 DAY) THEN 1 ELSE 0 END) as month,
+        SUM(CASE WHEN COALESCE(played_at, created_at) >= DATE_SUB(CURDATE(), INTERVAL 364 DAY) THEN 1 ELSE 0 END) as year,
         COUNT(*) as total
-       FROM tournament_matches
-       WHERE match_status != 'pending'`
+       FROM tournament_games
+       WHERE status = 'completed'`
     );
 
     if (tournamentMatchesResult.rows.length > 0) {
