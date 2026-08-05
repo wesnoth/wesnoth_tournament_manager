@@ -66,7 +66,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     );
 
     const result = await query(
-      `SELECT id, user_id, tournament_id, match_id, type, title, message, message_extra, is_read, created_at
+      `SELECT id, user_id, tournament_id, game_id, series_id, type, title, message, message_extra, is_read, created_at
        FROM user_notifications
        WHERE ${whereClause}
        ORDER BY created_at DESC
@@ -105,7 +105,7 @@ router.get('/pending', authMiddleware, async (req: AuthRequest, res: Response) =
     }
 
     const result = await query(
-      `SELECT id, user_id, tournament_id, match_id, type, title, message, message_extra, is_read, created_at
+      `SELECT id, user_id, tournament_id, game_id, series_id, type, title, message, message_extra, is_read, created_at
        FROM user_notifications
        WHERE user_id = ? AND is_read = false AND is_deleted = false
        ORDER BY created_at DESC`,
@@ -136,7 +136,7 @@ router.get('/accepted', authMiddleware, async (req: AuthRequest, res: Response) 
     }
 
     const result = await query(
-      `SELECT id, user_id, tournament_id, match_id, type, title, message, message_extra, is_read, created_at
+      `SELECT id, user_id, tournament_id, game_id, series_id, type, title, message, message_extra, is_read, created_at
        FROM user_notifications
        WHERE user_id = ? AND type = 'schedule_confirmed' AND is_deleted = false
        ORDER BY created_at DESC`,

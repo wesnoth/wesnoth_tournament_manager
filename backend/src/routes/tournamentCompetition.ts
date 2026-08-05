@@ -483,19 +483,20 @@ router.get('/:id/phases/:phaseId/games', async (req, res) => {
   const result = await query(
     `SELECT games.id AS game_id, games.game_number, games.status, games.played_at,
             games.organizer_action,
-            games.winner_entry_id, games.match_id, series.id AS series_id, series.best_of,
+            games.winner_entry_id, series.id AS series_id, series.best_of,
             phases.id AS phase_id, phases.name AS phase_name,
             rounds.round_number, groups.id AS group_id, groups.name AS group_name,
             games.entry1_id, games.entry2_id,
-            COALESCE(games.map, linked_match.map) AS map,
-            COALESCE(games.winner_faction, linked_match.winner_faction) AS winner_faction,
-            COALESCE(games.loser_faction, linked_match.loser_faction) AS loser_faction,
-            COALESCE(games.winner_side, linked_match.winner_side) AS winner_side,
-            COALESCE(linked_match.replay_file_path,
-              (SELECT replay.replay_url FROM replays replay
-               WHERE replay.tournament_game_id = games.id AND replay.deleted_at IS NULL
-               ORDER BY replay.detected_at DESC LIMIT 1)) AS replay_url,
-            COALESCE(linked_match.replay_downloads, 0) AS replay_downloads,
+            participant1.user_id AS entry1_user_id,
+            participant2.user_id AS entry2_user_id,
+            games.map,
+            games.winner_faction,
+            games.loser_faction,
+            games.winner_side,
+            (SELECT replay.replay_url FROM replays replay
+             WHERE replay.tournament_game_id = games.id AND replay.deleted_at IS NULL
+             ORDER BY replay.detected_at DESC LIMIT 1) AS replay_url,
+            games.replay_downloads,
             pending_replay.id AS pending_replay_id,
             pending_replay.parse_summary AS pending_replay_summary,
             pending_replay.integration_confidence AS pending_replay_confidence,
@@ -518,7 +519,6 @@ router.get('/:id/phases/:phaseId/games', async (req, res) => {
      LEFT JOIN users_extension user2 ON user2.id = participant2.user_id
      LEFT JOIN tournament_teams team1 ON team1.id = entry1.team_id
      LEFT JOIN tournament_teams team2 ON team2.id = entry2.team_id
-     LEFT JOIN matches linked_match ON linked_match.id = games.match_id
      LEFT JOIN replays pending_replay
        ON pending_replay.id = (
          SELECT replay.id FROM replays replay
@@ -592,6 +592,56 @@ router.get('/:id/phases/:phaseId/games', async (req, res) => {
       entry2_awarded_wins: Math.max(0, Number(series.entry2_wins) - Number(series.entry2_played_wins)),
     }));
   return res.json({ games: result.rows, administrative_decisions: administrativeDecisions });
+});
+
+/** Return confirmed phase-engine series schedules for the Events page. */
+router.get('/:id/scheduled-series', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT proposals.tournament_series_id AS series_id,
+              MIN(slots.slot_datetime) AS scheduled_datetime,
+              proposals.status AS scheduled_status,
+              tournaments.name AS tournament_name,
+              entry1_user.id AS player1_id,
+              entry2_user.id AS player2_id,
+              ${competitionEntryNameSql('entry1_user', 'team1')} AS player1_name,
+              ${competitionEntryNameSql('entry2_user', 'team2')} AS player2_name,
+              entry1.team_id AS player1_team_id,
+              entry2.team_id AS player2_team_id
+       FROM match_schedule_proposals proposals
+       JOIN match_schedule_slots slots ON slots.proposal_id = proposals.id
+       JOIN tournament_series series ON series.id = proposals.tournament_series_id
+       JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+       JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+       JOIN tournament_phases phases ON phases.id = groups.phase_id
+       JOIN tournaments ON tournaments.id = phases.tournament_id
+       JOIN tournament_series_slots series_slot1
+         ON series_slot1.series_id = series.id AND series_slot1.slot_number = 1
+       JOIN tournament_series_slots series_slot2
+         ON series_slot2.series_id = series.id AND series_slot2.slot_number = 2
+       JOIN tournament_entries entry1 ON entry1.id = series_slot1.resolved_entry_id
+       JOIN tournament_entries entry2 ON entry2.id = series_slot2.resolved_entry_id
+       LEFT JOIN tournament_participants participant1 ON participant1.id = entry1.participant_id
+       LEFT JOIN tournament_participants participant2 ON participant2.id = entry2.participant_id
+       LEFT JOIN users_extension entry1_user ON entry1_user.id = participant1.user_id
+       LEFT JOIN users_extension entry2_user ON entry2_user.id = participant2.user_id
+       LEFT JOIN tournament_teams team1 ON team1.id = entry1.team_id
+       LEFT JOIN tournament_teams team2 ON team2.id = entry2.team_id
+       WHERE phases.tournament_id = ?
+         AND proposals.challenge_mode = 'tournament'
+         AND proposals.status = 'confirmed'
+         AND slots.status = 'confirmed'
+       GROUP BY proposals.tournament_series_id, proposals.status, tournaments.name,
+                entry1_user.id, entry2_user.id, entry1.team_id, entry2.team_id,
+                player1_name, player2_name
+       ORDER BY scheduled_datetime ASC`,
+      [req.params.id]
+    );
+    return res.json({ schedules: result.rows || [] });
+  } catch (error) {
+    console.error('Get scheduled phase-engine series error:', error);
+    return res.status(500).json({ error: 'Failed to fetch scheduled series' });
+  }
 });
 
 export default router;

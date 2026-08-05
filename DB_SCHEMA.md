@@ -8,6 +8,13 @@
 | Table | Purpose | Primary Key | Important Columns |
 |---|---|---|---|
 | `users_extension` | Player profiles | `id` | `user_id`, `nickname`, `elo`, `level`, `is_admin` |
+
+### Notification References
+
+`user_notifications` links tournament events through `series_id` for series
+schedules or `game_id` for game-specific events. P2P challenge notifications use
+neither reference and are identified by their notification type and tournament
+context.
 | `matches` | Direct matches (1v1) | `id` | `player1_id`, `player2_id`, `winner_id`, `loser_id`, `status` |
 | `tournaments` | Tournament identity and lifecycle | `id` | `name`, `forum_topic_id`, `competition_model_version`, `tournament_mode`, `status` |
 | `tournament_entries` | Immutable competitive player/team identities | `id` | `tournament_id`, `entry_type`, `participant_id`, `team_id`, `initial_seed` |
@@ -27,7 +34,7 @@
 | `tournament_teams` | Team records (2v2) | `id` | `name`, `tournament_id`, `status` |
 | `tournament_round_matches` | Round-level match aggregates | `id` | `player1_id`, `player2_id`, `winner_id` |
 | `tournament_round_byes` | Automatic bye events per round | `id` | `tournament_id`, `round_id`, `participant_id`, `team_id` |
-| `match_schedule_proposals` | Schedule proposals (Phase 2) | `id` | `tournament_round_match_id`, `proposed_by_user_id`, `challenge_mode`, `challenged_user_id`, `status` |
+| `match_schedule_proposals` | Series-level tournament and P2P schedule proposals | `id` | `tournament_series_id`, `proposed_by_user_id`, `challenge_mode`, `challenged_user_id`, `status` |
 | `match_schedule_slots` | Time slots within a proposal | `id` | `proposal_id`, `slot_datetime`, `status` |
 | `match_schedule_confirmations` | User confirmations of proposals | `id` | `proposal_id`, `user_id`, `confirmed_at` |
 | `replays` | Discovered replays | `id` | `replay_file_path`, `parse_status`, `parsed_data` |
@@ -948,11 +955,12 @@ Tracks which SQL migrations have been executed.
 
 ### `match_schedule_proposals`
 
-Schedule proposals for tournament scheduling and P2P challenges. In tournament flows, `tournament_round_match_id` is the canonical reference and `challenged_user_id` remains NULL. In P2P flows, `challenge_mode='p2p'` and `challenged_user_id` identifies the target player.
+Schedule proposals for phase-engine tournament series and P2P challenges. In new tournament flows, `tournament_series_id` is the canonical reference and `challenged_user_id` remains NULL. In P2P flows, `challenge_mode='p2p'` and `challenged_user_id` identifies the target player. Legacy round-match and direct-tournament-match references remain only during the compatibility removal migration.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | char(36) PK | UUID |
+| `tournament_series_id` | char(36) FK→tournament_series | Series scheduled by this proposal; canonical for the phase-engine tournament model |
 | `tournament_round_match_id` | char(36) FK→tournament_round_matches | Target round match (NULL if for direct match) |
 | `tournament_match_id` | char(36) FK→tournament_matches | Target direct match (NULL if for round match) |
 | `proposed_by_user_id` | char(36) FK→users_extension | User who proposed this schedule |

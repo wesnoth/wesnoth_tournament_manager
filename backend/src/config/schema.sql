@@ -317,7 +317,7 @@ CREATE TABLE `match_schedule_proposals` (
   `challenge_mode` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'tournament' COMMENT 'Proposal context: tournament | p2p',
   `challenged_user_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'Target user for P2P challenges. NULL for tournament proposals',
   `discord_thread_id` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Optional Discord thread/message id for challenge conversations',
-  `visibility` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'private' COMMENT 'Visibility for events feed: private | public',
+  `visibility` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'public' COMMENT 'Visibility for events feed: public',
   `notes` text DEFAULT NULL COMMENT 'Player notes (max 500 chars)',
   `created_at` datetime DEFAULT current_timestamp(),
   `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
@@ -1023,7 +1023,8 @@ CREATE TABLE `user_notifications` (
   `id` char(36) NOT NULL,
   `user_id` char(36) NOT NULL,
   `tournament_id` char(36) NOT NULL,
-  `match_id` char(36) NOT NULL,
+  `game_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'Phase-engine tournament_games reference',
+  `series_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'Phase-engine tournament_series reference',
   `type` varchar(50) NOT NULL COMMENT 'schedule_proposal, schedule_confirmed, schedule_cancelled',
   `title` varchar(255) NOT NULL,
   `message` text NOT NULL,
@@ -1035,7 +1036,8 @@ CREATE TABLE `user_notifications` (
   PRIMARY KEY (`id`),
   KEY `idx_user_id` (`user_id`),
   KEY `idx_tournament_id` (`tournament_id`),
-  KEY `idx_match_id` (`match_id`),
+  KEY `idx_game_id` (`game_id`),
+  KEY `idx_series_id` (`series_id`),
   KEY `idx_is_read` (`is_read`),
   KEY `idx_created_at` (`created_at`),
   KEY `idx_user_is_read` (`user_id`,`is_read`),
@@ -1169,7 +1171,15 @@ CREATE TABLE `tournament_entries` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_tournament_entries_participant` (`tournament_id`,`participant_id`),
   UNIQUE KEY `uq_tournament_entries_team` (`tournament_id`,`team_id`),
-  KEY `idx_tournament_entries_tournament_status` (`tournament_id`,`status`)
+  KEY `idx_tournament_entries_tournament_status` (`tournament_id`,`status`),
+  KEY `idx_tournament_entries_participant` (`participant_id`),
+  KEY `idx_tournament_entries_team` (`team_id`),
+  CONSTRAINT `chk_tournament_entry_type` CHECK (`entry_type` in ('player','team')),
+  CONSTRAINT `chk_tournament_entry_entity` CHECK (
+    (`entry_type` = 'player' and `participant_id` is not null and `team_id` is null)
+    or (`entry_type` = 'team' and `participant_id` is null and `team_id` is not null)
+  ),
+  CONSTRAINT `chk_tournament_entry_status` CHECK (`status` in ('active','withdrawn','disqualified'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `tournament_phases` (
@@ -1252,7 +1262,11 @@ CREATE TABLE `tournament_phase_entry_assignments` (
   UNIQUE KEY `uq_tournament_phase_assignment_team` (`group_id`,`team_id`),
   UNIQUE KEY `uq_tournament_phase_assignment_seed` (`group_id`,`group_seed`),
   KEY `idx_tournament_phase_assignment_participant` (`participant_id`),
-  KEY `idx_tournament_phase_assignment_team` (`team_id`)
+  KEY `idx_tournament_phase_assignment_team` (`team_id`),
+  CONSTRAINT `chk_tournament_phase_assignment_entity` CHECK (
+    (`participant_id` is not null and `team_id` is null)
+    or (`participant_id` is null and `team_id` is not null)
+  )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `tournament_phase_entries` (

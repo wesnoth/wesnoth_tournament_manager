@@ -176,8 +176,9 @@ export default function ScheduleProposalModalP2P({
     if (!isOpen) return;
 
     if (proposal) {
-      // Check if current user is the proposer
-      if (userId && proposal.proposed_by_user_id === userId) {
+      // A confirmed proposal can be moved by either participant. While pending,
+      // only the proposer edits; the challenged player confirms or counters.
+      if (proposal.status === 'confirmed' || (userId && proposal.proposed_by_user_id === userId)) {
         setMode('edit_proposal');
         // Pre-fill with current slots so proposer can modify them
         if (proposal.slots) {
@@ -273,8 +274,7 @@ export default function ScheduleProposalModalP2P({
         const response = await p2pChallengesService.counterPropose(
           proposal.id,
           slotArray,
-          notes || undefined,
-          'private'
+          notes || undefined
         );
         if (response.success || response.proposalId) {
           onSuccess?.();
@@ -300,8 +300,7 @@ export default function ScheduleProposalModalP2P({
         const response = await p2pChallengesService.proposeChallenge(
           opponentId,
           slotArray,
-          notes || undefined,
-          'private'
+          notes || undefined
         );
 
         if (response.success || response.proposalId) {

@@ -537,8 +537,14 @@ router.get('/my', authMiddleware, async (req: AuthRequest, res) => {
             SELECT 1 FROM tournament_organizers tor
             WHERE tor.tournament_id = t.id AND tor.user_id = ?
           )
+          OR EXISTS (
+            SELECT 1 FROM tournament_participants participant
+            WHERE participant.tournament_id = t.id
+              AND participant.user_id = ?
+              AND participant.participation_status = 'accepted'
+          )
        ORDER BY created_at DESC`,
-      [userId, userId]
+      [userId, userId, userId]
     );
 
     // For each tournament, if status = 'finished', fetch winner and runner-up

@@ -247,6 +247,7 @@ const TournamentDetail: React.FC = () => {
     return 'participants';
   });
   const [highlightedMatchId, setHighlightedMatchId] = useState<string | null>(searchParams.get('matchId'));
+  const [highlightedSeriesId] = useState<string | null>(searchParams.get('seriesId'));
   const [myMatchesOnly, setMyMatchesOnly] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'scheduled' | 'completed'>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -270,6 +271,7 @@ const TournamentDetail: React.FC = () => {
   const [scheduleProposalModal, setScheduleProposalModal] = useState<{ 
     isOpen: boolean;
     tournamentId?: string;
+    seriesId?: string;
     roundMatchId?: string;
     matchId?: string;
     player1_nickname?: string; 
@@ -337,12 +339,9 @@ const TournamentDetail: React.FC = () => {
   const fetchTournamentData = async () => {
     try {
       setLoading(true);
-      const [tournamentRes, participantsRes, matchesRes, roundMaturesRes, roundsRes, organizersRes] = await Promise.all([
+      const [tournamentRes, participantsRes, organizersRes] = await Promise.all([
         publicService.getTournamentById(id!),
         tournamentService.getTournamentStandings(id!),
-        tournamentService.getTournamentMatches(id!),
-        tournamentService.getTournamentRoundMatches(id!),
-        tournamentService.getTournamentRounds(id!),
         tournamentService.getTournamentOrganizers(id!),
       ]);
 
@@ -362,33 +361,12 @@ const TournamentDetail: React.FC = () => {
         tournament_mode: tournamentRes.data.tournament_mode
       });
       setParticipants(participantsRes.data?.standings || []);
-      const matchesData = matchesRes.data || [];
-      setMatches(matchesData);
-      const roundMatchesData = roundMaturesRes.data || [];
-      setRoundMatches(roundMatchesData);
-      setRounds(roundsRes.data || []);
+      // Version 2 is authoritative in the phase-engine competition view;
+      // legacy rounds, series aggregates, and match rows are no longer loaded.
+      setMatches([]);
+      setRoundMatches([]);
+      setRounds([]);
       setOrganizers(organizersRes.data || []);
-      
-      // Pre-load proposals for matches with confirmed or pending schedules
-      await preloadProposals(roundMatchesData);
-      
-      // DEBUG: Log roundMatches with replay info
-      console.log('🎬 [ROUND-MATCHES] Received roundMatches:', roundMaturesRes.data);
-      console.log('🎬 [ROUND-MATCHES] roundMatches with replay fields:', roundMaturesRes.data?.map((m: any) => ({
-        id: m.id,
-        player1: m.player1_nickname,
-        player2: m.player2_nickname,
-        has_pending_replay_id: !!m.pending_replay_id,
-        pending_replay_id: m.pending_replay_id,
-        pending_replay_need_integration: m.pending_replay_need_integration,
-        pending_replay_summary_keys: m.pending_replay_summary ? (() => {
-          try {
-            return Object.keys(JSON.parse(m.pending_replay_summary)).slice(0, 5);
-          } catch {
-            return 'PARSE_ERROR';
-          }
-        })() : null
-      })));
       
       // For team mode, extract user's team_id from standings
       if (tournamentRes.data.tournament_mode === 'team' && userId) {
@@ -400,19 +378,6 @@ const TournamentDetail: React.FC = () => {
           console.log('🎯 User team found:', { teamId: userTeam.id, teamName: userTeam.nickname });
         }
       }
-      
-      console.log('Fetched data:', {
-        tournament: tournamentRes.data,
-        matches: matchesRes.data,
-        rounds: roundsRes.data,
-        userId: userId
-      });
-      console.log('Match status details:', matchesRes.data?.map((m: any) => ({
-        id: m.id,
-        match_id: m.match_id,
-        match_status: m.match_status,
-        match_status_from_matches: m.match_status_from_matches
-      })));
       
       // Initialize edit data when tournament loads
       setEditData({
@@ -453,7 +418,7 @@ const TournamentDetail: React.FC = () => {
     }
   };
 
-  const handlePreloadSchedulingData = async (roundMatchId: string, isRoundMatch: boolean, matchId?: string) => {
+  const handlePreloadSchedulingData = async (roundMatchId: string, isRoundMatch: boolean, matchId?: string, isSeries = false) => {
     try {
       setIsLoadingScheduling(true);
       const targetId = roundMatchId || matchId;
@@ -462,10 +427,14 @@ const TournamentDetail: React.FC = () => {
       }
 
       const [availRes, proposalRes] = await Promise.all([
-        isRoundMatch
+        isSeries
+          ? tournamentSchedulingService.getSeriesParticipantsAvailability(id!, targetId)
+          : isRoundMatch
           ? tournamentSchedulingService.getRoundMatchParticipantsAvailability(id!, targetId)
           : tournamentSchedulingService.getMatchParticipantsAvailability(id!, targetId),
-        isRoundMatch
+        isSeries
+          ? tournamentSchedulingService.getSeriesProposal(id!, targetId)
+          : isRoundMatch
           ? tournamentSchedulingService.getRoundMatchProposal(id!, targetId)
           : tournamentSchedulingService.getMatchProposal(id!, targetId)
       ]);
@@ -542,6 +511,7 @@ const TournamentDetail: React.FC = () => {
       setScheduleProposalModal({
         isOpen: true,
         tournamentId: id,
+        seriesId: isSeries ? targetId : undefined,
         roundMatchId: isRoundMatch ? roundMatchId : undefined,
         matchId: !isRoundMatch ? matchId : undefined,
         initialParticipants: participants,
@@ -680,6 +650,14 @@ const TournamentDetail: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [activeTab, highlightedMatchId, roundMatches.length]);
+
+  useEffect(() => {
+    if (activeTab !== 'competition' || !highlightedSeriesId) return;
+    const timer = setTimeout(() => {
+      document.getElementById(`series-${highlightedSeriesId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [activeTab, highlightedSeriesId]);
 
   const handleTeamJoinSubmit = async (teamName: string, teammateName: string) => {
     try {
@@ -3023,7 +3001,14 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
 
       {activeTab === 'competition' && tournament && (
         <div className="bg-white rounded-lg shadow-lg p-8 mb-8 mt-6">
-          <TournamentCompetitionView tournamentId={tournament.id} canManage={isCreator} />
+          <TournamentCompetitionView
+            tournamentId={tournament.id}
+            canManage={isCreator}
+            currentUserId={userId}
+            participantTeamIds={participants.map((participant: any) => participant.team_id).filter(Boolean)}
+            onScheduleGame={(game) => handlePreloadSchedulingData(game.series_id, false, undefined, true)}
+            highlightedSeriesId={highlightedSeriesId}
+          />
         </div>
       )}
 
@@ -3420,6 +3405,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
       <ScheduleProposalModal
         isOpen={scheduleProposalModal.isOpen}
         tournamentId={scheduleProposalModal.tournamentId || id!}
+        seriesId={scheduleProposalModal.seriesId}
         roundMatchId={scheduleProposalModal.roundMatchId}
         matchId={scheduleProposalModal.matchId}
         initialParticipants={scheduleProposalModal.initialParticipants}

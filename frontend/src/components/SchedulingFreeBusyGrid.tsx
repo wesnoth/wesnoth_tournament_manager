@@ -363,19 +363,24 @@ function SchedulingFreeBusyGrid({
   }, []);
 
   useEffect(() => {
-    if (effectiveScrollToHour !== null && effectiveScrollToHour !== undefined && gridContainerRef.current) {
-      const rowHeight = 30;
-      const hoursToScroll = effectiveScrollToHour * 2;
-      const scrollPosition = hoursToScroll * rowHeight;
+    if (effectiveScrollToHour !== null && effectiveScrollToHour !== undefined && gridContainerRef.current && flatSlots.length > 0) {
+      // Time is laid out horizontally: locate the first slot at or after the
+      // requested hour on the first visible day, then scroll that column into
+      // view beside the fixed participant column.
+      const firstSlotIndex = flatSlots.findIndex(
+        ({ slot }) => slot.timeMinutes >= effectiveScrollToHour * 60
+      );
+      const targetIndex = firstSlotIndex >= 0 ? firstSlotIndex : 0;
+      const scrollPosition = targetIndex * SLOT_COLUMN_WIDTH - PARTICIPANT_COLUMN_WIDTH;
       const timer = window.setTimeout(() => {
         if (gridContainerRef.current) {
-          gridContainerRef.current.scrollTop = Math.max(0, scrollPosition - 100);
+          gridContainerRef.current.scrollLeft = Math.max(0, scrollPosition);
         }
       }, 100);
       return () => window.clearTimeout(timer);
     }
     return undefined;
-  }, [effectiveScrollToHour]);
+  }, [effectiveScrollToHour, flatSlots]);
 
   const virtualWindow = useMemo(() => {
     const totalColumns = flatSlots.length;
@@ -506,18 +511,6 @@ function SchedulingFreeBusyGrid({
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-blue-200 border border-blue-400 rounded"></div>
             <span>Proposed</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-orange-200 border border-orange-400 rounded"></div>
-            <span>Reserved P2P</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-purple-200 border border-purple-400 rounded"></div>
-            <span>Reserved tournament</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-gray-200 border border-gray-400 rounded"></div>
-            <span>Past</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-green-500 border border-green-700 rounded"></div>

@@ -1,13 +1,37 @@
 import rateLimit from 'express-rate-limit';
 
+// Local development makes many parallel requests while loading tournament pages.
+// Keep production limits unchanged, but make the development defaults forgiving;
+// every value can still be overridden explicitly through the environment.
+const isProduction = process.env.NODE_ENV === 'production';
+const getLimit = (name: string, productionDefault: number, developmentDefault: number): number => {
+  const configured = Number(process.env[name]);
+  if (Number.isFinite(configured) && configured > 0) return configured;
+  return isProduction ? productionDefault : developmentDefault;
+};
+
+const getWindowMs = (name: string, defaultValue: number): number => {
+  const configured = Number(process.env[name]);
+  return Number.isFinite(configured) && configured > 0 ? configured : defaultValue;
+};
+
+const registerWindowMs = getWindowMs('RATE_LIMIT_REGISTER_WINDOW_MS', 15 * 60 * 1000);
+const loginWindowMs = getWindowMs('RATE_LIMIT_LOGIN_WINDOW_MS', 15 * 60 * 1000);
+const generalWindowMs = getWindowMs('RATE_LIMIT_GENERAL_WINDOW_MS', 60 * 1000);
+const searchWindowMs = getWindowMs('RATE_LIMIT_SEARCH_WINDOW_MS', 60 * 1000);
+const registerMax = getLimit('RATE_LIMIT_REGISTER_MAX', 5, 20);
+const loginMax = getLimit('RATE_LIMIT_LOGIN_MAX', 10, 50);
+const generalMax = getLimit('RATE_LIMIT_GENERAL_MAX', 100, 1000);
+const searchMax = getLimit('RATE_LIMIT_SEARCH_MAX', 10, 60);
+
 /**
  * Rate limiter for registration endpoint
  * Prevents spam account creation and bot attacks
- * Limits: 5 attempts per 15 minutes per IP
+ * Production limit: 5 attempts per 15 minutes per IP.
  */
 export const registerLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,  // 15 minutes
-  max: 5,                     // 5 attempts per window
+  windowMs: registerWindowMs,
+  max: registerMax,
   message: 'Too many registration attempts from this IP, please try again after 15 minutes',
   standardHeaders: true,      // Return rate limit info in `RateLimit-*` headers
   legacyHeaders: false,       // Disable `X-RateLimit-*` headers
@@ -32,11 +56,11 @@ export const registerLimiter = rateLimit({
 /**
  * Rate limiter for login endpoint
  * Prevents brute force password attacks
- * Limits: 10 attempts per 15 minutes per IP
+ * Production limit: 10 attempts per 15 minutes per IP.
  */
 export const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,  // 15 minutes
-  max: 10,                    // 10 attempts per window
+  windowMs: loginWindowMs,
+  max: loginMax,
   message: 'Too many login attempts from this IP, please try again after 15 minutes',
   standardHeaders: true,
   legacyHeaders: false,
@@ -59,11 +83,11 @@ export const loginLimiter = rateLimit({
 /**
  * General rate limiter for API endpoints
  * Prevents resource exhaustion and API abuse
- * Limits: 100 requests per minute per IP
+ * Production limit: 100 requests per minute per IP; local development defaults to 1000.
  */
 export const generalLimiter = rateLimit({
-  windowMs: 60 * 1000,        // 1 minute
-  max: 100,                   // 100 requests per window
+  windowMs: generalWindowMs,
+  max: generalMax,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req, res) => {
@@ -85,11 +109,11 @@ export const generalLimiter = rateLimit({
 /**
  * Strict rate limiter for search endpoints
  * Prevents user enumeration and information gathering
- * Limits: 10 requests per minute per IP
+ * Production limit: 10 requests per minute per IP; local development defaults to 60.
  */
 export const searchLimiter = rateLimit({
-  windowMs: 60 * 1000,        // 1 minute
-  max: 10,                    // 10 requests per window
+  windowMs: searchWindowMs,
+  max: searchMax,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req, res) => {

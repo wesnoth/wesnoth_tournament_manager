@@ -51,12 +51,12 @@ const ChallengeActionButtons: React.FC<ChallengeActionButtonsProps> = ({
   const [viewingTimezone, setViewingTimezone] = useState('UTC');
   const [loadingData, setLoadingData] = useState(false);
 
-  // Both participants may open the pending proposal; the backend still enforces
-  // which participant may confirm, edit, or cancel each operation.
+  // Both participants may manage a pending or confirmed proposal; the backend
+  // still enforces the participant boundary for every operation.
   const isIncoming = userId === challengedUserId;
   const isProposer = userId === proposedByUserId;
-  const isPending = status === 'pending';
-  const showActions = (isIncoming || isProposer) && isPending;
+  const isManageable = status === 'pending' || status === 'confirmed';
+  const showActions = isManageable && (isProposer || isIncoming);
 
   useEffect(() => {
     if (showManageModal && !proposal) {
@@ -112,10 +112,20 @@ const ChallengeActionButtons: React.FC<ChallengeActionButtonsProps> = ({
 
   if (!showActions) return null;
 
+  const firstSlotDatetime = proposal?.slots?.[0]?.slot_datetime;
+  const initialSlotHour = firstSlotDatetime
+    ? Number(new Intl.DateTimeFormat('en-US', {
+        timeZone: viewingTimezone,
+        hour: '2-digit',
+        hour12: false,
+      }).format(new Date(firstSlotDatetime))) % 24
+    : null;
+
   return (
     <>
       <button
         onClick={() => setShowManageModal(true)}
+        data-help-id="action-manage-challenge"
         className="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-700 text-white rounded font-semibold transition-colors"
         title="Manage this challenge"
       >
@@ -141,6 +151,7 @@ const ChallengeActionButtons: React.FC<ChallengeActionButtonsProps> = ({
               ? new Date(proposal.slots[0].slot_datetime)
               : new Date()
           }
+          initialScrollToHour={initialSlotHour}
         />
       )}
     </>

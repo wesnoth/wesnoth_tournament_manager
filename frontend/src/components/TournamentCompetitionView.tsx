@@ -2,8 +2,17 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import ReplayConfirmationModal from './ReplayConfirmationModal';
+import { tournamentSchedulingService } from '../services/tournamentSchedulingService';
+import { groupSlotsIntoRanges } from '../utils/slotGrouping';
 
-interface Props { tournamentId: string; canManage?: boolean }
+interface Props {
+  tournamentId: string;
+  canManage?: boolean;
+  currentUserId?: string | null;
+  participantTeamIds?: string[];
+  onScheduleGame?: (game: any) => void;
+  highlightedSeriesId?: string | null;
+}
 
 // Bracket spacing assumes equal-height match cards. Each later round doubles
 // the vertical interval between card centers, so a match remains centered
@@ -23,7 +32,14 @@ function getBracketRoundSpacing(roundIndex: number): React.CSSProperties {
   };
 }
 
-const TournamentCompetitionView: React.FC<Props> = ({ tournamentId, canManage = false }) => {
+const TournamentCompetitionView: React.FC<Props> = ({
+  tournamentId,
+  canManage = false,
+  currentUserId,
+  participantTeamIds = [],
+  onScheduleGame,
+  highlightedSeriesId = null,
+}) => {
   const [phases, setPhases] = useState<any[]>([]);
   const [details, setDetails] = useState<Record<string, any[]>>({});
   const [games, setGames] = useState<any[]>([]);
@@ -32,6 +48,7 @@ const TournamentCompetitionView: React.FC<Props> = ({ tournamentId, canManage = 
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedReplay, setSelectedReplay] = useState<any | null>(null);
   const [replayChoice, setReplayChoice] = useState<'I won' | 'I lost' | 'cancel'>('I won');
+  const [scheduleProposals, setScheduleProposals] = useState<Record<string, any>>({});
   const { user } = useAuthStore();
 
   useEffect(() => {
@@ -55,6 +72,28 @@ const TournamentCompetitionView: React.FC<Props> = ({ tournamentId, canManage = 
     };
     load();
   }, [tournamentId, reloadKey]);
+
+  // Proposal reads are public for tournament games, so spectators can see the
+  // same proposed/confirmed ranges while only participants receive the modal.
+  useEffect(() => {
+    const seriesIds = games.map(game => game.series_id).filter(Boolean);
+    if (seriesIds.length === 0) {
+      setScheduleProposals({});
+      return;
+    }
+    let cancelled = false;
+    Promise.all(seriesIds.map(async (seriesId) => {
+      try {
+        const response = await tournamentSchedulingService.getSeriesProposal(tournamentId, seriesId);
+        return [seriesId, response.proposal || null] as const;
+      } catch {
+        return [seriesId, null] as const;
+      }
+    })).then(entries => {
+      if (!cancelled) setScheduleProposals(Object.fromEntries(entries));
+    });
+    return () => { cancelled = true; };
+  }, [games, tournamentId]);
 
   if (error) return <p className="text-red-600">{error}</p>;
   return <div data-help-id="region-tournament-competition" className="space-y-6">
@@ -126,7 +165,7 @@ const TournamentCompetitionView: React.FC<Props> = ({ tournamentId, canManage = 
                           in_progress: 'In progress',
                           waiting: 'Waiting',
                         }[status];
-                        return <div key={item.series_id} className={`relative h-28 overflow-hidden rounded border shadow-sm ${statusStyles}`}>
+                        return <div id={`series-${item.series_id}`} key={item.series_id} className={`relative h-28 overflow-hidden rounded border shadow-sm ${highlightedSeriesId === item.series_id ? 'border-yellow-500 bg-yellow-200 ring-4 ring-yellow-300' : statusStyles}`}>
                           <div className="flex items-center justify-between border-b border-inherit px-3 py-1 text-xs text-gray-600">
                             <span>Bo{item.best_of}</span>
                             <span className={`rounded-full px-2 py-0.5 font-semibold ${status === 'ready' ? 'bg-green-200 text-green-900' : status === 'in_progress' ? 'bg-yellow-200 text-yellow-900' : status === 'completed' ? 'bg-gray-200 text-gray-700' : 'bg-gray-200 text-gray-600'}`}>{statusLabel}</span>
@@ -247,6 +286,25 @@ const TournamentCompetitionView: React.FC<Props> = ({ tournamentId, canManage = 
                 (team.members || []).some((member: string) => member.toLowerCase() === currentUserNickname)
               ) as any;
               const canConfirmReplay = pendingReplay && game.pending_replay_parse_status !== 'due' && Boolean(currentUserTeam);
+              const scheduleSeriesId = game.series_id;
+              const proposal = scheduleSeriesId ? scheduleProposals[scheduleSeriesId] : null;
+              const proposalSlots = proposal?.status === 'confirmed'
+                ? proposal.slots?.filter((slot: any) => slot.status === 'confirmed')
+                : proposal?.slots?.filter((slot: any) => slot.status === 'pending');
+              const scheduleRanges = groupSlotsIntoRanges((proposalSlots || []).map((slot: any) => slot.slot_datetime));
+              const isScheduleParticipant = Boolean(
+                currentUserId && (
+                  currentUserId === game.entry1_user_id ||
+                  currentUserId === game.entry2_user_id ||
+                  participantTeamIds.includes(game.entry1_team_id) ||
+                  participantTeamIds.includes(game.entry2_team_id)
+                )
+              );
+              const scheduleStatus = proposal?.status === 'confirmed'
+                ? 'confirmed'
+                : proposal
+                  ? 'pending_confirmation'
+                  : 'none';
               const openReplayAction = (choice: 'I won' | 'I lost' | 'cancel') => {
                 setSelectedReplay({
                   ...game,
@@ -259,7 +317,7 @@ const TournamentCompetitionView: React.FC<Props> = ({ tournamentId, canManage = 
                 });
                 setReplayChoice(choice);
               };
-              return <tr key={game.game_id} className={`border-b border-gray-200 ${pendingReplay ? 'bg-yellow-50 hover:bg-yellow-100' : 'hover:bg-gray-50'}`}>
+              return <tr id={`series-${game.series_id}`} key={game.game_id} className={`border-b border-gray-200 ${highlightedSeriesId === game.series_id ? 'bg-yellow-200 ring-2 ring-yellow-400' : pendingReplay ? 'bg-yellow-50 hover:bg-yellow-100' : 'hover:bg-gray-50'}`}>
                 <td className="px-4 py-3 text-gray-700">
                   <div className="font-medium">{game.phase_name}</div>
                   <div className="text-xs text-gray-500">{game.group_name} · Round {game.round_number} · Game {game.game_number} · Bo{game.best_of}</div>
@@ -294,6 +352,22 @@ const TournamentCompetitionView: React.FC<Props> = ({ tournamentId, canManage = 
                       : !pendingReplay && <span className="text-xs text-gray-500">No replay</span>}
                   </div> : <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full bg-yellow-500 px-3 py-1 text-xs font-semibold text-white">Pending</span>
+                    {scheduleStatus !== 'none' && <div className="flex flex-col gap-1">
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold text-white ${scheduleStatus === 'confirmed' ? 'bg-green-500' : 'bg-purple-500'}`}>
+                        {scheduleStatus === 'confirmed' ? '✅ Schedule confirmed' : '⏳ Schedule proposed'}
+                      </span>
+                      {scheduleRanges.map(range => <span key={range.start.toISOString()} className="text-xs text-gray-600">
+                        {range.start.toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })} – {range.end.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                      </span>)}
+                    </div>}
+                    {isScheduleParticipant && scheduleSeriesId && onScheduleGame && <button
+                      type="button"
+                      data-help-id="action-schedule-tournament-game"
+                      onClick={() => onScheduleGame(game)}
+                      className="rounded bg-purple-600 px-2 py-1 text-xs font-semibold text-white hover:bg-purple-700"
+                    >
+                      {scheduleStatus === 'none' ? '🗓️ Schedule' : 'Open schedule'}
+                    </button>}
                     {canManage && [{ id: game.entry1_id, name: game.entry1_name }, { id: game.entry2_id, name: game.entry2_name }].map(entry => <button key={entry.id} data-help-id="action-record-tournament-game-winner" type="button" onClick={async () => {
                       if (!window.confirm(`Record ${entry.name} as the winner of this game?`)) return;
                       try { await api.post(`/tournaments/${tournamentId}/games/${game.game_id}/result`, { winner_entry_id: entry.id }); setReloadKey(value => value + 1); } catch (resultError: any) { setError(resultError.response?.data?.error || 'Failed to record result'); }

@@ -7,7 +7,8 @@ interface Notification {
   id: string;
   user_id: string;
   tournament_id: string | null;
-  match_id: string | null;
+  game_id: string | null;
+  series_id: string | null;
   type:
     | 'schedule_proposal'
     | 'schedule_confirmed'
@@ -521,9 +522,9 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
                 >
                   → {t('label_go_events') || 'Go to Events'}
                 </button>
-              ) : notification.tournament_id && notification.match_id ? (
+              ) : notification.tournament_id ? (
                 <button
-                  onClick={() => navigate(`/tournament/${notification.tournament_id}?tab=roundMatches&matchId=${notification.match_id}`)}
+                  onClick={() => navigate(`/tournament/${notification.tournament_id}?tab=competition${notification.series_id ? `&seriesId=${notification.series_id}` : ''}`)}
                   className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors font-semibold"
                   title="Go to tournament details"
                 >

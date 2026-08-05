@@ -34,7 +34,7 @@ export const createP2PProposal = async (
   challengedUserId: string,
   slotDatetimes: string[],
   notes?: string,
-  visibility: 'private' | 'public' = 'private'
+  visibility: 'private' | 'public' = 'public'
 ): Promise<{ proposalId: string; slotsCreated: number }> => {
   if (proposedByUserId === challengedUserId) {
     throw new Error('You cannot challenge yourself');
@@ -146,19 +146,25 @@ export const getP2PProposalForUser = async (proposalId: string, userId: string) 
 
 /**
  * List challenges visible to a player, optionally restricted to incoming or
- * outgoing proposals. Slot dates are aggregated for event-list rendering.
+ * outgoing proposals. Public proposals are included in the general feed, but
+ * proposal details remain restricted to the two participants.
  */
 export const listP2PProposalsForUser = async (
-  userId: string,
+  userId: string | undefined,
   mode: 'incoming' | 'outgoing' | 'all' = 'all'
 ) => {
-  let whereClause = '(p.proposed_by_user_id = ? OR p.challenged_user_id = ?)';
-  const params: string[] = [userId, userId];
+  let whereClause = 'p.visibility = \'public\'';
+  const params: string[] = [];
 
-  if (mode === 'incoming') {
+  if (userId) {
+    whereClause = '(p.proposed_by_user_id = ? OR p.challenged_user_id = ? OR p.visibility = \'public\')';
+    params.push(userId, userId);
+  }
+
+  if (userId && mode === 'incoming') {
     whereClause = 'p.challenged_user_id = ?';
     params.splice(0, params.length, userId);
-  } else if (mode === 'outgoing') {
+  } else if (userId && mode === 'outgoing') {
     whereClause = 'p.proposed_by_user_id = ?';
     params.splice(0, params.length, userId);
   }
@@ -285,7 +291,7 @@ export const counterProposeP2P = async (
   userId: string,
   slotDatetimes: string[],
   notes?: string,
-  visibility: 'private' | 'public' = 'private'
+  visibility: 'private' | 'public' = 'public'
 ) => {
   const validation = validateSlotDatetimes(slotDatetimes);
   if (!validation.valid) {
@@ -329,7 +335,7 @@ export const counterProposeP2P = async (
 };
 
 /**
- * Replace the slots and notes of a still-pending proposal owned by the proposer.
+ * Replace the slots and notes of a pending or confirmed proposal by either participant.
  * Passing `null` for notes explicitly clears previously stored notes.
  */
 export const updateP2PProposal = async (
@@ -348,7 +354,7 @@ export const updateP2PProposal = async (
   }
 
   const proposalResult = await query(
-    `SELECT id, proposed_by_user_id, status
+    `SELECT id, proposed_by_user_id, challenged_user_id, status
      FROM match_schedule_proposals
      WHERE id = ? AND challenge_mode = 'p2p'`,
     [proposalId]
@@ -359,15 +365,16 @@ export const updateP2PProposal = async (
   }
 
   const proposal = proposalResult.rows[0];
-  if (proposal.proposed_by_user_id !== userId) {
-    throw new Error('Only proposer can update proposal');
+  if (proposal.proposed_by_user_id !== userId && proposal.challenged_user_id !== userId) {
+    throw new Error('Only challenge participants can update proposal');
   }
 
-  if (proposal.status !== 'pending') {
-    throw new Error('Can only update pending proposals');
+  if (!['pending', 'confirmed'].includes(proposal.status)) {
+    throw new Error('Can only update pending or confirmed proposals');
   }
 
-  // Delete old slots
+  // Moving a confirmed challenge starts a fresh confirmation cycle.
+  await query(`DELETE FROM match_schedule_confirmations WHERE proposal_id = ?`, [proposalId]);
   await query(
     `DELETE FROM match_schedule_slots
      WHERE proposal_id = ?`,
@@ -388,15 +395,19 @@ export const updateP2PProposal = async (
     slotIds.push(slotId);
   }
 
-  // Update notes if provided
-  if (notes !== undefined) {
-    await query(
-      `UPDATE match_schedule_proposals
-       SET notes = ?, proposed_at = NOW()
-       WHERE id = ?`,
-      [notes || null, proposalId]
-    );
-  }
+  await query(
+    `INSERT INTO match_schedule_confirmations (id, proposal_id, user_id, confirmed_at)
+     VALUES (?, ?, ?, NOW())`,
+    [uuidv4(), proposalId, userId]
+  );
+
+  await query(
+    `UPDATE match_schedule_proposals
+     SET notes = CASE WHEN ? IS NULL THEN notes ELSE ? END,
+         status = 'pending', proposed_at = NOW(), cancelled_at = NULL
+     WHERE id = ?`,
+    [notes === undefined ? null : notes, notes === undefined ? null : notes, proposalId]
+  );
 
   return {
     success: true,
@@ -406,12 +417,12 @@ export const updateP2PProposal = async (
 };
 
 /**
- * Cancel a proposal and mark its remaining pending slots as cancelled.
- * Only the original proposer may perform this operation.
+ * Cancel a proposal and mark all of its active slots as cancelled.
+ * Either participant may perform this operation.
  */
 export const cancelP2PProposal = async (proposalId: string, userId: string) => {
   const proposalResult = await query(
-    `SELECT id, proposed_by_user_id
+    `SELECT id, proposed_by_user_id, challenged_user_id
      FROM match_schedule_proposals
      WHERE id = ? AND challenge_mode = 'p2p'`,
     [proposalId]
@@ -422,8 +433,8 @@ export const cancelP2PProposal = async (proposalId: string, userId: string) => {
   }
 
   const proposal = proposalResult.rows[0];
-  if (proposal.proposed_by_user_id !== userId) {
-    throw new Error('Only proposer can cancel proposal');
+  if (proposal.proposed_by_user_id !== userId && proposal.challenged_user_id !== userId) {
+    throw new Error('Only challenge participants can cancel proposal');
   }
 
   await query(
@@ -436,7 +447,7 @@ export const cancelP2PProposal = async (proposalId: string, userId: string) => {
   await query(
     `UPDATE match_schedule_slots
      SET status = 'cancelled'
-     WHERE proposal_id = ? AND status = 'pending'`,
+     WHERE proposal_id = ? AND status <> 'cancelled'`,
     [proposalId]
   );
 

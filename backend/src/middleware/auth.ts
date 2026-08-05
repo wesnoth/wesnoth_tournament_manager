@@ -25,7 +25,7 @@ export const authMiddleware = (req: AuthRequest, res: Response, next: NextFuncti
   }
 };
 
-// Optional auth middleware - extracts user ID if token is provided, but doesn't fail if missing
+// Optional auth middleware - extracts user ID if token is provided, but doesn't fail if missing.
 export const optionalAuthMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
   const token = req.headers.authorization?.split(' ')[1];
 

@@ -346,17 +346,19 @@ export async function sendDiscordNotification(
  * Store an in-app notification for users who may be offline when the event occurs.
  * @param userIds Application user IDs that should receive the notification.
  * @param tournamentId Tournament or proposal owner used by the notification record.
- * @param matchId Match or proposal identifier associated with the event.
+ * @param _legacyMatchId Ignored compatibility argument retained for legacy callers.
  * @param type Notification type consumed by the in-app notification UI.
  * @param title Short notification title.
  * @param message Human-readable notification body.
  * @param messageExtra Optional additional content stored separately.
+ * @param seriesId Optional phase-engine series identifier.
+ * @param gameId Optional phase-engine game identifier.
  * @returns `true` when all inserts succeed; otherwise `false`.
  */
 export async function storeNotificationForUsers(
   userIds: string[],
   tournamentId: string,
-  matchId: string,
+  _legacyMatchId: string | null,
   type:
     | 'schedule_proposal'
     | 'schedule_confirmed'
@@ -371,15 +373,19 @@ export async function storeNotificationForUsers(
     | 'challenge_cancelled',
   title: string,
   message: string,
-  messageExtra?: string | null
+  messageExtra?: string | null,
+  seriesId?: string | null,
+  gameId?: string | null
 ): Promise<boolean> {
   try {
     for (const userId of userIds) {
       const notificationId = uuidv4();
       await query(
-        `INSERT INTO user_notifications (id, user_id, tournament_id, match_id, type, title, message, message_extra, is_read)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, false)`,
-        [notificationId, userId, tournamentId, matchId, type, title, message, messageExtra || null]
+        `INSERT INTO user_notifications
+           (id, user_id, tournament_id, game_id, series_id, type, title, message, message_extra, is_read)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, false)`,
+        [notificationId, userId, tournamentId, gameId || null, seriesId || null,
+          type, title, message, messageExtra || null]
       );
     }
     console.log(`✅ Stored ${userIds.length} notification(s) in database`);

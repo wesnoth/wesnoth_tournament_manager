@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { authMiddleware, AuthRequest, optionalAuthMiddleware } from '../middleware/auth.js';
 import { query } from '../config/database.js';
 import discordService from '../services/discordService.js';
 import { storeNotificationForUsers } from '../services/discordNotificationService.js';
@@ -71,8 +71,8 @@ const getUserSummary = async (userId: string): Promise<{ nickname: string }> => 
   };
 };
 
-/** List the authenticated player's incoming, outgoing, or all P2P proposals. */
-router.get('/proposals', authMiddleware, async (req: AuthRequest, res: Response) => {
+/** List public P2P proposals, plus the authenticated player's own proposals when available. */
+router.get('/proposals', optionalAuthMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
     const mode = (req.query.mode as 'incoming' | 'outgoing' | 'all' | undefined) || 'all';
@@ -132,7 +132,7 @@ router.get('/occupied-slots', authMiddleware, async (req: AuthRequest, res: Resp
 router.post('/proposals', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const proposedByUserId = req.userId!;
-    const { challenged_user_id, slot_datetimes, notes, visibility } = req.body;
+    const { challenged_user_id, slot_datetimes, notes } = req.body;
 
     if (!challenged_user_id || !Array.isArray(slot_datetimes)) {
       return res.status(400).json({ error: 'Missing required fields: challenged_user_id, slot_datetimes[]' });
@@ -143,7 +143,7 @@ router.post('/proposals', authMiddleware, async (req: AuthRequest, res: Response
       challenged_user_id,
       slot_datetimes,
       notes,
-      visibility === 'public' ? 'public' : 'private'
+      'public'
     );
 
     const proposer = await getUserSummary(proposedByUserId);
@@ -242,7 +242,7 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
   try {
     const userId = req.userId!;
     const { proposalId } = req.params;
-    const { slot_datetimes, notes, visibility } = req.body;
+    const { slot_datetimes, notes } = req.body;
 
     if (!Array.isArray(slot_datetimes) || slot_datetimes.length === 0) {
       return res.status(400).json({ error: 'slot_datetimes must be a non-empty array' });
@@ -253,7 +253,7 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
       userId,
       slot_datetimes,
       notes,
-      visibility === 'public' ? 'public' : 'private'
+      'public'
     );
 
     const newProposal = await getP2PProposalForUser(result.proposalId, userId);
@@ -303,7 +303,7 @@ router.post('/proposals/:proposalId/cancel', authMiddleware, async (req: AuthReq
     // Get cancelled slots before cancelling
     const slotsResult = await query(
       `SELECT slot_datetime FROM match_schedule_slots
-       WHERE proposal_id = ? AND status = 'pending'
+       WHERE proposal_id = ? AND status <> 'cancelled'
        ORDER BY slot_datetime ASC`,
       [proposalId]
     );
@@ -314,7 +314,9 @@ router.post('/proposals/:proposalId/cancel', authMiddleware, async (req: AuthReq
 
     await cancelP2PProposal(proposalId, userId);
 
-    const targetUserId = proposal.challenged_user_id;
+    const targetUserId = proposal.proposed_by_user_id === userId
+      ? proposal.challenged_user_id
+      : proposal.proposed_by_user_id;
     const actor = await getUserSummary(userId);
     const target = await getUserSummary(targetUserId);
 
@@ -357,7 +359,7 @@ router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, re
     // Get old slots before updating
     const oldSlotsResult = await query(
       `SELECT slot_datetime FROM match_schedule_slots
-       WHERE proposal_id = ? AND status = 'pending'
+       WHERE proposal_id = ? AND status <> 'cancelled'
        ORDER BY slot_datetime ASC`,
       [proposalId]
     );
@@ -373,7 +375,9 @@ router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, re
       return res.status(404).json({ error: 'Proposal not found after update' });
     }
 
-    const challengedUserId = proposal.challenged_user_id;
+    const challengedUserId = proposal.proposed_by_user_id === userId
+      ? proposal.challenged_user_id
+      : proposal.proposed_by_user_id;
     const updater = await getUserSummary(userId);
     const challenged = await getUserSummary(challengedUserId);
 

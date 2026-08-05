@@ -11,7 +11,8 @@ interface NavbarNotification {
   id: string;
   type: string;
   tournament_id?: string | null;
-  match_id?: string | null;
+  game_id?: string | null;
+  series_id?: string | null;
   title: string;
   message: string;
   message_extra?: string | null;
@@ -304,13 +305,13 @@ const Navbar: React.FC = () => {
                           onClick={() => {
                             if (typeof notif.type === 'string' && notif.type.startsWith('challenge_')) {
                               navigate('/events');
-                            } else if (notif.tournament_id && notif.match_id) {
-                              navigate(`/tournament/${notif.tournament_id}?tab=roundMatches&matchId=${notif.match_id}`);
+                            } else if (notif.tournament_id) {
+                              navigate(`/tournament/${notif.tournament_id}?tab=competition${notif.series_id ? `&seriesId=${notif.series_id}` : ''}`);
                             }
                             setNotificationsDropdownOpen(false);
                           }}
                           className={`px-4 py-3 border-b border-gray-100 transition-colors cursor-pointer ${
-                            notif.tournament_id && notif.match_id
+                            notif.tournament_id
                               ? 'hover:bg-green-50 hover:border-green-200'
                               : 'hover:bg-gray-50'
                           }`}
@@ -335,7 +336,7 @@ const Navbar: React.FC = () => {
                                 <p className="text-xs text-blue-600 font-semibold mt-1">
                                   → {t('navbar_events') || 'Events'}
                                 </p>
-                              ) : notif.tournament_id && notif.match_id ? (
+                              ) : notif.tournament_id ? (
                                 <p className="text-xs text-green-600 font-semibold mt-1">
                                   → {t('label_go_tournament') || 'Go to Tournament'}
                                 </p>

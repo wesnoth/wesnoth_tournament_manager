@@ -208,6 +208,7 @@ export const tournamentService = {
   calculateTournamentTiebreakers: (id: string) => api.post(`/tournaments/${id}/calculate-tiebreakers`, {}),
   getTournamentMatches: (id: string) => api.get(`/tournaments/${id}/matches`),
   getTournamentRoundMatches: (id: string) => api.get(`/tournaments/${id}/round-matches`),
+  getTournamentScheduledSeries: (id: string) => api.get(`/tournaments/${id}/scheduled-series`),
   getRoundMatches: (tournamentId: string, roundId: string) => 
     api.get(`/tournaments/${tournamentId}/rounds/${roundId}/matches`),
   recordMatchResult: (tournamentId: string, matchId: string, data: any) =>

@@ -88,7 +88,7 @@ const convertTimeRangeToTimezone = (
       // No conversion needed
       return { day: dayOfWeek, ranges: [timeRange] };
     }
-    
+
     // Get timezone offsets
     const fromTzOffsetHours = getTimezoneOffset('UTC', fromTz, referenceDate);
     const toTzOffsetHours = getTimezoneOffset('UTC', toTz, referenceDate);
@@ -408,6 +408,78 @@ export const createRoundMatchProposal = async (
 };
 
 /**
+ * Create a proposal for a phase-engine series. A series is the scheduling
+ * boundary in the new tournament model; individual games are materialized
+ * lazily as the best-of result progresses.
+ */
+export const createSeriesProposal = async (
+  seriesId: string,
+  proposedByUserId: string,
+  slotDatetimes: string[],
+  notes?: string
+): Promise<{ proposalId: string; slotsCreated: number }> => {
+  const validation = validateSlotDatetimes(slotDatetimes);
+  if (!validation.valid) throw new Error(validation.error);
+  if (notes && notes.length > 500) throw new Error('Notes cannot exceed 500 characters');
+
+  const context = await query(
+    `SELECT series.id, phases.tournament_id, tournaments.tournament_mode
+     FROM tournament_series series
+     JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+     JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+     JOIN tournament_phases phases ON phases.id = groups.phase_id
+     JOIN tournaments ON tournaments.id = phases.tournament_id
+     WHERE series.id = ?`,
+    [seriesId]
+  );
+  if (!context.rows?.length) throw new Error('Tournament series not found');
+
+  const { tournament_id: tournamentId } = context.rows[0];
+  const participantUsers = await query(
+    `SELECT DISTINCT tp.user_id
+     FROM tournament_series_slots slots
+     JOIN tournament_entries entries ON entries.id = slots.resolved_entry_id
+     JOIN tournament_participants tp
+       ON tp.id = entries.participant_id OR tp.team_id = entries.team_id
+     WHERE slots.series_id = ? AND slots.resolved_entry_id IS NOT NULL
+       AND tp.tournament_id = ? AND tp.participation_status = 'accepted'`,
+    [seriesId, tournamentId]
+  );
+  const participantUserIds = (participantUsers.rows || []).map((row: any) => row.user_id);
+  if (!participantUserIds.includes(proposedByUserId)) {
+    throw new Error('You are not a participant in this series');
+  }
+  await assertSlotsAreAvailable(participantUserIds, slotDatetimes);
+
+  const maxSlotDatetime = new Date(Math.max(...slotDatetimes.map(dt => new Date(dt).getTime())));
+  const proposalId = uuidv4();
+  const result = await query(
+    `INSERT INTO match_schedule_proposals
+       (id, tournament_series_id, proposed_by_user_id, proposed_at, status,
+        notes, expires_at, user_id, challenge_mode, challenged_user_id)
+     VALUES (?, ?, ?, NOW(), 'pending', ?, ?, ?, 'tournament', NULL)`,
+    [proposalId, seriesId, proposedByUserId, notes || null,
+      new Date(maxSlotDatetime.getTime() + 7 * 24 * 60 * 60 * 1000), proposedByUserId]
+  );
+  if (!result.rowCount) throw new Error('Failed to create proposal');
+
+  for (const slotDatetime of slotDatetimes) {
+    await query(
+      `INSERT INTO match_schedule_slots
+         (id, proposal_id, slot_datetime, slot_duration_minutes, status)
+       VALUES (?, ?, ?, 30, 'pending')`,
+      [uuidv4(), proposalId, roundToNearest30Min(new Date(slotDatetime))]
+    );
+  }
+  await query(
+    `INSERT INTO match_schedule_confirmations (id, proposal_id, user_id, confirmed_at)
+     VALUES (?, ?, ?, NOW())`,
+    [uuidv4(), proposalId, proposedByUserId]
+  );
+  return { proposalId, slotsCreated: slotDatetimes.length };
+};
+
+/**
  * Create a schedule proposal at match level (single game)
  */
 export const createMatchProposal = async (
@@ -682,6 +754,36 @@ export const getRoundMatchProposal = async (roundMatchId: string) => {
   }
 };
 
+/** Return the active proposal for a phase-engine series. */
+export const getSeriesProposal = async (seriesId: string) => {
+  const proposalResult = await query(
+    `SELECT id, proposed_by_user_id, proposed_at, status, notes
+     FROM match_schedule_proposals
+     WHERE tournament_series_id = ?
+       AND status IN ('pending', 'confirmed')
+       AND challenge_mode = 'tournament'
+     LIMIT 1`,
+    [seriesId]
+  );
+  if (!proposalResult.rows?.length) return null;
+  const proposal = proposalResult.rows[0];
+  const slotsResult = await query(
+    `SELECT id, slot_datetime, status
+     FROM match_schedule_slots WHERE proposal_id = ? ORDER BY slot_datetime ASC`,
+    [proposal.id]
+  );
+  const confirmationsResult = await query(
+    `SELECT user_id, confirmed_at
+     FROM match_schedule_confirmations WHERE proposal_id = ? ORDER BY confirmed_at ASC`,
+    [proposal.id]
+  );
+  return {
+    ...proposal,
+    slots: slotsResult.rows || [],
+    confirmations: confirmationsResult.rows || [],
+  };
+};
+
 /**
  * Get active proposal with slots and confirmations for a match
  */
@@ -746,12 +848,26 @@ export const getMatchProposal = async (matchId: string) => {
 export const getParticipantsAvailability = async (
   roundMatchId?: string,
   matchId?: string,
-  loggedInUserId?: string
+  loggedInUserId?: string,
+  seriesId?: string
 ): Promise<any> => {
   try {
     let participantsResult;
     
-    if (roundMatchId) {
+    if (seriesId) {
+      participantsResult = await query(
+        `SELECT DISTINCT u.id, u.nickname, u.timezone, u.availability_schedule
+         FROM tournament_series_slots slots
+         JOIN tournament_entries entries ON entries.id = slots.resolved_entry_id
+         JOIN tournament_participants tp
+           ON tp.id = entries.participant_id OR tp.team_id = entries.team_id
+         JOIN users_extension u ON u.id = tp.user_id
+         WHERE slots.series_id = ? AND slots.resolved_entry_id IS NOT NULL
+           AND tp.participation_status = 'accepted'
+         ORDER BY u.nickname`,
+        [seriesId]
+      );
+    } else if (roundMatchId) {
       // First, check if this is a team tournament
       const matchTypeResult = await query(
         `SELECT trm.player1_id, trm.player2_id, t.tournament_mode
@@ -924,7 +1040,7 @@ export const confirmProposal = async (proposalId: string, userId: string) => {
     
     // 3. Get proposal details
     const proposal = await query(
-     `SELECT tournament_round_match_id, proposed_by_user_id, status, challenge_mode
+     `SELECT tournament_round_match_id, tournament_series_id, proposed_by_user_id, status, challenge_mode
        FROM match_schedule_proposals WHERE id = ?`,
       [proposalId]
     );
@@ -940,7 +1056,8 @@ export const confirmProposal = async (proposalId: string, userId: string) => {
     // 4. Check if proposal is now fully confirmed
     const isFullyConfirmed = await checkProposalFullyConfirmed(
       proposalId,
-      proposal.rows[0].tournament_round_match_id
+      proposal.rows[0].tournament_round_match_id,
+      proposal.rows[0].tournament_series_id
     );
     
     if (isFullyConfirmed && proposal.rows[0].status !== 'confirmed') {
@@ -1067,7 +1184,7 @@ export const confirmPartialSlots = async (
     
     // 8. Update proposal status
     const proposal = await query(
-      `SELECT status, tournament_round_match_id, challenge_mode FROM match_schedule_proposals WHERE id = ?`,
+      `SELECT status, tournament_round_match_id, tournament_series_id, challenge_mode FROM match_schedule_proposals WHERE id = ?`,
       [proposalId]
     );
     
@@ -1169,12 +1286,14 @@ export const cancelConfirmation = async (proposalId: string, userId: string) => 
       );
       
       // 5. Clear tournament_round_matches scheduling
-      await query(
-        `UPDATE tournament_round_matches 
-         SET scheduled_datetime = NULL, scheduled_status = 'pending', scheduled_confirmed_at = NULL
-         WHERE id = ?`,
-        [proposal.rows[0].tournament_round_match_id]
-      );
+      if (proposal.rows[0].tournament_round_match_id) {
+        await query(
+          `UPDATE tournament_round_matches
+           SET scheduled_datetime = NULL, scheduled_status = 'pending', scheduled_confirmed_at = NULL
+           WHERE id = ?`,
+          [proposal.rows[0].tournament_round_match_id]
+        );
+      }
     }
     
     return { success: true };
@@ -1207,7 +1326,7 @@ export const rejectAndCounterPropose = async (
     
     // 2. Get original proposal
     const original = await query(
-      `SELECT tournament_round_match_id, proposed_by_user_id, challenge_mode
+      `SELECT tournament_round_match_id, tournament_series_id, proposed_by_user_id, challenge_mode
        FROM match_schedule_proposals WHERE id = ?`,
       [proposalId]
     );
@@ -1236,12 +1355,14 @@ export const rejectAndCounterPropose = async (
     const expiresAt = new Date(maxSlotDatetime.getTime() + 7 * 24 * 60 * 60 * 1000);
     
     await query(
-      `INSERT INTO match_schedule_proposals 
-       (id, tournament_round_match_id, proposed_by_user_id, proposed_at, status, notes, expires_at, user_id, challenge_mode, challenged_user_id)
-       VALUES (?, ?, ?, NOW(), 'pending', ?, ?, ?, 'tournament', NULL)`,
+      `INSERT INTO match_schedule_proposals
+       (id, tournament_round_match_id, tournament_series_id, proposed_by_user_id,
+        proposed_at, status, notes, expires_at, user_id, challenge_mode, challenged_user_id)
+       VALUES (?, ?, ?, ?, NOW(), 'pending', ?, ?, ?, 'tournament', NULL)`,
       [
         counterProposalId,
         original.rows[0].tournament_round_match_id,
+        original.rows[0].tournament_series_id,
         userId,
         notes || null,
         expiresAt,
@@ -1266,12 +1387,56 @@ export const rejectAndCounterPropose = async (
         slotsCreated++;
       }
     }
+
+    await query(
+      `INSERT INTO match_schedule_confirmations (id, proposal_id, user_id, confirmed_at)
+       VALUES (?, ?, ?, NOW())`,
+      [uuidv4(), counterProposalId, userId]
+    );
     
     return { success: true, counterProposalId, slotsCreated };
   } catch (error) {
     console.error('[rejectAndCounterPropose] Error:', error);
     throw error;
   }
+};
+
+/** Reject a proposal without creating a replacement proposal. */
+export const rejectProposal = async (
+  proposalId: string,
+  userId: string,
+  notes?: string
+): Promise<{ success: true }> => {
+  if (notes && notes.length > 500) throw new Error('Notes cannot exceed 500 characters');
+
+  const proposal = await query(
+    `SELECT proposed_by_user_id, status, challenge_mode
+     FROM match_schedule_proposals WHERE id = ?`,
+    [proposalId]
+  );
+  if (!proposal.rows?.length) throw new Error('Proposal not found');
+  if (proposal.rows[0].challenge_mode !== 'tournament') {
+    throw new Error('This endpoint only supports tournament proposals');
+  }
+  if (proposal.rows[0].proposed_by_user_id === userId) {
+    throw new Error('Proposer cannot reject their own proposal');
+  }
+  if (!['pending', 'active'].includes(proposal.rows[0].status)) {
+    throw new Error('Proposal is no longer active');
+  }
+
+  await query(
+    `UPDATE match_schedule_proposals
+     SET status = 'rejected', notes = COALESCE(?, notes), updated_at = NOW()
+     WHERE id = ?`,
+    [notes || null, proposalId]
+  );
+  await query(
+    `UPDATE match_schedule_slots SET status = 'rejected'
+     WHERE proposal_id = ? AND status = 'pending'`,
+    [proposalId]
+  );
+  return { success: true };
 };
 
 /**
@@ -1297,7 +1462,7 @@ export const modifyProposal = async (
     
     // 2. Get proposal
     const proposal = await query(
-      `SELECT proposed_by_user_id, tournament_round_match_id, status, challenge_mode
+      `SELECT proposed_by_user_id, tournament_round_match_id, tournament_series_id, status, challenge_mode
        FROM match_schedule_proposals WHERE id = ?`,
       [proposalId]
     );
@@ -1315,6 +1480,7 @@ export const modifyProposal = async (
     }
     
     // 3. Delete old slots (CASCADE deletes confirmations)
+    await query(`DELETE FROM match_schedule_confirmations WHERE proposal_id = ?`, [proposalId]);
     await query(
       `DELETE FROM match_schedule_slots WHERE proposal_id = ?`,
       [proposalId]
@@ -1348,15 +1514,24 @@ export const modifyProposal = async (
         slotsCreated++;
       }
     }
-    
-    // 6. Reset tournament_round_matches
+
     await query(
-      `UPDATE tournament_round_matches 
-       SET scheduled_datetime = NULL, scheduled_status = 'pending', scheduled_confirmed_at = NULL
-       WHERE id = ?`,
-      [proposal.rows[0].tournament_round_match_id]
+      `INSERT INTO match_schedule_confirmations (id, proposal_id, user_id, confirmed_at)
+       VALUES (?, ?, ?, NOW())`,
+      [uuidv4(), proposalId, userId]
     );
     
+    // Legacy round-match schedule columns are intentionally untouched for
+    // phase-engine proposals, which are represented entirely by the proposal.
+    if (proposal.rows[0].tournament_round_match_id) {
+      await query(
+        `UPDATE tournament_round_matches
+         SET scheduled_datetime = NULL, scheduled_status = 'pending', scheduled_confirmed_at = NULL
+         WHERE id = ?`,
+        [proposal.rows[0].tournament_round_match_id]
+      );
+    }
+
     return { success: true, slotsCreated };
   } catch (error) {
     console.error('[modifyProposal] Error:', error);
@@ -1428,9 +1603,31 @@ export const cancelProposal = async (proposalId: string, userId: string) => {
  */
 export const checkProposalFullyConfirmed = async (
   proposalId: string,
-  roundMatchId: string
+  roundMatchId?: string,
+  seriesId?: string
 ): Promise<boolean> => {
   try {
+    if (seriesId) {
+      const proposal = await query(
+        `SELECT proposed_by_user_id FROM match_schedule_proposals WHERE id = ? AND tournament_series_id = ?`,
+        [proposalId, seriesId]
+      );
+      if (!proposal.rows?.length) return false;
+      const confirmations = await query(
+        `SELECT COUNT(*) AS count
+         FROM match_schedule_confirmations confirmations
+         JOIN tournament_series_slots slots ON slots.series_id = ?
+         JOIN tournament_entries entries ON entries.id = slots.resolved_entry_id
+         JOIN tournament_participants participants
+           ON participants.id = entries.participant_id OR participants.team_id = entries.team_id
+         WHERE confirmations.proposal_id = ?
+           AND confirmations.user_id = participants.user_id
+           AND confirmations.user_id <> ?`,
+        [seriesId, proposalId, proposal.rows[0].proposed_by_user_id]
+      );
+      return Number(confirmations.rows?.[0]?.count || 0) > 0;
+    }
+    if (!roundMatchId) return false;
     // 1. Get match details (player1_id and player2_id can be user UUIDs or team UUIDs)
     const match = await query(
       `SELECT trm.player1_id, trm.player2_id, t.tournament_mode

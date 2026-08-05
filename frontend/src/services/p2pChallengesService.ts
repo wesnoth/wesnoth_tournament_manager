@@ -7,14 +7,13 @@ export const p2pChallengesService = {
   proposeChallenge: async (
     challengedUserId: string,
     slotDatetimes: string[],
-    notes?: string,
-    visibility: 'public' | 'private' = 'private'
+    notes?: string
   ) => {
     const response = await api.post('/challenges/proposals', {
       challenged_user_id: challengedUserId,
       slot_datetimes: slotDatetimes,
       ...(notes && { notes }),
-      visibility,
+      visibility: 'public',
     });
     return response.data;
   },
@@ -35,13 +34,12 @@ export const p2pChallengesService = {
   counterPropose: async (
     proposalId: string,
     slotDatetimes: string[],
-    notes?: string,
-    visibility: 'public' | 'private' = 'private'
+    notes?: string
   ) => {
     const response = await api.post(`/challenges/proposals/${proposalId}/counter-propose`, {
       slot_datetimes: slotDatetimes,
       ...(notes && { notes }),
-      visibility,
+      visibility: 'public',
     });
     return response.data;
   },

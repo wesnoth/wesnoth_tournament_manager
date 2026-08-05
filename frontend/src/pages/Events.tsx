@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { tournamentService, publicService } from '../services/api';
 import { p2pChallengesService } from '../services/p2pChallengesService';
+import { tournamentSchedulingService } from '../services/tournamentSchedulingService';
+import ScheduleProposalModal from '../components/ScheduleProposalModal';
 import ChallengeFromEventsModal from '../components/ChallengeFromEventsModal';
 import ChallengeActionButtons from '../components/ChallengeActionButtons';
 import { useAuthStore } from '../store/authStore';
@@ -22,9 +25,16 @@ interface EventItem {
   userTeamParticipates?: boolean;
 }
 
-/** Format an event timestamp in the authenticated user's IANA timezone. */
-const formatEventDateTime = (datetime: string, timezone: string): string =>
-  new Date(datetime).toLocaleString(undefined, { timeZone: timezone });
+/** Map the selected application language to a locale understood by Intl. */
+const getDateLocale = (language: string): string => {
+  const languageCode = language.split('-')[0];
+  return ({ en: 'en-US', es: 'es-ES', de: 'de-DE', ru: 'ru-RU', zh: 'zh-CN' } as Record<string, string>)[languageCode]
+    || 'en-US';
+};
+
+/** Format an event timestamp in the viewer's IANA timezone and language. */
+const formatEventDateTime = (datetime: string, timezone: string, locale: string): string =>
+  new Date(datetime).toLocaleString(locale, { timeZone: timezone });
 
 /** Return the calendar date key for an event in the viewer's timezone. */
 const getEventDateKey = (datetime: string, timezone: string): string => {
@@ -39,8 +49,10 @@ const getEventDateKey = (datetime: string, timezone: string): string => {
 };
 
 const Events: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const { userId } = useAuthStore();
+  const dateLocale = getDateLocale(i18n.language);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -55,6 +67,40 @@ const Events: React.FC = () => {
   const [fromDateFilter, setFromDateFilter] = useState('');
   const [toDateFilter, setToDateFilter] = useState('');
   const [myEventsOnly, setMyEventsOnly] = useState(false);
+  const [scheduleModal, setScheduleModal] = useState<any>({ isOpen: false });
+
+  const openSeriesSchedule = useCallback(async (event: EventItem) => {
+    const seriesId = event.raw?.series_id;
+    const tournamentId = event.raw?.tournament_id;
+    if (!seriesId || !tournamentId) return;
+    try {
+      const [availability, proposalResponse] = await Promise.all([
+        tournamentSchedulingService.getSeriesParticipantsAvailability(tournamentId, seriesId),
+        tournamentSchedulingService.getSeriesProposal(tournamentId, seriesId),
+      ]);
+      const proposal = proposalResponse.proposal || null;
+      const timezone = availability.viewing_timezone || 'UTC';
+      const earliest = proposal?.slots?.length
+        ? new Date(Math.min(...proposal.slots.map((slot: any) => new Date(slot.slot_datetime).getTime())))
+        : new Date(event.datetime);
+      const dateParts = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false,
+      }).formatToParts(earliest);
+      const value = (type: string, fallback: string) => dateParts.find((part) => part.type === type)?.value || fallback;
+      setScheduleModal({
+        isOpen: true,
+        tournamentId,
+        seriesId,
+        initialParticipants: availability.participants || [],
+        initialProposal: proposal,
+        initialViewingTimezone: timezone,
+        initialDisplayDateStart: new Date(Date.UTC(Number(value('year', '2026')), Number(value('month', '1')) - 1, Number(value('day', '1')))),
+        initialScrollToHour: Number(value('hour', '0')),
+      });
+    } catch (error) {
+      console.error('Error opening series schedule from Events:', error);
+    }
+  }, []);
 
   const loadEvents = useCallback(async () => {
     try {
@@ -63,7 +109,7 @@ const Events: React.FC = () => {
 
       const [userResponse, myTournamentsResponse, p2pResponse] = await Promise.all([
         userId ? publicService.getPlayerProfile(userId) : Promise.resolve(null),
-        tournamentService.getMyTournaments(),
+        publicService.getTournaments(1),
         p2pChallengesService.listProposals('all'),
       ]);
 
@@ -71,13 +117,22 @@ const Events: React.FC = () => {
         setUserTimezone(userResponse.data.timezone);
       }
 
-      const tournaments = myTournamentsResponse.data || [];
-      const tournamentRoundMatchesResponses = await Promise.all(
-        tournaments
-          .filter((t: any) => t?.id)
-          .map((t: any) => tournamentService.getTournamentRoundMatches(t.id))
+      const firstTournamentPage = myTournamentsResponse.data || {};
+      const additionalTournamentPages = await Promise.all(
+        Array.from(
+          { length: Math.max(0, Number(firstTournamentPage.pagination?.totalPages || 1) - 1) },
+          (_, index) => publicService.getTournaments(index + 2)
+        )
       );
-
+      const tournaments = [
+        ...(firstTournamentPage.data || []),
+        ...additionalTournamentPages.flatMap((response: any) => response.data?.data || []),
+      ];
+      const scheduledSeriesResponses = await Promise.all(
+        tournaments.map((t: any) => Number(t?.competition_model_version) === 2
+          ? tournamentService.getTournamentScheduledSeries(t.id).catch(() => ({ data: { schedules: [] } }))
+          : Promise.resolve({ data: { schedules: [] } }))
+      );
       // Load participants for team mode tournaments
       const tournamentParticipantsMap: Record<string, any[]> = {};
       const participantsResponses = await Promise.all(
@@ -100,61 +155,32 @@ const Events: React.FC = () => {
         tournamentParticipantsMap[tournamentId] = participants;
       });
 
-      const tournamentEvents: EventItem[] = tournamentRoundMatchesResponses.flatMap((response: any, index: number) => {
+      const phaseTournamentEvents: EventItem[] = scheduledSeriesResponses.flatMap((response: any, index: number) => {
         const tournament = tournaments[index];
-        const matches = response.data || [];
+        const schedules = response.data?.schedules || [];
         const isTeamMode = tournament?.tournament_mode === 'team';
-        const participants = tournamentParticipantsMap[tournament?.id] || [];
-
-        return matches
-          .filter((m: any) => !!m?.scheduled_datetime)
-          .map((m: any) => {
-            let playerNames = [m.player1_nickname, m.player2_nickname].filter(Boolean);
-           let userTeamParticipates = false;
-            
-           // If team mode, enhance with participant names and check if user participates
-           if (isTeamMode && participants.length > 0) {
-             const getTeamParticipantNames = (teamId: string | null) => {
-               if (!teamId) return [];
-               const teamParticipants = participants.filter((p: any) => p.team_id === teamId);
-               return teamParticipants.map((p: any) => p.user_nickname || p.nickname).filter(Boolean);
-             };
-
-             const team1Participants = participants.filter((p: any) => p.team_id === m.player1_id);
-             const team2Participants = participants.filter((p: any) => p.team_id === m.player2_id);
-              
-             // Check if user is in either team
-             const userInTeam1 = team1Participants.some((p: any) => p.user_id === userId);
-             const userInTeam2 = team2Participants.some((p: any) => p.user_id === userId);
-             userTeamParticipates = userInTeam1 || userInTeam2;
-
-             const team1Names = getTeamParticipantNames(m.player1_id);
-             const team2Names = getTeamParticipantNames(m.player2_id);
-              
-             // Format: "TeamName (player1, player2)" vs "TeamName (player1, player2)"
-             playerNames = [
-               team1Names.length > 0 
-                 ? `${m.player1_nickname} (${team1Names.join(', ')})`
-                 : m.player1_nickname,
-               team2Names.length > 0
-                 ? `${m.player2_nickname} (${team2Names.join(', ')})`
-                 : m.player2_nickname
-             ].filter(Boolean);
-           }
-
-           return {
-             id: `tournament-${m.id}`,
-             type: 'tournament',
-             title: `${t('events_tournament_schedule') || 'Tournament Schedule'}: ${tournament?.name || ''}`,
-             tournamentName: tournament?.name || '',
-             players: playerNames,
-             datetime: m.scheduled_datetime,
-             status: m.scheduled_status || 'pending',
-             raw: m,
-             isTeamMode,
-             userTeamParticipates,
-           };
-         });
+        return schedules.map((schedule: any) => ({
+          id: `tournament-series-${schedule.series_id}`,
+          type: 'tournament' as const,
+          title: `${t('events_tournament_schedule') || 'Tournament Schedule'}: ${schedule.tournament_name || tournament?.name || ''}`,
+          tournamentName: schedule.tournament_name || tournament?.name || '',
+          players: [schedule.player1_name, schedule.player2_name].filter(Boolean),
+          datetime: schedule.scheduled_datetime,
+          status: schedule.scheduled_status || 'confirmed',
+          raw: {
+            ...schedule,
+            tournament_id: tournament?.id,
+            player1_id: schedule.player1_id,
+            player2_id: schedule.player2_id,
+          },
+          isTeamMode,
+          userTeamParticipates: isTeamMode
+            ? schedule.player1_team_id === (tournamentParticipantsMap[tournament?.id] || [])
+                .find((participant: any) => participant.user_id === userId)?.team_id
+              || schedule.player2_team_id === (tournamentParticipantsMap[tournament?.id] || [])
+                .find((participant: any) => participant.user_id === userId)?.team_id
+            : undefined,
+        }));
       });
 
       const p2pRows = p2pResponse?.proposals || [];
@@ -168,11 +194,11 @@ const Events: React.FC = () => {
           players: [p.proposed_by_nickname, p.challenged_nickname].filter(Boolean),
           datetime: p.first_slot_datetime,
           status: p.status || 'pending',
-          visibility: p.visibility || 'private',
+          visibility: p.visibility || 'public',
           raw: p,
         }));
 
-      const merged = [...tournamentEvents, ...p2pEvents].sort((a, b) => {
+      const merged = [...phaseTournamentEvents, ...p2pEvents].sort((a, b) => {
         return new Date(a.datetime).getTime() - new Date(b.datetime).getTime();
       });
 
@@ -231,13 +257,13 @@ const Events: React.FC = () => {
       <div className="mt-2 text-xs text-gray-600 space-y-1">
         {ranges.map((range, idx) => (
           <div key={idx}>
-            {range.start.toLocaleTimeString('es-ES', {
+            {range.start.toLocaleTimeString(dateLocale, {
               timeZone: timezone,
               hour: '2-digit',
               minute: '2-digit'
             })}
             {' – '}
-            {range.end.toLocaleTimeString('es-ES', {
+            {range.end.toLocaleTimeString(dateLocale, {
               timeZone: timezone,
               hour: '2-digit',
               minute: '2-digit'
@@ -246,7 +272,7 @@ const Events: React.FC = () => {
         ))}
       </div>
     );
-  }, []);
+  }, [dateLocale]);
 
   const filteredEvents = useMemo(() => {
     return events.filter((event) => {
@@ -428,13 +454,34 @@ const Events: React.FC = () => {
                       <td className="px-4 py-3">{event.title}</td>
                       <td className="px-4 py-3">{event.players.join(' vs ')}</td>
                       <td className="px-4 py-3">
-                        {formatEventDateTime(event.datetime, userTimezone)}
+                        {formatEventDateTime(event.datetime, userTimezone, dateLocale)}
                         {event.type === 'p2p' && event.raw?.slots && (
                           renderScheduleSlots(event.raw, userTimezone)
                         )}
                       </td>
                       <td className="px-4 py-3">
                         <span>{event.status}</span>
+                        {event.type === 'tournament' && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <button
+                              data-help-id="action-open-tournament-from-event"
+                              onClick={() => navigate(`/tournament/${event.raw.tournament_id}?tab=competition&seriesId=${event.raw.series_id}`)}
+                              className="rounded bg-gray-700 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-800"
+                            >
+                              {t('events_open_tournament') || 'Open tournament'}
+                            </button>
+                            {((event.isTeamMode && event.userTeamParticipates)
+                              || (!event.isTeamMode && (event.raw.player1_id === userId || event.raw.player2_id === userId))) && (
+                              <button
+                                data-help-id="action-open-schedule-from-event"
+                                onClick={() => openSeriesSchedule(event)}
+                                className="rounded bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+                              >
+                                {t('events_open_schedule') || 'Open schedule'}
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </td>
                     </tr>
                     {event.type === 'p2p' && event.raw && (
@@ -466,7 +513,7 @@ const Events: React.FC = () => {
             {groupedByDay.map(([dateKey, dayEvents]) => (
               <section key={dateKey} className="bg-white rounded-lg shadow">
                 <div className="px-4 py-3 border-b border-gray-200 font-semibold text-gray-800">
-                  {dayEvents[0] && new Date(dayEvents[0].datetime).toLocaleDateString(undefined, {
+                    {dayEvents[0] && new Date(dayEvents[0].datetime).toLocaleDateString(dateLocale, {
                     timeZone: userTimezone,
                     weekday: 'long',
                     year: 'numeric',
@@ -485,7 +532,7 @@ const Events: React.FC = () => {
                       <h3 className="font-semibold text-gray-800 mt-1">{event.title}</h3>
                       <p className="text-sm text-gray-700 mt-1">{event.players.join(' vs ')}</p>
                       <p className="text-sm text-gray-600 mt-1">
-                        {formatEventDateTime(event.datetime, userTimezone)}
+                        {formatEventDateTime(event.datetime, userTimezone, dateLocale)}
                       </p>
                      {event.type === 'p2p' && event.raw?.slots && (
                        renderScheduleSlots(event.raw, userTimezone)
@@ -495,6 +542,27 @@ const Events: React.FC = () => {
                        {event.type === 'p2p' && event.visibility ? ` • ${event.visibility}` : ''}
                      </p>
                      <div className="mt-3 pt-3 border-t border-gray-300 space-y-2">
+                       {event.type === 'tournament' && (
+                         <div className="flex flex-wrap gap-2">
+                           <button
+                             data-help-id="action-open-tournament-from-event"
+                             onClick={() => navigate(`/tournament/${event.raw.tournament_id}?tab=competition&seriesId=${event.raw.series_id}`)}
+                             className="rounded bg-gray-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-gray-800"
+                           >
+                           {t('events_open_tournament') || 'Open tournament'}
+                           </button>
+                           {((event.isTeamMode && event.userTeamParticipates)
+                             || (!event.isTeamMode && (event.raw.player1_id === userId || event.raw.player2_id === userId))) && (
+                             <button
+                               data-help-id="action-open-schedule-from-event"
+                               onClick={() => openSeriesSchedule(event)}
+                               className="rounded bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700"
+                             >
+                             {t('events_open_schedule') || 'Open schedule'}
+                             </button>
+                           )}
+                         </div>
+                       )}
                        {event.type === 'p2p' && event.raw && (
                          <ChallengeActionButtons
                            proposalId={event.raw.id}
@@ -521,6 +589,21 @@ const Events: React.FC = () => {
         isOpen={showChallengeModal}
         onClose={() => setShowChallengeModal(false)}
         onSuccess={loadEvents}
+      />
+      <ScheduleProposalModal
+        isOpen={scheduleModal.isOpen}
+        tournamentId={scheduleModal.tournamentId || ''}
+        seriesId={scheduleModal.seriesId}
+        initialParticipants={scheduleModal.initialParticipants}
+        initialProposal={scheduleModal.initialProposal}
+        initialViewingTimezone={scheduleModal.initialViewingTimezone}
+        initialDisplayDateStart={scheduleModal.initialDisplayDateStart}
+        initialScrollToHour={scheduleModal.initialScrollToHour}
+        onClose={() => setScheduleModal({ isOpen: false })}
+        onSuccess={() => {
+          setScheduleModal({ isOpen: false });
+          loadEvents();
+        }}
       />
     </div>
   );

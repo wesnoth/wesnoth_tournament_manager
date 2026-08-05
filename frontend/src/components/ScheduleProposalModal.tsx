@@ -8,6 +8,7 @@ import { groupSlotsIntoRanges, type GroupedTimeRange } from '../utils/slotGroupi
 interface ScheduleProposalModalProps {
   isOpen: boolean;
   tournamentId: string;
+  seriesId?: string;
   roundMatchId?: string;
   matchId?: string;
   // Preloaded data from parent
@@ -82,6 +83,7 @@ const useAsyncGroupedRanges = (slotDatetimes: string[]): GroupedTimeRange[] => {
 export default function ScheduleProposalModal({
   isOpen,
   tournamentId,
+  seriesId,
   roundMatchId,
   matchId,
   initialParticipants,
@@ -109,10 +111,12 @@ export default function ScheduleProposalModal({
   const [hasStartedConfirmationSelection, setHasStartedConfirmationSelection] = useState(false);
   const hasStartedConfirmationSelectionRef = useRef(false);
 
-  // For scheduling, always use tournament_round_match_id (roundMatchId) since proposals are tied to tournament_round_matches
-  // If roundMatchId is not provided, fallback to matchId (though this shouldn't happen)
-  const targetId = roundMatchId || matchId;
+  const targetId = seriesId || roundMatchId || matchId;
+  const isSeries = Boolean(seriesId);
   const isRoundMatch = !!roundMatchId;
+  const hasConfirmedCurrentUser = Boolean(
+    userId && proposal?.confirmations?.some((confirmation) => confirmation.user_id === userId)
+  );
 
   // Update state when preloaded data props change
   useEffect(() => {
@@ -181,7 +185,7 @@ export default function ScheduleProposalModal({
       } else {
         setMode('confirm');
         // Pre-select proposed slots for opponent to confirm or modify
-        if (proposal.slots) {
+        if (proposal.slots && !hasConfirmedCurrentUser) {
           const proposedSlotDatetimes = proposal.slots.map(s => s.slot_datetime);
           // Initialize confirmedSlotIds with all proposed slots (all checked by default)
           setConfirmedSlotIds(new Set(proposedSlotDatetimes));
@@ -195,7 +199,7 @@ export default function ScheduleProposalModal({
       setHasStartedConfirmationSelection(false);
       hasStartedConfirmationSelectionRef.current = false;
     }
-  }, [isOpen, proposal, userId]);
+  }, [isOpen, proposal, userId, hasConfirmedCurrentUser]);
 
   const handleSlotToggle = useCallback((slotDatetime: string, selected: boolean) => {
     setSelectedSlots((prevSelected) => {
@@ -244,7 +248,18 @@ export default function ScheduleProposalModal({
       setError('');
 
       const slotArray = Array.from(selectedSlots);
-      const response = isRoundMatch
+      const response = mode === 'edit_proposal'
+        ? await tournamentSchedulingService.modifyProposal(proposal!.id, slotArray, notes || undefined)
+        : mode === 'counter'
+        ? await tournamentSchedulingService.counterPropose(proposal!.id, slotArray, notes || undefined)
+        : isSeries
+        ? await tournamentSchedulingService.proposeSeriesSlots(
+            tournamentId,
+            targetId!,
+            slotArray,
+            notes || undefined
+          )
+        : isRoundMatch
         ? await tournamentSchedulingService.proposeRoundMatchSlots(
             tournamentId,
             targetId!,
@@ -275,6 +290,10 @@ export default function ScheduleProposalModal({
       setError('No proposal to confirm');
       return;
     }
+    if (hasConfirmedCurrentUser) {
+      setError('You have already confirmed this proposal');
+      return;
+    }
 
     try {
       setLoading(true);
@@ -295,7 +314,9 @@ export default function ScheduleProposalModal({
           .map(s => s.id);
       }
 
-      const response = isRoundMatch
+      const response = isSeries
+        ? await tournamentSchedulingService.confirmSeriesSlots(tournamentId, targetId!, proposal.id, slotIdsToSend)
+        : isRoundMatch
         ? await tournamentSchedulingService.confirmRoundMatchSlots(tournamentId, targetId!, proposal.id, slotIdsToSend)
         : await tournamentSchedulingService.confirmMatchSlots(tournamentId, targetId!, proposal.id, slotIdsToSend);
 
@@ -306,6 +327,22 @@ export default function ScheduleProposalModal({
     } catch (err) {
       console.error('Error confirming slots:', err);
       setError('Failed to confirm slots');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelConfirmation = async () => {
+    if (!proposal) return;
+    try {
+      setLoading(true);
+      setError('');
+      await tournamentSchedulingService.cancelConfirmation(proposal.id);
+      onSuccess?.();
+      onClose();
+    } catch (err) {
+      console.error('Error cancelling confirmation:', err);
+      setError('Failed to cancel confirmation');
     } finally {
       setLoading(false);
     }
@@ -332,6 +369,28 @@ export default function ScheduleProposalModal({
     } catch (err) {
       console.error('Error canceling proposal:', err);
       setError('Failed to cancel proposal');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRejectProposal = async () => {
+    if (!proposal) {
+      setError('No proposal to reject');
+      return;
+    }
+
+    if (!confirm('Are you sure you want to reject this proposal?')) return;
+
+    try {
+      setLoading(true);
+      setError('');
+      await tournamentSchedulingService.rejectProposal(proposal.id, notes || undefined);
+      onSuccess?.();
+      onClose();
+    } catch (err) {
+      console.error('Error rejecting proposal:', err);
+      setError('Failed to reject proposal');
     } finally {
       setLoading(false);
     }
@@ -558,6 +617,16 @@ export default function ScheduleProposalModal({
               </button>
             ) : mode === 'edit_proposal' ? (
               <>
+                {hasConfirmedCurrentUser && (
+                  <button
+                    data-help-id="action-cancel-schedule-confirmation"
+                    onClick={handleCancelConfirmation}
+                    className="px-4 py-2 border border-orange-300 rounded hover:bg-orange-50 text-orange-700 font-medium"
+                    disabled={loading}
+                  >
+                    Cancel Confirmation
+                  </button>
+                )}
                 <button
                   data-help-id="action-cancel-schedule-proposal"
                   onClick={handleCancelProposal}
@@ -578,6 +647,14 @@ export default function ScheduleProposalModal({
             ) : (
               <>
                 <button
+                  data-help-id="action-reject-schedule-proposal"
+                  onClick={handleRejectProposal}
+                  className="px-4 py-2 border border-red-300 rounded hover:bg-red-50 text-red-700 font-medium"
+                  disabled={loading}
+                >
+                  Reject Proposal
+                </button>
+                <button
                   data-help-id="action-counter-propose-schedule"
                   onClick={() => {
                     setMode('counter');
@@ -588,14 +665,16 @@ export default function ScheduleProposalModal({
                 >
                   Counter-propose
                 </button>
-                <button
-                  data-help-id="action-confirm-schedule"
-                  onClick={handleConfirmSlots}
-                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium disabled:opacity-50"
-                  disabled={loading || confirmedSlotIds.size === 0}
-                >
-                  {loading ? 'Confirming...' : `Confirm ${confirmedSlotIds.size} Slot${confirmedSlotIds.size !== 1 ? 's' : ''}`}
-                </button>
+                {!hasConfirmedCurrentUser && (
+                  <button
+                    data-help-id="action-confirm-schedule"
+                    onClick={handleConfirmSlots}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium disabled:opacity-50"
+                    disabled={loading || confirmedSlotIds.size === 0}
+                  >
+                    {loading ? 'Confirming...' : `Confirm ${confirmedSlotIds.size} Slot${confirmedSlotIds.size !== 1 ? 's' : ''}`}
+                  </button>
+                )}
               </>
             )}
           </div>
