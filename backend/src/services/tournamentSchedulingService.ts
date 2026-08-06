@@ -320,10 +320,10 @@ export const createSeriesProposal = async (
   const result = await query(
     `INSERT INTO match_schedule_proposals
        (id, tournament_series_id, proposed_by_user_id, proposed_at, status,
-        notes, expires_at, user_id, challenge_mode, challenged_user_id)
-     VALUES (?, ?, ?, NOW(), 'pending', ?, ?, ?, 'tournament', NULL)`,
+        notes, expires_at, challenge_mode, challenged_user_id)
+     VALUES (?, ?, ?, NOW(), 'pending', ?, ?, 'tournament', NULL)`,
     [proposalId, seriesId, proposedByUserId, notes || null,
-      new Date(maxSlotDatetime.getTime() + 7 * 24 * 60 * 60 * 1000), proposedByUserId]
+      new Date(maxSlotDatetime.getTime() + 7 * 24 * 60 * 60 * 1000)]
   );
   if (!result.rowCount) throw new Error('Failed to create proposal');
 
@@ -554,10 +554,10 @@ export const rejectAndCounterPropose = async (
   const maxSlotDatetime = new Date(Math.max(...newSlotDatetimes.map(dt => new Date(dt).getTime())));
   await query(
     `INSERT INTO match_schedule_proposals
-       (id, tournament_series_id, proposed_by_user_id, proposed_at, status, notes, expires_at, user_id, challenge_mode, challenged_user_id)
-     VALUES (?, ?, ?, NOW(), 'pending', ?, ?, ?, 'tournament', NULL)`,
+       (id, tournament_series_id, proposed_by_user_id, proposed_at, status, notes, expires_at, challenge_mode, challenged_user_id)
+     VALUES (?, ?, ?, NOW(), 'pending', ?, ?, 'tournament', NULL)`,
     [counterProposalId, original.tournament_series_id, userId, notes || null,
-      new Date(maxSlotDatetime.getTime() + 7 * 24 * 60 * 60 * 1000), userId]
+      new Date(maxSlotDatetime.getTime() + 7 * 24 * 60 * 60 * 1000)]
   );
   let slotsCreated = 0;
   for (const slotDatetime of newSlotDatetimes) {

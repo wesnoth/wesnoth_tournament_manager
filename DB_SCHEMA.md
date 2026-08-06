@@ -869,7 +869,6 @@ Schedule proposals for phase-engine tournament series and P2P challenges. In tou
 | `status` | varchar(20) | `pending` = awaiting confirmation, `confirmed` = at least one slot accepted, `rejected` = no slot accepted, `cancelled` = withdrawn, `expired` = no longer actionable; `superseded` is legacy-only |
 | `expires_at` | datetime | Optional: automatic expiration timestamp |
 | `cancelled_at` | datetime | When cancelled (NULL if active/confirmed) |
-| `user_id` | char(36) FK→users_extension | Legacy field (deprecated) |
 | `challenge_mode` | varchar(20) | Context discriminator: `tournament` \| `p2p` |
 | `challenged_user_id` | char(36) FK→users_extension | Target user for P2P challenges (NULL for tournament schedules) |
 | `discord_thread_id` | varchar(255) | Optional Discord thread/message identifier |
