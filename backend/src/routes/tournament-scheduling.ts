@@ -144,21 +144,21 @@ const notifySeriesProposal = async (
     discordIds,
     proposedTimeRanges: formattedRanges,
     messageExtra: notes || undefined,
+    seriesId,
   }).catch(error => console.error('⚠️ Discord series notification failed:', error));
 
   await storeNotificationForUsers(
     recipientIds,
     tournamentId,
-    null,
     'schedule_proposal',
     `🗓️ Schedule Proposal - ${proposerRow?.tournament_name || 'Tournament'}`,
     notificationMessage,
     notes || null,
     seriesId
-  ).catch(error => console.error('⚠️ Error storing series notifications:', error));
+  ).catch(error => console.error(`⚠️ [SCHEDULING][NOTIFICATIONS] Failed action=schedule_proposal tournamentId=${tournamentId} seriesId=${seriesId}:`, error));
 };
 
-type SeriesNotificationAction = 'schedule_proposal' | 'schedule_confirmed' | 'schedule_rejected' | 'schedule_changed';
+type SeriesNotificationAction = 'schedule_proposal' | 'schedule_confirmed' | 'schedule_rejected' | 'schedule_changed' | 'schedule_cancelled';
 
 /** Notify every other participant when a phase-engine series changes state. */
 const notifySeriesParticipants = async (
@@ -207,12 +207,14 @@ const notifySeriesParticipants = async (
     schedule_confirmed: `${actorName} confirmed the schedule for your tournament series.`,
     schedule_rejected: `${actorName} rejected the schedule for your tournament series.`,
     schedule_changed: `${actorName} changed the schedule for your tournament series.`,
+    schedule_cancelled: `${actorName} cancelled the schedule proposal for your tournament series.`,
   };
   const titleByAction: Record<SeriesNotificationAction, string> = {
     schedule_proposal: '🗓️ Schedule Proposal',
     schedule_confirmed: '✅ Schedule Confirmed',
     schedule_rejected: '❌ Schedule Rejected',
     schedule_changed: '🔄 Schedule Changed',
+    schedule_cancelled: '🚫 Schedule Cancelled',
   };
 
   await sendDiscordNotification(tournamentId, action, {
@@ -222,18 +224,19 @@ const notifySeriesParticipants = async (
     discordIds,
     proposedTimeRanges: formattedRanges,
     messageExtra: notes || undefined,
-  }).catch(error => console.error('⚠️ Discord series action notification failed:', error));
+    proposalId,
+    seriesId,
+  }).catch(error => console.error(`⚠️ [SCHEDULING][DISCORD] Failed action=${action} tournamentId=${tournamentId} seriesId=${seriesId} proposalId=${proposalId}:`, error));
 
   await storeNotificationForUsers(
     recipientIds,
     tournamentId,
-    null,
     action,
     `${titleByAction[action]} - ${actor?.tournament_name || 'Tournament'}`,
     `${messageByAction[action]}${notes ? ` ${notes}` : ''}`,
     notes || null,
     seriesId
-  ).catch(error => console.error('⚠️ Error storing series action notifications:', error));
+  ).catch(error => console.error(`⚠️ [SCHEDULING][NOTIFICATIONS] Failed action=${action} tournamentId=${tournamentId} seriesId=${seriesId} proposalId=${proposalId}:`, error));
 };
 
 /** Notify the original proposer when the other participant rejects a series proposal. */
@@ -293,18 +296,19 @@ const notifySeriesRejection = async (
     discordIds: proposerDiscordIds,
     proposedTimeRanges: formattedRanges,
     messageExtra: notes || undefined,
-  }).catch(error => console.error('⚠️ Discord rejection notification failed:', error));
+    proposalId,
+    seriesId: proposal.series_id,
+  }).catch(error => console.error(`⚠️ [SCHEDULING][DISCORD] Failed action=schedule_rejected tournamentId=${proposal.tournament_id} seriesId=${proposal.series_id} proposalId=${proposalId}:`, error));
 
   await storeNotificationForUsers(
     [proposal.proposed_by_user_id],
     proposal.tournament_id,
-    null,
     'schedule_rejected',
     `🗓️ Schedule Rejected - ${proposal.tournament_name}`,
     `${rejectingName} rejected your schedule proposal.${notes ? ` ${notes}` : ''}`,
     notes || null,
     proposal.series_id
-  ).catch(error => console.error('⚠️ Error storing rejection notification:', error));
+  ).catch(error => console.error(`⚠️ [SCHEDULING][NOTIFICATIONS] Failed action=schedule_rejected tournamentId=${proposal.tournament_id} seriesId=${proposal.series_id} proposalId=${proposalId}:`, error));
 };
 
 /**
@@ -589,7 +593,7 @@ router.delete('/proposals/:proposalId', authMiddleware, async (req: AuthRequest,
 
     await cancelProposal(proposalId, userId);
     if (proposal.tournament_series_id) {
-      await notifySeriesParticipants(proposal.tournament_series_id, proposalId, userId, 'schedule_changed');
+      await notifySeriesParticipants(proposal.tournament_series_id, proposalId, userId, 'schedule_cancelled');
     }
     return res.json({ success: true });
   } catch (error) {

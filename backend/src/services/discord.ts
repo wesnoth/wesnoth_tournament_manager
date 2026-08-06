@@ -17,7 +17,10 @@ export function isValidDiscordSnowflake(id: string): boolean {
   try {
     const snowflake = BigInt(id);
     const timestampMs = Number((snowflake >> 22n) + DISCORD_EPOCH_MS);
-    const maxFutureSkewMs = 365 * 24 * 60 * 60 * 1000;
+    // Discord snowflakes should not be accepted when they are more than
+    // 72 hours ahead of the server clock; this bounds malformed future IDs
+    // without rejecting IDs produced by a small amount of clock skew.
+    const maxFutureSkewMs = 72 * 60 * 60 * 1000;
 
     return (
       snowflake > 0n &&

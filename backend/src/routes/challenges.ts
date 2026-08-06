@@ -27,12 +27,16 @@ interface ChallengeSlotRow {
  * Publish a challenge event to the configured public P2P Discord channel.
  * Discord is an optional side effect, so a delivery failure is logged and
  * never changes the outcome of the challenge operation that already succeeded.
+ * @param challengeId P2P challenge proposal identifier for log correlation.
+ * @param action Challenge action that produced the event.
  * @param title Embed title describing the challenge event.
  * @param color Discord embed color.
  * @param fields Event details shown in the embed.
  * @returns A promise that resolves after publishing is attempted; skipped when no channel is configured.
  */
 const sendChallengeDiscord = async (
+  challengeId: string,
+  action: string,
   title: string,
   color: number,
   fields: Array<{ name: string; value: string; inline?: boolean }>
@@ -43,8 +47,9 @@ const sendChallengeDiscord = async (
     await discordService.publishChannelMessage(DISCORD_P2P_CHALLENGE_CHANNEL_ID, {
       embeds: [{ title, color, fields, timestamp: new Date().toISOString() }],
     });
+    console.log(`[CHALLENGES][DISCORD] Published action=${action} challengeId=${challengeId}`);
   } catch (error) {
-    console.error('[CHALLENGES] Failed to publish optional Discord event:', error);
+    console.error(`[CHALLENGES][DISCORD] Failed action=${action} challengeId=${challengeId}:`, error);
   }
 };
 
@@ -155,14 +160,13 @@ router.post('/proposals', authMiddleware, async (req: AuthRequest, res: Response
     await storeNotificationForUsers(
       [challenged_user_id],
       proposalId,
-      proposalId,
       'challenge_proposal',
       '🗓️ New Challenge Proposal',
       message,
       notes || null
     );
 
-    await sendChallengeDiscord('⚔️ New P2P Challenge Proposal', 0xffa500, [
+    await sendChallengeDiscord(proposalId, 'challenge_proposal', '⚔️ New P2P Challenge Proposal', 0xffa500, [
       { name: 'From', value: proposer.nickname, inline: true },
       { name: 'To', value: challenged.nickname, inline: true },
       { name: 'Slots (UTC)', value: formattedRanges || 'No slots', inline: false },
@@ -214,13 +218,15 @@ router.post('/proposals/:proposalId/confirm-slots', authMiddleware, async (req: 
       ? 'challenge_confirmed'
       : 'challenge_rejected';
 
-    await storeNotificationForUsers([proposerId], proposalId, proposalId, type, title, message, null);
+    await storeNotificationForUsers([proposerId], proposalId, type, title, message, null);
 
     const discordTitle = result.status === 'confirmed'
       ? `⚔️ ${confirmer.nickname} has accepted ${proposer.nickname}'s challenge`
       : `❌ ${confirmer.nickname} has rejected ${proposer.nickname}'s challenge`;
 
     await sendChallengeDiscord(
+      proposalId,
+      type,
       discordTitle,
       result.status === 'confirmed' ? 0x2ecc71 : 0xff0000,
       [
@@ -269,14 +275,13 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
     await storeNotificationForUsers(
       [recipientId],
       result.proposalId,
-      result.proposalId,
       'challenge_counter_proposal',
       '🔄 Challenge Counter Proposal',
       message,
       notes || null
     );
 
-    await sendChallengeDiscord('🔄 P2P Challenge Counter Proposal', 0x3498db, [
+    await sendChallengeDiscord(result.proposalId, 'challenge_counter_proposal', '🔄 P2P Challenge Counter Proposal', 0x3498db, [
       { name: 'Action by', value: actor.nickname, inline: false },
       { name: 'Slots (UTC)', value: formatTimeRangesForDiscord(ranges), inline: false },
       ...(notes ? [{ name: 'Notes', value: notes, inline: false }] : []),
@@ -323,7 +328,6 @@ router.post('/proposals/:proposalId/cancel', authMiddleware, async (req: AuthReq
     await storeNotificationForUsers(
       [targetUserId],
       proposalId,
-      proposalId,
       'challenge_cancelled',
       '🚫 Challenge Proposal Cancelled',
       `${actor.nickname} cancelled a challenge proposal`,
@@ -332,7 +336,7 @@ router.post('/proposals/:proposalId/cancel', authMiddleware, async (req: AuthReq
 
     const discordTitle = `🚫 ${actor.nickname} has cancelled the challenge to ${target.nickname}`;
 
-    await sendChallengeDiscord(discordTitle, 0xff0000, [
+    await sendChallengeDiscord(proposalId, 'challenge_cancelled', discordTitle, 0xff0000, [
       ...(ranges.length > 0
         ? [{ name: 'Cancelled Slots (UTC)', value: formatTimeRangesForDiscord(ranges), inline: false }]
         : []),
@@ -387,11 +391,13 @@ router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, re
     const title = '🔄 Challenge Schedule Updated';
     const type = 'challenge_updated';
 
-    await storeNotificationForUsers([challengedUserId], proposalId, proposalId, type, title, message, null);
+    await storeNotificationForUsers([challengedUserId], proposalId, type, title, message, null);
 
     const discordTitle = `🔄 ${updater.nickname} has updated the challenge to ${challenged.nickname}`;
 
     await sendChallengeDiscord(
+      proposalId,
+      type,
       discordTitle,
       0xffc107,
       [

@@ -31,12 +31,14 @@ interface DiscordScheduleNotificationData {
   toTeamMembers?: string[];
   /** Discord user IDs that should receive a direct mention. */
   discordIds?: string[];
-  /** Legacy single UTC date/time retained for older scheduling flows. */
-  proposedDateTime?: string;
   /** Current formatted UTC time ranges produced by slotGrouping utilities. */
   proposedTimeRanges?: string;
   /** Optional user-authored message attached to the proposal. */
   messageExtra?: string;
+  /** Proposal identifier used to correlate Discord logs with the source event. */
+  proposalId?: string;
+  /** Series identifier used to correlate Discord logs with the source event. */
+  seriesId?: string;
 }
 
 /** Discord embed shape produced by the scheduling notification builders. */
@@ -95,7 +97,7 @@ function appendActorAndTargetFields(
 
 /**
  * Build the embed published when a player proposes a schedule.
- * Supports the current time-range format and the legacy single datetime field.
+ * Uses the current time-range format for schedule proposals.
  * @param tournamentName Tournament display name loaded from the database.
  * @param data Scheduling event details.
  * @returns A Discord embed ready to publish.
@@ -109,11 +111,8 @@ function buildScheduleProposalEmbed(
   ];
   appendActorAndTargetFields(fields, data);
 
-  // Use new format with time ranges if available, otherwise fall back to single datetime
   if (data.proposedTimeRanges) {
     fields.push({ name: '📅 Proposed Time Slots (UTC)', value: data.proposedTimeRanges, inline: false });
-  } else if (data.proposedDateTime) {
-    fields.push({ name: '📅 Proposed Date/Time', value: data.proposedDateTime, inline: false });
   }
 
   if (data.messageExtra) {
@@ -134,7 +133,7 @@ function buildScheduleProposalEmbed(
 
 /**
  * Build the embed published when a schedule proposal is confirmed.
- * Supports the current time-range format and the legacy single datetime field.
+ * Uses the current time-range format for confirmed schedules.
  * @param tournamentName Tournament display name loaded from the database.
  * @param data Scheduling event details.
  * @returns A Discord embed ready to publish.
@@ -148,11 +147,8 @@ function buildScheduleConfirmationEmbed(
   ];
   appendActorAndTargetFields(fields, data);
 
-  // Use new format with time ranges if available, otherwise fall back to single datetime
   if (data.proposedTimeRanges) {
     fields.push({ name: '📅 Confirmed Time Slot (UTC)', value: data.proposedTimeRanges, inline: false });
-  } else if (data.proposedDateTime) {
-    fields.push({ name: '📅 Confirmed Date/Time', value: data.proposedDateTime, inline: false });
   }
 
   return {
@@ -267,8 +263,10 @@ export async function sendDiscordNotification(
   notificationType: 'schedule_proposal' | 'schedule_confirmed' | 'schedule_rejected' | 'schedule_changed' | 'schedule_cancelled',
   notificationData: DiscordScheduleNotificationData
 ): Promise<boolean> {
+  const logContext = `tournamentId=${tournamentId} proposalId=${notificationData.proposalId || 'n/a'} seriesId=${notificationData.seriesId || 'n/a'} action=${notificationType}`;
+
   if (!DISCORD_ENABLED) {
-    console.log('⏭️  Discord disabled, skipping Discord notification');
+    console.log(`⏭️  [DISCORD] Discord disabled, skipping notification (${logContext})`);
     return true;
   }
 
@@ -280,29 +278,37 @@ export async function sendDiscordNotification(
     );
 
     if (!tournamentResult.rows || tournamentResult.rows.length === 0) {
-      console.log('⚠️  Tournament not found in database');
+      console.log(`⚠️  [DISCORD] Tournament not found (${logContext})`);
       return false;
     }
 
     const { name: tournamentName, discord_thread_id: threadId } = tournamentResult.rows[0];
     
     if (!threadId) {
-      console.log('⚠️  No Discord thread ID for this tournament');
+      console.log(`⚠️  [DISCORD] No Discord thread ID (${logContext} tournamentName=${tournamentName})`);
       return false;
     }
 
     // Build appropriate embed
-    let embed;
-    if (notificationType === 'schedule_proposal') {
-      embed = buildScheduleProposalEmbed(tournamentName, notificationData);
-    } else if (notificationType === 'schedule_confirmed') {
-      embed = buildScheduleConfirmationEmbed(tournamentName, notificationData);
-    } else if (notificationType === 'schedule_rejected') {
-      embed = buildScheduleRejectionEmbed(tournamentName, notificationData);
-    } else if (notificationType === 'schedule_changed') {
-      embed = buildScheduleChangedEmbed(tournamentName, notificationData);
-    } else {
-      embed = buildScheduleCancelledEmbed(tournamentName, notificationData);
+    let embed: DiscordScheduleEmbed;
+    switch (notificationType) {
+      case 'schedule_proposal':
+        embed = buildScheduleProposalEmbed(tournamentName, notificationData);
+        break;
+      case 'schedule_confirmed':
+        embed = buildScheduleConfirmationEmbed(tournamentName, notificationData);
+        break;
+      case 'schedule_rejected':
+        embed = buildScheduleRejectionEmbed(tournamentName, notificationData);
+        break;
+      case 'schedule_changed':
+        embed = buildScheduleChangedEmbed(tournamentName, notificationData);
+        break;
+      case 'schedule_cancelled':
+        embed = buildScheduleCancelledEmbed(tournamentName, notificationData);
+        break;
+      default:
+        throw new Error(`Discord notification action not defined: ${String(notificationType)}`);
     }
 
     // Build message content with mentions
@@ -311,12 +317,12 @@ export async function sendDiscordNotification(
       const validIds = notificationData.discordIds.filter(isValidDiscordSnowflake);
       if (validIds.length > 0) {
         messageContent = validIds.map(id => `<@${id}>`).join(' ');
-        console.log(`📝 [DISCORD-MENTION] Final message content: ${messageContent}`);
+        console.log(`📝 [DISCORD-MENTION] Final message content (${logContext}): ${messageContent}`);
       } else {
-        console.warn('⚠️  [DISCORD-MENTION] No valid Discord IDs provided; message will have no mentions');
+        console.warn(`⚠️  [DISCORD-MENTION] No valid Discord IDs provided; message will have no mentions (${logContext})`);
       }
     } else {
-      console.log('ℹ️  [DISCORD-MENTION] No Discord IDs provided in notification data');
+      console.log(`ℹ️  [DISCORD-MENTION] No Discord IDs provided (${logContext})`);
     }
 
     const discordMessage = { 
@@ -324,20 +330,20 @@ export async function sendDiscordNotification(
       embeds: [embed] 
     };
 
-    console.log(`📤 [DISCORD-MENTION] Sending Discord message with content: "${messageContent || '(empty)'}"`);
+    console.log(`📤 [DISCORD] Sending notification to thread ${threadId} tournamentName=${tournamentName} (${logContext})`);
 
     // Send to Discord thread
     const success = await discordService.publishTournamentMessage(threadId, discordMessage);
     
     if (success) {
-      console.log(`✅ Discord notification sent to thread ${threadId} (${notificationType})`);
+      console.log(`✅ [DISCORD] Notification sent to thread ${threadId} tournamentName=${tournamentName} (${logContext})`);
       return true;
     } else {
-      console.log(`⚠️  Failed to send Discord notification to thread`);
+      console.log(`⚠️  [DISCORD] Failed to send notification to thread ${threadId} tournamentName=${tournamentName} (${logContext})`);
       return false;
     }
   } catch (error: any) {
-    console.error(`❌ Error sending Discord notification:`, error.message);
+    console.error(`❌ [DISCORD] Error sending notification (${logContext}):`, error.message);
     return false;
   }
 }
@@ -346,7 +352,6 @@ export async function sendDiscordNotification(
  * Store an in-app notification for users who may be offline when the event occurs.
  * @param userIds Application user IDs that should receive the notification.
  * @param tournamentId Tournament or proposal owner used by the notification record.
- * @param _legacyMatchId Ignored compatibility argument retained for legacy callers.
  * @param type Notification type consumed by the in-app notification UI.
  * @param title Short notification title.
  * @param message Human-readable notification body.
@@ -358,7 +363,6 @@ export async function sendDiscordNotification(
 export async function storeNotificationForUsers(
   userIds: string[],
   tournamentId: string,
-  _legacyMatchId: string | null,
   type:
     | 'schedule_proposal'
     | 'schedule_confirmed'
@@ -388,10 +392,10 @@ export async function storeNotificationForUsers(
           type, title, message, messageExtra || null]
       );
     }
-    console.log(`✅ Stored ${userIds.length} notification(s) in database`);
+    console.log(`✅ [NOTIFICATIONS] Stored ${userIds.length} notification(s) type=${type} tournamentId=${tournamentId} seriesId=${seriesId || 'n/a'} gameId=${gameId || 'n/a'}`);
     return true;
   } catch (error: any) {
-    console.error(`❌ Error storing notifications:`, error.message);
+    console.error(`❌ [NOTIFICATIONS] Error storing notifications type=${type} tournamentId=${tournamentId}:`, error.message);
     return false;
   }
 }
