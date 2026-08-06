@@ -200,10 +200,11 @@ const AdminBalanceEvents: React.FC = () => {
   return (
     <>
       <UserProfileNav />
-      <div className="max-w-6xl mx-auto px-4 py-8">
+      <div data-help-id="region-balance-events-management" className="max-w-6xl mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold text-gray-800">{t('admin_balance_events') || 'Balance Events'}</h1>
         <button 
+          data-help-id="action-open-balance-event-form"
           onClick={() => setShowModal(true)} 
           className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
           title={t('add_new_event') || 'Add new balance event'}
@@ -216,6 +217,7 @@ const AdminBalanceEvents: React.FC = () => {
         {/* Recalculate Snapshots Button */}
         <div className="mb-6">
           <button 
+            data-help-id="action-recalculate-balance-snapshots"
             type="button" 
             onClick={handleRecalculateSnapshots} 
             disabled={recalculatingSnapshots}
@@ -238,7 +240,7 @@ const AdminBalanceEvents: React.FC = () => {
             <p className="text-gray-600">{t('no_balance_events') || 'No balance events found'}</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div data-help-id="region-balance-events-table" className="overflow-x-auto">
             <table className="w-full border-collapse bg-white shadow-md rounded-lg overflow-hidden">
               <thead>
                 <tr className="bg-gray-200">
@@ -253,7 +255,7 @@ const AdminBalanceEvents: React.FC = () => {
               </thead>
               <tbody>
                 {events.map(event => (
-                  <tr key={event.id} className="border-b border-gray-200 hover:bg-gray-50">
+                  <tr data-help-id="region-balance-event-row" key={event.id} className="border-b border-gray-200 hover:bg-gray-50">
                     <td className="px-4 py-3 text-gray-700">{formatEventDate(event.event_date)}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
@@ -274,6 +276,7 @@ const AdminBalanceEvents: React.FC = () => {
                     <td className="px-4 py-3 text-gray-700">{event.patch_version || '-'}</td>
                     <td className="px-4 py-3">
                       <button 
+                        data-help-id="action-edit-balance-event"
                         onClick={() => handleEditEvent(event)}
                         className="px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600"
                         title={t('edit') || 'Edit event'}
@@ -292,10 +295,10 @@ const AdminBalanceEvents: React.FC = () => {
       {/* Modal for Create/Edit Form */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={handleCloseModal}>
-          <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div data-help-id="region-balance-event-form" className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="sticky top-0 bg-gray-100 px-6 py-4 border-b border-gray-300 flex justify-between items-center">
               <h2 className="text-xl font-semibold text-gray-800">{editingEventId ? t('edit_balance_event') || 'Edit Balance Event' : t('create_balance_event') || 'Create Balance Event'}</h2>
-              <button onClick={handleCloseModal} className="text-2xl text-gray-600 hover:text-gray-800">✕</button>
+              <button data-help-id="action-close-balance-event-form" onClick={handleCloseModal} className="text-2xl text-gray-600 hover:text-gray-800">✕</button>
             </div>
 
             {success && <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 m-4 rounded-lg">{success}</div>}
@@ -305,6 +308,7 @@ const AdminBalanceEvents: React.FC = () => {
               <div className="mb-4">
                 <label className="block text-gray-700 font-semibold mb-2">{t('event_date') || 'Event Date'} *</label>
                 <input
+                  data-help-id="field-balance-event-date"
                   type="date"
                   name="event_date"
                   value={formData.event_date}
@@ -317,6 +321,7 @@ const AdminBalanceEvents: React.FC = () => {
               <div className="mb-4">
                 <label className="block text-gray-700 font-semibold mb-2">{t('event_type') || 'Event Type'} *</label>
                 <select
+                  data-help-id="field-balance-event-type"
                   name="event_type"
                   value={formData.event_type}
                   onChange={handleInputChange}
@@ -334,6 +339,7 @@ const AdminBalanceEvents: React.FC = () => {
               <div className="mb-4">
                 <label className="block text-gray-700 font-semibold mb-2">{t('description') || 'Description'} *</label>
                 <textarea
+                  data-help-id="field-balance-event-description"
                   name="description"
                   value={formData.description}
                   onChange={handleInputChange}
@@ -348,6 +354,7 @@ const AdminBalanceEvents: React.FC = () => {
                 <div>
                   <label className="block text-gray-700 font-semibold mb-2">{t('faction') || 'Faction'} ({t('optional') || 'optional'})</label>
                   <select
+                    data-help-id="field-balance-event-faction"
                     name="faction_id"
                     value={formData.faction_id}
                     onChange={handleInputChange}
@@ -363,6 +370,7 @@ const AdminBalanceEvents: React.FC = () => {
                 <div>
                   <label className="block text-gray-700 font-semibold mb-2">{t('map') || 'Map'} ({t('optional') || 'optional'})</label>
                   <select
+                    data-help-id="field-balance-event-map"
                     name="map_id"
                     value={formData.map_id}
                     onChange={handleInputChange}
@@ -380,6 +388,7 @@ const AdminBalanceEvents: React.FC = () => {
                 <div>
                   <label className="block text-gray-700 font-semibold mb-2">{t('patch_version') || 'Patch Version'} ({t('optional') || 'optional'})</label>
                   <input
+                    data-help-id="field-balance-event-patch"
                     type="text"
                     name="patch_version"
                     value={formData.patch_version}
@@ -392,6 +401,7 @@ const AdminBalanceEvents: React.FC = () => {
                 <div>
                   <label className="block text-gray-700 font-semibold mb-2">{t('notes') || 'Notes'} ({t('optional') || 'optional'})</label>
                   <input
+                    data-help-id="field-balance-event-notes"
                     type="text"
                     name="notes"
                     value={formData.notes}
@@ -403,10 +413,10 @@ const AdminBalanceEvents: React.FC = () => {
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <button type="button" onClick={handleCloseModal} className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600">
+                <button data-help-id="action-cancel-balance-event-form" type="button" onClick={handleCloseModal} className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600">
                   {t('cancel') || 'Cancel'}
                 </button>
-                <button type="submit" disabled={loading} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                <button data-help-id="action-submit-balance-event-form" type="submit" disabled={loading} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
                   {loading 
                     ? (editingEventId ? t('updating') || 'Updating...' : t('creating') || 'Creating...') 
                     : (editingEventId ? t('update_event') || 'Update Event' : t('create_event') || 'Create Event')

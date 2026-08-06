@@ -346,7 +346,7 @@ const Events: React.FC = () => {
   }, [filteredEvents, userTimezone]);
 
   return (
-    <div className="bg-gradient-to-br from-gray-100 to-gray-300 min-h-screen py-8 px-4">
+    <div data-help-id="region-events" className="bg-gradient-to-br from-gray-100 to-gray-300 min-h-screen py-8 px-4">
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-3xl font-bold text-gray-800">{t('events_title') || 'Events'}</h1>
@@ -455,7 +455,7 @@ const Events: React.FC = () => {
               <tbody>
                 {filteredEvents.map((event) => (
                   <React.Fragment key={event.id}>
-                    <tr className="border-t border-gray-100">
+                    <tr data-help-id={event.type === 'tournament' ? 'region-event-tournament-schedule' : undefined} className="border-t border-gray-100">
                       <td className="px-4 py-3">
                         {event.type === 'tournament'
                           ? (t('events_filter_type_tournament') || 'Tournament')
@@ -533,7 +533,7 @@ const Events: React.FC = () => {
                 </div>
                 <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                   {dayEvents.map((event) => (
-                    <article key={event.id} className="border border-gray-200 rounded p-3 bg-gray-50">
+                    <article data-help-id={event.type === 'p2p' ? 'region-p2p-event-item' : event.type === 'tournament' ? 'region-event-tournament-schedule' : 'region-event-item'} key={event.id} className="border border-gray-200 rounded p-3 bg-gray-50">
                       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                         {event.type === 'tournament'
                           ? (t('events_filter_type_tournament') || 'Tournament')

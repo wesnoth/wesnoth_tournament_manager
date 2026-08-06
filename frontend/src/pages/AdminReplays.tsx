@@ -337,11 +337,12 @@ const AdminReplays: React.FC = () => {
         </details>}
 
         {/* Filter */}
-        <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+        <div data-help-id="region-replay-filters" className="bg-white rounded-lg shadow-md p-4 mb-6">
           <div className="flex gap-4 items-end flex-wrap mb-3">
             <div className="flex flex-col gap-1">
               <label className="text-sm font-semibold text-gray-600">{t('label_status', 'Status')}:</label>
               <select
+                data-help-id="field-replay-status-filter"
                 value={statusFilter}
                 onChange={(e) => {
                   setStatusFilter(e.target.value);
@@ -367,6 +368,7 @@ const AdminReplays: React.FC = () => {
             <div className="flex flex-col gap-1">
               <label className="text-sm font-semibold text-gray-600">Game ID:</label>
               <input
+                data-help-id="field-replay-game-id-filter"
                 type="number"
                 name="gameId"
                 placeholder="Filter by game ID"
@@ -380,6 +382,7 @@ const AdminReplays: React.FC = () => {
             <div className="flex flex-col gap-1">
               <label className="text-sm font-semibold text-gray-600">Map:</label>
               <input
+                data-help-id="field-replay-map-filter"
                 type="text"
                 name="map"
                 placeholder="Filter by map name"
@@ -393,6 +396,7 @@ const AdminReplays: React.FC = () => {
             <div className="flex flex-col gap-1">
               <label className="text-sm font-semibold text-gray-600">Player:</label>
               <input
+                data-help-id="field-replay-player-filter"
                 type="text"
                 name="player"
                 placeholder="Filter by player nickname"
@@ -404,6 +408,7 @@ const AdminReplays: React.FC = () => {
             </div>
 
             <button
+              data-help-id="action-reset-replay-filters"
               onClick={handleResetFilters}
               className="px-4 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500 transition-colors text-sm font-semibold"
             >
@@ -411,6 +416,7 @@ const AdminReplays: React.FC = () => {
             </button>
 
             <button
+              data-help-id="action-refresh-replays"
               onClick={handleRefresh}
               className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-semibold"
               title="Refresh"
@@ -464,7 +470,7 @@ const AdminReplays: React.FC = () => {
         {replays.length === 0 ? (
           <p className="text-center py-8 text-gray-600">{t('no_data')}</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div data-help-id="region-replay-table" className="overflow-x-auto">
             <table className="w-full border-collapse bg-white shadow-md rounded-lg overflow-hidden text-sm">
               <thead>
                 <tr className="bg-gray-200">
@@ -486,7 +492,7 @@ const AdminReplays: React.FC = () => {
                   const { side1, side1Id, side2, side2Id, map } = parseSummaryPlayers(replay.parse_summary);
                   const displayStatus = replay.match_id ? 'reported' : replay.parse_status;
                   return (
-                    <tr key={replay.id} className="border-b border-gray-200 hover:bg-gray-50">
+                    <tr data-help-id="region-replay-row" key={replay.id} className="border-b border-gray-200 hover:bg-gray-50">
                       <td className="px-3 py-2 text-gray-700 font-mono">{replay.game_id ?? '—'}</td>
                       <td className="px-3 py-2 text-gray-500 font-mono text-xs max-w-[9rem] truncate" title={replay.instance_uuid}>
                         {replay.instance_uuid ?? '—'}
@@ -543,6 +549,7 @@ const AdminReplays: React.FC = () => {
                         <div className="flex gap-1 items-center">
                           {/* Parse summary viewer */}
                           <button
+                            data-help-id="action-view-replay-summary"
                             className="text-gray-400 hover:text-blue-600 transition-colors text-base"
                             title="View parse summary"
                             onClick={() => openSummary(replay)}
@@ -552,6 +559,7 @@ const AdminReplays: React.FC = () => {
                           {/* Force discard */}
                           {['new', 'parsed', 'error'].includes(replay.parse_status) && !replay.match_id && (
                             <button
+                              data-help-id="action-discard-replay"
                               className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
                               disabled={discarding === replay.id}
                               onClick={() => handleForceDiscard(replay.id, replay.replay_filename || replay.id)}
@@ -562,6 +570,7 @@ const AdminReplays: React.FC = () => {
                           {/* Reprocess */}
                           {['error', 'failed', 'rejected', 'parsed', 'skipped', 'discarded'].includes(replay.parse_status) && !replay.match_id && (
                             <button
+                              data-help-id="action-reprocess-replay"
                               className="px-2 py-1 text-xs bg-amber-500 text-white rounded hover:bg-amber-600 disabled:opacity-50"
                               disabled={reprocessing === replay.id}
                               onClick={() => handleReprocess(replay.id, replay.replay_filename || replay.id)}
@@ -658,7 +667,7 @@ const AdminReplays: React.FC = () => {
       {/* Parse Summary Modal */}
       {editingSettingKey === null && summaryModal.open && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={() => setSummaryModal({ open: false, json: '', filename: '' })}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col" style={{ maxHeight: '85vh' }} onClick={(e) => e.stopPropagation()}>
+          <div data-help-id="region-replay-summary-modal" className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col" style={{ maxHeight: '85vh' }} onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-base font-semibold text-gray-800 truncate">Parse Summary</h2>
               <span className="text-xs text-gray-500 font-mono truncate ml-4">{summaryModal.filename}</span>
@@ -670,6 +679,7 @@ const AdminReplays: React.FC = () => {
             </div>
             <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
               <button
+                data-help-id="action-close-replay-summary"
                 className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors"
                 onClick={() => setSummaryModal({ open: false, json: '', filename: '' })}
               >

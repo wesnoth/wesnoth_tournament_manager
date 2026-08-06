@@ -551,6 +551,7 @@ function SchedulingFreeBusyGrid({
       )}
 
       <div
+        data-help-id="region-p2p-grid-scroll"
         ref={gridContainerRef}
         className="overflow-auto border border-gray-200 rounded-lg"
         style={{ maxHeight: '600px' }}

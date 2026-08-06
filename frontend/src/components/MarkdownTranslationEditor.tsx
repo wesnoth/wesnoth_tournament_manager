@@ -82,7 +82,7 @@ const MarkdownTranslationEditor: React.FC<MarkdownTranslationEditorProps> = ({
   const preview = renderWikiMarkdown(currentMarkdown).html;
 
   return (
-    <div className="space-y-4">
+    <div data-help-id="region-markdown-translation-editor" className="space-y-4">
       {showLanguageTabs && (
         <div className="flex gap-2 border-b border-gray-200">
           {LANGUAGES.map(({ code, label }) => (
@@ -106,6 +106,7 @@ const MarkdownTranslationEditor: React.FC<MarkdownTranslationEditorProps> = ({
       )}
 
       <input
+        data-help-id="field-news-title"
         type="text"
         value={current.title || ''}
         onChange={(event) => onTitleChange(event.target.value)}
@@ -128,6 +129,7 @@ const MarkdownTranslationEditor: React.FC<MarkdownTranslationEditorProps> = ({
             <input ref={fileInputRef} type="file" accept="image/*" onChange={insertImage} className="hidden" />
           </div>
           <textarea
+            data-help-id="field-news-content"
             ref={textareaRef}
             value={current.content_markdown || ''}
             onChange={(event) => onContentChange(event.target.value)}

@@ -112,7 +112,7 @@ const AdminDisputes: React.FC = () => {
 
   return (
     <MainLayout>
-      <div className="max-w-6xl mx-auto px-4 py-8">
+      <div data-help-id="region-match-disputes" className="max-w-6xl mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold text-gray-800 mb-6">Manage Match Disputes</h1>
 
         {error && <p className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</p>}
@@ -137,7 +137,7 @@ const AdminDisputes: React.FC = () => {
               </div>
             )}
 
-            <table className="w-full border-collapse bg-white shadow-md rounded-lg overflow-hidden">
+            <table data-help-id="region-disputed-matches-table" className="w-full border-collapse bg-white shadow-md rounded-lg overflow-hidden">
               <thead>
                 <tr className="bg-gray-200">
                   <th className="px-4 py-3 text-left font-semibold text-gray-800">Match ID</th>
@@ -153,7 +153,7 @@ const AdminDisputes: React.FC = () => {
               </thead>
               <tbody>
                 {disputes.map((dispute) => (
-                  <tr key={dispute.id} className="border-b border-gray-200 hover:bg-gray-50">
+                  <tr data-help-id="region-disputed-match-row" key={dispute.id} className="border-b border-gray-200 hover:bg-gray-50">
                     <td className="px-4 py-3 text-gray-700">{dispute.id.substring(0, 8)}</td>
                     <td className="px-4 py-3 text-gray-700">{dispute.winner_nickname}</td>
                     <td className="px-4 py-3 text-gray-700">{dispute.loser_nickname}</td>
@@ -165,6 +165,7 @@ const AdminDisputes: React.FC = () => {
                     <td className="px-4 py-3">
                       <div>
                         <button 
+                          data-help-id="action-view-dispute-details"
                           className="px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600"
                           onClick={() => setSelectedDispute(dispute)}
                         >
@@ -181,10 +182,10 @@ const AdminDisputes: React.FC = () => {
 
         {selectedDispute && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedDispute(null)}>
-            <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div data-help-id="region-dispute-review" className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
               <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 border-b-2 border-blue-800 flex justify-between items-center rounded-t-xl">
                 <h2 className="text-2xl font-bold text-white">Dispute Review</h2>
-                <button className="text-3xl text-white hover:text-blue-100 transition-colors" onClick={() => setSelectedDispute(null)}>×</button>
+                <button data-help-id="action-close-dispute-review" className="text-3xl text-white hover:text-blue-100 transition-colors" onClick={() => setSelectedDispute(null)}>×</button>
               </div>
               
               <div className="p-8 space-y-6">
@@ -238,12 +239,14 @@ const AdminDisputes: React.FC = () => {
 
               <div className="bg-gray-50 px-6 py-5 border-t-2 border-gray-200 flex justify-end gap-3 rounded-b-xl sticky bottom-0">
                 <button
+                  data-help-id="action-cancel-dispute-review"
                   className="px-6 py-2.5 bg-gray-400 text-white rounded-lg hover:bg-gray-500 font-semibold transition-colors shadow-md"
                   onClick={() => setSelectedDispute(null)}
                 >
                   Cancel
                 </button>
                 <button 
+                  data-help-id="action-validate-dispute-admin"
                   className="px-6 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold transition-colors shadow-md flex items-center gap-2"
                   disabled={processingId === selectedDispute.id}
                   onClick={() => {
@@ -255,6 +258,7 @@ const AdminDisputes: React.FC = () => {
                   ✓ Validate Dispute
                 </button>
                 <button 
+                  data-help-id="action-reject-dispute-admin"
                   className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold transition-colors shadow-md flex items-center gap-2"
                   disabled={processingId === selectedDispute.id}
                   onClick={() => {

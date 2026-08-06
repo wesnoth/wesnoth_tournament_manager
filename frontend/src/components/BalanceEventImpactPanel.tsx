@@ -179,11 +179,12 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
   };
 
   return (
-    <div className="w-full bg-white rounded-lg border border-gray-200 p-6 mb-8">
+    <div data-help-id="region-statistics-mode" className="w-full bg-white rounded-lg border border-gray-200 p-6 mb-8">
       <div className="mb-6">
         <h3 className="text-xl font-semibold text-gray-800 mb-3">{t('select_balance_event') || 'Select Balance Event'}</h3>
         
         <select 
+          data-help-id="option-statistics-mode"
           value={selectedEvent?.id || ''} 
           onChange={(e) => {
             if (e.target.value === '') {

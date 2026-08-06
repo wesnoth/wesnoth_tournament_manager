@@ -36,7 +36,7 @@ const Statistics: React.FC = () => {
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 py-8">
+    <div data-help-id="region-statistics" className="w-full max-w-6xl mx-auto px-4 py-8">
       <h1 className="text-4xl font-bold text-gray-800 mb-4">{t('statistics') || 'Balance Statistics'}</h1>
       <p className="text-lg text-gray-600 mb-8">
         {t('statistics_intro') || 'Detailed analysis of faction and map balance across all matches'}
@@ -52,26 +52,30 @@ const Statistics: React.FC = () => {
         }}
       />
 
-      <div className="flex gap-4 border-b border-gray-300 mb-6 overflow-x-auto">
+      <div data-help-id="region-statistics-tabs" className="flex gap-4 border-b border-gray-300 mb-6 overflow-x-auto">
         <button 
+          data-help-id="action-statistics-tab-faction"
           className={`px-4 py-3 font-semibold text-gray-600 border-b-2 border-transparent hover:text-gray-800 transition-colors cursor-pointer whitespace-nowrap ${activeTab === 'faction' ? 'text-blue-600 border-blue-600' : ''}`}
           onClick={() => setActiveTab('faction')}
         >
           {t('faction_balance') || 'Faction Balance'}
         </button>
         <button 
+          data-help-id="action-statistics-tab-map"
           className={`px-4 py-3 font-semibold text-gray-600 border-b-2 border-transparent hover:text-gray-800 transition-colors cursor-pointer whitespace-nowrap ${activeTab === 'map' ? 'text-blue-600 border-blue-600' : ''}`}
           onClick={() => setActiveTab('map')}
         >
           {t('map_balance') || 'Map Balance'}
         </button>
         <button 
+          data-help-id="action-statistics-tab-matchups"
           className={`px-4 py-3 font-semibold text-gray-600 border-b-2 border-transparent hover:text-gray-800 transition-colors cursor-pointer whitespace-nowrap ${activeTab === 'matchups' ? 'text-blue-600 border-blue-600' : ''}`}
           onClick={() => setActiveTab('matchups')}
         >
           {t('matchup_balance') || 'Matchup Analysis'}
         </button>
         <button 
+          data-help-id="action-statistics-tab-faction-vs-faction"
           className={`px-4 py-3 font-semibold text-gray-600 border-b-2 border-transparent hover:text-gray-800 transition-colors cursor-pointer whitespace-nowrap ${activeTab === 'faction-vs-faction' ? 'text-blue-600 border-blue-600' : ''}`}
           onClick={() => setActiveTab('faction-vs-faction')}
         >
@@ -79,7 +83,7 @@ const Statistics: React.FC = () => {
         </button>
       </div>
 
-      <div className="mt-8">
+      <div data-help-id="region-statistics-active-tab" className="mt-8">
         {activeTab === 'faction' && <FactionBalanceTab beforeData={selectedEventId ? beforeData : null} afterData={selectedEventId ? afterData : null} beforeLabel={selectedEventId ? beforeInterval : undefined} afterLabel={selectedEventId ? afterInterval : undefined} />}
         {activeTab === 'map' && <MapBalanceTab beforeData={selectedEventId ? beforeData : null} afterData={selectedEventId ? afterData : null} />}
         {activeTab === 'matchups' && <MatchupBalanceTab beforeData={selectedEventId ? beforeData : null} afterData={selectedEventId ? afterData : null} />}

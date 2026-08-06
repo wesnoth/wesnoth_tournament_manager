@@ -39,7 +39,7 @@ const News: React.FC = () => {
   }, [i18n.language, t]);
 
   return (
-    <div className="w-full min-h-screen px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200">
+    <div data-help-id="region-public-news" className="w-full min-h-screen px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between gap-4 mb-8">
           <h1 className="text-4xl font-bold text-gray-800">{t('news_title', 'News')}</h1>
@@ -57,7 +57,7 @@ const News: React.FC = () => {
             const rendered = renderWikiMarkdown(item.content || '').html;
             const date = item.published_at || item.created_at;
             return (
-              <article key={item.id} className="bg-white rounded-lg shadow-lg p-6">
+              <article data-help-id="region-public-news-item" key={item.id} className="bg-white rounded-lg shadow-lg p-6">
                 <h2 className="text-2xl font-semibold text-gray-900 mb-2">{item.title}</h2>
                 {date && <p className="text-sm text-gray-500 mb-4">{new Date(date).toLocaleDateString(i18n.language)}</p>}
                 <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: rendered }} />

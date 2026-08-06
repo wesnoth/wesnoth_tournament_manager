@@ -204,7 +204,7 @@ const PlayerProfile: React.FC = () => {
           <>
             <div data-help-id="region-player-profile-statistics"><ProfileStats player={profile} /></div>
             
-            <div className="mb-8">
+            <div data-help-id="region-player-challenge" className="mb-8">
               <div className="mb-3 flex justify-end">
                 {isAuthenticated && currentUser?.id !== id && (
                   <button data-help-id="action-challenge-player"

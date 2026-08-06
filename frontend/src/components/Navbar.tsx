@@ -268,6 +268,7 @@ const Navbar: React.FC = () => {
           {isAuthenticated && (
             <div className="notifications-menu relative self-center z-[2000] flex-shrink-0">
               <button
+                data-help-id="action-open-notifications-bell"
                 ref={notificationsBtnRef}
                 className="relative px-3 py-2 bg-white/10 text-white hover:bg-white/20 rounded transition-all flex items-center gap-2 max-sm:px-2 max-sm:py-1.5 max-nav:px-2.5 max-nav:py-1.5"
                 onClick={() => setNotificationsDropdownOpen(!notificationsDropdownOpen)}
@@ -284,6 +285,7 @@ const Navbar: React.FC = () => {
               {/* Notifications Dropdown */}
               {notificationsDropdownOpen && notificationsDropdownPosition && createPortal(
                 <div
+                  data-help-id="region-notifications-dropdown"
                   className="bg-white text-gray-800 w-80 rounded shadow-lg z-[9999] overflow-hidden flex flex-col max-h-96"
                   style={{
                     position: 'fixed',
@@ -301,6 +303,7 @@ const Navbar: React.FC = () => {
                     {recentNotifications.length > 0 ? (
                       recentNotifications.map((notif) => (
                         <div
+                          data-help-id="action-open-notification"
                           key={notif.id}
                           onClick={() => {
                             if (typeof notif.type === 'string' && notif.type.startsWith('challenge_')) {
@@ -357,6 +360,7 @@ const Navbar: React.FC = () => {
 
                   {/* Always provide a route to the full notification history. */}
                   <button
+                    data-help-id="action-open-my-notifications"
                     onClick={() => {
                       navigate('/notifications');
                       setNotificationsDropdownOpen(false);

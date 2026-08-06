@@ -366,7 +366,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
   }
 
   return (
-    <div className="space-y-4">
+    <div data-help-id="region-notifications" className="space-y-4">
       {actionError && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3 text-yellow-800 text-sm">
           {actionError}
@@ -404,6 +404,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
           </div>
           <div className="flex gap-2">
             <button
+              data-help-id="action-mark-selected-read"
               onClick={handleBulkMarkAsRead}
               disabled={bulkMarking || bulkDeleting}
               className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -411,6 +412,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
               {bulkMarking ? t('notifications_working', 'Working...') : t('notifications_mark_read', '✓ Mark as Read')}
             </button>
             <button
+              data-help-id="action-mark-selected-unread"
               onClick={handleBulkMarkAsUnread}
               disabled={bulkMarking || bulkDeleting}
               className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -418,6 +420,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
               {bulkMarking ? t('notifications_working', 'Working...') : t('notifications_mark_unread', '↩️ Mark as Unread')}
             </button>
             <button
+              data-help-id="action-delete-selected-notifications"
               onClick={handleBulkDelete}
               disabled={bulkDeleting || bulkMarking}
               className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -432,6 +435,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
       {notifications.length > 0 && (
         <div className="flex items-center gap-2 mb-2">
           <input
+            data-help-id="field-select-all-notifications"
             type="checkbox"
             checked={selectedIds.size === notifications.length && notifications.length > 0}
             onChange={toggleSelectAll}
@@ -447,6 +451,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
       {/* Notifications List */}
       {notifications.map((notification) => (
         <div
+          data-help-id="region-notification-item"
           key={notification.id}
           className={`border rounded-lg p-4 transition-colors flex gap-3 ${
             notification.is_read
@@ -455,6 +460,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
           } ${selectedIds.has(notification.id) ? 'ring-2 ring-blue-500' : ''}`}
         >
           <input
+            data-help-id="field-select-notification"
             type="checkbox"
             checked={selectedIds.has(notification.id)}
             onChange={() => toggleSelectNotification(notification.id)}
@@ -490,6 +496,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
               <div className="flex gap-2">
                 {!notification.is_read && (
                   <button
+                    data-help-id="action-mark-notification-read"
                     onClick={() => handleMarkAsRead(notification.id)}
                     className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
                     title="Mark as read"
@@ -499,6 +506,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
                 )}
                 {notification.is_read && (
                   <button
+                    data-help-id="action-mark-notification-unread"
                     onClick={() => handleMarkAsUnread(notification.id)}
                     className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
                     title="Mark as unread"
@@ -507,6 +515,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
                   </button>
                 )}
                 <button
+                  data-help-id="action-delete-notification"
                   onClick={() => handleDelete(notification.id)}
                   className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
                   title="Delete"
@@ -516,6 +525,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
               </div>
               {notification.type?.startsWith('challenge_') ? (
                 <button
+                  data-help-id="action-go-events-from-notification"
                   onClick={() => navigate(`/events`)}
                   className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors font-semibold"
                   title="Go to events"
@@ -524,6 +534,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
                 </button>
               ) : notification.tournament_id ? (
                 <button
+                  data-help-id="action-go-tournament-from-notification"
                   onClick={() => navigate(`/tournament/${notification.tournament_id}?tab=competition${notification.series_id ? `&seriesId=${notification.series_id}` : ''}`)}
                   className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors font-semibold"
                   title="Go to tournament details"

@@ -432,7 +432,7 @@ export default function ScheduleProposalModalP2P({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div data-help-id="region-p2p-schedule-modal" className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 p-6">
           <div className="flex justify-between items-start">
@@ -462,10 +462,11 @@ export default function ScheduleProposalModalP2P({
           ) : (
             <>
               {/* Date picker */}
-              <div className="space-y-2">
+              <div data-help-id="region-p2p-schedule-date-range" className="space-y-2">
                 <label className="block text-sm font-semibold text-gray-800">Select Date Range Start</label>
                 <div className="flex gap-2">
                   <input
+                    data-help-id="field-p2p-schedule-start-date"
                     type="date"
                     min={minimumDate}
                     value={displayDateStart.toISOString().split('T')[0]}
@@ -482,7 +483,7 @@ export default function ScheduleProposalModalP2P({
               </div>
 
               {/* Grid */}
-              <div className="space-y-2">
+              <div data-help-id="region-p2p-availability-grid" className="space-y-2">
                 <h3 className="font-semibold text-gray-800">Availability Grid</h3>
                 <SchedulingFreeBusyGrid
                   participants={participants}
@@ -568,11 +569,12 @@ export default function ScheduleProposalModalP2P({
                 )
               ) : (
                 // In propose/edit mode, show textarea for editing notes
-                <div className="space-y-2">
+                <div data-help-id="region-p2p-schedule-notes" className="space-y-2">
                   <label className="block text-sm font-semibold text-gray-800">
                     Notes (optional, max 500 characters)
                   </label>
                   <textarea
+                    data-help-id="field-p2p-schedule-notes"
                     value={notes}
                     onChange={handleNotesChange}
                     placeholder="Add any notes about your availability or preferences..."
@@ -588,9 +590,10 @@ export default function ScheduleProposalModalP2P({
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6 space-y-3">
+        <div data-help-id="region-p2p-schedule-footer" className="sticky bottom-0 bg-white border-t border-gray-200 p-6 space-y-3">
           <div className="flex gap-3 justify-end">
             <button
+              data-help-id="action-p2p-cancel-schedule"
               onClick={onClose}
               className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 text-gray-700 font-medium"
               disabled={loading}
@@ -600,6 +603,7 @@ export default function ScheduleProposalModalP2P({
 
             {mode === 'propose' ? (
               <button
+                data-help-id="action-p2p-propose-schedule"
                 onClick={handleProposeSlots}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium disabled:opacity-50"
                 disabled={loading || selectedSlots.size === 0}
@@ -608,7 +612,8 @@ export default function ScheduleProposalModalP2P({
               </button>
             ) : mode === 'edit_proposal' ? (
               <>
-                <button
+              <button
+                data-help-id="action-p2p-cancel-proposal"
                   onClick={handleCancelProposal}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-medium"
                   disabled={loading}
@@ -616,6 +621,7 @@ export default function ScheduleProposalModalP2P({
                   Cancel Proposal
                 </button>
                 <button
+                  data-help-id="action-p2p-change-proposal"
                   onClick={handleProposeSlots}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium disabled:opacity-50"
                   disabled={loading || selectedSlots.size === 0}
@@ -626,6 +632,7 @@ export default function ScheduleProposalModalP2P({
             ) : (
               <>
                 <button
+                  data-help-id="action-p2p-reject-proposal"
                   onClick={handleCancelProposal}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-medium"
                   disabled={loading}
@@ -633,6 +640,7 @@ export default function ScheduleProposalModalP2P({
                   {loading ? 'Rejecting...' : '❌ Reject'}
                 </button>
                 <button
+                  data-help-id="action-p2p-counter-propose"
                   onClick={() => {
                     setMode('counter');
                     setSelectedSlots(new Set());
@@ -643,6 +651,7 @@ export default function ScheduleProposalModalP2P({
                   🔄 Counter-propose
                 </button>
                 <button
+                  data-help-id="action-p2p-confirm-schedule"
                   onClick={handleConfirmSlots}
                   className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium disabled:opacity-50"
                   disabled={loading || confirmedSlotIds.size === 0}

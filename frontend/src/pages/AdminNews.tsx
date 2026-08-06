@@ -142,7 +142,7 @@ const AdminNews: React.FC = () => {
 
   return (
     <MainLayout>
-      <div className="max-w-6xl mx-auto px-4 py-8">
+      <div data-help-id="region-manage-news" className="max-w-6xl mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold text-gray-800 mb-6">Manage News</h1>
 
       {error && <p className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</p>}
@@ -151,7 +151,7 @@ const AdminNews: React.FC = () => {
       <section>
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-semibold text-gray-800">News</h2>
-          <button onClick={() => {
+          <button data-help-id="action-toggle-news-form" onClick={() => {
             if (showForm) {
               resetForm();
             }
@@ -162,11 +162,12 @@ const AdminNews: React.FC = () => {
         </div>
 
         {showForm && (
-          <form className="bg-white rounded-lg shadow-md p-6 mb-6" onSubmit={handleSubmit}>
+          <form data-help-id="region-news-form" className="bg-white rounded-lg shadow-md p-6 mb-6" onSubmit={handleSubmit}>
             {/* Language Tabs */}
             <div className="flex border-b border-gray-300 mb-6">
               {languages.map(lang => (
                 <button
+                  data-help-id="action-select-news-language"
                   key={lang}
                   type="button"
                   className={`px-4 py-2 font-semibold border-b-2 ${
@@ -182,7 +183,7 @@ const AdminNews: React.FC = () => {
             </div>
 
             {/* Language Content */}
-            <div className="mb-6">
+            <div data-help-id="region-news-translation-editor" className="mb-6">
               <MarkdownTranslationEditor
                 translations={Object.fromEntries(
                   languages.map((lang) => [lang, {
@@ -205,7 +206,7 @@ const AdminNews: React.FC = () => {
               />
             </div>
 
-            <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">
+            <button data-help-id="action-submit-news-form" type="submit" className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">
               {editingId ? 'Update News Item (All Languages)' : 'Create News Item (All Languages)'}
             </button>
           </form>
@@ -221,7 +222,7 @@ const AdminNews: React.FC = () => {
               const author = firstLang ? newsGroup[firstLang].author : '';
               
               return (
-                <div key={id} className="bg-white rounded-lg shadow-md p-4">
+                <div data-help-id="region-news-item" key={id} className="bg-white rounded-lg shadow-md p-4">
                   <div className="flex justify-between items-start mb-3">
                     <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
                     <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-full">Multi-language</span>
@@ -231,8 +232,8 @@ const AdminNews: React.FC = () => {
                     <small className="text-gray-600">By {author} on {new Date(publishedAt).toLocaleDateString()}</small>
                   )}
                   <div className="flex gap-2 mt-4">
-                    <button onClick={() => handleEdit(newsGroup)} className="px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600">Edit</button>
-                    <button onClick={() => handleDelete(id)} className="px-3 py-1 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600">Delete</button>
+                    <button data-help-id="action-edit-news" onClick={() => handleEdit(newsGroup)} className="px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600">Edit</button>
+                    <button data-help-id="action-delete-news" onClick={() => handleDelete(id)} className="px-3 py-1 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600">Delete</button>
                   </div>
                 </div>
               );

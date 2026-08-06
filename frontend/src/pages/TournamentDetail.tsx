@@ -2182,7 +2182,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                 }
                                 
                                 return (
-                                  <tr key={match.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+                                  <tr id={`scheduled-series-${seriesId}`} key={match.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
                                     <td className="px-4 py-3 text-gray-700">
                                       <div className="flex flex-col gap-1">
                                         <div className="flex items-center gap-2">
