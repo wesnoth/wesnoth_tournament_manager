@@ -31,9 +31,9 @@ router.get('/profile', authMiddleware, async (req: AuthRequest, res) => {
         u.country,
         u.avatar,
         u.enable_ranked,
-        CASE WHEN u.is_active = 1 AND u.is_blocked = 0 THEN (
+        CASE WHEN u.is_blocked = 0 THEN (
           SELECT COUNT(*) + 1 FROM users_extension ranked_user
-          WHERE ranked_user.is_active = 1 AND ranked_user.is_blocked = 0
+          WHERE ranked_user.is_blocked = 0
             AND (ranked_user.elo_rating > u.elo_rating
               OR (ranked_user.elo_rating = u.elo_rating AND ranked_user.id < u.id))
         ) ELSE NULL END AS global_ranking_position,
@@ -718,9 +718,9 @@ router.get('/ranking/global', async (req, res) => {
     params.push(offset);
     const result = await query(
       `SELECT u.id, u.nickname, u.elo_rating, u.level, u.is_rated, u.matches_played, u.total_wins, u.total_losses, u.country, u.avatar, COALESCE(u.trend, '-') as trend,
-              CASE WHEN u.is_active = 1 AND u.is_blocked = 0 THEN (
+              CASE WHEN u.is_blocked = 0 THEN (
                 SELECT COUNT(*) + 1 FROM users_extension ranked_user
-                WHERE ranked_user.is_active = 1 AND ranked_user.is_blocked = 0
+                WHERE ranked_user.is_blocked = 0
                   AND (ranked_user.elo_rating > u.elo_rating
                     OR (ranked_user.elo_rating = u.elo_rating AND ranked_user.id < u.id))
               ) ELSE NULL END AS global_ranking_position
@@ -774,9 +774,9 @@ router.get('/all', async (req, res) => {
   try {
     const result = await query(
       `SELECT id, nickname, elo_rating, level, is_rated, country, avatar, created_at,
-              CASE WHEN is_active = 1 AND is_blocked = 0 THEN (
+              CASE WHEN is_blocked = 0 THEN (
                 SELECT COUNT(*) + 1 FROM users_extension ranked_user
-                WHERE ranked_user.is_active = 1 AND ranked_user.is_blocked = 0
+                WHERE ranked_user.is_blocked = 0
                   AND (ranked_user.elo_rating > users_extension.elo_rating
                     OR (ranked_user.elo_rating = users_extension.elo_rating AND ranked_user.id < users_extension.id))
               ) ELSE NULL END AS global_ranking_position

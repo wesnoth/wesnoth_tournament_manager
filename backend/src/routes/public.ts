@@ -439,9 +439,9 @@ router.get('/players', async (req, res) => {
     params.push(offset);
     const result = await query(
       `SELECT u.id, u.nickname, u.elo_rating, u.is_rated, u.enable_ranked, u.matches_played, u.total_wins, u.total_losses, u.country, u.avatar,
-              CASE WHEN u.is_active = 1 AND u.is_blocked = 0 THEN (
+              CASE WHEN u.is_blocked = 0 THEN (
                 SELECT COUNT(*) + 1 FROM users_extension ranked_user
-                WHERE ranked_user.is_active = 1 AND ranked_user.is_blocked = 0
+                WHERE ranked_user.is_blocked = 0
                   AND (ranked_user.elo_rating > u.elo_rating
                     OR (ranked_user.elo_rating = u.elo_rating AND ranked_user.id < u.id))
               ) ELSE NULL END AS global_ranking_position
@@ -738,9 +738,9 @@ router.get('/players/:id', async (req, res) => {
         u.trend,
         u.is_active,
         u.enable_ranked,
-        CASE WHEN u.is_active = 1 AND u.is_blocked = 0 THEN (
+        CASE WHEN u.is_blocked = 0 THEN (
           SELECT COUNT(*) + 1 FROM users_extension ranked_user
-          WHERE ranked_user.is_active = 1 AND ranked_user.is_blocked = 0
+          WHERE ranked_user.is_blocked = 0
             AND (ranked_user.elo_rating > u.elo_rating
               OR (ranked_user.elo_rating = u.elo_rating AND ranked_user.id < u.id))
         ) ELSE NULL END AS global_ranking_position,

@@ -404,8 +404,10 @@ router.post('/recalculate-all-stats', authMiddleware, async (req: AuthRequest, r
         const recalcResult = await performGlobalStatsRecalculation(onProgress);
         if (recalcResult.success) {
           try {
+            await onProgress({ phase: 'calculating_player_of_month', current: 0, total: 1 });
             const { calculatePlayerOfMonth } = await import('../jobs/playerOfMonthJob.js');
             await calculatePlayerOfMonth();
+            await onProgress({ phase: 'calculating_player_of_month', current: 1, total: 1 });
           } catch (error: any) {
             console.error('⚠️  Warning: Failed to recalculate player of month:', error.message);
           }

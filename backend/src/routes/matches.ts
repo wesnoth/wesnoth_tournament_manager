@@ -131,6 +131,7 @@ async function performGlobalStatsRecalculation(
       elo_rating: number;
       ranking_pos: number;
       is_global_ranked: boolean;
+      last_match_date: Date | null;
       matches_played: number;
       total_wins: number;
       total_losses: number;
@@ -143,7 +144,8 @@ async function performGlobalStatsRecalculation(
       userStates.set(userRow.id, {
         elo_rating: defaultElo,
         ranking_pos: 1,
-        is_global_ranked: Boolean(userRow.is_active) && !Boolean(userRow.is_blocked),
+        is_global_ranked: !Boolean(userRow.is_blocked),
+        last_match_date: null,
         matches_played: 0,
         total_wins: 0,
         total_losses: 0,
@@ -162,17 +164,17 @@ async function performGlobalStatsRecalculation(
 
       // Ensure both users exist in state map
       if (!userStates.has(winnerId)) {
-        userStates.set(winnerId, { elo_rating: defaultElo, ranking_pos: 1, is_global_ranked: true, matches_played: 0, total_wins: 0, total_losses: 0, trend: '-', level: 'Novato' });
+        userStates.set(winnerId, { elo_rating: defaultElo, ranking_pos: 1, is_global_ranked: true, last_match_date: null, matches_played: 0, total_wins: 0, total_losses: 0, trend: '-', level: 'Novato' });
       }
       if (!userStates.has(loserId)) {
-        userStates.set(loserId, { elo_rating: defaultElo, ranking_pos: 1, is_global_ranked: true, matches_played: 0, total_wins: 0, total_losses: 0, trend: '-', level: 'Novato' });
+        userStates.set(loserId, { elo_rating: defaultElo, ranking_pos: 1, is_global_ranked: true, last_match_date: null, matches_played: 0, total_wins: 0, total_losses: 0, trend: '-', level: 'Novato' });
       }
 
       const winner = userStates.get(winnerId)!;
       const loser = userStates.get(loserId)!;
 
-      // Store before values. Global ranking includes every active, non-blocked
-      // player, including players who are not yet eligible for rated ranking.
+      // Store before values. Global ranking includes every non-blocked player,
+      // including inactive and unrated players.
       const getGlobalRankingPosition = (playerId: string, playerElo: number): number =>
         1 + Array.from(userStates.entries()).filter(([otherId, other]) =>
           other.is_global_ranked && otherId !== playerId &&
@@ -203,6 +205,9 @@ async function performGlobalStatsRecalculation(
       // Update stats
       winner.elo_rating = winnerNewRating;
       loser.elo_rating = loserNewRating;
+      const matchDate = new Date(matchRow.created_at);
+      winner.last_match_date = matchDate;
+      loser.last_match_date = matchDate;
       winner.matches_played++;
       loser.matches_played++;
       winner.total_wins++;
@@ -286,20 +291,10 @@ async function performGlobalStatsRecalculation(
     let usersUpdatedCount = 0;
     if (onProgress) await onProgress({ phase: 'updating_users', current: 0, total: userStates.size });
     for (const [userId, stats] of userStates.entries()) {
-      // Get current is_rated status from database
-      const userCurrentResult = await query('SELECT is_rated FROM users_extension WHERE id = ?', [userId]);
-      const isCurrentlyRated = userCurrentResult.rows[0]?.is_rated || false;
-      
-      let isRated = isCurrentlyRated;
-      
-      // If rated and ELO falls below 1400, unrate the player
-      if (isCurrentlyRated && stats.elo_rating < 1400) {
-        isRated = false;
-      }
-      // If unrated, has 10+ matches, and ELO >= 1400, rate the player
-      else if (!isCurrentlyRated && stats.matches_played >= 10 && stats.elo_rating >= 1400) {
-        isRated = true;
-      }
+      // Rebuild rated status from replayed history instead of preserving a
+      // stale flag. This keeps cancellations and imported test data consistent
+      // with the documented eligibility rule.
+      const isRated = shouldPlayerBeRated(stats.matches_played, stats.elo_rating);
       
       await query(
         `UPDATE users_extension 
@@ -310,9 +305,22 @@ async function performGlobalStatsRecalculation(
              trend = ?,
              level = ?,
              is_rated = ?,
+             is_active = ?,
+             last_match_date = ?,
              updated_at = CURRENT_TIMESTAMP 
          WHERE id = ?`,
-        [stats.elo_rating, stats.matches_played, stats.total_wins, stats.total_losses, stats.trend, stats.level, isRated, userId]
+        [
+          stats.elo_rating,
+          stats.matches_played,
+          stats.total_wins,
+          stats.total_losses,
+          stats.trend,
+          stats.level,
+          isRated,
+          stats.last_match_date && stats.last_match_date >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) ? 1 : 0,
+          stats.last_match_date,
+          userId,
+        ]
       );
       usersUpdatedCount++;
       if (onProgress && (usersUpdatedCount === userStates.size || usersUpdatedCount % 10 === 0)) {
@@ -335,14 +343,14 @@ async function performGlobalStatsRecalculation(
       if (isDebugEnabled) console.error('Warning: Failed to drop triggers:', error);
     }
 
-    // STEP 7: Recalculate player match statistics and faction/map balance statistics
-    if (onProgress) await onProgress({ phase: 'recalculating_derived_statistics', current: 0, total: 2 });
+    // STEP 7: Recalculate derived statistics in separately observable phases.
     try {
-      const playerResult = await recalculatePlayerMatchStatistics();
+      const playerResult = await recalculatePlayerMatchStatistics(async (current, total) => {
+        if (onProgress) await onProgress({ phase: 'recalculating_player_statistics', current, total });
+      });
       const msg = `✓ Recalculated ${playerResult.records_updated} player match statistics`;
       logs.push(msg);
       if (isDebugEnabled) console.log(msg);
-      if (onProgress) await onProgress({ phase: 'recalculating_derived_statistics', current: 1, total: 2 });
     } catch (error) {
       recalculationHadErrors = true;
       const msg = `✗ Error recalculating player match statistics: ${error instanceof Error ? error.message : 'Unknown error'}`;
@@ -351,11 +359,12 @@ async function performGlobalStatsRecalculation(
     }
 
     try {
-      const factionResult = await recalculateFactionMapStatistics();
+      const factionResult = await recalculateFactionMapStatistics(async (current, total) => {
+        if (onProgress) await onProgress({ phase: 'recalculating_faction_statistics', current, total });
+      });
       const msg = `✓ Recalculated ${factionResult.records_updated} faction/map statistics`;
       logs.push(msg);
       if (isDebugEnabled) console.log(msg);
-      if (onProgress) await onProgress({ phase: 'recalculating_derived_statistics', current: 2, total: 2 });
 
       // Manage snapshots
       const snapshotResult = await query('SELECT COUNT(*) FROM faction_map_statistics_history');
@@ -956,8 +965,10 @@ router.post('/admin/:id/dispute', moderatorOrAdminMiddleware, async (req: AuthRe
             const recalcResult = await performGlobalStatsRecalculation(onProgress);
             if (recalcResult.success) {
               try {
+                await onProgress({ phase: 'calculating_player_of_month', current: 0, total: 1 });
                 const { calculatePlayerOfMonth } = await import('../jobs/playerOfMonthJob.js');
                 await calculatePlayerOfMonth();
+                await onProgress({ phase: 'calculating_player_of_month', current: 1, total: 1 });
               } catch (error: any) {
                 console.error('⚠️  Warning: Failed to recalculate player of month after awarding dispute:', error.message);
               }

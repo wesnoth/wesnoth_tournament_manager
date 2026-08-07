@@ -426,7 +426,9 @@ export async function getBalanceTrend(
  *  3. Per-map      (opponent_id=NULL, map_id=set, faction_id=NULL)
  *  4. Per-faction  (opponent_id=NULL, map_id=NULL, faction_id=set, opponent_faction_id=set)
  */
-export async function recalculatePlayerMatchStatistics(): Promise<{ records_updated: number }> {
+export async function recalculatePlayerMatchStatistics(
+  onProgress?: (current: number, total: number) => Promise<void>
+): Promise<{ records_updated: number }> {
   try {
     const { randomUUID } = await import('crypto');
 
@@ -583,6 +585,16 @@ export async function recalculatePlayerMatchStatistics(): Promise<{ records_upda
 
     // ── INSERT helpers ────────────────────────────────────────────────────────
     let recordsUpdated = 0;
+    const totalRecords = [...globalMap.values()].reduce((sum, bySide) => sum + bySide.size, 0)
+      + [...opponentMap.values()].reduce((sum, bySide) => sum + [...bySide.values()].reduce((sideSum, byOpponent) => sideSum + byOpponent.size, 0), 0)
+      + [...mapMap.values()].reduce((sum, bySide) => sum + [...bySide.values()].reduce((sideSum, byMap) => sideSum + byMap.size, 0), 0)
+      + [...factionMap.values()].reduce((sum, bySide) => sum + [...bySide.values()].reduce((sideSum, byFaction) => sideSum + byFaction.size, 0), 0);
+    const reportProgress = async () => {
+      if (onProgress && (recordsUpdated === totalRecords || recordsUpdated % 10 === 0)) {
+        await onProgress(recordsUpdated, totalRecords);
+      }
+    };
+    if (onProgress) await onProgress(0, totalRecords);
 
     const insertBase = `INSERT INTO player_match_statistics
       (id, player_id, opponent_id, map_id, faction_id, opponent_faction_id,
@@ -607,6 +619,7 @@ export async function recalculatePlayerMatchStatistics(): Promise<{ records_upda
           side, total, e.wins, e.losses, wr(e.wins, total), avg(e.elo_sum, e.elo_count)
         ]);
         recordsUpdated++;
+        await reportProgress();
       }
     }
 
@@ -624,6 +637,7 @@ export async function recalculatePlayerMatchStatistics(): Promise<{ records_upda
             e.last_match_date || null
           ]);
           recordsUpdated++;
+          await reportProgress();
         }
       }
     }
@@ -638,6 +652,7 @@ export async function recalculatePlayerMatchStatistics(): Promise<{ records_upda
             side, total, e.wins, e.losses, wr(e.wins, total), avg(e.elo_sum, e.elo_count)
           ]);
           recordsUpdated++;
+          await reportProgress();
         }
       }
     }
@@ -652,6 +667,7 @@ export async function recalculatePlayerMatchStatistics(): Promise<{ records_upda
             side, total, e.wins, e.losses, wr(e.wins, total), 0
           ]);
           recordsUpdated++;
+          await reportProgress();
         }
       }
     }
@@ -666,7 +682,9 @@ export async function recalculatePlayerMatchStatistics(): Promise<{ records_upda
 /**
  * Recalculate all faction/map statistics
  */
-export async function recalculateFactionMapStatistics(): Promise<{ records_updated: number }> {
+export async function recalculateFactionMapStatistics(
+  onProgress?: (current: number, total: number) => Promise<void>
+): Promise<{ records_updated: number }> {
   try {
     await query('TRUNCATE TABLE faction_map_statistics');
 
@@ -740,6 +758,13 @@ export async function recalculateFactionMapStatistics(): Promise<{ records_updat
 
     const { randomUUID } = await import('crypto');
     let recordsInserted = 0;
+    const totalRecords = aggregated.size;
+    const reportProgress = async () => {
+      if (onProgress && (recordsInserted === totalRecords || recordsInserted % 10 === 0)) {
+        await onProgress(recordsInserted, totalRecords);
+      }
+    };
+    if (onProgress) await onProgress(0, totalRecords);
 
     for (const stats of aggregated.values()) {
       const winrate = stats.total_games > 0 ? (stats.wins / stats.total_games) * 100 : 0;
@@ -752,6 +777,7 @@ export async function recalculateFactionMapStatistics(): Promise<{ records_updat
          stats.total_games, stats.wins, stats.losses, Math.round(winrate * 100) / 100]
       );
       recordsInserted++;
+      await reportProgress();
     }
 
     return { records_updated: recordsInserted };
