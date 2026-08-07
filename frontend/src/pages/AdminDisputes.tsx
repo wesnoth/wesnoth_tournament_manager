@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { matchService } from '../services/api';
+import { adminService, matchService } from '../services/api';
 import MainLayout from '../components/MainLayout';
 
 interface DisputedMatch {
@@ -93,6 +93,44 @@ const AdminDisputes: React.FC = () => {
       fetchDisputes();
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'Failed to reject dispute');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleAwardDisputeWin = async (matchId: string) => {
+    setProcessingId(matchId);
+    setError('');
+    try {
+      const response = await matchService.awardDisputeWin(matchId);
+      // Keep the visible confirmation in the selected locale; the backend
+      // response is an operational message and is not localized.
+      setMessage(t('dispute_award_queued'));
+      setSelectedDispute(null);
+      fetchDisputes();
+
+      const jobId = response.data?.recalculationJobId;
+      if (jobId) {
+        let status = 'queued';
+        while (status === 'queued' || status === 'running') {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          const statusResponse = await adminService.getRecalculateAllStatsStatus(jobId);
+          const job = statusResponse.data;
+          status = job.status;
+          if (status === 'running') {
+            setMessage(t('admin.recalculation_progress', {
+              defaultValue: 'Recalculating statistics: {{current}}/{{total}}',
+              current: job.progress_current || 0,
+              total: job.progress_total || 0,
+            }));
+          }
+        }
+        setMessage(status === 'completed'
+          ? t('admin.recalculation_completed', 'Global statistics recalculation completed')
+          : t('admin.recalculation_failed', 'Global statistics recalculation failed'));
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || t('error_awarding_dispute_win'));
     } finally {
       setProcessingId(null);
     }
@@ -256,6 +294,18 @@ const AdminDisputes: React.FC = () => {
                   }}
                 >
                   ✓ Validate Dispute
+                </button>
+                <button
+                  data-help-id="action-award-dispute-win-admin"
+                  className="px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold transition-colors shadow-md flex items-center gap-2"
+                  disabled={processingId === selectedDispute.id}
+                  onClick={() => {
+                    if (window.confirm(t('confirm_award_dispute_win'))) {
+                      handleAwardDisputeWin(selectedDispute.id);
+                    }
+                  }}
+                >
+                  ✓ {t('award_dispute_win')}
                 </button>
                 <button 
                   data-help-id="action-reject-dispute-admin"

@@ -236,9 +236,9 @@ export const recalculateUserStatsInCascade = (
 };
 
 /**
- * Calculate a player's ranking position based on their ELO rating.
- * Position = 1 + (count of players with higher ELO)
- * Only counts active players with is_rated = true
+ * Calculate a player's global ranking position based on their ELO rating.
+ * Position = 1 + players with higher ELO, with UUID order breaking ties.
+ * All active, non-blocked players participate, including unrated players.
  */
 export const getPlayerRankingPosition = async (
   query: any,
@@ -247,13 +247,12 @@ export const getPlayerRankingPosition = async (
 ): Promise<number> => {
   try {
     const result = await query(
-      `SELECT COUNT(*) as higher_count 
+      `SELECT COUNT(*) as higher_count
        FROM users_extension 
-       WHERE is_rated = true 
-       AND is_active = true
-       AND elo_rating > ?
-       AND id != ?`,
-      [playerElo, playerId]
+       WHERE is_active = true
+       AND is_blocked = false
+       AND (elo_rating > ? OR (elo_rating = ? AND id < ?))`,
+      [playerElo, playerElo, playerId]
     );
     
     const higherCount = result.rows?.[0]?.higher_count || 0;

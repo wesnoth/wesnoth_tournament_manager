@@ -7,6 +7,11 @@ import { calculateNewRating, calculateTrend } from '../utils/elo.js';
 import { unlockAccount } from '../services/accountLockout.js';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
 import { performGlobalStatsRecalculation } from './matches.js';
+import {
+  enqueueGlobalStatsRecalculation,
+  getGlobalStatsRecalculationJob,
+  GlobalStatsRecalculationInProgressError,
+} from '../services/globalStatsRecalculationJobService.js';
 import { isTournamentOrganizer } from '../services/tournamentAuthorizationService.js';
 
 const router = Router();
@@ -378,7 +383,8 @@ router.get('/debug/faction-map-stats', authMiddleware, async (req: AuthRequest, 
   }
 });
 
-// Recalculate all stats from scratch (global replay of all non-cancelled matches)
+// Queue a global replay of all non-cancelled matches. The replay runs in the
+// background because its duration grows with the complete match history.
 router.post('/recalculate-all-stats', authMiddleware, async (req: AuthRequest, res) => {
   try {
     // Verify admin status
@@ -391,42 +397,46 @@ router.post('/recalculate-all-stats', authMiddleware, async (req: AuthRequest, r
       console.log(`🔄 Starting global stats recalculation by admin ${req.userId}`);
     }
 
-    // Call the centralized recalculation function (handles ELO, player stats, faction/map stats, snapshots)
-    const recalcResult = await performGlobalStatsRecalculation();
-
-    // Log the results
-    if (process.env.BACKEND_DEBUG_LOGS === 'true') {
-      console.log(`Global stats recalculation completed: ${recalcResult.success ? 'SUCCESS' : 'WITH ERRORS'}`);
-      recalcResult.logs.forEach(log => console.log(log));
-    }
-
-    // Calculate player of the month for the previous month
-    try {
-      const { calculatePlayerOfMonth } = await import('../jobs/playerOfMonthJob.js');
-      if (process.env.BACKEND_DEBUG_LOGS === 'true') {
-        console.log('🎯 Recalculating player of month...');
-      }
-      await calculatePlayerOfMonth();
-      if (process.env.BACKEND_DEBUG_LOGS === 'true') {
-        console.log('✅ Player of month recalculated successfully');
-      }
-    } catch (error: any) {
-      if (process.env.BACKEND_DEBUG_LOGS === 'true') {
-        console.error('⚠️  Warning: Failed to recalculate player of month:', error.message);
-      }
-      // Don't fail the entire operation if player of month calculation fails
-    }
-
-    res.json({
-      message: 'Global stats recalculation completed successfully',
-      success: recalcResult.success,
-      matchesProcessed: recalcResult.matchesProcessed,
-      usersUpdated: recalcResult.usersUpdated,
-      debugLogs: recalcResult.logs
+    const jobId = await enqueueGlobalStatsRecalculation({
+      requestedBy: req.userId ?? null,
+      reason: 'ADMIN_MANUAL_RECALCULATION',
+      execute: async (onProgress) => {
+        const recalcResult = await performGlobalStatsRecalculation(onProgress);
+        if (recalcResult.success) {
+          try {
+            const { calculatePlayerOfMonth } = await import('../jobs/playerOfMonthJob.js');
+            await calculatePlayerOfMonth();
+          } catch (error: any) {
+            console.error('⚠️  Warning: Failed to recalculate player of month:', error.message);
+          }
+        }
+        return recalcResult;
+      },
     });
-  } catch (error) {
+
+    res.status(202).json({
+      message: 'Global stats recalculation queued',
+      jobId,
+      status: 'queued',
+    });
+  } catch (error: any) {
+    if (error instanceof GlobalStatsRecalculationInProgressError) {
+      return res.status(409).json({ error: error.message, jobId: error.jobId });
+    }
     console.error('Global stats recalculation error:', error);
-    res.status(500).json({ error: 'Failed to recalculate stats' });
+    res.status(500).json({ error: 'Failed to queue stats recalculation' });
+  }
+});
+
+// Read progress for a queued or completed global statistics recalculation.
+router.get('/recalculate-all-stats/:jobId', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const job = await getGlobalStatsRecalculationJob(req.params.jobId);
+    if (!job) return res.status(404).json({ error: 'Recalculation job not found' });
+    res.json(job);
+  } catch (error) {
+    console.error('Global stats recalculation status error:', error);
+    res.status(500).json({ error: 'Failed to fetch recalculation status' });
   }
 });
 

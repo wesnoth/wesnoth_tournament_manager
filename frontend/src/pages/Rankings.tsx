@@ -9,6 +9,7 @@ interface PlayerStats {
   id: string;
   nickname: string;
   elo_rating: number;
+  global_ranking_position?: number | null;
   is_rated: boolean;
   matches_played: number;
   total_wins: number;
@@ -127,6 +128,7 @@ const Rankings: React.FC = () => {
             id: player.id,
             nickname: player.nickname,
             elo_rating: player.elo_rating,
+            global_ranking_position: player.global_ranking_position,
             is_rated: player.is_rated,
             matches_played: totalMatches,
             total_wins: wins,
@@ -308,6 +310,7 @@ const Rankings: React.FC = () => {
             <thead>
               <tr className="bg-gray-200">
                 <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-300 transition-colors">#</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">{t('label_global_ranking_position', 'Global rank')}</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-300 transition-colors" onClick={() => handleSort('nickname')}>
                   {t('label_nickname')}
                   {sortColumn === 'nickname' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
@@ -343,6 +346,9 @@ const Rankings: React.FC = () => {
                 <tr key={player.id} className={`border-b border-gray-200 hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                   <td className="px-4 py-3 text-gray-700">
                     <span className="font-bold text-lg text-center">#{(currentPage - 1) * 20 + index + 1}</span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-700">
+                    {player.global_ranking_position ? `#${player.global_ranking_position}` : '—'}
                   </td>
                   <td className="px-4 py-3 text-gray-700">
                     <div className="flex items-center gap-2">

@@ -168,6 +168,7 @@ export const matchService = {
   cancelOwnMatch: (id: string) => api.post(`/matches/${id}/cancel-own`),
   validateDispute: (id: string) => api.post(`/matches/admin/${id}/dispute`, { action: 'validate' }),
   rejectDispute: (id: string) => api.post(`/matches/admin/${id}/dispute`, { action: 'reject' }),
+  awardDisputeWin: (id: string) => api.post(`/matches/admin/${id}/dispute`, { action: 'award' }),
   incrementReplayDownloads: (matchId: string) => api.post(`/matches/${matchId}/replay/download-count`),
   reportConfidence1Replay: (
     replayId: string, 
@@ -242,6 +243,7 @@ export const adminService = {
     api.get('/admin/maintenance-logs', { params: limit ? { limit } : {} }),
   deleteUser: (id: string) => api.delete(`/admin/users/${id}`),
   recalculateAllStats: () => api.post('/admin/recalculate-all-stats'),
+  getRecalculateAllStatsStatus: (jobId: string) => api.get(`/admin/recalculate-all-stats/${jobId}`),
   
   // Audit logs
   getAuditLogs: (params?: any) => api.get('/admin/audit-logs', { params }),

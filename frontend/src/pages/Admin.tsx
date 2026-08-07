@@ -210,11 +210,29 @@ const AdminUsers: React.FC = () => {
       setError('');
       setMessage('');
       const res = await adminService.recalculateAllStats();
-      const matchesProcessed = res.data.matchesProcessed || 0;
-      const usersUpdated = res.data.usersUpdated || 0;
-      setMessage(
-        `Stats recalculated successfully! Processed ${matchesProcessed} matches and updated ${usersUpdated} users.`
-      );
+      const jobId = res.data.jobId;
+      setMessage(t('admin.recalculation_queued', 'Global statistics recalculation queued'));
+
+      let status = 'queued';
+      while (status === 'queued' || status === 'running') {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const statusResponse = await adminService.getRecalculateAllStatsStatus(jobId);
+        const job = statusResponse.data;
+        status = job.status;
+        if (status === 'running') {
+          setMessage(t('admin.recalculation_progress', {
+            defaultValue: 'Recalculating statistics: {{current}}/{{total}}',
+            current: job.progress_current || 0,
+            total: job.progress_total || 0,
+          }));
+        }
+      }
+
+      if (status === 'completed') {
+        setMessage(t('admin.recalculation_completed', 'Global statistics recalculation completed'));
+      } else {
+        throw new Error(t('admin.recalculation_failed', 'Global statistics recalculation failed'));
+      }
       // Refresh users list
       fetchUsers();
       setTimeout(() => setMessage(''), 5000);

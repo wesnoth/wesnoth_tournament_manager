@@ -4,6 +4,10 @@ import { query } from '../config/database.js';
 import { authMiddleware, moderatorOrAdminMiddleware, AuthRequest } from '../middleware/auth.js';
 import { getUserLevel } from '../utils/auth.js';
 import {
+  enqueueGlobalStatsRecalculation,
+  getActiveGlobalStatsRecalculationJobId,
+} from '../services/globalStatsRecalculationJobService.js';
+import {
   calculateNewRating,
   calculateInitialRating,
   shouldPlayerBeRated,
@@ -84,9 +88,12 @@ function normalizeMapName(mapName: string | null | undefined): string {
 
 // Helper function to recalculate all stats (used by both admin and player self-cancel)
 // This does a FULL replay of all non-cancelled matches to recalculate ELO correctly
-async function performGlobalStatsRecalculation() {
+async function performGlobalStatsRecalculation(
+  onProgress?: (progress: { phase: string; current: number; total: number }) => Promise<void>
+) {
   const logs: string[] = [];
   const isDebugEnabled = process.env.BACKEND_DEBUG_LOGS === 'true';
+  let recalculationHadErrors = false;
   
   try {
     const startMsg = '🔄 Starting full stats recalculation with match replay';
@@ -117,11 +124,13 @@ async function performGlobalStatsRecalculation() {
        WHERE m.status != 'cancelled'
        ORDER BY m.created_at ASC, m.id ASC`
     );
+    if (onProgress) await onProgress({ phase: 'replaying_matches', current: 0, total: allNonCancelledMatches.rows.length });
 
     // STEP 3: Initialize all users with baseline ELO and zero stats
     const userStates = new Map<string, {
       elo_rating: number;
       ranking_pos: number;
+      is_global_ranked: boolean;
       matches_played: number;
       total_wins: number;
       total_losses: number;
@@ -129,11 +138,12 @@ async function performGlobalStatsRecalculation() {
       level: string;
     }>();
 
-    const allUsersResult = await query('SELECT id FROM users_extension');
+    const allUsersResult = await query('SELECT id, is_active, is_blocked FROM users_extension');
     for (const userRow of allUsersResult.rows) {
       userStates.set(userRow.id, {
         elo_rating: defaultElo,
         ranking_pos: 1,
+        is_global_ranked: Boolean(userRow.is_active) && !Boolean(userRow.is_blocked),
         matches_played: 0,
         total_wins: 0,
         total_losses: 0,
@@ -152,20 +162,27 @@ async function performGlobalStatsRecalculation() {
 
       // Ensure both users exist in state map
       if (!userStates.has(winnerId)) {
-        userStates.set(winnerId, { elo_rating: defaultElo, ranking_pos: 1, matches_played: 0, total_wins: 0, total_losses: 0, trend: '-', level: 'Novato' });
+        userStates.set(winnerId, { elo_rating: defaultElo, ranking_pos: 1, is_global_ranked: true, matches_played: 0, total_wins: 0, total_losses: 0, trend: '-', level: 'Novato' });
       }
       if (!userStates.has(loserId)) {
-        userStates.set(loserId, { elo_rating: defaultElo, ranking_pos: 1, matches_played: 0, total_wins: 0, total_losses: 0, trend: '-', level: 'Novato' });
+        userStates.set(loserId, { elo_rating: defaultElo, ranking_pos: 1, is_global_ranked: true, matches_played: 0, total_wins: 0, total_losses: 0, trend: '-', level: 'Novato' });
       }
 
       const winner = userStates.get(winnerId)!;
       const loser = userStates.get(loserId)!;
 
-      // Store before values (including ranking position)
+      // Store before values. Global ranking includes every active, non-blocked
+      // player, including players who are not yet eligible for rated ranking.
+      const getGlobalRankingPosition = (playerId: string, playerElo: number): number =>
+        1 + Array.from(userStates.entries()).filter(([otherId, other]) =>
+          other.is_global_ranked && otherId !== playerId &&
+          (other.elo_rating > playerElo || (other.elo_rating === playerElo && otherId < playerId))
+        ).length;
+
       const winnerEloBefore = winner.elo_rating;
       const loserEloBefore = loser.elo_rating;
-      const winnerRankingPosBefore = winner.ranking_pos;
-      const loserRankingPosBefore = loser.ranking_pos;
+      const winnerRankingPosBefore = getGlobalRankingPosition(winnerId, winnerEloBefore);
+      const loserRankingPosBefore = getGlobalRankingPosition(loserId, loserEloBefore);
       const winnerMatchesBeforeCalc = winner.matches_played;
       const loserMatchesBeforeCalc = loser.matches_played;
 
@@ -197,10 +214,10 @@ async function performGlobalStatsRecalculation() {
       winner.level = winnerLevelAfter;
       loser.level = loserLevelAfter;
 
-      // Calculate ranking positions AFTER the match based on current state
-      // Count how many players have higher ELO than this player
-      const winnerRankingPosAfter = 1 + Array.from(userStates.values()).filter(u => u.elo_rating > winnerNewRating).length;
-      const loserRankingPosAfter = 1 + Array.from(userStates.values()).filter(u => u.elo_rating > loserNewRating).length;
+      // Calculate global ranking positions after both players have received
+      // their new ratings. Equal ELO values use UUID order as a stable tie-break.
+      const winnerRankingPosAfter = getGlobalRankingPosition(winnerId, winnerNewRating);
+      const loserRankingPosAfter = getGlobalRankingPosition(loserId, loserNewRating);
 
       // Calculate ranking changes
       const winnerRankingChange = winnerRankingPosBefore - winnerRankingPosAfter;
@@ -249,6 +266,9 @@ async function performGlobalStatsRecalculation() {
       );
 
       matchProcessedCount++;
+      if (onProgress && (matchProcessedCount === allNonCancelledMatches.rows.length || matchProcessedCount % 10 === 0)) {
+        await onProgress({ phase: 'replaying_matches', current: matchProcessedCount, total: allNonCancelledMatches.rows.length });
+      }
     }
 
     const finalMsg = `✅ Replayed ${allNonCancelledMatches.rows.length} matches with FIDE ELO recalculation`;
@@ -264,6 +284,7 @@ async function performGlobalStatsRecalculation() {
 
     // STEP 5: Update all users in the database with their recalculated stats
     let usersUpdatedCount = 0;
+    if (onProgress) await onProgress({ phase: 'updating_users', current: 0, total: userStates.size });
     for (const [userId, stats] of userStates.entries()) {
       // Get current is_rated status from database
       const userCurrentResult = await query('SELECT is_rated FROM users_extension WHERE id = ?', [userId]);
@@ -291,9 +312,12 @@ async function performGlobalStatsRecalculation() {
              is_rated = ?,
              updated_at = CURRENT_TIMESTAMP 
          WHERE id = ?`,
-        [stats.elo_rating, stats.matches_played, stats.total_wins, stats.total_losses, stats.trend, stats.level, isCurrentlyRated, userId]
+        [stats.elo_rating, stats.matches_played, stats.total_wins, stats.total_losses, stats.trend, stats.level, isRated, userId]
       );
       usersUpdatedCount++;
+      if (onProgress && (usersUpdatedCount === userStates.size || usersUpdatedCount % 10 === 0)) {
+        await onProgress({ phase: 'updating_users', current: usersUpdatedCount, total: userStates.size });
+      }
     }
 
     // STEP 6: Re-enable both triggers
@@ -312,12 +336,15 @@ async function performGlobalStatsRecalculation() {
     }
 
     // STEP 7: Recalculate player match statistics and faction/map balance statistics
+    if (onProgress) await onProgress({ phase: 'recalculating_derived_statistics', current: 0, total: 2 });
     try {
       const playerResult = await recalculatePlayerMatchStatistics();
       const msg = `✓ Recalculated ${playerResult.records_updated} player match statistics`;
       logs.push(msg);
       if (isDebugEnabled) console.log(msg);
+      if (onProgress) await onProgress({ phase: 'recalculating_derived_statistics', current: 1, total: 2 });
     } catch (error) {
+      recalculationHadErrors = true;
       const msg = `✗ Error recalculating player match statistics: ${error instanceof Error ? error.message : 'Unknown error'}`;
       logs.push(msg);
       console.error(msg);
@@ -328,6 +355,7 @@ async function performGlobalStatsRecalculation() {
       const msg = `✓ Recalculated ${factionResult.records_updated} faction/map statistics`;
       logs.push(msg);
       if (isDebugEnabled) console.log(msg);
+      if (onProgress) await onProgress({ phase: 'recalculating_derived_statistics', current: 2, total: 2 });
 
       // Manage snapshots
       const snapshotResult = await query('SELECT COUNT(*) FROM faction_map_statistics_history');
@@ -337,13 +365,14 @@ async function performGlobalStatsRecalculation() {
         console.log(snapshotMsg);
       }
     } catch (error) {
+      recalculationHadErrors = true;
       const msg = `✗ Error recalculating faction/map statistics: ${error instanceof Error ? error.message : 'Unknown error'}`;
       logs.push(msg);
       console.error(msg);
     }
 
     return { 
-      success: true, 
+      success: !recalculationHadErrors,
       logs,
       matchesProcessed: matchProcessedCount,
       usersUpdated: usersUpdatedCount
@@ -851,7 +880,7 @@ router.get('/pending/user', authMiddleware, async (req: AuthRequest, res) => {
 router.post('/admin/:id/dispute', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
-    const { action } = req.body; // 'validate' or 'reject'
+    const { action } = req.body; // 'validate', 'reject', or 'award'
 
     const matchResult = await query('SELECT * FROM matches WHERE id = ?', [id]);
     if (matchResult.rows.length === 0) {
@@ -862,6 +891,127 @@ router.post('/admin/:id/dispute', moderatorOrAdminMiddleware, async (req: AuthRe
 
     if (match.status !== 'disputed') {
       return res.status(400).json({ error: 'Match is not disputed' });
+    }
+
+    const activeRecalculationJobId = await getActiveGlobalStatsRecalculationJobId();
+    if (activeRecalculationJobId) {
+      return res.status(409).json({
+        error: 'A global statistics recalculation is in progress. Resolve disputes after it completes.',
+        jobId: activeRecalculationJobId,
+      });
+    }
+
+    if (action === 'award') {
+      // Correct the result on the existing match row so replay identity and all
+      // foreign-key references remain intact. The disputed player is currently
+      // stored as loser_id because only that participant can open the dispute.
+      const previousResult = {
+        winner_id: match.winner_id,
+        loser_id: match.loser_id,
+        winner_faction: match.winner_faction,
+        loser_faction: match.loser_faction,
+        winner_comments: match.winner_comments,
+        loser_comments: match.loser_comments,
+        winner_rating: match.winner_rating,
+        loser_rating: match.loser_rating,
+        winner_side: match.winner_side,
+        status: match.status,
+        admin_reviewed: match.admin_reviewed,
+        admin_reviewed_at: match.admin_reviewed_at,
+        admin_reviewed_by: match.admin_reviewed_by,
+      };
+
+      const correctedWinnerSide = match.winner_side === 1 ? 2 : match.winner_side === 2 ? 1 : match.winner_side;
+      await query(
+        `UPDATE matches
+         SET winner_id = ?, loser_id = ?,
+             winner_faction = ?, loser_faction = ?,
+             winner_comments = ?, loser_comments = ?,
+             winner_rating = ?, loser_rating = ?,
+             winner_side = ?, status = 'confirmed',
+             admin_reviewed = true, admin_reviewed_at = CURRENT_TIMESTAMP, admin_reviewed_by = ?,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND status = 'disputed'`,
+        [
+          previousResult.loser_id,
+          previousResult.winner_id,
+          previousResult.loser_faction,
+          previousResult.winner_faction,
+          previousResult.loser_comments,
+          previousResult.winner_comments,
+          previousResult.loser_rating,
+          previousResult.winner_rating,
+          correctedWinnerSide,
+          req.userId,
+          id,
+        ]
+      );
+
+      let recalcJobId: string;
+      try {
+        recalcJobId = await enqueueGlobalStatsRecalculation({
+          requestedBy: req.userId ?? null,
+          reason: 'MATCH_DISPUTE_AWARDED_WIN',
+          execute: async (onProgress) => {
+            const recalcResult = await performGlobalStatsRecalculation(onProgress);
+            if (recalcResult.success) {
+              try {
+                const { calculatePlayerOfMonth } = await import('../jobs/playerOfMonthJob.js');
+                await calculatePlayerOfMonth();
+              } catch (error: any) {
+                console.error('⚠️  Warning: Failed to recalculate player of month after awarding dispute:', error.message);
+              }
+            }
+            return recalcResult;
+          },
+        });
+      } catch (error: any) {
+        // Do not leave a corrected match without a scheduled recalculation.
+        await query(
+          `UPDATE matches
+           SET winner_id = ?, loser_id = ?,
+               winner_faction = ?, loser_faction = ?,
+               winner_comments = ?, loser_comments = ?,
+               winner_rating = ?, loser_rating = ?,
+               winner_side = ?, status = ?,
+               admin_reviewed = ?, admin_reviewed_at = ?, admin_reviewed_by = ?,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+          [
+            previousResult.winner_id, previousResult.loser_id,
+            previousResult.winner_faction, previousResult.loser_faction,
+            previousResult.winner_comments, previousResult.loser_comments,
+            previousResult.winner_rating, previousResult.loser_rating,
+            previousResult.winner_side, previousResult.status,
+            previousResult.admin_reviewed, previousResult.admin_reviewed_at,
+            previousResult.admin_reviewed_by, id,
+          ]
+        );
+        return res.status(error.name === 'GlobalStatsRecalculationInProgressError' ? 409 : 500).json({
+          error: error.message || 'Could not schedule statistics recalculation',
+          jobId: error.jobId,
+        });
+      }
+
+      await logAuditEvent({
+        event_type: 'ADMIN_ACTION',
+        user_id: req.userId,
+        username: req.username,
+        ip_address: getUserIP(req),
+        user_agent: getUserAgent(req),
+        details: {
+          action: 'MATCH_DISPUTE_AWARDED_WIN',
+          match_id: id,
+          previous_winner_id: previousResult.winner_id,
+          corrected_winner_id: previousResult.loser_id,
+        },
+      });
+
+      return res.json({
+        message: 'Dispute resolved. The disputed player was awarded the win and global statistics recalculation was queued.',
+        recalculationJobId: recalcJobId,
+        recalculationStatus: 'queued',
+      });
     }
 
     if (action === 'validate') {
@@ -1123,7 +1273,7 @@ router.post('/admin/:id/dispute', moderatorOrAdminMiddleware, async (req: AuthRe
       console.log(`Match ${id} dispute rejected by admin ${req.userId}: Match remains confirmed`);
       res.json({ message: 'Dispute rejected. Match confirmed.' });
     } else {
-      res.status(400).json({ error: 'Invalid action. Use "validate" or "reject"' });
+      res.status(400).json({ error: 'Invalid action. Use "validate", "reject", or "award"' });
     }
   } catch (error) {
     console.error('Admin dispute resolution error:', error);
