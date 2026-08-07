@@ -75,6 +75,9 @@ replays/
 temp/
 tmp/
 
+# Generated from the tracked Wesnoth avatar PNG files during the backend build.
+frontend/public/wesnoth-avatars/manifest.json
+
 # Database
 *.db
 *.sqlite

@@ -940,10 +940,10 @@ router.get('/data/avatars', async (req, res) => {
   }
 });
 
-// Get avatar manifest (dynamically generated from PNG files)
+// Get the manifest generated during the backend build or startup.
 router.get('/data/avatar-manifest', async (req, res) => {
   try {
-    const manifest = await avatarManifestService.generateAvatarManifest();
+    const manifest = avatarManifestService.readAvatarManifest();
     res.json(manifest);
   } catch (error) {
     console.error('Avatar manifest error:', error);

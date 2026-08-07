@@ -127,6 +127,21 @@ class AvatarManifestService {
   }
 
   /**
+   * Read the generated manifest without rebuilding it on every API request.
+   * Build/startup generation is responsible for keeping this derived file current.
+   */
+  readAvatarManifest(): AvatarEntry[] {
+    try {
+      if (!fs.existsSync(this.manifestPath)) return [];
+      const manifest = JSON.parse(fs.readFileSync(this.manifestPath, 'utf-8'));
+      return Array.isArray(manifest) ? manifest : [];
+    } catch (error) {
+      console.error('❌ Error reading avatar manifest:', error);
+      return [];
+    }
+  }
+
+  /**
    * Validate that all manifest entries have corresponding PNG files
    */
   async validateManifest(): Promise<boolean> {

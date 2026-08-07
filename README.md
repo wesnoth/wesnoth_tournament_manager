@@ -98,6 +98,7 @@ cp .env.example .env
 # for the forum and game-server databases.
 
 # Build TypeScript
+# This also generates and validates the ignored avatar manifest from the PNG files.
 npm run build
 
 # Start in development mode
@@ -777,6 +778,7 @@ sudo apt install nodejs
 # Setup backend
 cd backend
 npm ci --production
+# The build generates and validates frontend/public/wesnoth-avatars/manifest.json.
 npm run build
 # Set environment variables, then:
 npm start &
