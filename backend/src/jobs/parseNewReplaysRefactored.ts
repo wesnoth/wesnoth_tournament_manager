@@ -25,6 +25,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { parseTournamentCode } from '../tournament-engine/forumTopic.js';
 import { recordPhaseGameResult } from '../tournament-engine/competitionProgression.js';
+import { shouldPauseReplayProcessing } from '../services/systemPauseService.js';
 
 /** Resolve an active tournament by explicit forum code first, then by its exact name. */
 async function findTournamentForGameName(gameName: string, modes: string[]): Promise<any | null> {
@@ -211,6 +212,11 @@ export class ParseNewReplaysRefactorized {
     errors: number;
     duration_ms: number;
   }> {
+    if (await shouldPauseReplayProcessing()) {
+      console.log('⏸️  [PARSE] Skipping cycle during maintenance or global recalculation');
+      return { parsed_count: 0, match_count: 0, errors: 0, duration_ms: 0 };
+    }
+
     if (this.isRunning) {
       console.log('⚠️  [PARSE] Job already running, skipping');
       return { parsed_count: 0, match_count: 0, errors: 0, duration_ms: 0 };

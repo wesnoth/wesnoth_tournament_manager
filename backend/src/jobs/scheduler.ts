@@ -8,6 +8,7 @@ import { cleanupExpiredSchedules } from './cleanupExpiredSchedulesJob.js';
 import { cleanupOldNotifications } from './cleanupOldNotificationsJob.js';
 import { createFactionMapStatisticsSnapshot, recalculatePlayerMatchStatistics } from '../services/statisticsCalculator.js';
 import { logAuditEvent } from '../middleware/audit.js';
+import { shouldPauseReplayProcessing } from '../services/systemPauseService.js';
 
 /**
  * Mark unconfirmed replays as 'due' when they exceed the age threshold
@@ -16,6 +17,11 @@ import { logAuditEvent } from '../middleware/audit.js';
  * Due replays can still be downloaded but cannot be confirmed or used in matches
  */
 export async function autoDiscardUnconfirmedReplays(): Promise<void> {
+  if (await shouldPauseReplayProcessing()) {
+    console.log('⏸️ [AUTO-DISCARD] Skipped during maintenance or global recalculation');
+    return;
+  }
+
   const configuredThreshold = Number(process.env.REPLAY_AUTO_DISCARD_TIME || '30');
   const thresholdDays = Number.isInteger(configuredThreshold) && configuredThreshold >= 1 && configuredThreshold <= 3650
     ? configuredThreshold
@@ -139,6 +145,10 @@ export const initializeScheduledJobs = (): void => {
 
     setInterval(async () => {
       try {
+        if (await shouldPauseReplayProcessing()) {
+          console.log('⏸️ [FORUM SYNC] Paused during maintenance or global recalculation');
+          return;
+        }
         await forumSyncJob.executeSync();
       } catch (error) {
         console.error('❌ [FORUM SYNC] Job execution failed:', error);
@@ -155,6 +165,10 @@ export const initializeScheduledJobs = (): void => {
 
     setInterval(async () => {
       try {
+        if (await shouldPauseReplayProcessing()) {
+          console.log('⏸️ [PARSE] Paused during maintenance or global recalculation');
+          return;
+        }
         await parseNewReplaysRefactored.execute();
       } catch (error) {
         console.error('❌ [PARSE] Job execution failed:', error);

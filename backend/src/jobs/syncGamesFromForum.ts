@@ -25,6 +25,7 @@ import {
 } from '../config/forumDatabase.js';
 import { parseWesnothVersions, getBaseVersion } from '../utils/versionParser.js';
 import { v4 as uuidv4 } from 'uuid';
+import { shouldPauseReplayProcessing } from '../services/systemPauseService.js';
 
 interface ForumGame {
   INSTANCE_UUID: string;
@@ -49,6 +50,11 @@ export class SyncGamesFromForumJob {
    * Fetches new games from forum database and inserts them into replays table
    */
   async executeSync(): Promise<void> {
+    if (await shouldPauseReplayProcessing()) {
+      console.log('⏸️  [FORUM SYNC] Skipping cycle during maintenance or global recalculation');
+      return;
+    }
+
     if (this.isRunning) {
       console.log('⚠️  [FORUM SYNC] Job already running, skipping this cycle');
       return;

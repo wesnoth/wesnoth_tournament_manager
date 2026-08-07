@@ -3,6 +3,7 @@ import { initializeScheduledJobs, autoDiscardUnconfirmedReplays } from './jobs/s
 import { runMigrations } from './services/migrationRunner.js';
 import { avatarManifestService } from './services/avatarManifestService.js';
 import { recoverInterruptedGlobalStatsRecalculationJobs } from './services/globalStatsRecalculationJobService.js';
+import { invalidateNonAdminTokensIfMaintenanceIsActive } from './services/systemPauseService.js';
 
 // Port configuration - 7100 for test, 8100 for production
 const PORT = parseInt(process.env.PORT || '7100', 10);
@@ -44,6 +45,8 @@ const startServer = async () => {
     console.log('\n🔄 Running database migrations...\n');
     await runMigrations();
     console.log('\n');
+
+    await invalidateNonAdminTokensIfMaintenanceIsActive();
 
     await recoverInterruptedGlobalStatsRecalculationJobs();
 

@@ -484,7 +484,9 @@
   "losses": "Derrotas",
   "maintenance": {
     "title": "Sitio en Mantenimiento",
-    "message": "Estamos realizando mantenimiento programado. Por favor, intenta más tarde."
+    "message": "Estamos realizando mantenimiento programado. Por favor, intenta más tarde.",
+    "global_recalculation_title": "Recálculo de estadísticas en progreso",
+    "global_recalculation_message": "El procesamiento y la confirmación de replays están pausados temporalmente. Inténtalo de nuevo en unos minutos."
   },
   "map": "Mapa",
   "map_balance": "Balance de Mapas",

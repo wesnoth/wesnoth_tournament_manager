@@ -14,6 +14,7 @@ import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { createMatch } from '../services/matchCreationService.js';
 import { validateAndCorrectFactions } from '../services/replayConfirmationService.js';
 import { recordPhaseGameResult } from '../tournament-engine/competitionProgression.js';
+import { globalRecalculationMiddleware } from '../services/systemPauseService.js';
 
 const router = express.Router();
 
@@ -86,7 +87,7 @@ router.get('/pending-confirmation', authMiddleware, async (req: AuthRequest, res
  *  4. Create match via matchCreationService (handles ELO + tournament round match update)
  *  5. Mark replay as parse_status='completed'
  */
-router.post('/:replayId/confirm-winner', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/:replayId/confirm-winner', authMiddleware, globalRecalculationMiddleware, async (req: AuthRequest, res) => {
   try {
     const replayId = req.params.replayId;
     const { iWon } = req.body;
@@ -295,7 +296,7 @@ router.post('/:replayId/confirm-winner', authMiddleware, async (req: AuthRequest
  * Player discards a pending-confirmation replay (e.g. paused match, will replay later).
  * Sets parse_status='rejected'.
  */
-router.post('/:replayId/discard', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/:replayId/discard', authMiddleware, globalRecalculationMiddleware, async (req: AuthRequest, res) => {
   try {
     const replayId = req.params.replayId;
     const userId = req.userId;

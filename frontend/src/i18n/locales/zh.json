@@ -473,7 +473,9 @@
   "losses": "失败",
   "maintenance": {
     "title": "网站维护中",
-    "message": "我们正在进行计划的维护。请稍后再试。"
+    "message": "我们正在进行计划的维护。请稍后再试。",
+    "global_recalculation_title": "统计数据重新计算进行中",
+    "global_recalculation_message": "回放处理和确认暂时暂停。请几分钟后重试。"
   },
   "map": "地图",
   "map_balance": "地图平衡",

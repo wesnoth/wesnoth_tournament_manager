@@ -32,11 +32,26 @@ router.post('/login', async (req, res) => {
 
      // Check if user exists in users_extension and validate account status
     const existingUsers = await queryTournament(
-      'SELECT id, is_blocked FROM users_extension WHERE LOWER(nickname) = LOWER(?)',
+      'SELECT id, is_blocked, is_admin FROM users_extension WHERE LOWER(nickname) = LOWER(?)',
       [normalizedUsername]
     ) as any[];
 
     let tournamentUserId: string = '';
+
+    // Maintenance is enforced before password authentication so it also blocks
+    // users who have never received an application token.
+    if (!existingUsers?.[0]?.is_admin) {
+      const maintenanceResult = await query(
+        'SELECT setting_value FROM system_settings WHERE setting_key = ?',
+        ['maintenance_mode']
+      );
+      if (maintenanceResult.rows[0]?.setting_value === 'true') {
+        return res.status(503).json({
+          code: 'MAINTENANCE_MODE',
+          error: 'Maintenance mode is active. Please try again later.',
+        });
+      }
+    }
 
     if (existingUsers && existingUsers.length > 0) {
       tournamentUserId = existingUsers[0].id;
@@ -217,11 +232,24 @@ router.get('/validate-token', async (req, res) => {
 
     // Get tournament user info to check if admin
     const tournamentUserResult = await query(
-      'SELECT is_admin FROM users_extension WHERE id = ?',
+      'SELECT is_admin, token_invalidated_at FROM users_extension WHERE id = ?',
       [decoded.userId]
     );
 
     const isAdmin = tournamentUserResult.rows[0]?.is_admin || false;
+    const invalidatedAt = tournamentUserResult.rows[0]?.token_invalidated_at;
+    if (invalidatedAt && decoded.iat * 1000 <= new Date(invalidatedAt).getTime()) {
+      return res.status(401).json({ code: 'TOKEN_INVALIDATED', error: 'Session expired. Please log in again.' });
+    }
+    if (!isAdmin) {
+      const maintenanceResult = await query(
+        'SELECT setting_value FROM system_settings WHERE setting_key = ?',
+        ['maintenance_mode']
+      );
+      if (maintenanceResult.rows[0]?.setting_value === 'true') {
+        return res.status(503).json({ code: 'MAINTENANCE_MODE', error: 'Maintenance mode is active. Please try again later.' });
+      }
+    }
     const isTournamentModerator = await checkUserIsForumModerator(decoded.username);
 
     // Return user info

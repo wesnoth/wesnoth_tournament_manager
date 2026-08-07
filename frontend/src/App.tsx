@@ -47,6 +47,7 @@ const App: React.FC = () => {
   const { isAdmin, token, validateToken, isValidating } = useAuthStore();
   const [authChecked, setAuthChecked] = React.useState(false);
   const [maintenanceMode, setMaintenanceMode] = React.useState(false);
+  const [globalRecalculationInProgress, setGlobalRecalculationInProgress] = React.useState(false);
 
   useEffect(() => {
     // Validate token on app load if token exists
@@ -66,6 +67,7 @@ const App: React.FC = () => {
       try {
         const res = await adminService.getMaintenanceStatus();
         setMaintenanceMode(res.data.maintenance_mode);
+        setGlobalRecalculationInProgress(Boolean(res.data.global_recalculation_in_progress));
       } catch (error) {
         console.error('Error fetching maintenance status:', error);
       }
@@ -73,9 +75,23 @@ const App: React.FC = () => {
 
     checkMaintenance();
 
+    const handleMaintenanceStatusChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ maintenanceMode?: boolean }>).detail;
+      if (typeof detail?.maintenanceMode === 'boolean') {
+        setMaintenanceMode(detail.maintenanceMode);
+      }
+      // Refresh the complete status as well, keeping the global-recalculation
+      // flag accurate if another system state changed at the same time.
+      void checkMaintenance();
+    };
+    window.addEventListener('maintenance-status-changed', handleMaintenanceStatusChanged);
+
     // Check maintenance status every 30 seconds
     const interval = setInterval(checkMaintenance, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('maintenance-status-changed', handleMaintenanceStatusChanged);
+    };
   }, []);
 
   // Show loading while validating auth
@@ -93,9 +109,13 @@ const App: React.FC = () => {
   return (
     <I18nextProvider i18n={i18n}>
       <BrowserRouter>
-        <MaintenanceBanner isVisible={maintenanceMode} />
+        <MaintenanceBanner
+          isVisible={maintenanceMode || globalRecalculationInProgress}
+          maintenanceMode={maintenanceMode}
+          globalRecalculationInProgress={globalRecalculationInProgress}
+        />
         <Navbar />
-        <main className={`main-content ${maintenanceMode ? 'pt-40' : ''}`}>
+        <main className={`main-content ${maintenanceMode || globalRecalculationInProgress ? 'pt-40' : ''}`}>
           <Suspense fallback={<RouteLoader />}>
             <Routes>
               <Route path="/" element={<Home />} />

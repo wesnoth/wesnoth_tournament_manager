@@ -117,6 +117,9 @@ const AdminUsers: React.FC = () => {
       const newStatus = !maintenanceMode;
       await adminService.toggleMaintenance(newStatus, maintenanceReason || undefined);
       setMaintenanceMode(newStatus);
+      window.dispatchEvent(new CustomEvent('maintenance-status-changed', {
+        detail: { maintenanceMode: newStatus },
+      }));
       setMessage(
         newStatus
           ? t('admin.maintenance_enabled', 'Maintenance mode enabled')

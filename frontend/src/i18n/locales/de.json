@@ -473,7 +473,9 @@
   "losses": "Niederlagen",
   "maintenance": {
     "title": "Website wird gewartet",
-    "message": "Wir führen geplante Wartungsarbeiten durch. Bitte versuchen Sie es später erneut."
+    "message": "Wir führen geplante Wartungsarbeiten durch. Bitte versuchen Sie es später erneut.",
+    "global_recalculation_title": "Neuberechnung der Statistiken läuft",
+    "global_recalculation_message": "Replay-Verarbeitung und Bestätigungen sind vorübergehend pausiert. Bitte versuchen Sie es in einigen Minuten erneut."
   },
   "map": "Karte",
   "map_balance": "Karten-Balance",

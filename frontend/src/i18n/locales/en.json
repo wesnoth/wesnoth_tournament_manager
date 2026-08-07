@@ -489,7 +489,9 @@
   "losses": "Losses",
   "maintenance": {
     "title": "Site Under Maintenance",
-    "message": "We are performing scheduled maintenance. Please try again later."
+    "message": "We are performing scheduled maintenance. Please try again later.",
+    "global_recalculation_title": "Statistics Recalculation in Progress",
+    "global_recalculation_message": "Replay processing and confirmations are temporarily paused. Please try again in a few minutes."
   },
   "map": "Map",
   "map_balance": "Map Balance",

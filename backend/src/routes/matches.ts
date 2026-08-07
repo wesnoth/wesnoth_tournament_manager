@@ -24,6 +24,7 @@ import {
 import { validateAndCorrectFactions } from '../services/replayConfirmationService.js';
 import { recordPhaseGameResult } from '../tournament-engine/competitionProgression.js';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
+import { globalRecalculationMiddleware } from '../services/systemPauseService.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -720,7 +721,7 @@ router.post('/preview-replay', authMiddleware, upload.single('replay'), async (r
 });
 
 // Confirm/dispute match - MUST be BEFORE generic /:id routes
-router.post('/:id/confirm', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post('/:id/confirm', authMiddleware, globalRecalculationMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { comments, rating, action } = req.body;
@@ -1378,7 +1379,7 @@ function extractMatchDataFromReplay(parseSummary: any, replayUrl: string, winner
 // User says "I won" or "I lost" to help determine the winner
 // ============================================================================
 // Report the winner of a confidence-one replay linked to a phase-engine game.
-router.post('/report-confidence-1-replay', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post('/report-confidence-1-replay', authMiddleware, globalRecalculationMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { replayId, winner_choice } = req.body;
     const userId = req.userId;
@@ -1454,7 +1455,7 @@ router.post('/report-confidence-1-replay', authMiddleware, async (req: AuthReque
   }
 });
 
-router.post('/cancel-confidence-1-replay', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/cancel-confidence-1-replay', authMiddleware, globalRecalculationMiddleware, async (req: AuthRequest, res) => {
   try {
     const { replayId } = req.body;
     const userId = req.userId;
@@ -1868,7 +1869,7 @@ router.post('/:id/cancel-own', authMiddleware, async (req: AuthRequest, res) => 
  * Players are NOT asked for confirmation; replay goes straight to parse_status='rejected'.
  * Body: { replayId: string }
  */
-router.post('/admin-discard-replay', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/admin-discard-replay', authMiddleware, globalRecalculationMiddleware, async (req: AuthRequest, res) => {
   try {
     const { replayId } = req.body;
     if (!replayId) {

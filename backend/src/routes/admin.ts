@@ -13,6 +13,7 @@ import {
   GlobalStatsRecalculationInProgressError,
 } from '../services/globalStatsRecalculationJobService.js';
 import { isTournamentOrganizer } from '../services/tournamentAuthorizationService.js';
+import { getSystemPauseStatus, globalRecalculationMiddleware, invalidateNonAdminTokens } from '../services/systemPauseService.js';
 
 const router = Router();
 
@@ -709,7 +710,7 @@ router.get('/replays', moderatorOrAdminMiddleware, async (req: AuthRequest, res)
 });
 
 // Force-discard an unprocessed replay — accessible to admins and tournament moderators
-router.post('/replays/:replayId/force-discard', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
+router.post('/replays/:replayId/force-discard', moderatorOrAdminMiddleware, globalRecalculationMiddleware, async (req: AuthRequest, res) => {
   try {
     const { replayId } = req.params;
 
@@ -748,7 +749,7 @@ router.post('/replays/:replayId/force-discard', moderatorOrAdminMiddleware, asyn
 });
 
 // Reprocess a replay — reset it to 'new' so the parse job picks it up again
-router.post('/replays/:replayId/reprocess', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
+router.post('/replays/:replayId/reprocess', moderatorOrAdminMiddleware, globalRecalculationMiddleware, async (req: AuthRequest, res) => {
   try {
     const { replayId } = req.params;
 
@@ -2347,13 +2348,12 @@ router.delete('/tournaments/:id/teams/:teamId', authMiddleware, async (req: Auth
  */
 router.get('/maintenance-status', async (req, res) => {
   try {
-    const result = await query(
-      'SELECT setting_value FROM system_settings WHERE setting_key = ?',
-      ['maintenance_mode']
-    );
-
-    const isMaintenanceMode = result.rows.length > 0 && result.rows[0].setting_value === 'true';
-    res.json({ maintenance_mode: isMaintenanceMode });
+    const status = await getSystemPauseStatus();
+    res.json({
+      maintenance_mode: status.maintenanceMode,
+      global_recalculation_in_progress: Boolean(status.globalRecalculationJobId),
+      global_recalculation_job_id: status.globalRecalculationJobId,
+    });
   } catch (error) {
     console.error('Error fetching maintenance status:', error);
     res.status(500).json({ error: 'Failed to fetch maintenance status' });
@@ -2385,6 +2385,11 @@ router.post('/toggle-maintenance', authMiddleware, async (req: AuthRequest, res)
        WHERE setting_key = ?`,
       [enable ? 'true' : 'false', req.userId, 'maintenance_mode']
     );
+
+    if (enable) {
+      // Existing non-admin JWTs must remain unusable after maintenance ends.
+      await invalidateNonAdminTokens();
+    }
 
     // Get admin nickname for logging
     const adminUser = await query('SELECT nickname FROM users_extension WHERE id = ?', [req.userId]);
