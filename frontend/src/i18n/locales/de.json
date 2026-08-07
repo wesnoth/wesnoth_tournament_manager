@@ -183,6 +183,7 @@
   "error_loading_statistics": "Fehler beim Laden der Statistiken",
   "error_loading_tournament": "Fehler beim Laden der Turnierdaten",
   "error_max_participants_required": "Die maximale Teilnehmerzahl ist erforderlich: Verwende 0 für unbegrenzt oder einen Wert zwischen 2 und 256",
+  "error_max_concurrent_tournaments": "Du hast die maximal zulässige Anzahl gleichzeitiger Turniere für dein Konto erreicht",
   "error_tournament_assets_required": "Wähle mindestens eine Fraktion und eine Karte",
   "error_name_description_required": "Name, Beschreibung und Turniertyp sind erforderlich",
   "error_recalculating_snapshots": "Fehler beim Neu berechnen der Snapshots",

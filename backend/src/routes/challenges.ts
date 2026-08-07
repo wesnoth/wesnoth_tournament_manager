@@ -44,7 +44,7 @@ const sendChallengeDiscord = async (
   if (!DISCORD_P2P_CHALLENGE_CHANNEL_ID) return;
 
   try {
-    await discordService.publishChannelMessage(DISCORD_P2P_CHALLENGE_CHANNEL_ID, {
+    await discordService.publishDiscordMessage(DISCORD_P2P_CHALLENGE_CHANNEL_ID, {
       embeds: [{ title, color, fields, timestamp: new Date().toISOString() }],
     });
     console.log(`[CHALLENGES][DISCORD] Published action=${action} challengeId=${challengeId}`);

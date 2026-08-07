@@ -333,7 +333,7 @@ export async function sendDiscordNotification(
     console.log(`📤 [DISCORD] Sending notification to thread ${threadId} tournamentName=${tournamentName} (${logContext})`);
 
     // Send to Discord thread
-    const success = await discordService.publishTournamentMessage(threadId, discordMessage);
+    const success = await discordService.publishDiscordMessage(threadId, discordMessage);
     
     if (success) {
       console.log(`✅ [DISCORD] Notification sent to thread ${threadId} tournamentName=${tournamentName} (${logContext})`);

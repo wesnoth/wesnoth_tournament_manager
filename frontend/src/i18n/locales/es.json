@@ -192,6 +192,7 @@
   "error_loading_statistics": "Error al cargar estadísticas",
   "error_loading_tournament": "Error cargando datos del torneo",
   "error_max_participants_required": "El número máximo de participantes es obligatorio: usa 0 para ilimitado o un valor entre 2 y 256",
+  "error_max_concurrent_tournaments": "Has alcanzado el número máximo de torneos simultáneos permitidos para tu cuenta",
   "error_tournament_assets_required": "Selecciona al menos una facción y un mapa",
   "error_name_description_required": "Nombre, descripción y tipo de torneo son obligatorios",
   "error_recalculating_snapshots": "Error al recalcular snapshots",

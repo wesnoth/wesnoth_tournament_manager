@@ -29,6 +29,12 @@ const TOURNAMENT_TYPES = ['elimination', 'league', 'swiss', 'swiss_elimination']
 const TOURNAMENT_MODES = ['ranked', 'unranked', 'team'] as const;
 const MATCH_FORMATS = ['bo1', 'bo3', 'bo5'] as const;
 
+// Keep the backend limit authoritative; invalid or missing configuration falls back to four.
+const configuredConcurrentTournamentLimit = Number.parseInt(process.env.MAX_USER_CONCURRENT_TOURNAMENTS || '4', 10);
+const MAX_USER_CONCURRENT_TOURNAMENTS = Number.isInteger(configuredConcurrentTournamentLimit) && configuredConcurrentTournamentLimit > 0
+  ? configuredConcurrentTournamentLimit
+  : 4;
+
 interface TournamentConfiguration {
   tournament_type: string;
   tournament_mode: string;
@@ -424,40 +430,68 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     // Generate UUID for tournament
     tournamentId = randomUUID();
 
-    // Create tournament
-    const tournamentResult = await query(
-      `INSERT INTO tournaments (
-        id, name, description, forum_topic_id, rules_template_id, rules_content, creator_id, tournament_type, tournament_mode,
-        max_participants, round_duration_days, auto_advance_round, auto_progress, scheduled_start_at,
-        total_rounds, general_rounds, final_rounds,
-        general_rounds_format, final_rounds_format,
-        status, current_round
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       `,
-      [
-        tournamentId,
-        name.trim(),
-        description.trim(),
-        forumTopicId,
-        selectedTemplateId,
-        resolvedRulesContent,
-        req.userId, 
-        tournament_type,
-        tournament_mode || 'ranked',
-        max_participants, 
-        round_duration_days || 7,
-        effectiveAutoAdvanceRound,
-        effectiveAutoAdvanceRound,
-        scheduled_start_at ? toMariaDbDateTime(scheduled_start_at) : null,
-        totalRounds,
-        tournamentTypeLower === 'elimination' ? 0 : (general_rounds || 0),
-        tournamentTypeLower === 'elimination' ? 0 : (final_rounds || 0),
-        general_rounds_format || 'bo3',
-        final_rounds_format || 'bo5',
-        'registration_open',
-        0
-      ]
-    );
+    // Lock the creator row while counting and inserting so concurrent requests
+    // cannot both pass the limit check and create an extra active tournament.
+    const creationConnection = await pool.getConnection();
+    try {
+      await creationConnection.beginTransaction();
+      await creationConnection.execute('SELECT id FROM users_extension WHERE id = ? FOR UPDATE', [req.userId]);
+      const [activeCountRows] = await creationConnection.execute<any[]>(
+        `SELECT COUNT(*) AS active_count
+         FROM tournaments
+         WHERE creator_id = ? AND status <> 'finished'`,
+        [req.userId]
+      );
+      const activeTournamentCount = Number(activeCountRows[0]?.active_count || 0);
+
+      if (activeTournamentCount >= MAX_USER_CONCURRENT_TOURNAMENTS) {
+        await creationConnection.rollback();
+        return res.status(409).json({
+          error: 'Maximum concurrent tournaments limit for this user reached.',
+          code: 'MAX_USER_CONCURRENT_TOURNAMENTS'
+        });
+      }
+
+      await creationConnection.execute(
+        `INSERT INTO tournaments (
+          id, name, description, forum_topic_id, rules_template_id, rules_content, creator_id, tournament_type, tournament_mode,
+          max_participants, round_duration_days, auto_advance_round, auto_progress, scheduled_start_at,
+          total_rounds, general_rounds, final_rounds,
+          general_rounds_format, final_rounds_format,
+          status, current_round
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         `,
+        [
+          tournamentId,
+          name.trim(),
+          description.trim(),
+          forumTopicId,
+          selectedTemplateId,
+          resolvedRulesContent,
+          req.userId,
+          tournament_type,
+          tournament_mode || 'ranked',
+          max_participants,
+          round_duration_days || 7,
+          effectiveAutoAdvanceRound,
+          effectiveAutoAdvanceRound,
+          scheduled_start_at ? toMariaDbDateTime(scheduled_start_at) : null,
+          totalRounds,
+          tournamentTypeLower === 'elimination' ? 0 : (general_rounds || 0),
+          tournamentTypeLower === 'elimination' ? 0 : (final_rounds || 0),
+          general_rounds_format || 'bo3',
+          final_rounds_format || 'bo5',
+          'registration_open',
+          0
+        ]
+      );
+      await creationConnection.commit();
+    } catch (error) {
+      await creationConnection.rollback();
+      throw error;
+    } finally {
+      creationConnection.release();
+    }
 
     // Ensure creator is registered as organizer (for multi-organizer model)
     await query(
@@ -536,7 +570,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       console.warn('Could not fetch organizers list:', userError);
     }
 
-    // Create Discord forum thread for the tournament
+    // Create the Discord thread for the tournament
     try {
       const threadId = await discordService.createTournamentThread(
         tournamentId.toString(),
@@ -1791,7 +1825,7 @@ router.post('/:tournamentId/participants/:participantId/reject', authMiddleware,
           },
           timestamp: new Date().toISOString(),
         };
-        await discordService.publishTournamentMessage(
+        await discordService.publishDiscordMessage(
           tournamentResult.rows[0].discord_thread_id,
           { embeds: [embed] }
         );

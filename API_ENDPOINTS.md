@@ -366,7 +366,8 @@ Admin triggers manual full recalculation:
 
 ### `POST /api/tournaments` (create tournament)
 - Inserts tournament into DB.
-- **Discord side effect** (if Discord configured): calls `discordService.createTournamentThread()` → creates a forum thread in the configured Discord server, stores `discord_thread_id` in `tournaments` table. Posts `postTournamentCreated()` message to the thread.
+- Returns HTTP 409 with code `MAX_USER_CONCURRENT_TOURNAMENTS` when the authenticated user has reached the configured number of non-finished tournaments.
+- **Discord side effect** (if Discord configured): calls `discordService.createTournamentThread()` → creates a Discord thread in the configured forum channel, stores `discord_thread_id` in `tournaments` table. Posts `postTournamentCreated()` message to the thread.
 
 ### Tournament lifecycle Discord notifications
 Triggered by organizer actions on the tournament:

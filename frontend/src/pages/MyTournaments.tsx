@@ -119,7 +119,11 @@ const MyTournaments: React.FC = () => {
       setShowCreateForm(false);
       await fetchTournaments();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to create tournament');
+      if (err.response?.data?.code === 'MAX_USER_CONCURRENT_TOURNAMENTS') {
+        setError(t('error_max_concurrent_tournaments'));
+      } else {
+        setError(err.response?.data?.error || t('error_failed_create_tournament'));
+      }
     }
   };
 

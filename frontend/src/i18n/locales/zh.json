@@ -183,6 +183,7 @@
   "error_loading_statistics": "加载统计信息出错",
   "error_loading_tournament": "加载锦标赛数据时出错",
   "error_max_participants_required": "必须设置最大参与人数：无限制请输入 0，否则请输入 2 到 256 之间的值",
+  "error_max_concurrent_tournaments": "你已达到帐户允许同时创建的锦标赛数量上限",
   "error_tournament_assets_required": "请至少选择一个派系和一张地图",
   "error_name_description_required": "名称、描述和锦标赛类型为必填项",
   "error_recalculating_snapshots": "重新计算快照出错",

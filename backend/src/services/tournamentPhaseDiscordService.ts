@@ -94,7 +94,7 @@ async function publishPhaseStarted(tournamentId: string, phaseId: string): Promi
     visiblePairings.push(`…and ${pairings.rows.length - visiblePairings.length} more pairings.`);
   }
 
-  await deliver(`phase ${phaseId} start`, () => discordService.publishTournamentMessage(
+  await deliver(`phase ${phaseId} start`, () => discordService.publishDiscordMessage(
     phase.discord_thread_id,
     {
       embeds: [{
@@ -148,7 +148,7 @@ async function publishRoundStandings(tournamentId: string, roundId: string): Pro
     `**${standing.rank_position}.** ${neutralizeMentions(standing.entry_name)} — ${Number(standing.points)} pts (${standing.wins}W-${standing.losses}L) · OMP ${Number(standing.omp).toFixed(2)} · GWP ${Number(standing.gwp).toFixed(2)} · OGP ${Number(standing.ogp).toFixed(2)}`
   ).join('\n');
 
-  await deliver(`round ${roundId} standings`, () => discordService.publishTournamentMessage(
+  await deliver(`round ${roundId} standings`, () => discordService.publishDiscordMessage(
     round.discord_thread_id,
     {
       embeds: [{
@@ -208,7 +208,7 @@ async function publishPhaseCompleted(tournamentId: string, phaseId: string): Pro
     inline: false,
   }));
 
-  await deliver(`phase ${phaseId} completion`, () => discordService.publishTournamentMessage(
+  await deliver(`phase ${phaseId} completion`, () => discordService.publishDiscordMessage(
     phase.discord_thread_id,
     {
       embeds: [{
@@ -250,7 +250,7 @@ async function publishTournamentFinished(tournamentId: string): Promise<void> {
     `**${result.placement}.** ${neutralizeMentions(result.entry_name)}`
   ).join('\n');
 
-  await deliver(`tournament ${tournamentId} completion`, () => discordService.publishTournamentMessage(
+  await deliver(`tournament ${tournamentId} completion`, () => discordService.publishDiscordMessage(
     tournament.discord_thread_id,
     {
       embeds: [{

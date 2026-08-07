@@ -25,7 +25,7 @@ The backend reads these environment variables:
 | `DISCORD_ENABLED=true` | Enables Discord publishing. Any other value disables it. |
 | `DISCORD_BOT_TOKEN` | Bot token used for Discord REST API requests. |
 | `DISCORD_GUILD_ID` | Guild used when validating a user's Discord ID. |
-| `DISCORD_FORUM_CHANNEL_ID` | Forum channel where tournament threads are created. |
+| `DISCORD_FORUM_CHANNEL_ID` | Forum channel where tournament Discord threads are created. |
 | `DISCORD_P2P_CHALLENGE_CHANNEL_ID` | Plain channel where public P2P challenge events are posted. |
 
 Discord publishing requires the bot token and the relevant channel ID. Profile guild validation additionally requires `DISCORD_GUILD_ID`.
@@ -54,13 +54,13 @@ There is no username search or discriminator lookup. Format validation is local;
 | Scheduling routes | `backend/src/routes/tournament-scheduling.ts` | Supply schedule events and canonical Discord IDs to the notification service. |
 | Profile integration | `backend/src/routes/users.ts` and `frontend/src/pages/Profile.tsx` | Accept, display, and validate the numeric Discord ID. |
 
-The tournament's Discord forum thread ID is stored in `tournaments.discord_thread_id`. Later tournament messages are sent to that thread only when the value exists.
+The tournament's Discord thread ID is stored in `tournaments.discord_thread_id`. Later tournament messages are sent to that thread only when the value exists.
 
 ## User-visible notification flows
 
 ### Tournament notifications
 
-Tournament creation creates a forum thread and publishes the initial description, rules, organizers, type, capacity, and planned start. Registration closure repeats the planned start so accepted participants can see it in their own Discord timezone. Adding, changing, or removing that date before the tournament starts publishes a dedicated update. Later messages cover registration, participant acceptance, tournament start, league start, round start, pairings, eliminations, standings, cancellation, and completion.
+Tournament creation creates a Discord thread in the configured forum channel and publishes the initial description, rules, organizers, type, capacity, and planned start. Registration closure repeats the planned start so accepted participants can see it in their own Discord timezone. Adding, changing, or removing that date before the tournament starts publishes a dedicated update. Later messages cover registration, participant acceptance, tournament start, league start, round start, pairings, eliminations, standings, cancellation, and completion.
 
 Automatic tournament progression can publish completion and league standings messages. The organizer-only results endpoint is also available as an intentional manual resend mechanism for league standings and final results.
 
@@ -72,7 +72,7 @@ These public messages use application nicknames and schedule information. They c
 
 ### Tournament scheduling notifications
 
-Scheduling messages are sent to the tournament forum thread. They cover proposals, confirmations, rejections, changes, and cancellations. When recipients have stored canonical Discord IDs, the notification content includes direct mentions without performing any Discord username lookup.
+Scheduling messages are sent to the tournament Discord thread. They cover proposals, confirmations, rejections, changes, and cancellations. When recipients have stored canonical Discord IDs, the notification content includes direct mentions without performing any Discord username lookup.
 
 The same events are stored in `user_notifications` so users can see them inside the application even when they were offline or Discord publishing failed.
 

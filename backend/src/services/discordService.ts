@@ -44,12 +44,19 @@ class DiscordService {
   private toDiscordSafeText(input: string | undefined, maxLength: number): string {
     if (!input) return '';
     const normalized = input
+      // Remove Markdown image syntax while preserving the image's accessible alt text.
       .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '$1')
+      // Remove Markdown link destinations while preserving the visible link text.
       .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
+      // Normalize Windows and legacy carriage-return line endings to Unix-style newlines.
       .replace(/\r\n?/g, '\n')
+      // Remove trailing spaces and tabs from each line without changing internal spacing.
       .replace(/[ \t]+\n/g, '\n')
+      // Collapse excessive blank lines so paragraphs remain readable within Discord embeds.
       .replace(/\n{3,}/g, '\n\n')
+      // Break the @everyone mention token so user-authored text cannot notify the entire server.
       .replace(/@everyone\b/g, '@\u200beveryone')
+      // Break the @here mention token so user-authored text cannot notify online members.
       .replace(/@here\b/g, '@\u200bhere')
       .trim();
 
@@ -93,6 +100,7 @@ class DiscordService {
 
     // Tournament DATETIME values are persisted in UTC even though MariaDB does
     // not retain a timezone suffix. Add it when a raw SQL string is returned.
+    // Detect a MariaDB DATETIME value without timezone metadata before treating it as UTC.
     const normalized = typeof value === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)
       ? `${value.replace(' ', 'T')}Z`
       : value;
@@ -104,7 +112,7 @@ class DiscordService {
   }
 
   /**
-   * Create the forum thread that becomes the tournament's Discord discussion space.
+   * Create the Discord thread that becomes the tournament's discussion space.
    * @param tournamentId Application tournament ID used for logging.
    * @param tournamentName Name used in the Discord thread title.
    * @param tournamentType Tournament type shown in the title.
@@ -169,25 +177,25 @@ class DiscordService {
 
   /**
    * Publish an embed or content message to a Discord channel or tournament thread.
-   * @param threadId Discord channel or thread ID receiving the message.
+   * @param channelOrThreadId Discord channel or thread ID receiving the message.
    * @param message Discord content and/or embeds to publish.
    * @returns `true` when Discord accepts the message; otherwise `false`.
    */
-  async publishTournamentMessage(
-    threadId: string,
+  async publishDiscordMessage(
+    channelOrThreadId: string,
     message: DiscordMessage
   ): Promise<boolean> {
     if (!DISCORD_ENABLED) {
       console.log(`⏭️  Discord disabled (DISCORD_ENABLED=${process.env.DISCORD_ENABLED}). Skipping message publish.`);
       return false;
     }
-    if (!BOT_TOKEN || !threadId) {
+    if (!BOT_TOKEN || !channelOrThreadId) {
       return false;
     }
 
     try {
       await axios.post(
-        `${DISCORD_API_URL}/channels/${threadId}/messages`,
+        `${DISCORD_API_URL}/channels/${channelOrThreadId}/messages`,
         message,
         { headers: this.headers }
       );
@@ -199,20 +207,7 @@ class DiscordService {
   }
 
   /**
-   * Publish a message to a plain Discord channel, such as the P2P challenge channel.
-   * @param channelId Discord channel ID receiving the message.
-   * @param message Discord content and/or embeds to publish.
-   * @returns `true` when Discord accepts the message; otherwise `false`.
-   */
-  async publishChannelMessage(
-    channelId: string,
-    message: DiscordMessage
-  ): Promise<boolean> {
-    return this.publishTournamentMessage(channelId, message);
-  }
-
-  /**
-   * Publish the initial tournament details after its forum thread is created.
+   * Publish the initial tournament details after its Discord thread is created.
    * @returns Whether the initial message was published successfully.
    */
   async postTournamentCreated(
@@ -263,7 +258,7 @@ class DiscordService {
       timestamp: new Date().toISOString(),
     };
 
-    return this.publishTournamentMessage(threadId, { embeds: [embed] });
+    return this.publishDiscordMessage(threadId, { embeds: [embed] });
   }
 
   /**
@@ -297,7 +292,7 @@ class DiscordService {
       timestamp: new Date().toISOString(),
     };
 
-    return this.publishTournamentMessage(threadId, { embeds: [embed] });
+    return this.publishDiscordMessage(threadId, { embeds: [embed] });
   }
 
   /**
@@ -326,7 +321,7 @@ class DiscordService {
       timestamp: new Date().toISOString(),
     };
 
-    return this.publishTournamentMessage(threadId, { embeds: [embed] });
+    return this.publishDiscordMessage(threadId, { embeds: [embed] });
   }
 
   /**
@@ -360,7 +355,7 @@ class DiscordService {
       timestamp: new Date().toISOString(),
     };
 
-    return this.publishTournamentMessage(threadId, { embeds: [embed] });
+    return this.publishDiscordMessage(threadId, { embeds: [embed] });
   }
 
   /** Publish any addition, change, or removal of the planned tournament start. */
@@ -392,7 +387,7 @@ class DiscordService {
       timestamp: new Date().toISOString(),
     };
 
-    return this.publishTournamentMessage(threadId, { embeds: [embed] });
+    return this.publishDiscordMessage(threadId, { embeds: [embed] });
   }
 
   /**
@@ -427,7 +422,7 @@ class DiscordService {
       timestamp: new Date().toISOString(),
     };
 
-    return this.publishTournamentMessage(threadId, { embeds: [embed] });
+    return this.publishDiscordMessage(threadId, { embeds: [embed] });
   }
 
   /**
@@ -462,7 +457,7 @@ class DiscordService {
       timestamp: new Date().toISOString(),
     };
 
-    return this.publishTournamentMessage(threadId, { embeds: [embed] });
+    return this.publishDiscordMessage(threadId, { embeds: [embed] });
   }
 
   /**
@@ -488,7 +483,7 @@ class DiscordService {
       timestamp: new Date().toISOString(),
     };
 
-    return this.publishTournamentMessage(threadId, { embeds: [embed] });
+    return this.publishDiscordMessage(threadId, { embeds: [embed] });
   }
 
   /**
@@ -522,7 +517,7 @@ class DiscordService {
       timestamp: new Date().toISOString(),
     };
 
-    return this.publishTournamentMessage(threadId, { embeds: [embed] });
+    return this.publishDiscordMessage(threadId, { embeds: [embed] });
   }
 
   /**
@@ -557,7 +552,7 @@ class DiscordService {
       timestamp: new Date().toISOString(),
     };
 
-    return this.publishTournamentMessage(threadId, { embeds: [embed] });
+    return this.publishDiscordMessage(threadId, { embeds: [embed] });
   }
 
   /**
@@ -585,7 +580,7 @@ class DiscordService {
       timestamp: new Date().toISOString(),
     };
 
-    return this.publishTournamentMessage(threadId, { embeds: [embed] });
+    return this.publishDiscordMessage(threadId, { embeds: [embed] });
   }
 
   /**
@@ -620,7 +615,7 @@ class DiscordService {
       timestamp: new Date().toISOString(),
     };
 
-    return this.publishTournamentMessage(threadId, { embeds: [embed] });
+    return this.publishDiscordMessage(threadId, { embeds: [embed] });
   }
 
   /**
@@ -649,7 +644,7 @@ class DiscordService {
       timestamp: new Date().toISOString(),
     };
 
-    return this.publishTournamentMessage(threadId, { embeds: [embed] });
+    return this.publishDiscordMessage(threadId, { embeds: [embed] });
   }
 }
 
