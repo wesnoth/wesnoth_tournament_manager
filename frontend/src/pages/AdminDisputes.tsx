@@ -2,8 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { adminService, matchService } from '../services/api';
+import { matchService } from '../services/api';
 import MainLayout from '../components/MainLayout';
+import GlobalStatsRecalculationProgress from '../components/GlobalStatsRecalculationProgress';
+import { useGlobalStatsRecalculation } from '../hooks/useGlobalStatsRecalculation';
 
 interface DisputedMatch {
   id: string;
@@ -41,6 +43,12 @@ const AdminDisputes: React.FC = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const {
+    status: recalculationStatus,
+    progress: recalculationProgress,
+    trackJob: trackRecalculationJob,
+    reset: resetRecalculation,
+  } = useGlobalStatsRecalculation();
 
   useEffect(() => {
     if (!isAuthenticated || (!isAdmin && !isTournamentModerator)) {
@@ -69,6 +77,7 @@ const AdminDisputes: React.FC = () => {
   };
 
   const handleValidateDispute = async (matchId: string) => {
+    resetRecalculation();
     setProcessingId(matchId);
     setError('');
     try {
@@ -84,6 +93,7 @@ const AdminDisputes: React.FC = () => {
   };
 
   const handleRejectDispute = async (matchId: string) => {
+    resetRecalculation();
     setProcessingId(matchId);
     setError('');
     try {
@@ -111,23 +121,7 @@ const AdminDisputes: React.FC = () => {
 
       const jobId = response.data?.recalculationJobId;
       if (jobId) {
-        let status = 'queued';
-        while (status === 'queued' || status === 'running') {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          const statusResponse = await adminService.getRecalculateAllStatsStatus(jobId);
-          const job = statusResponse.data;
-          status = job.status;
-          if (status === 'running') {
-            setMessage(t('admin.recalculation_progress', {
-              defaultValue: 'Recalculating statistics: {{current}}/{{total}}',
-              current: job.progress_current || 0,
-              total: job.progress_total || 0,
-            }));
-          }
-        }
-        setMessage(status === 'completed'
-          ? t('admin.recalculation_completed', 'Global statistics recalculation completed')
-          : t('admin.recalculation_failed', 'Global statistics recalculation failed'));
+        await trackRecalculationJob(jobId);
       }
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || t('error_awarding_dispute_win'));
@@ -153,8 +147,9 @@ const AdminDisputes: React.FC = () => {
       <div data-help-id="region-match-disputes" className="max-w-6xl mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold text-gray-800 mb-6">Manage Match Disputes</h1>
 
-        {error && <p className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</p>}
-        {message && <p className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-4">{message}</p>}
+        {error && recalculationStatus === 'idle' && <p className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</p>}
+        <GlobalStatsRecalculationProgress status={recalculationStatus} progress={recalculationProgress} />
+        {recalculationStatus === 'idle' && message && <p className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-4">{message}</p>}
 
         {disputes.length === 0 ? (
           <p className="text-center text-gray-600">{t('no_data')}</p>

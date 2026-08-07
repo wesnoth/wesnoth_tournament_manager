@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { adminService } from '../services/api';
 import MainLayout from '../components/MainLayout';
+import GlobalStatsRecalculationProgress from '../components/GlobalStatsRecalculationProgress';
+import { useGlobalStatsRecalculation } from '../hooks/useGlobalStatsRecalculation';
 
 interface ManagedUser {
   id: string;
@@ -16,17 +18,6 @@ interface ManagedUser {
   is_moderator?: boolean;
   enable_ranked?: boolean;
 }
-
-const RECALCULATION_PHASES: Record<string, { index: number; key: string }> = {
-  starting: { index: 1, key: 'admin.recalculation_phase_starting' },
-  replaying_matches: { index: 1, key: 'admin.recalculation_phase_matches' },
-  updating_users: { index: 2, key: 'admin.recalculation_phase_users' },
-  recalculating_player_statistics: { index: 3, key: 'admin.recalculation_phase_player_stats' },
-  recalculating_faction_statistics: { index: 4, key: 'admin.recalculation_phase_faction_stats' },
-  calculating_player_of_month: { index: 5, key: 'admin.recalculation_phase_player_of_month' },
-};
-
-const RECALCULATION_PHASE_COUNT = 5;
 
 const AdminUsers: React.FC = () => {
   const { t } = useTranslation();
@@ -43,8 +34,12 @@ const AdminUsers: React.FC = () => {
   const [actionType, setActionType] = useState('');
   const [searchNIC, setSearchNIC] = useState('');
   const [recalculatingStats, setRecalculatingStats] = useState(false);
-  const [recalculationStatus, setRecalculationStatus] = useState<'idle' | 'running' | 'completed' | 'failed'>('idle');
-  const [recalculationProgress, setRecalculationProgress] = useState({ phase: 'starting', current: 0, total: 0 });
+  const {
+    status: recalculationStatus,
+    progress: recalculationProgress,
+    start: startRecalculation,
+    reset: resetRecalculation,
+  } = useGlobalStatsRecalculation();
   const [userStatusFilter, setUserStatusFilter] = useState('all');
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [maintenanceReason, setMaintenanceReason] = useState('');
@@ -204,7 +199,7 @@ const AdminUsers: React.FC = () => {
   };
 
   const handleAction = (user: ManagedUser, action: string) => {
-    setRecalculationStatus('idle');
+    resetRecalculation();
     setSelectedUser(user);
     setActionType(action);
     setShowModal(true);
@@ -221,41 +216,16 @@ const AdminUsers: React.FC = () => {
 
     try {
       setRecalculatingStats(true);
-      setRecalculationStatus('running');
       setError('');
       setMessage('');
-      const res = await adminService.recalculateAllStats();
-      const jobId = res.data.jobId;
-      setRecalculationProgress({ phase: 'starting', current: 0, total: 0 });
-
-      let status = 'queued';
-      while (status === 'queued' || status === 'running') {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        const statusResponse = await adminService.getRecalculateAllStatsStatus(jobId);
-        const job = statusResponse.data;
-        status = job.status;
-        setRecalculationProgress({
-          phase: job.phase || 'starting',
-          current: Number(job.progress_current || 0),
-          total: Number(job.progress_total || 0),
-        });
-        if (status === 'running') {
-          setRecalculationStatus('running');
-        }
-      }
-
-      if (status === 'completed') {
-        setRecalculationStatus('completed');
-        setMessage('');
-      } else {
-        setRecalculationStatus('failed');
+      const status = await startRecalculation();
+      if (status !== 'completed') {
         throw new Error(t('admin.recalculation_failed', 'Global statistics recalculation failed'));
       }
       // Refresh users list
       fetchUsers();
       setTimeout(() => setMessage(''), 5000);
     } catch (err: any) {
-      setRecalculationStatus('failed');
       setMessage('');
       setError('');
     } finally {
@@ -273,43 +243,8 @@ const AdminUsers: React.FC = () => {
       <h1 className="text-3xl font-bold text-gray-800 mb-6">{t('admin_users_title')}</h1>
 
       {error && <p className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</p>}
-      {recalculationStatus !== 'idle' ? (
-        <div className={`mb-4 rounded-lg border px-4 py-3 ${
-          recalculationStatus === 'running'
-            ? 'border-purple-200 bg-purple-50 text-purple-900'
-            : recalculationStatus === 'completed'
-              ? 'border-green-400 bg-green-100 text-green-700'
-              : 'border-red-400 bg-red-100 text-red-700'
-        }`}>
-          {recalculationStatus === 'running' ? (
-            <>
-              {(() => {
-                const phase = RECALCULATION_PHASES[recalculationProgress.phase] || RECALCULATION_PHASES.starting;
-                const progress = recalculationProgress.total > 0
-                  ? Math.min(100, Math.round((recalculationProgress.current / recalculationProgress.total) * 100))
-                  : 0;
-                return (
-                  <>
-                    <div className="flex justify-between gap-4 text-sm font-semibold">
-                      <span>{t('admin.recalculation_phase_label', 'Phase')} {phase.index}/{RECALCULATION_PHASE_COUNT} — {t(phase.key)}</span>
-                      <span>{recalculationProgress.current}/{recalculationProgress.total || '—'}</span>
-                    </div>
-                    <div className="mt-2 h-2 overflow-hidden rounded bg-purple-200">
-                      <div className="h-full bg-purple-600 transition-all" style={{ width: `${progress}%` }} />
-                    </div>
-                  </>
-                );
-              })()}
-            </>
-          ) : (
-            <span className="font-semibold">
-              {recalculationStatus === 'completed'
-                ? t('admin.recalculation_completed', 'Global statistics recalculation completed')
-                : t('admin.recalculation_failed', 'Global statistics recalculation failed')}
-            </span>
-          )}
-        </div>
-      ) : message ? <p className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-4">{message}</p> : null}
+      <GlobalStatsRecalculationProgress status={recalculationStatus} progress={recalculationProgress} />
+      {recalculationStatus === 'idle' && message && <p className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-4">{message}</p>}
 
       <section className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-white rounded-lg shadow-md p-6">
