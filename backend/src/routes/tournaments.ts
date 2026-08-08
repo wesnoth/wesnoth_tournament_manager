@@ -607,7 +607,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     if (error.code === 'ER_DUP_ENTRY' && String(error.message).includes('forum_topic')) {
       return res.status(409).json({ error: 'This forum topic is already assigned to another tournament' });
     }
-    if (sendUserActionRateLimitError(res, error)) return;
+    if (sendUserActionRateLimitError(req, res, error)) return;
     if (error.issues) return res.status(400).json({ error: error.message, issues: error.issues });
     res.status(500).json({ error: 'Failed to create tournament', details: error.message });
   }

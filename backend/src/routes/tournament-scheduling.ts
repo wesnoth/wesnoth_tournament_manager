@@ -350,7 +350,7 @@ router.post('/tournament/:tournamentId/series/:seriesId/propose-slots', authMidd
     return res.json({ success: true, ...result });
   } catch (error) {
     const message = (error as Error).message || 'Failed to propose schedule';
-    if (sendUserActionRateLimitError(res, error)) return;
+    if (sendUserActionRateLimitError(req, res, error)) return;
     return res.status(message.includes('already reserved') ? 409 : 400).json({ error: message });
   }
 });
@@ -544,7 +544,7 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
     return res.json({ success: true, counterProposalId: result.counterProposalId, slotsCreated: result.slotsCreated });
   } catch (error) {
     console.error('❌ [SCHEDULING] Error creating counter-proposal:', error);
-    if (sendUserActionRateLimitError(res, error)) return;
+    if (sendUserActionRateLimitError(req, res, error)) return;
     return res.status(400).json({ error: (error as any).message || 'Failed to create counter-proposal' });
   }
 });
@@ -575,7 +575,7 @@ router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, re
     return res.json({ success: true, slotsCreated: result.slotsCreated });
   } catch (error) {
     console.error('❌ [SCHEDULING] Error modifying proposal:', error);
-    if (sendUserActionRateLimitError(res, error)) return;
+    if (sendUserActionRateLimitError(req, res, error)) return;
     return res.status(400).json({ error: (error as any).message || 'Failed to modify proposal' });
   }
 });

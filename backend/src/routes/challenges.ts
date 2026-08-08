@@ -177,7 +177,7 @@ router.post('/proposals', authMiddleware, async (req: AuthRequest, res: Response
     return res.json({ success: true, proposalId, slotsCreated });
   } catch (error) {
     console.error('❌ [CHALLENGES] Error creating proposal:', error);
-    if (sendUserActionRateLimitError(res, error)) return;
+    if (sendUserActionRateLimitError(req, res, error)) return;
     return res.status(400).json({ error: (error as Error).message || 'Failed to create challenge proposal' });
   }
 });
@@ -292,7 +292,7 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
     return res.json({ success: true, ...result });
   } catch (error) {
     console.error('❌ [CHALLENGES] Error creating counter-proposal:', error);
-    if (sendUserActionRateLimitError(res, error)) return;
+    if (sendUserActionRateLimitError(req, res, error)) return;
     return res.status(400).json({ error: (error as Error).message || 'Failed to create counter-proposal' });
   }
 });
@@ -413,7 +413,7 @@ router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, re
     return res.json({ success: true, proposalId });
   } catch (error) {
     console.error('❌ [CHALLENGES] Error updating proposal:', error);
-    if (sendUserActionRateLimitError(res, error)) return;
+    if (sendUserActionRateLimitError(req, res, error)) return;
     return res.status(400).json({ error: (error as Error).message || 'Failed to update proposal' });
   }
 });
