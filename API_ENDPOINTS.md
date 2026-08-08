@@ -78,7 +78,7 @@
 
 ## Tournament Routes
 
-- `[POST] /api/tournaments` — Private — body: tournament config fields including optional `organizer_ids: string[]` and `scheduled_start_at` — Create a tournament.
+- `[POST] /api/tournaments` — Private — body: tournament config fields including optional `organizer_ids: string[]` and `scheduled_start_at` — Create a tournament. Successful creations are limited per user by a rolling window (default: 3 per hour).
 - `[GET] /api/tournaments/my` — Private — Tournaments managed by the current user as creator or co-organizer.
 - `[GET] /api/tournaments/:id` — Public — Tournament full details.
 - `[GET] /api/tournaments/:id/organizers` — Public — List tournament organizers (creator + co-organizers).
@@ -149,6 +149,8 @@
 - `[POST] /api/challenges/proposals/:proposalId/counter-propose` — Private — body: `{ slot_datetimes[], notes?, visibility? }` — Create P2P counter-proposal.
 - `[POST] /api/challenges/proposals/:proposalId/cancel` — Private — Cancel P2P proposal.
 - `[PUT] /api/challenges/proposals/:proposalId` — Private — body: `{ slot_datetimes[], notes? }` — Update a pending proposal owned by its proposer.
+
+P2P proposal creation, counter-proposal, and update operations share a rolling per-user limit (default: 5 per hour). Tournament schedule proposal creation, counter-proposal, and update operations use a separate rolling limit (default: 10 per hour). Exceeding any application action limit returns HTTP 429 with `Retry-After`, a localized `error`, and both UTC and profile-timezone retry timestamps.
 
 ---
 
@@ -366,7 +368,7 @@ Admin triggers manual full recalculation:
 
 ### `POST /api/tournaments` (create tournament)
 - Inserts tournament into DB.
-- Returns HTTP 409 with code `MAX_USER_CONCURRENT_TOURNAMENTS` when the authenticated user has reached the configured number of non-finished tournaments.
+- Returns HTTP 429 with code `USER_ACTION_RATE_LIMIT_EXCEEDED` when the authenticated user reaches the configured rolling creation limit.
 - **Discord side effect** (if Discord configured): calls `discordService.createTournamentThread()` → creates a Discord thread in the configured forum channel, stores `discord_thread_id` in `tournaments` table. Posts `postTournamentCreated()` message to the thread.
 
 ### Tournament lifecycle Discord notifications

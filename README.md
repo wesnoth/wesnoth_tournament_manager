@@ -509,6 +509,13 @@ JWT_EXPIRATION=7d
 PORT=3000
 NODE_ENV=development
 
+# Rolling per-user action rate limits. These defaults are also used when the
+# variables are absent or invalid.
+USER_ACTION_RATE_LIMIT_WINDOW_MS=3600000
+TOURNAMENT_CREATION_RATE_LIMIT_MAX=3
+P2P_CHALLENGE_RATE_LIMIT_MAX=5
+TOURNAMENT_SCHEDULE_RATE_LIMIT_MAX=10
+
 # Frontend URL (for CORS)
 FRONTEND_URL=http://localhost:5173
 

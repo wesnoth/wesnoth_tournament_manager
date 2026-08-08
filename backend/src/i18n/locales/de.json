@@ -15,5 +15,10 @@
     "registration_confirmation_message": "Deine Registrierung ist abgeschlossen. Willkommen beim Wesnoth-Turniermanager!",
     "account_unlocked_subject": "Konto freigeschaltet",
     "account_unlocked_message": "Dein Konto wurde von einem Administrator freigeschaltet. Du kannst dich jetzt anmelden."
+  },
+  "rate_limits": {
+    "tournament_creation": "Du hast das Limit für die Turniererstellung erreicht. Versuche es nach {{retryAt}} erneut.",
+    "p2p_challenge": "Du hast das Limit für P2P-Herausforderungsaktionen erreicht. Versuche es nach {{retryAt}} erneut.",
+    "tournament_schedule": "Du hast das Limit für Turnierterminaktionen erreicht. Versuche es nach {{retryAt}} erneut."
   }
 }

@@ -15,5 +15,10 @@
     "registration_confirmation_message": "Your registration is complete. Welcome to Wesnoth Tournament Manager!",
     "account_unlocked_subject": "Account unlocked",
     "account_unlocked_message": "Your account has been unlocked by an administrator. You can now log in."
+  },
+  "rate_limits": {
+    "tournament_creation": "You have reached the tournament creation rate limit. Try again after {{retryAt}}.",
+    "p2p_challenge": "You have reached the P2P challenge action rate limit. Try again after {{retryAt}}.",
+    "tournament_schedule": "You have reached the tournament schedule action rate limit. Try again after {{retryAt}}."
   }
 }

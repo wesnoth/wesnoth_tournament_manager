@@ -308,9 +308,10 @@ export default function ScheduleProposalModalP2P({
           onClose();
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error proposing challenge:', err);
-      setError('Failed to propose challenge');
+      // Preserve localized 429 details, including the profile-timezone retry time.
+      setError(err.response?.data?.error || 'Failed to propose challenge');
     } finally {
       setLoading(false);
     }

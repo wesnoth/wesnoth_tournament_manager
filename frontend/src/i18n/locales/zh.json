@@ -194,7 +194,6 @@
   "error_loading_statistics": "加载统计信息出错",
   "error_loading_tournament": "加载锦标赛数据时出错",
   "error_max_participants_required": "必须设置最大参与人数：无限制请输入 0，否则请输入 2 到 256 之间的值",
-  "error_max_concurrent_tournaments": "你已达到帐户允许同时创建的锦标赛数量上限",
   "error_tournament_assets_required": "请至少选择一个派系和一张地图",
   "error_awarding_dispute_win": "无法将这场有争议比赛的胜利判给申诉玩家",
   "award_dispute_win": "将胜利判给申诉玩家",

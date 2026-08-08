@@ -39,6 +39,7 @@ context.
 | `balance_events` | Balance patches | `id` | `event_name`, `affected_factions`, `affected_maps` |
 | `global_statistics` | Aggregated site statistics cache | `id` | `statistic_key`, `statistic_value`, `last_updated` |
 | `system_settings` | Config key-value | `id` | `setting_key`, `setting_value` |
+| `user_action_rate_limit_events` | Rolling per-user abuse-protection events | `id` | `user_id`, `action_type`, `created_at` |
 | `migrations` | Migration tracking | `id` | `name`, `executed_at` |
 
 ### Forum Schema — Key Tables (READ-ONLY)

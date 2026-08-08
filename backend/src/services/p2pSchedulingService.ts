@@ -2,6 +2,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { query } from '../config/database.js';
 import { roundToNearest30Min, validateSlotDatetimes } from './tournamentSchedulingService.js';
 import { assertSlotsAreAvailable } from './schedulingConflictService.js';
+import {
+  consumeUserActionRateLimit,
+  releaseUserActionRateLimit,
+} from './userActionRateLimitService.js';
 interface P2PProposalRow {
   id: string;
   proposed_by_user_id: string;
@@ -28,13 +32,25 @@ interface P2PConfirmationRow {
 /**
  * Create a new pending challenge, replacing older active challenges between
  * the same two players and recording the proposer's confirmation.
+ *
+ * The initial proposal and every counter-proposal share the proposer's P2P
+ * action budget because both produce equivalent database and Discord effects.
+ * `rateLimitAlreadyConsumed` is an internal invariant used only by the counter
+ * path, which reserves quota before rejecting the previous proposal. External
+ * callers must leave it false so direct creations cannot bypass protection.
+ *
+ * The reservation is made only after user, slot, conflict, and notes validation.
+ * It is released if the proposal row itself cannot be inserted. Once that row
+ * exists the action remains counted even if a later slot, confirmation, or
+ * notification side effect fails.
  */
 export const createP2PProposal = async (
   proposedByUserId: string,
   challengedUserId: string,
   slotDatetimes: string[],
   notes?: string,
-  visibility: 'private' | 'public' = 'public'
+  visibility: 'private' | 'public' = 'public',
+  rateLimitAlreadyConsumed = false
 ): Promise<{ proposalId: string; slotsCreated: number }> => {
   if (proposedByUserId === challengedUserId) {
     throw new Error('You cannot challenge yourself');
@@ -68,12 +84,22 @@ export const createP2PProposal = async (
   const maxSlotDatetime = new Date(Math.max(...slotDatetimes.map(dt => new Date(dt).getTime())));
   const expiresAt = new Date(maxSlotDatetime.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-  await query(
-    `INSERT INTO match_schedule_proposals
-      (id, proposed_by_user_id, proposed_at, status, expires_at, cancelled_at, challenge_mode, challenged_user_id, visibility, notes)
-     VALUES (?, ?, ?, 'pending', ?, NULL, 'p2p', ?, ?, ?)`,
-    [proposalId, proposedByUserId, now, expiresAt, challengedUserId, visibility, notes || null]
-  );
+  const rateLimitEventId = rateLimitAlreadyConsumed
+    ? null
+    : await consumeUserActionRateLimit(proposedByUserId, 'p2p_challenge');
+  try {
+    await query(
+      `INSERT INTO match_schedule_proposals
+        (id, proposed_by_user_id, proposed_at, status, expires_at, cancelled_at, challenge_mode, challenged_user_id, visibility, notes)
+       VALUES (?, ?, ?, 'pending', ?, NULL, 'p2p', ?, ?, ?)`,
+      [proposalId, proposedByUserId, now, expiresAt, challengedUserId, visibility, notes || null]
+    );
+  } catch (error) {
+    if (rateLimitEventId) {
+      await releaseUserActionRateLimit(rateLimitEventId, proposedByUserId, 'p2p_challenge');
+    }
+    throw error;
+  }
 
   let slotsCreated = 0;
   for (const dtString of slotDatetimes) {
@@ -285,6 +311,8 @@ export const confirmP2PProposalSlots = async (
 /**
  * Reject the current proposal and create a new proposal in the opposite
  * direction, preserving the challenge negotiation as a sequence of records.
+ * Quota is reserved before changing the original proposal so concurrent
+ * counters from the same user cannot exceed the shared P2P action budget.
  */
 export const counterProposeP2P = async (
   proposalId: string,
@@ -318,25 +346,34 @@ export const counterProposeP2P = async (
     throw new Error('Only challenged user can counter-propose');
   }
 
-  await query(
-    `UPDATE match_schedule_proposals
-     SET status = 'rejected'
-     WHERE id = ?`,
-    [proposalId]
-  );
+  const rateLimitEventId = await consumeUserActionRateLimit(userId, 'p2p_challenge');
+  try {
+    await query(
+      `UPDATE match_schedule_proposals
+       SET status = 'rejected'
+       WHERE id = ?`,
+      [proposalId]
+    );
+  } catch (error) {
+    await releaseUserActionRateLimit(rateLimitEventId, userId, 'p2p_challenge');
+    throw error;
+  }
 
   return createP2PProposal(
     userId,
     original.proposed_by_user_id,
     slotDatetimes,
     notes,
-    visibility
+    visibility,
+    true
   );
 };
 
 /**
  * Replace the slots and notes of a pending or confirmed proposal by either participant.
  * Passing `null` for notes explicitly clears previously stored notes.
+ * Updates consume the same P2P budget as new and counter proposals because an
+ * otherwise reusable proposal could be edited indefinitely to spam Discord.
  */
 export const updateP2PProposal = async (
   proposalId: string,
@@ -373,8 +410,15 @@ export const updateP2PProposal = async (
     throw new Error('Can only update pending or confirmed proposals');
   }
 
-  // Moving a confirmed challenge starts a fresh confirmation cycle.
-  await query(`DELETE FROM match_schedule_confirmations WHERE proposal_id = ?`, [proposalId]);
+  // Moving a confirmed challenge starts a fresh confirmation cycle. Reserve
+  // quota immediately before the first write, after all validation and access checks.
+  const rateLimitEventId = await consumeUserActionRateLimit(userId, 'p2p_challenge');
+  try {
+    await query(`DELETE FROM match_schedule_confirmations WHERE proposal_id = ?`, [proposalId]);
+  } catch (error) {
+    await releaseUserActionRateLimit(rateLimitEventId, userId, 'p2p_challenge');
+    throw error;
+  }
   await query(
     `DELETE FROM match_schedule_slots
      WHERE proposal_id = ?`,

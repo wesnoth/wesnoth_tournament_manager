@@ -14,6 +14,7 @@ import {
 } from '../services/p2pSchedulingService.js';
 import { getSchedulingConflictsForUsers } from '../services/schedulingConflictService.js';
 import { buildNotificationMessage, formatTimeRangesForDiscord, groupSlotsIntoRanges } from '../utils/slotGrouping.js';
+import { sendUserActionRateLimitError } from '../utils/userActionRateLimitResponse.js';
 
 const router = Router();
 const DISCORD_P2P_CHALLENGE_CHANNEL_ID = process.env.DISCORD_P2P_CHALLENGE_CHANNEL_ID || '';
@@ -176,6 +177,7 @@ router.post('/proposals', authMiddleware, async (req: AuthRequest, res: Response
     return res.json({ success: true, proposalId, slotsCreated });
   } catch (error) {
     console.error('❌ [CHALLENGES] Error creating proposal:', error);
+    if (sendUserActionRateLimitError(res, error)) return;
     return res.status(400).json({ error: (error as Error).message || 'Failed to create challenge proposal' });
   }
 });
@@ -290,6 +292,7 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
     return res.json({ success: true, ...result });
   } catch (error) {
     console.error('❌ [CHALLENGES] Error creating counter-proposal:', error);
+    if (sendUserActionRateLimitError(res, error)) return;
     return res.status(400).json({ error: (error as Error).message || 'Failed to create counter-proposal' });
   }
 });
@@ -410,6 +413,7 @@ router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, re
     return res.json({ success: true, proposalId });
   } catch (error) {
     console.error('❌ [CHALLENGES] Error updating proposal:', error);
+    if (sendUserActionRateLimitError(res, error)) return;
     return res.status(400).json({ error: (error as Error).message || 'Failed to update proposal' });
   }
 });

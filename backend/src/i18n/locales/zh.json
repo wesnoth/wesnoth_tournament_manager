@@ -15,5 +15,10 @@
     "registration_confirmation_message": "您的注册已完成。欢迎使用 Wesnoth 锦标赛管理器！",
     "account_unlocked_subject": "账户已解锁",
     "account_unlocked_message": "您的账户已被管理员解锁，现在可以登录了。"
+  },
+  "rate_limits": {
+    "tournament_creation": "创建锦标赛已达到频率限制。请在 {{retryAt}} 之后重试。",
+    "p2p_challenge": "P2P 挑战操作已达到频率限制。请在 {{retryAt}} 之后重试。",
+    "tournament_schedule": "锦标赛赛程操作已达到频率限制。请在 {{retryAt}} 之后重试。"
   }
 }

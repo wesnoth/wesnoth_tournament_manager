@@ -194,7 +194,6 @@
   "error_loading_statistics": "Fehler beim Laden der Statistiken",
   "error_loading_tournament": "Fehler beim Laden der Turnierdaten",
   "error_max_participants_required": "Die maximale Teilnehmerzahl ist erforderlich: Verwende 0 für unbegrenzt oder einen Wert zwischen 2 und 256",
-  "error_max_concurrent_tournaments": "Du hast die maximal zulässige Anzahl gleichzeitiger Turniere für dein Konto erreicht",
   "error_tournament_assets_required": "Wähle mindestens eine Fraktion und eine Karte",
   "error_awarding_dispute_win": "Der Sieg für das angefochtene Match konnte nicht vergeben werden",
   "award_dispute_win": "Sieg an den Beschwerdeführer vergeben",

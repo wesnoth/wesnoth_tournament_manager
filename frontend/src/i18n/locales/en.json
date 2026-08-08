@@ -208,7 +208,6 @@
   "error_loading_statistics": "Error loading statistics",
   "error_loading_tournament": "Error loading tournament data",
   "error_max_participants_required": "Max participants is required: use 0 for unlimited or a value from 2 to 256",
-  "error_max_concurrent_tournaments": "You have reached the maximum number of concurrent tournaments allowed for your account",
   "error_tournament_assets_required": "Select at least one faction and one map",
   "award_dispute_win": "Award Win to Disputed Player",
   "confirm_award_dispute_win": "Award the win to the player who disputed this match? All ELO, ranking, and statistics will be recalculated.",

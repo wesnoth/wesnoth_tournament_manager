@@ -12,6 +12,8 @@ import { preparePhaseCompetition, startPhaseCompetition } from '../tournament-en
 import { parseForumTopicUrl } from '../tournament-engine/forumTopic.js';
 import { saveTournamentFormat } from '../tournament-engine/formatService.js';
 import type { TournamentFormatDefinition } from '../tournament-engine/types.js';
+import { consumeUserActionRateLimit } from '../services/userActionRateLimitService.js';
+import { sendUserActionRateLimitError } from '../utils/userActionRateLimitResponse.js';
 
 const router = Router();
 
@@ -28,12 +30,6 @@ const REJECTED_PLAYERS_TRANSLATIONS = [
 const TOURNAMENT_TYPES = ['elimination', 'league', 'swiss', 'swiss_elimination'] as const;
 const TOURNAMENT_MODES = ['ranked', 'unranked', 'team'] as const;
 const MATCH_FORMATS = ['bo1', 'bo3', 'bo5'] as const;
-
-// Keep the backend limit authoritative; invalid or missing configuration falls back to four.
-const configuredConcurrentTournamentLimit = Number.parseInt(process.env.MAX_USER_CONCURRENT_TOURNAMENTS || '4', 10);
-const MAX_USER_CONCURRENT_TOURNAMENTS = Number.isInteger(configuredConcurrentTournamentLimit) && configuredConcurrentTournamentLimit > 0
-  ? configuredConcurrentTournamentLimit
-  : 4;
 
 interface TournamentConfiguration {
   tournament_type: string;
@@ -430,27 +426,14 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     // Generate UUID for tournament
     tournamentId = randomUUID();
 
-    // Lock the creator row while counting and inserting so concurrent requests
-    // cannot both pass the limit check and create an extra active tournament.
+    // Quota consumption and tournament insertion share one transaction so a
+    // failed insert cannot consume capacity from the rolling user rate limit.
+    // The event survives later cancellation or completion by design: this is a
+    // creation-frequency policy, not a limit on concurrently active tournaments.
     const creationConnection = await pool.getConnection();
     try {
       await creationConnection.beginTransaction();
-      await creationConnection.execute('SELECT id FROM users_extension WHERE id = ? FOR UPDATE', [req.userId]);
-      const [activeCountRows] = await creationConnection.execute<any[]>(
-        `SELECT COUNT(*) AS active_count
-         FROM tournaments
-         WHERE creator_id = ? AND status <> 'finished'`,
-        [req.userId]
-      );
-      const activeTournamentCount = Number(activeCountRows[0]?.active_count || 0);
-
-      if (activeTournamentCount >= MAX_USER_CONCURRENT_TOURNAMENTS) {
-        await creationConnection.rollback();
-        return res.status(409).json({
-          error: 'Maximum concurrent tournaments limit for this user reached.',
-          code: 'MAX_USER_CONCURRENT_TOURNAMENTS'
-        });
-      }
+      await consumeUserActionRateLimit(req.userId!, 'tournament_creation', creationConnection);
 
       await creationConnection.execute(
         `INSERT INTO tournaments (
@@ -624,6 +607,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     if (error.code === 'ER_DUP_ENTRY' && String(error.message).includes('forum_topic')) {
       return res.status(409).json({ error: 'This forum topic is already assigned to another tournament' });
     }
+    if (sendUserActionRateLimitError(res, error)) return;
     if (error.issues) return res.status(400).json({ error: error.message, issues: error.issues });
     res.status(500).json({ error: 'Failed to create tournament', details: error.message });
   }

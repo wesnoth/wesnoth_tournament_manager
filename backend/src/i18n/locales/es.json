@@ -15,5 +15,10 @@
     "registration_confirmation_message": "Tu registro se ha completado. ¡Bienvenido/a al Gestor de Torneos Wesnoth!",
     "account_unlocked_subject": "Cuenta desbloqueada",
     "account_unlocked_message": "Tu cuenta ha sido desbloqueada por un administrador. Ya puedes iniciar sesión."
+  },
+  "rate_limits": {
+    "tournament_creation": "Has alcanzado el límite de creación de torneos. Inténtalo de nuevo después de {{retryAt}}.",
+    "p2p_challenge": "Has alcanzado el límite de acciones de challenges P2P. Inténtalo de nuevo después de {{retryAt}}.",
+    "tournament_schedule": "Has alcanzado el límite de acciones de horarios de torneo. Inténtalo de nuevo después de {{retryAt}}."
   }
 }

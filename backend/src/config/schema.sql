@@ -1313,6 +1313,16 @@ CREATE TABLE `tournament_results` (
   KEY `idx_tournament_results_entry` (`entry_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+DROP TABLE IF EXISTS `user_action_rate_limit_events`;
+CREATE TABLE `user_action_rate_limit_events` (
+  `id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT 'Immutable UUID for one consumed action',
+  `user_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT 'Authenticated user whose rolling budget was consumed',
+  `action_type` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Stable category: tournament_creation, p2p_challenge, or tournament_schedule',
+  `created_at` datetime NOT NULL DEFAULT current_timestamp() COMMENT 'UTC action timestamp used as the rolling-window boundary',
+  PRIMARY KEY (`id`),
+  KEY `idx_user_action_rate_limit_window` (`user_id`,`action_type`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Rolling per-user action timestamps for persistent abuse protection';
+
 DROP TABLE IF EXISTS `users_extension`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -1399,6 +1409,9 @@ ALTER TABLE `tournament_results`
   ADD CONSTRAINT `fk_tournament_results_group` FOREIGN KEY (`determined_by_group_id`) REFERENCES `tournament_phase_groups` (`id`) ON DELETE SET NULL;
 ALTER TABLE `replays` ADD CONSTRAINT `fk_replays_tournament_game_id` FOREIGN KEY (`tournament_game_id`) REFERENCES `tournament_games` (`id`) ON DELETE SET NULL;
 ALTER TABLE `match_schedule_proposals` ADD CONSTRAINT `fk_match_schedule_proposals_series` FOREIGN KEY (`tournament_series_id`) REFERENCES `tournament_series` (`id`) ON DELETE SET NULL;
+-- Application users are permanent and rate-limit history must never cascade away.
+ALTER TABLE `user_action_rate_limit_events`
+  ADD CONSTRAINT `fk_user_action_rate_limit_user` FOREIGN KEY (`user_id`) REFERENCES `users_extension` (`id`) ON DELETE RESTRICT;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

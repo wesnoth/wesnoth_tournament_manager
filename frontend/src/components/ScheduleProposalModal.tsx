@@ -277,9 +277,10 @@ export default function ScheduleProposalModal({
         onSuccess?.();
         onClose();
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error proposing slots:', err);
-      setError('Failed to propose slots');
+      // Preserve localized 429 details, including the profile-timezone retry time.
+      setError(err.response?.data?.error || 'Failed to propose slots');
     } finally {
       setLoading(false);
     }

@@ -2,6 +2,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { query } from '../config/database.js';
 import { assertSlotsAreAvailable } from './schedulingConflictService.js';
 import { validateTimezone, validateAvailabilitySchedule } from '../utils/timezoneUtils.js';
+import {
+  consumeUserActionRateLimit,
+  releaseUserActionRateLimit,
+} from './userActionRateLimitService.js';
 
 export interface TimeRange {
   start: string;
@@ -275,7 +279,14 @@ export const validateSlotDatetimes = (
   return { valid: true };
 };
 
-/** Create a schedule proposal for a phase-engine series. */
+/**
+ * Create a schedule proposal for a phase-engine series.
+ *
+ * Authorization, slot validation, and cross-proposal conflict detection happen
+ * before quota is reserved. Once the proposal row exists, the schedule action
+ * remains counted even if a later slot or confirmation insert fails because the
+ * externally visible scheduling mutation has already persisted.
+ */
 export const createSeriesProposal = async (
   seriesId: string,
   proposedByUserId: string,
@@ -317,14 +328,21 @@ export const createSeriesProposal = async (
 
   const maxSlotDatetime = new Date(Math.max(...slotDatetimes.map(dt => new Date(dt).getTime())));
   const proposalId = uuidv4();
-  const result = await query(
-    `INSERT INTO match_schedule_proposals
-       (id, tournament_series_id, proposed_by_user_id, proposed_at, status,
-        notes, expires_at, challenge_mode, challenged_user_id)
-     VALUES (?, ?, ?, NOW(), 'pending', ?, ?, 'tournament', NULL)`,
-    [proposalId, seriesId, proposedByUserId, notes || null,
-      new Date(maxSlotDatetime.getTime() + 7 * 24 * 60 * 60 * 1000)]
-  );
+  const rateLimitEventId = await consumeUserActionRateLimit(proposedByUserId, 'tournament_schedule');
+  let result;
+  try {
+    result = await query(
+      `INSERT INTO match_schedule_proposals
+         (id, tournament_series_id, proposed_by_user_id, proposed_at, status,
+          notes, expires_at, challenge_mode, challenged_user_id)
+       VALUES (?, ?, ?, NOW(), 'pending', ?, ?, 'tournament', NULL)`,
+      [proposalId, seriesId, proposedByUserId, notes || null,
+        new Date(maxSlotDatetime.getTime() + 7 * 24 * 60 * 60 * 1000)]
+    );
+  } catch (error) {
+    await releaseUserActionRateLimit(rateLimitEventId, proposedByUserId, 'tournament_schedule');
+    throw error;
+  }
   if (!result.rowCount) throw new Error('Failed to create proposal');
 
   for (const slotDatetime of slotDatetimes) {
@@ -538,6 +556,12 @@ export const cancelConfirmation = async (proposalId: string, userId: string) => 
   return { success: true };
 };
 
+/**
+ * Reject an active tournament schedule and create its replacement in the
+ * opposite direction. The actor must not be the current proposer. The complete
+ * operation consumes one tournament-schedule action before the first write so
+ * concurrent counter-proposals cannot exceed the rolling user budget.
+ */
 export const rejectAndCounterPropose = async (
   proposalId: string,
   userId: string,
@@ -549,7 +573,15 @@ export const rejectAndCounterPropose = async (
   if (notes && notes.length > 500) throw new Error('Notes cannot exceed 500 characters');
   const original = await getTournamentSeriesProposal(proposalId);
   if (original.proposed_by_user_id === userId) throw new Error('Proposer cannot reject their own proposal');
-  await query("UPDATE match_schedule_proposals SET status = 'rejected' WHERE id = ?", [proposalId]);
+  // Counter-proposals share the schedule action budget with initial proposals
+  // and edits because all three can generate a new Discord notification.
+  const rateLimitEventId = await consumeUserActionRateLimit(userId, 'tournament_schedule');
+  try {
+    await query("UPDATE match_schedule_proposals SET status = 'rejected' WHERE id = ?", [proposalId]);
+  } catch (error) {
+    await releaseUserActionRateLimit(rateLimitEventId, userId, 'tournament_schedule');
+    throw error;
+  }
   const counterProposalId = uuidv4();
   const maxSlotDatetime = new Date(Math.max(...newSlotDatetimes.map(dt => new Date(dt).getTime())));
   await query(
@@ -590,6 +622,13 @@ export const rejectProposal = async (proposalId: string, userId: string, notes?:
   return { success: true };
 };
 
+/**
+ * Replace the slots of a tournament schedule owned by its proposer.
+ *
+ * An edit resets confirmations and consumes one tournament-schedule action.
+ * Treating edits like creations closes the otherwise unlimited Discord-message
+ * path where one proposal could be rewritten repeatedly without creating rows.
+ */
 export const modifyProposal = async (
   proposalId: string,
   userId: string,
@@ -601,7 +640,15 @@ export const modifyProposal = async (
   if (notes && notes.length > 500) throw new Error('Notes cannot exceed 500 characters');
   const proposal = await getTournamentSeriesProposal(proposalId);
   if (proposal.proposed_by_user_id !== userId) throw new Error('Only proposer can modify proposal');
-  await query('DELETE FROM match_schedule_confirmations WHERE proposal_id = ?', [proposalId]);
+  // Editing is deliberately limited: without this reservation one persisted
+  // proposal could be modified repeatedly to bypass creation-only throttling.
+  const rateLimitEventId = await consumeUserActionRateLimit(userId, 'tournament_schedule');
+  try {
+    await query('DELETE FROM match_schedule_confirmations WHERE proposal_id = ?', [proposalId]);
+  } catch (error) {
+    await releaseUserActionRateLimit(rateLimitEventId, userId, 'tournament_schedule');
+    throw error;
+  }
   await query('DELETE FROM match_schedule_slots WHERE proposal_id = ?', [proposalId]);
   const maxSlotDatetime = new Date(Math.max(...newSlotDatetimes.map(dt => new Date(dt).getTime())));
   await query(
