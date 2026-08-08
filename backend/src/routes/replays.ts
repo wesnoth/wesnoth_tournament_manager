@@ -269,10 +269,17 @@ router.post('/:replayId/confirm-winner', authMiddleware, globalRecalculationMidd
       await recordPhaseGameResult(summary.linkedTournamentId, summary.linkedTournamentGameId, winnerEntryId, result.matchId);
     }
 
-    // Mark replay as completed
+    // Keep the replay lifecycle consistent with automatic integration. The
+    // parse status records that processing finished, while match_id is the
+    // association used by pending-replay lists to hide a replay that already
+    // produced a global match. Tournament-unranked games intentionally have
+    // no global match row, so their match_id remains NULL.
     await query(
-      `UPDATE replays SET parse_status = 'completed', updated_at = NOW() WHERE id = ?`,
-      [replayId]
+      `UPDATE replays
+       SET parse_status = 'completed', parsed = 1, need_integration = 0,
+           match_id = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [result.matchId || null, replayId]
     );
 
     console.log(`✅ [CONFIRM-WINNER] Match ${result.matchId} created by player ${nickname}`);
