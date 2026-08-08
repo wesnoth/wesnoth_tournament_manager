@@ -301,6 +301,7 @@ router.get('/matches/recent', async (req, res) => {
            AND r.parsed = 1
            AND r.parse_status NOT IN ('rejected', 'error')
            AND r.match_id IS NULL
+           AND NOT EXISTS (SELECT 1 FROM matches linked_match WHERE linked_match.replay_id = r.id)
            AND r.tournament_id IS NULL
          ORDER BY r.created_at DESC
          LIMIT 20`
@@ -586,6 +587,7 @@ router.get('/matches', async (req, res) => {
           AND r.parsed = 1
           AND r.parse_status NOT IN ('rejected', 'error')
           AND r.match_id IS NULL
+          AND NOT EXISTS (SELECT 1 FROM matches linked_match WHERE linked_match.replay_id = r.id)
           AND r.tournament_id IS NULL
         ORDER BY r.created_at DESC`
       );

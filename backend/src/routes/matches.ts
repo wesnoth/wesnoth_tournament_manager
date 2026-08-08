@@ -1660,6 +1660,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
          AND r.parsed = 1
          AND r.parse_status NOT IN ('rejected')
          AND r.match_id IS NULL
+         AND NOT EXISTS (SELECT 1 FROM matches linked_match WHERE linked_match.replay_id = r.id)
          AND r.tournament_game_id IS NULL
        ORDER BY r.created_at DESC
        LIMIT ? OFFSET ?`,
@@ -1673,7 +1674,9 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
       const debugReplays = await query(
         `SELECT r.id, r.tournament_game_id, r.integration_confidence, r.parsed, r.match_id, r.parse_status
          FROM replays r
-         WHERE r.integration_confidence = 1 AND r.parsed = 1 AND r.parse_status NOT IN ('rejected') AND r.match_id IS NULL
+         WHERE r.integration_confidence = 1 AND r.parsed = 1 AND r.parse_status NOT IN ('rejected')
+           AND r.match_id IS NULL
+           AND NOT EXISTS (SELECT 1 FROM matches linked_match WHERE linked_match.replay_id = r.id)
          ORDER BY r.created_at DESC LIMIT 10`,
         []
       );
