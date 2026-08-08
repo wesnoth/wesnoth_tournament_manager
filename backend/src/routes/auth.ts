@@ -5,12 +5,13 @@ import { generateUUID } from '../utils/uuid.js';
 import { queryTournament } from '../config/tournamentDatabase.js';
 import { query } from '../config/database.js';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
+import { loginLimiter } from '../middleware/rateLimiter.js';
 import { isAccountLocked, recordFailedLoginAttempt, recordSuccessfulLogin, getRemainingLockoutTime } from '../services/accountLockout.js';
 
 const router = Router();
 
 // Login - RATE LIMITED with phpBB database authentication
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
 

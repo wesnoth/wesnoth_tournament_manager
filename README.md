@@ -841,7 +841,7 @@ To customize, modify `backend/src/utils/eloCalculation.ts`
 ### Rate Limiting
 
 Configured in `backend/src/middleware/rateLimiter.ts`:
-- Login attempts: 5 per 15 minutes
+- Login attempts: 10 per 15 minutes per IP
 - API requests: Based on JWT scope
 - Can be customized per endpoint
 

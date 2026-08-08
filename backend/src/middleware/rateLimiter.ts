@@ -15,43 +15,12 @@ const getWindowMs = (name: string, defaultValue: number): number => {
   return Number.isFinite(configured) && configured > 0 ? configured : defaultValue;
 };
 
-const registerWindowMs = getWindowMs('RATE_LIMIT_REGISTER_WINDOW_MS', 15 * 60 * 1000);
 const loginWindowMs = getWindowMs('RATE_LIMIT_LOGIN_WINDOW_MS', 15 * 60 * 1000);
 const generalWindowMs = getWindowMs('RATE_LIMIT_GENERAL_WINDOW_MS', 60 * 1000);
 const searchWindowMs = getWindowMs('RATE_LIMIT_SEARCH_WINDOW_MS', 60 * 1000);
-const registerMax = getLimit('RATE_LIMIT_REGISTER_MAX', 5, 20);
 const loginMax = getLimit('RATE_LIMIT_LOGIN_MAX', 10, 50);
 const generalMax = getLimit('RATE_LIMIT_GENERAL_MAX', 100, 1000);
 const searchMax = getLimit('RATE_LIMIT_SEARCH_MAX', 10, 60);
-
-/**
- * Rate limiter for registration endpoint
- * Prevents spam account creation and bot attacks
- * Production limit: 5 attempts per 15 minutes per IP.
- */
-export const registerLimiter = rateLimit({
-  windowMs: registerWindowMs,
-  max: registerMax,
-  message: 'Too many registration attempts from this IP, please try again after 15 minutes',
-  standardHeaders: true,      // Return rate limit info in `RateLimit-*` headers
-  legacyHeaders: false,       // Disable `X-RateLimit-*` headers
-  keyGenerator: (req, res) => {
-    // Use X-Forwarded-For for production (behind proxy), fallback to ip
-    return req.ip || req.socket.remoteAddress || 'unknown';
-  },
-  skip: (req) => {
-    // Skip rate limiting in test environment
-    return process.env.NODE_ENV === 'test';
-  },
-  handler: (req, res) => {
-    console.warn(`Registration rate limit exceeded for IP: ${req.ip}`);
-    res.status(429).json({
-      error: 'Too many registration attempts',
-      message: 'Please try again after 15 minutes',
-      retryAfter: res.getHeader('Retry-After')
-    });
-  }
-});
 
 /**
  * Rate limiter for login endpoint
@@ -133,7 +102,6 @@ export const searchLimiter = rateLimit({
 });
 
 export default {
-  registerLimiter,
   loginLimiter,
   generalLimiter,
   searchLimiter
