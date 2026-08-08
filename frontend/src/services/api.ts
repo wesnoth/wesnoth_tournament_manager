@@ -176,7 +176,14 @@ export const matchService = {
     comments?: string,
     rating?: number
   ) => 
-    api.post('/matches/report-confidence-1-replay', { replayId, winner_choice, comments, rating }),
+    // Replay confirmation is owned by the replay route. The legacy matches
+    // endpoint only accepts phase-engine games and returns 410 for regular
+    // confidence-one replays still shown in the pending matches list.
+    api.post(`/replays/${replayId}/confirm-winner`, {
+      iWon: winner_choice === 'I won',
+      comments,
+      rating,
+    }),
   cancelConfidence1Replay: (replayId: string) =>
     api.post('/matches/cancel-confidence-1-replay', { replayId }),
   adminDiscardReplay: (replayId: string) =>
