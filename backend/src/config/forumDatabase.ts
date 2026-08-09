@@ -218,6 +218,8 @@ export async function getCompetitiveGameData(
   instanceUuid: string,
   gameId: number
 ): Promise<CompetitiveGameData | null> {
+  if (!isCompetitiveGameModelEnabled()) return null;
+
   let competitiveGameId: string | number | null = null;
   try {
     const gameInfo = await queryForum(
@@ -269,6 +271,16 @@ export async function getCompetitiveGameData(
   );
   console.log(`✅ [FORUM] competitive_game=${competitiveGameId} status=${games[0].STATUS ?? games[0].status ?? 'unknown'} players=${players.length}`);
   return { game: games[0], players };
+}
+
+/**
+ * Allow older forum deployments to disable probing the optional competitive
+ * schema. The default keeps the new model enabled for migrated environments;
+ * setting the flag to false makes both sync and parsing use the legacy path.
+ */
+function isCompetitiveGameModelEnabled(): boolean {
+  const value = String(process.env.FORUM_COMPETITIVE_GAME_MODEL ?? 'true').trim().toLowerCase();
+  return !['0', 'false', 'off', 'no'].includes(value);
 }
 
 function isMissingForumObject(error: any): boolean {
