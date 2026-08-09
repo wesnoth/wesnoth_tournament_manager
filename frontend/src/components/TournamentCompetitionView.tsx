@@ -393,7 +393,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
                       <button type="button" onClick={() => openReplayAction('I lost')} className="rounded bg-red-600 px-2 py-1 text-xs font-semibold text-white hover:bg-red-700">I lost</button>
                       <button type="button" onClick={() => openReplayAction('cancel')} className="rounded bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700">Discard</button>
                     </>}
-                    {!pendingReplay && !game.organizer_action && confirmationStatus === 'unconfirmed' && isCurrentUserWinner && <button
+                    {!pendingReplay && !game.organizer_action && ['unconfirmed', 'reported'].includes(confirmationStatus) && isCurrentUserWinner && <button
                       data-help-id="action-inform-phase-game-result"
                       type="button"
                       onClick={() => setSelectedGameConfirmation({ game, action: 'report' })}
@@ -409,7 +409,6 @@ const TournamentCompetitionView: React.FC<Props> = ({
                       >
                         {t('report_match_link') || 'Report Match'}
                       </button>}
-                    {!pendingReplay && (confirmationStatus === 'reported' || confirmationStatus === 'unconfirmed') && !isCurrentUserLoser && !isCurrentUserWinner && <span className="text-xs text-gray-500">Waiting for opponent confirmation</span>}
                     {!pendingReplay && confirmationStatus === 'disputed' && <span className="rounded-full bg-red-500 px-3 py-1 text-xs font-semibold text-white">Disputed</span>}
                     {pendingReplay && game.pending_replay_url && <a href={game.pending_replay_url} target="_blank" rel="noopener noreferrer" className="rounded bg-yellow-600 px-2 py-1 text-xs font-semibold text-white hover:bg-yellow-700">Replay ⬇</a>}
                     {!pendingReplay && game.replay_url

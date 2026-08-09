@@ -2289,6 +2289,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                         .map((match) => {
                            // Check if this is a pending replay (not yet confirmed)
                             const isPendingReplay = match.match_status === 'unconfirmed';
+                            const isConfidenceOneReplay = isPendingReplay && Number(match.pending_replay_confidence) === 1;
                             const isDueReplay = isPendingReplay && match.pending_replay_parse_status === 'due';
                            
                             // Extract replay data if pending
@@ -2336,8 +2337,14 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                               // For non-team tournaments, use player names from replay
                               winnerNickname = replayData.winnerName || '';
                               loserNickname = replayData.loserName || '';
-                              winnerId = match.player1_id;
-                              loserId = match.player2_id;
+                              // The replay summary contains the authoritative
+                              // winner/loser names; do not assume player 1 won.
+                              winnerId = winnerNickname.toLowerCase() === match.player1_nickname?.toLowerCase()
+                                ? match.player1_id
+                                : match.player2_id;
+                              loserId = winnerNickname.toLowerCase() === match.player1_nickname?.toLowerCase()
+                                ? match.player2_id
+                                : match.player1_id;
                             } else {
                               // For confirmed matches, use match.winner_id directly if available
                               if (match.winner_id) {
@@ -2512,7 +2519,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                        <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 italic">
                                          {t('replay_due') || 'Due Replay - Download only'}
                                        </div>
-                                     ) : isPendingReplay && (userId === winnerId || (match.is_team_mode && userTeamId === winnerId)) ? (
+                                     ) : isConfidenceOneReplay && (userId === winnerId || (match.is_team_mode && userTeamId === winnerId)) ? (
                                        <>
                                          <button
                                            data-help-id="action-confirm-match-won"
@@ -2554,7 +2561,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                        <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 italic">
                                          {t('replay_due') || 'Due Replay - Download only'}
                                        </div>
-                                     ) : isPendingReplay && (userId === loserId || (match.is_team_mode && userTeamId === loserId)) ? (
+                                     ) : isConfidenceOneReplay && (userId === loserId || (match.is_team_mode && userTeamId === loserId)) ? (
                                        <>
                                          <button
                                            data-help-id="action-confirm-match-won"
@@ -2620,16 +2627,16 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                      ) : (
                                        <span className="text-xs text-gray-500">-</span>
                                      )}
-                                     {!isAdminDetermined && !isPendingReplay && isCurrentUserLoser && confirmationStatus === 'unconfirmed' && !nextRoundStarted && (
+                                     {!isAdminDetermined && !isPendingReplay && isCurrentUserLoser && ['unconfirmed', 'reported'].includes(confirmationStatus) && (
                                        <button
                                          data-help-id="action-confirm-match-dispute"
                                          className="px-2 py-1 text-xs bg-yellow-500 hover:bg-yellow-600 text-white rounded transition-colors"
                                          onClick={() => handleOpenConfirmModal(match)}
                                        >
-                                         {t('confirm_dispute')}
+                                         {t('report_match_link') || 'Report Match'}
                                        </button>
                                      )}
-                                     {!isAdminDetermined && !isPendingReplay && isCurrentUserWinner && !match.winner_comments && !match.winner_rating && !nextRoundStarted && (
+                                     {!isAdminDetermined && !isPendingReplay && isCurrentUserWinner && !match.winner_comments && !match.winner_rating && (
                                        <button
                                          data-help-id="action-inform-match-result"
                                          className="px-2 py-1 text-xs bg-orange-500 hover:bg-orange-600 text-white rounded transition-colors"

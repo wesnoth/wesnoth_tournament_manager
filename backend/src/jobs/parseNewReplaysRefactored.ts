@@ -349,8 +349,10 @@ export class ParseNewReplaysRefactorized {
               parseSummary.linkedTournamentGameId,
               parseSummary.linkedWinnerEntryId!
             );
+            // Automatic replay detection records the game result, but it
+            // must not impersonate the winner's Inform Match action.
             await query(
-              `UPDATE tournament_games SET confirmation_status = 'reported' WHERE id = ?`,
+              `UPDATE tournament_games SET confirmation_status = 'unconfirmed' WHERE id = ?`,
               [parseSummary.linkedTournamentGameId]
             );
             matchCreateResult = { success: true, matchId: null };
@@ -375,8 +377,10 @@ export class ParseNewReplaysRefactorized {
                 parseSummary.linkedWinnerEntryId!,
                 matchCreateResult.matchId
               );
+              // Keep the completed game awaiting the winner's explicit
+              // report; the loser can then confirm or dispute it.
               await query(
-                `UPDATE tournament_games SET confirmation_status = 'reported' WHERE id = ?`,
+                `UPDATE tournament_games SET confirmation_status = 'unconfirmed' WHERE id = ?`,
                 [parseSummary.linkedTournamentGameId]
               );
             }
