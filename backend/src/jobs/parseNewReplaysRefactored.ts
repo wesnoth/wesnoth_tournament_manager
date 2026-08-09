@@ -586,14 +586,14 @@ export class ParseNewReplaysRefactorized {
       competitive && ['complete', 'completed'].includes(parseSummary.competitiveGameStatus || '')
     );
 
-    // ======== STEP 1: Query legacy competitive markers ========
-    // A competitive_game_id is the authoritative replacement for the Ranked
-    // add-on and wesnothd_game_content_info markers. The legacy query must not
-    // run for new-model games.
+    // ======== STEP 1: Select the competitive-game model ========
+    // Production's legacy model is identified only by the Ranked add-on; WML
+    // then supplies ranked_mode and tournament=yes. A competitive_game_id is
+    // the future model and bypasses the legacy add-on path entirely.
     if (competitive) {
-      console.log(`📋 [FORUM] Step 1: Using competitive_game model; skipping Ranked add-on and legacy markers`);
+      console.log(`📋 [FORUM] Step 1: Using competitive_game model; skipping legacy Ranked add-on`);
     } else {
-      console.log(`📋 [FORUM] Step 1: Checking legacy Ranked add-on and content markers...`);
+      console.log(`📋 [FORUM] Step 1: Checking legacy Ranked add-on...`);
     }
     const addonResult = competitive ? [] : await queryForum(
       `SELECT addon_id, addon_version FROM wesnothd_game_content_info
@@ -601,53 +601,13 @@ export class ParseNewReplaysRefactorized {
       [replay.instance_uuid, replay.game_id]
     );
 
-    const markerResult = competitive ? [] : await queryForum(
-      `SELECT TYPE AS content_type, ID AS content_id
-       FROM wesnothd_game_content_info
-       WHERE instance_uuid = ? AND game_id = ?
-         AND TYPE IN ('ranked', 'tournament', 'tournament_game')`,
-      [replay.instance_uuid, replay.game_id]
-    );
-
-    const normalizeMarker = (value: unknown): string =>
-      String(value ?? '').trim().toLowerCase();
-    const markerRows = markerResult || [];
-    parseSummary.forumRankedMarker = parseSummary.forumRankedMarker || markerRows.some((content: any) =>
-      normalizeMarker(content.content_type) === 'ranked' &&
-      normalizeMarker(content.content_id) === 'yes'
-    );
-    parseSummary.forumTournamentMarker = parseSummary.forumTournamentMarker || markerRows.some((content: any) => {
-      if (normalizeMarker(content.content_type) !== 'tournament') {
-        return false;
-      }
-      const tournamentId = normalizeMarker(content.content_id);
-      return tournamentId !== '' && tournamentId !== 'none';
-    });
-    parseSummary.forumTournamentId = parseSummary.forumTournamentId || markerRows.find((content: any) =>
-      normalizeMarker(content.content_type) === 'tournament' &&
-      normalizeMarker(content.content_id) !== '' &&
-      normalizeMarker(content.content_id) !== 'none'
-    )?.content_id || null;
-    parseSummary.forumTournamentGameId = parseSummary.forumTournamentGameId || markerRows.find((content: any) =>
-      normalizeMarker(content.content_type) === 'tournament_game' &&
-      normalizeMarker(content.content_id) !== '' &&
-      normalizeMarker(content.content_id) !== 'none'
-    )?.content_id || null;
-
     if (competitive) {
       console.log(`   ✅ Competitive game model selected; legacy markers ignored`);
     } else if (addonResult.length > 0) {
       parseSummary.forumAddon = addonResult[0];
       console.log(`   ✅ Found Ranked addon in forum`);
-    } else if (parseSummary.forumRankedMarker || parseSummary.forumTournamentMarker) {
-      console.log(
-        `   ✅ Found new competitive metadata: ` +
-        `${parseSummary.forumRankedMarker ? 'ranked=yes' : ''}` +
-        `${parseSummary.forumRankedMarker && parseSummary.forumTournamentMarker ? ', ' : ''}` +
-        `${parseSummary.forumTournamentMarker ? 'tournament=<id>' : ''}`
-      );
     } else {
-      console.log(`   ⚠️  No Ranked addon or valid competitive metadata found`);
+      console.log(`   ⚠️  No Ranked addon or competitive_game_id found`);
       parseSummary.matchType = 'rejected';
       return parseSummary;
     }
@@ -802,17 +762,15 @@ export class ParseNewReplaysRefactorized {
         if (competitive) {
           console.log(`   ✅ 5.1 Using competitive_game metadata for mode, tournament and victory`);
         } else if (parsed.addon) {
-          // 5.1 Extract ranked_mode and tournament flag for legacy games.
-          // Combine replay WML with forum metadata. The metadata is the
-          // authoritative fallback for replays created without the add-on.
-          parseSummary.replayRankedMode = Boolean(parsed.addon.ranked_mode) || parseSummary.forumRankedMarker;
+          // 5.1 Extract ranked_mode and tournament flag from legacy WML.
+          parseSummary.replayRankedMode = Boolean(parsed.addon.ranked_mode);
           // Tournament flag indicates whether the game was marked as a tournament game in WML
           // Tournament name always comes from game_name in forum DB, never from WML
-          parseSummary.replayTournamentFlag = Boolean(parsed.addon.tournament) || parseSummary.forumTournamentMarker;
+          parseSummary.replayTournamentFlag = Boolean(parsed.addon.tournament);
           console.log(`   ✅ 5.1 ranked_mode=${parseSummary.replayRankedMode}, tournament_flag=${parseSummary.replayTournamentFlag}`);
         } else {
-          parseSummary.replayRankedMode = parseSummary.forumRankedMarker;
-          parseSummary.replayTournamentFlag = parseSummary.forumTournamentMarker;
+          parseSummary.replayRankedMode = false;
+          parseSummary.replayTournamentFlag = false;
           console.log(
             `   ✅ 5.1 Using forum metadata: ranked_mode=${parseSummary.replayRankedMode}, ` +
             `tournament_flag=${parseSummary.replayTournamentFlag}`
@@ -887,10 +845,10 @@ export class ParseNewReplaysRefactorized {
     }
 
     // ======== DETERMINE MATCH TYPE ========
-    // Logic based on replay WML when available, with forum metadata as the
-    // fallback for games created without the legacy Ranked add-on.
+    // New games use competitive_game metadata. Legacy games use the Ranked
+    // add-on plus its WML flags and resolve tournament names locally.
     console.log(`📊 [PARSE] Determining match type...`);
-    if (!competitive && !parseSummary.forumAddon && !parseSummary.forumRankedMarker && !parseSummary.forumTournamentMarker) {
+    if (!competitive && !parseSummary.forumAddon) {
       parseSummary.matchType = 'rejected';
       console.log(`   ❌ No valid competitive marker in forum → REJECTED`);
       return parseSummary;

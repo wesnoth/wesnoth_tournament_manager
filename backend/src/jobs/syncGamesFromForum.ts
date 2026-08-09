@@ -21,7 +21,6 @@ import { query } from '../config/database.js';
 import { 
   getNewGamesFromForum, 
   getGamePlayers, 
-  getGameContent,
   hasGameTournamentAddon,
   getCompetitiveGameData
 } from '../config/forumDatabase.js';
@@ -147,38 +146,24 @@ export class SyncGamesFromForumJob {
             continue; // Skip silently if already processed
           }
 
-          // The legacy Ranked add-on remains valid. The new client writes
-          // ranked=yes or tournament=<id> into game content metadata.
+          // Production currently identifies competitive games through the
+          // Ranked add-on. The future path is selected by competitive_game_id
+          // and is checked first by getCompetitiveGameData().
           const competitiveGame = await getCompetitiveGameData(instanceUuid, gameId);
           // A competitive_game_id is the replacement for the legacy Ranked
           // add-on marker. Do not query legacy content markers in that case.
           const hasRankedAddon = competitiveGame
             ? false
             : await hasGameTournamentAddon(instanceUuid, gameId, rankedAddonName);
-          const gameContent = competitiveGame ? [] : await getGameContent(instanceUuid, gameId);
-          const normalize = (value: unknown): string => String(value ?? '').trim().toLowerCase();
-          const hasRankedMetadata = gameContent.some(content =>
-            normalize(content.TYPE) === 'ranked' && normalize(content.ID) === 'yes'
-          );
-          const hasTournamentMetadata = gameContent.some(content => {
-            if(normalize(content.TYPE) !== 'tournament') {
-              return false;
-            }
-            const tournamentId = normalize(content.ID);
-            return tournamentId !== '' && tournamentId !== 'none';
-          });
-
           const hasCompetitiveGame = Boolean(competitiveGame);
 
-          if(!hasRankedAddon && !hasRankedMetadata && !hasTournamentMetadata && !hasCompetitiveGame) {
+          if(!hasRankedAddon && !hasCompetitiveGame) {
             skippedWithoutMarker++;
-            continue; // Skip games unrelated to ranked/tournament processing.
+            continue; // Skip games unrelated to the two supported models.
           }
 
           const markers = [
             hasRankedAddon ? 'Ranked addon' : '',
-            hasRankedMetadata ? 'ranked=yes' : '',
-            hasTournamentMetadata ? 'tournament metadata' : '',
             hasCompetitiveGame ? 'competitive_game_id' : ''
           ].filter(Boolean).join(', ');
           console.log(`🌐 [FORUM SYNC] Processing: ${game.game_name} (${instanceUuid}:${gameId}) [${markers}]`);
