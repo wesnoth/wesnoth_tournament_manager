@@ -801,51 +801,60 @@ function extractTeams(wml: WmlNode): Record<number, string> {
 }
 
 /**
- * Extract selected map name from replay commands
- * Looks for [command] > [input] > [variable] with name="selected_map_name"
- * Used when ranked_map_picker addon is present
+ * Extract the map selected by ranked_map_picker.
+ *
+ * Replay layouts changed between Wesnoth versions: older replays put the
+ * variable below replay commands, while newer ones may preserve it under a
+ * variables/snapshot node. Walk the parsed WML tree instead of depending on
+ * one command nesting shape.
  */
 function extractSelectedMapName(wml: WmlNode): string | undefined {
   try {
-    const replayNode = wml.replay as WmlNode | WmlNode[] | undefined;
-    if (!replayNode) {
-      return undefined;
-    }
+    const visited = new Set<object>();
+    const visit = (node: unknown): string | undefined => {
+      if (!node || typeof node !== 'object') return undefined;
+      if (visited.has(node as object)) return undefined;
+      visited.add(node as object);
 
-    const replay = Array.isArray(replayNode) ? replayNode[replayNode.length - 1] : replayNode;
-    if (!replay) {
-      return undefined;
-    }
+      if (Array.isArray(node)) {
+        for (const child of node) {
+          const found = visit(child);
+          if (found) return found;
+        }
+        return undefined;
+      }
 
-    const commands = replay.command as WmlNode | WmlNode[] | undefined;
-    if (!commands) {
-      return undefined;
-    }
-
-    const commandArray = Array.isArray(commands) ? commands : [commands];
-
-    for (const command of commandArray) {
-      const input = command.input as WmlNode | undefined;
-      if (!input) continue;
-
-      const variable = input.variable as WmlNode | WmlNode[] | undefined;
-      if (!variable) continue;
-
-      const variableArray = Array.isArray(variable) ? variable : [variable];
-
-      for (const vars of variableArray) {
-        const varName = vars.name as string | undefined;
-        if (varName === 'selected_map_name') {
-          const mapName = vars.value as string | undefined;
-          if (mapName) {
-            console.log(`✅ [EXTRACT MAP] Found selected_map_name: "${mapName}"`);
-            return mapName;
-          }
+      const record = node as Record<string, unknown>;
+      const name = record.name;
+      const value = record.value;
+      if (typeof name === 'string' && name.toLowerCase() === 'selected_map_name' && value) {
+        const mapName = String(value).trim();
+        if (mapName) {
+          console.log(`✅ [EXTRACT MAP] Found selected_map_name: "${mapName}"`);
+          return mapName;
         }
       }
-    }
 
-    return undefined;
+      const keyedValue = Object.entries(record).find(([key, entryValue]) =>
+        key.toLowerCase() === 'selected_map_name' &&
+        (typeof entryValue === 'string' || typeof entryValue === 'number')
+      )?.[1];
+      if (keyedValue !== undefined && keyedValue !== null) {
+        const mapName = String(keyedValue).trim();
+        if (mapName) {
+          console.log(`✅ [EXTRACT MAP] Found selected_map_name: "${mapName}"`);
+          return mapName;
+        }
+      }
+
+      for (const child of Object.values(record)) {
+        const found = visit(child);
+        if (found) return found;
+      }
+      return undefined;
+    };
+
+    return visit(wml);
   } catch (error) {
     console.warn('⚠️  [EXTRACT MAP] Could not extract selected_map_name:', error);
     return undefined;

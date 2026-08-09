@@ -3,19 +3,22 @@
  * File: backend/src/jobs/parseNewReplaysRefactored.ts
  * 
  * Data Flow:
- * 1. Query wesnothd_game_content_info for the legacy Ranked add-on or the
- *    new ranked/tournament metadata markers
+ * 1. Prefer the server-authoritative competitive_game model when the game
+ *    exposes competitive_game_id; otherwise use the legacy Ranked add-on and
+ *    wesnothd_game_content_info markers
  * 2. Query wesnothd_game_player_info for player nicknames, sides, factions  
  * 3. Query wesnothd_game_content_info for scenario/map name
  * 4. If forum factions are "Custom" → search replay for actual factions
- * 5. Parse replay file for: ranked_mode, tournament, victory condition
+ * 5. Parse WML only for legacy metadata, or for the narrow new-model fields
+ *    that are not available in the server records: ranked/ladder era map or
+ *    factions and ranked_map_picker selected map
  * 6. Validate factions and map against assets
  * 7. Report parse_summary with all detected information
  * 8. Create match with appropriate confidence level
  */
 
 import { query } from '../config/database.js';
-import { queryForum } from '../config/forumDatabase.js';
+import { queryForum, getCompetitiveGameData } from '../config/forumDatabase.js';
 import ReplayParser from '../services/replayParser.js';
 import { parseRankedReplay, ParsedRankedReplay } from '../utils/replayRankedParser.js';
 import { createMatch } from '../services/matchCreationService.js';
@@ -79,6 +82,11 @@ interface UnparsedReplay {
 }
 
 interface ParseSummary {
+  competitiveGameId: string | null;
+  competitiveGameStatus: string | null;
+  competitiveGameType: string | null;
+  competitivePlayers: Array<any>;
+  deferredUntilCompetitiveCompletion: boolean;
   forumAddon: any | null;
   // New server-side markers. These allow processing replays without the
   // Ranked add-on while the legacy add-on remains supported.
@@ -266,6 +274,16 @@ export class ParseNewReplaysRefactorized {
 
           const parseSummary = await this.parseReplayForumFirst(replay);
 
+          if (parseSummary.deferredUntilCompetitiveCompletion) {
+            console.log(`⏳ [PARSE] Competitive game is still active; leaving replay queued`);
+            await query(
+              `UPDATE replays SET parse_status = 'new', parsed = 0, need_integration = 1,
+               parse_error_message = ?, parse_summary = ? WHERE id = ?`,
+              ['Waiting for competitive_game status=complete/completed', JSON.stringify(parseSummary), replay.id]
+            );
+            continue;
+          }
+
           if (parseSummary.matchType === 'rejected') {
             console.log(`❌ [PARSE] Match rejected → Update replay as rejected`);
             await query(
@@ -308,6 +326,15 @@ export class ParseNewReplaysRefactorized {
 
           // Create match (only if confidence=2)
           let matchCreateResult;
+
+          const isTournamentMatch = parseSummary.matchType === 'tournament_ranked' ||
+            parseSummary.matchType === 'tournament_unranked';
+          if (isTournamentMatch && (!parseSummary.linkedTournamentId || !parseSummary.linkedTournamentGameId)) {
+            throw new Error(
+              `Tournament match has incomplete linkage: tournament_id=${parseSummary.linkedTournamentId ?? 'NULL'}, ` +
+              `tournament_game_id=${parseSummary.linkedTournamentGameId ?? 'NULL'}`
+            );
+          }
 
           if (parseSummary.matchType === 'tournament_unranked' && parseSummary.linkedTournamentGameId) {
             const metadata = phaseGameDisplayMetadata(parseSummary);
@@ -359,6 +386,11 @@ export class ParseNewReplaysRefactorized {
             console.log(`✅ [PARSE] Match created: ID ${matchCreateResult.matchId}`);
             // For unranked tournament matches, match_id stays NULL (no entry in matches table)
             const replayMatchId = parseSummary.matchType === 'tournament_unranked' ? null : matchCreateResult.matchId;
+            console.log(
+              `🔗 [PARSE] Persisting replay linkage: match_id=${replayMatchId ?? 'NULL'}, ` +
+              `tournament_id=${parseSummary.linkedTournamentId ?? 'NULL'}, ` +
+              `tournament_game_id=${parseSummary.linkedTournamentGameId ?? 'NULL'}`
+            );
             await query(
               `UPDATE replays SET parse_status = 'completed', parsed = 1, integration_confidence = ?,
                tournament_id = ?, tournament_game_id = ?,
@@ -446,6 +478,11 @@ export class ParseNewReplaysRefactorized {
    */
   private async parseReplayForumFirst(replay: UnparsedReplay): Promise<ParseSummary> {
     const parseSummary: ParseSummary = {
+      competitiveGameId: null,
+      competitiveGameStatus: null,
+      competitiveGameType: null,
+      competitivePlayers: [],
+      deferredUntilCompetitiveCompletion: false,
       forumAddon: null,
       forumRankedMarker: false,
       forumTournamentMarker: false,
@@ -480,18 +517,87 @@ export class ParseNewReplaysRefactorized {
       detectedTournament: null
     };
 
-    // ======== STEP 1: Query forum for competitive markers ========
-    // The Ranked add-on is retained for backwards compatibility. Newer
-    // servers identify competitive games with explicit content records:
-    // TYPE=ranked, ID=yes or TYPE=tournament, ID=<real tournament id>.
-    console.log(`📋 [FORUM] Step 1: Checking competitive game markers...`);
-    const addonResult = await queryForum(
+    // The new Wesnoth tables are authoritative for completion and victory.
+    // A missing result deliberately falls through to the legacy WML path.
+    const competitive = await getCompetitiveGameData(replay.instance_uuid, replay.game_id);
+    if (competitive) {
+      const game = competitive.game;
+      const value = (names: string[]): any => {
+        for (const name of names) {
+          const key = Object.keys(game).find(candidate => candidate.toLowerCase() === name.toLowerCase());
+          if (key && game[key] !== null && game[key] !== undefined) return game[key];
+        }
+        return null;
+      };
+      parseSummary.competitiveGameId = String(value(['id', 'competitive_game_id']) ?? '');
+      parseSummary.competitiveGameStatus = String(value(['status']) ?? '').toLowerCase();
+      const competitiveTournamentId = value(['tournament_id', 'tournamentId']);
+      const competitiveTournamentGameId = value(['tournament_game_id', 'tournamentGameId']);
+      parseSummary.competitiveGameType = String(value([
+        'type',
+        'game_type',
+        'competitive_type',
+        'competitive_game_type',
+        'match_type',
+        'mode'
+      ]) ?? '').trim().toLowerCase();
+      // The tournament link is an unambiguous model discriminator even when
+      // an older local schema does not expose the type column under the
+      // canonical name.
+      if (parseSummary.competitiveGameType !== 'ranked' && parseSummary.competitiveGameType !== 'tournament') {
+        parseSummary.competitiveGameType = competitiveTournamentId || competitiveTournamentGameId ? 'tournament' : 'ranked';
+      }
+      parseSummary.competitivePlayers = competitive.players;
+      if (parseSummary.competitiveGameType === 'ranked') {
+        parseSummary.forumRankedMarker = true;
+        parseSummary.replayRankedMode = true;
+      } else if (parseSummary.competitiveGameType === 'tournament') {
+        parseSummary.forumTournamentMarker = true;
+        parseSummary.replayTournamentFlag = true;
+      }
+
+      // A tournament link is authoritative even when the competitive game
+      // type is `ranked` (ranked tournament). It must not become a direct
+      // ranked match merely because the mode is ranked.
+      if (competitiveTournamentId || competitiveTournamentGameId) {
+        parseSummary.forumTournamentMarker = true;
+        parseSummary.replayTournamentFlag = true;
+        parseSummary.forumTournamentId = String(competitiveTournamentId ?? '') || null;
+        parseSummary.forumTournamentGameId = String(competitiveTournamentGameId ?? '') || null;
+      }
+
+      console.log(`✅ [FORUM] competitive model type=${parseSummary.competitiveGameType} tournament=${competitiveTournamentId ?? 'none'} tournament_game=${competitiveTournamentGameId ?? 'none'}`);
+
+      if (parseSummary.competitiveGameStatus === 'active') {
+        // A replay of an active game is a temporary save. Keep it queued so a
+        // later sync can observe the completed server-side result.
+        parseSummary.deferredUntilCompetitiveCompletion = true;
+        return parseSummary;
+      }
+    }
+
+    // Some local Wesnoth builds expose the terminal state as `completed`,
+    // while the protocol contract calls it `complete`.
+    const competitiveGameComplete = Boolean(
+      competitive && ['complete', 'completed'].includes(parseSummary.competitiveGameStatus || '')
+    );
+
+    // ======== STEP 1: Query legacy competitive markers ========
+    // A competitive_game_id is the authoritative replacement for the Ranked
+    // add-on and wesnothd_game_content_info markers. The legacy query must not
+    // run for new-model games.
+    if (competitive) {
+      console.log(`📋 [FORUM] Step 1: Using competitive_game model; skipping Ranked add-on and legacy markers`);
+    } else {
+      console.log(`📋 [FORUM] Step 1: Checking legacy Ranked add-on and content markers...`);
+    }
+    const addonResult = competitive ? [] : await queryForum(
       `SELECT addon_id, addon_version FROM wesnothd_game_content_info
        WHERE instance_uuid = ? AND game_id = ? AND type = 'modification' AND addon_id = 'Ranked' LIMIT 1`,
       [replay.instance_uuid, replay.game_id]
     );
 
-    const markerResult = await queryForum(
+    const markerResult = competitive ? [] : await queryForum(
       `SELECT TYPE AS content_type, ID AS content_id
        FROM wesnothd_game_content_info
        WHERE instance_uuid = ? AND game_id = ?
@@ -502,29 +608,31 @@ export class ParseNewReplaysRefactorized {
     const normalizeMarker = (value: unknown): string =>
       String(value ?? '').trim().toLowerCase();
     const markerRows = markerResult || [];
-    parseSummary.forumRankedMarker = markerRows.some((content: any) =>
+    parseSummary.forumRankedMarker = parseSummary.forumRankedMarker || markerRows.some((content: any) =>
       normalizeMarker(content.content_type) === 'ranked' &&
       normalizeMarker(content.content_id) === 'yes'
     );
-    parseSummary.forumTournamentMarker = markerRows.some((content: any) => {
+    parseSummary.forumTournamentMarker = parseSummary.forumTournamentMarker || markerRows.some((content: any) => {
       if (normalizeMarker(content.content_type) !== 'tournament') {
         return false;
       }
       const tournamentId = normalizeMarker(content.content_id);
       return tournamentId !== '' && tournamentId !== 'none';
     });
-    parseSummary.forumTournamentId = markerRows.find((content: any) =>
+    parseSummary.forumTournamentId = parseSummary.forumTournamentId || markerRows.find((content: any) =>
       normalizeMarker(content.content_type) === 'tournament' &&
       normalizeMarker(content.content_id) !== '' &&
       normalizeMarker(content.content_id) !== 'none'
     )?.content_id || null;
-    parseSummary.forumTournamentGameId = markerRows.find((content: any) =>
+    parseSummary.forumTournamentGameId = parseSummary.forumTournamentGameId || markerRows.find((content: any) =>
       normalizeMarker(content.content_type) === 'tournament_game' &&
       normalizeMarker(content.content_id) !== '' &&
       normalizeMarker(content.content_id) !== 'none'
     )?.content_id || null;
 
-    if (addonResult.length > 0) {
+    if (competitive) {
+      console.log(`   ✅ Competitive game model selected; legacy markers ignored`);
+    } else if (addonResult.length > 0) {
       parseSummary.forumAddon = addonResult[0];
       console.log(`   ✅ Found Ranked addon in forum`);
     } else if (parseSummary.forumRankedMarker || parseSummary.forumTournamentMarker) {
@@ -611,8 +719,8 @@ export class ParseNewReplaysRefactorized {
     if (addonCheckResult.length > 0) {
       for (const addon of addonCheckResult) {
         scenarioId = addon.id;
-        eraAddonId = addon.addon_id;
         if (addon.addon_id === 'ranked_era' || addon.addon_id === 'ladder_era') {
+          eraAddonId = addon.addon_id;
           parseSummary.hasRankedEra = true;
           console.log(`   ✅ Detected ${addon.addon_id} addon (factions will be from forum)`);
           // Normalize "Ranked " prefix from forum factions only for ranked_era
@@ -664,14 +772,33 @@ export class ParseNewReplaysRefactorized {
     const hasCustomFaction = Object.values(parseSummary.forumFactions)
       .some(f => f.toLowerCase().includes('custom'));
 
-    // ======== STEPS 5-7: ALWAYS parse replay (selectively) ========
-    console.log(`🎬 [REPLAY] Step 5-7: Parsing replay file (selective)...`);
-    try {
-      const parsed = await this.parseReplayFromUrl(replay, parseSummary.forumPlayers, hasCustomFaction);
+    // ======== STEPS 5-7: Parse replay only when it still provides metadata ========
+    // New-model games get their victory from competitive_game_player. WML is
+    // retained only for narrow metadata gaps: era map/factions and the map
+    // selected by ranked_map_picker. It never supplies the result or mode.
+    const shouldParseReplayWml = !competitive || parseSummary.hasRankedEra || parseSummary.hasRankedMapPicker;
+    const needsLadderFactionWml = Boolean(
+      competitive && eraAddonId?.toLowerCase() === 'ladder_era'
+    );
+    if (!shouldParseReplayWml) {
+      console.log(`⏭️  [REPLAY] New competitive model without WML-required map/faction addon → skipping WML parsing`);
+    } else {
+      console.log(`🎬 [REPLAY] Parsing replay WML${competitive ? ' (selected map/faction metadata only)' : ' (legacy path)'}...`);
+    }
+    if (shouldParseReplayWml) try {
+      const parsed = await this.parseReplayFromUrl(
+        replay,
+        parseSummary.forumPlayers,
+        hasCustomFaction || needsLadderFactionWml
+      );
 
       if (parsed) {
-        // 5.1 Extract ranked_mode and tournament flag
-        if (parsed.addon) {
+        // The competitive tables, not replay WML, define mode and tournament
+        // identity for new-model games.
+        if (competitive) {
+          console.log(`   ✅ 5.1 Using competitive_game metadata for mode, tournament and victory`);
+        } else if (parsed.addon) {
+          // 5.1 Extract ranked_mode and tournament flag for legacy games.
           // Combine replay WML with forum metadata. The metadata is the
           // authoritative fallback for replays created without the add-on.
           parseSummary.replayRankedMode = Boolean(parsed.addon.ranked_mode) || parseSummary.forumRankedMarker;
@@ -688,21 +815,21 @@ export class ParseNewReplaysRefactorized {
           );
         }
 
-        // 5.1b Extract team information (for team tournaments)
-        if (parsed.teams && Object.keys(parsed.teams).length > 0) {
+        // 5.1b Extract team information only for legacy games.
+        if (!competitive && parsed.teams && Object.keys(parsed.teams).length > 0) {
           parseSummary.wmlTeams = parsed.teams;
           const teamInfo = Object.entries(parsed.teams).map(([side, team]) => `side${side}=${team}`).join(', ');
           console.log(`   ✅ 5.1b Teams: ${teamInfo}`);
         }
 
-        // 5.1c Extract selected map name (for ranked_map_picker addon)
-        if (parsed.selectedMapName) {
+        // 5.1c Extract selected map name only for legacy ranked-map-picker games.
+        if ((!competitive || parseSummary.hasRankedMapPicker) && parsed.selectedMapName) {
           parseSummary.selectedMapName = parsed.selectedMapName;
           console.log(`   ✅ 5.1c Selected map name: ${parsed.selectedMapName}`);
         }
 
         // 5.2 Victory (from parsed replay)
-        if (parsed.victory) {
+        if (!competitive && parsed.victory && !parseSummary.replayVictory) {
           parseSummary.replayVictory = parsed.victory;
           if (parsed.victory.reason === 'surrender') {
             console.log(`   ✅ 5.2 Victory: ${parsed.victory.winner_name} def ${parsed.victory.loser_name} (surrender, confidence: 2)`);
@@ -711,8 +838,12 @@ export class ParseNewReplaysRefactorized {
           }
         }
 
-        // 5.3 (Optional) Build player_name → faction map from WML ONLY if forum had "Custom"
-        if (hasCustomFaction && parsed.players) {
+        // Ladder-era WML is used only to recover factions. Ranked-era WML is
+        // intentionally not allowed to replace forum factions.
+        const shouldUseWmlFactions = !competitive
+          ? hasCustomFaction
+          : needsLadderFactionWml;
+        if (shouldUseWmlFactions && parsed.players) {
           for (const p of parsed.players) {
             if (p.name && p.faction) {
               parseSummary.wmlPlayerFactions[p.name] = p.faction;
@@ -734,7 +865,17 @@ export class ParseNewReplaysRefactorized {
 
     // ======== CONFIDENCE LEVEL (from replayVictory) ========
     console.log(`🎯 [PARSE] Determining confidence level...`);
-    parseSummary.confidenceLevel = parseSummary.replayVictory?.confidence_level || 1;
+    // A completed competitive_game result is authoritative and never uses
+    // the legacy confidence-one/manual-confirmation state.
+    if (competitiveGameComplete) {
+      // Re-check the authoritative player table at the confidence boundary.
+      // This path must not inherit confidence from WML, especially when WML
+      // was intentionally skipped.
+      parseSummary.replayVictory = this.determineCompetitiveVictory(parseSummary);
+      parseSummary.confidenceLevel = 2;
+    } else {
+      parseSummary.confidenceLevel = parseSummary.replayVictory?.confidence_level || 1;
+    }
     if (parseSummary.confidenceLevel === 2) {
       console.log(`   ✅ Clear victory (${parseSummary.replayVictory?.reason}) → confidence=2`);
     } else {
@@ -745,15 +886,46 @@ export class ParseNewReplaysRefactorized {
     // Logic based on replay WML when available, with forum metadata as the
     // fallback for games created without the legacy Ranked add-on.
     console.log(`📊 [PARSE] Determining match type...`);
-    if (!parseSummary.forumAddon && !parseSummary.forumRankedMarker && !parseSummary.forumTournamentMarker) {
+    if (!competitive && !parseSummary.forumAddon && !parseSummary.forumRankedMarker && !parseSummary.forumTournamentMarker) {
       parseSummary.matchType = 'rejected';
       console.log(`   ❌ No valid competitive marker in forum → REJECTED`);
       return parseSummary;
     }
 
+    if (competitiveGameComplete && !parseSummary.replayVictory) {
+      parseSummary.matchType = 'rejected';
+      console.log(`   ❌ Complete competitive game has no valid winner in competitive_game_player → REJECTED`);
+      return parseSummary;
+    }
+
     // Determine match type based on ranked_mode and tournament flag
     // Tournament name always comes from game_name in forum DB
-    if (!parseSummary.replayRankedMode) {
+    if (competitive && parseSummary.forumTournamentId) {
+      // Newer servers identify the tournament directly. Its local mode is
+      // the authoritative distinction between ranked, unranked and team
+      // tournament processing when WML does not contain the old flags.
+      const competitiveTournament = await findTournamentById(
+        parseSummary.forumTournamentId,
+        ['ranked', 'unranked', 'team']
+      );
+      if (competitiveTournament) {
+        parseSummary.detectedTournament = competitiveTournament;
+        parseSummary.replayRankedMode = competitiveTournament.tournament_mode === 'ranked';
+        parseSummary.replayTournamentFlag = true;
+        parseSummary.forumTournamentMarker = true;
+        parseSummary.matchType = competitiveTournament.tournament_mode === 'ranked'
+          ? 'tournament_ranked'
+          : 'tournament_unranked';
+        console.log(`   ✅ Competitive tournament type resolved: ${parseSummary.matchType}`);
+      }
+    }
+
+    if (competitive && parseSummary.detectedTournament) {
+      // The new model already resolved the tournament from tournament_id.
+      // Never fall back to the replay game name when an exact server link is
+      // available; tournament_game_id is resolved later by linkToTournament.
+      console.log(`   ✅ Using exact competitive tournament link; skipping game-name lookup`);
+    } else if (!parseSummary.replayRankedMode) {
       // ranked_mode=false → unranked game
       console.log(`   ℹ️  ranked_mode=false (unranked)`);
       
@@ -854,8 +1026,11 @@ export class ParseNewReplaysRefactorized {
         const sideKey = `side${player.side_number}`;
         const forumFaction = parseSummary.forumFactions[sideKey] || '';
         const isCustom = forumFaction.toLowerCase().includes('custom');
+        const useLadderWmlFaction = Boolean(
+          competitive && eraAddonId?.toLowerCase() === 'ladder_era'
+        );
 
-        const factionRaw = isCustom
+        const factionRaw = isCustom || useLadderWmlFaction
           ? (this.getWmlFactionForPlayer(parseSummary.wmlPlayerFactions, player.user_name) || 'Unknown')
           : forumFaction;
 
@@ -1083,10 +1258,24 @@ export class ParseNewReplaysRefactorized {
     parseSummary.tournamentLinkMethod = 'tournament_game';
 
     if (tournament.tournament_mode === 'team' || game.team1_id || game.team2_id) {
-      // Team victories still require manual confirmation because the replay
-      // does not reliably identify the winning team from a single side.
       await this.populateTeamReplayMetadata(parseSummary, tournament, [game.team1_id, game.team2_id]);
-      parseSummary.confidenceLevel = 1;
+      if (parseSummary.replayVictory?.reason === 'competitive_game_status') {
+        const winningPlayer = parseSummary.competitivePlayers.find((player: any) =>
+          String(Object.entries(player).find(([key]) => key.toLowerCase() === 'status')?.[1] ?? '').toLowerCase() === 'victory'
+        );
+        const teamKey = winningPlayer
+          ? Object.keys(winningPlayer).find(key => ['tournament_team_id', 'team_id'].includes(key.toLowerCase()))
+          : undefined;
+        const winningTeamId = teamKey ? winningPlayer[teamKey] : null;
+        if (winningTeamId === game.team1_id) parseSummary.linkedWinnerEntryId = game.entry1_id;
+        if (winningTeamId === game.team2_id) parseSummary.linkedWinnerEntryId = game.entry2_id;
+      }
+      // The new competitive tables contain the server-side team outcome. The
+      // legacy path remains conservative because WML alone cannot map a side
+      // to a tournament team reliably.
+      if (parseSummary.replayVictory?.reason !== 'competitive_game_status') {
+        parseSummary.confidenceLevel = 1;
+      }
       return true;
     }
 
@@ -1280,14 +1469,16 @@ export class ParseNewReplaysRefactorized {
   /**
    * Resolve a named team replay against a pending tournament_games row.
    * 
-   * CRITICAL: For team tournaments, we CANNOT reliably determine which team won
-   * because we don't know the side-to-team mapping. Example:
+   * Legacy team replays cannot reliably determine which team won because they
+   * do not contain a trustworthy side-to-team mapping. Example:
    * - Game has sides 1,2,3,4 - but we don't know which pairs are allied
    * - Isars Cross: sides (1,4) vs (2,3), but parser sees "side 1 won"
    * - Without knowing the alliance structure, we can't map side 1 to its team
    * 
-   * Solution: ALWAYS mark as confidence=1 (requires manual confirmation)
-   * The phase-game confirmation flow handles progression after manual review.
+   * Legacy solution: mark confidence=1 and let the phase-game confirmation
+   * flow handle progression after manual review. New competitive_game rows
+   * bypass this limitation because tournament_team_id and player status are
+   * server-authoritative.
    * 
    * In contrast, 1v1 tournaments CAN determine winner reliably (two players, clear victory)
    */
@@ -1372,7 +1563,9 @@ export class ParseNewReplaysRefactorized {
       parseSummary.linkedTournamentId = tournament.id;
       parseSummary.linkedTournamentGameId = phaseGames.rows[0].id;
       parseSummary.tournamentLinkMethod = 'participants';
-      parseSummary.confidenceLevel = 1;
+      if (parseSummary.replayVictory?.reason !== 'competitive_game_status') {
+        parseSummary.confidenceLevel = 1;
+      }
     }
 
     // Enrich parseSummary with detected team information
@@ -1477,6 +1670,71 @@ export class ParseNewReplaysRefactorized {
     );
 
     return ((result as any).rows || []) as UnparsedReplay[];
+  }
+
+  /**
+   * Convert the authoritative competitive-player statuses into the common
+   * replay victory shape. Player identity is deliberately nickname-based:
+   * competitive_game_player has no Wesnoth user ID.
+   *
+   * A team result is valid when one team has at least one victory status and
+   * the opposing team has every member marked defeated. This also covers 1v1
+   * games because each player becomes a one-member team.
+   */
+  private determineCompetitiveVictory(parseSummary: ParseSummary): any | null {
+    if (parseSummary.competitivePlayers.length === 0) return null;
+
+    console.log(`   ✅ Competitive players received: ${parseSummary.competitivePlayers.length}`);
+    const playerByName = new Map(
+      parseSummary.forumPlayers.map(player => [String(player.user_name || '').toLowerCase(), player])
+    );
+    const winnerNames: string[] = [];
+    const loserNames: string[] = [];
+    const teamStatuses = new Map<string, string[]>();
+
+    for (const competitivePlayer of parseSummary.competitivePlayers) {
+      const rowValue = (names: string[]): any => {
+        const key = Object.keys(competitivePlayer).find(candidate => names.includes(candidate.toLowerCase()));
+        return key ? competitivePlayer[key] : null;
+      };
+      const username = rowValue([
+        'nickname',
+        'wesnoth_nickname',
+        'user_name',
+        'wesnoth_username',
+        'username',
+        'player_name',
+        'name'
+      ]);
+      const forumPlayer = playerByName.get(String(username || '').toLowerCase());
+      if (!forumPlayer) {
+        console.warn(`   ⚠️  Competitive result contains a nickname absent from wesnothd_game_player_info`);
+        continue;
+      }
+
+      const status = String(rowValue(['status']) ?? '').trim().toLowerCase();
+      const teamId = rowValue(['tournament_team_id', 'team_id']) ?? `player:${forumPlayer.user_name}`;
+      console.log(`   Competitive player: ${forumPlayer.user_name} status=${status || 'missing'} team=${teamId}`);
+      const statuses = teamStatuses.get(String(teamId)) || [];
+      statuses.push(status);
+      teamStatuses.set(String(teamId), statuses);
+      if (status === 'victory') winnerNames.push(forumPlayer.user_name);
+      if (status === 'defeated') loserNames.push(forumPlayer.user_name);
+    }
+
+    const teamOutcomeValid = Array.from(teamStatuses.values()).some(statuses => statuses.includes('victory')) &&
+      Array.from(teamStatuses.values()).some(statuses => statuses.length > 0 && statuses.every(status => status === 'defeated'));
+    if (!winnerNames.length || !loserNames.length || !teamOutcomeValid) return null;
+
+    console.log(`   ✅ Server-authoritative victory: ${winnerNames.join(', ')} def ${loserNames.join(', ')}`);
+    return {
+      winner_name: winnerNames[0],
+      loser_name: loserNames[0],
+      reason: 'competitive_game_status',
+      confidence_level: 2,
+      winner_names: winnerNames,
+      loser_names: loserNames,
+    };
   }
 
   private async parseReplayFromUrl(

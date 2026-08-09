@@ -203,6 +203,78 @@ export async function getGameContent(
   }
 }
 
+export interface CompetitiveGameData {
+  game: any;
+  players: any[];
+}
+
+/**
+ * Read the server-authoritative competitive result when the new Wesnoth
+ * schema is available.  The forum database is deployed independently from
+ * this application, so an unknown column/table is an expected compatibility
+ * case rather than a fatal integration error.
+ */
+export async function getCompetitiveGameData(
+  instanceUuid: string,
+  gameId: number
+): Promise<CompetitiveGameData | null> {
+  let competitiveGameId: string | number | null = null;
+  try {
+    const gameInfo = await queryForum(
+      `SELECT COMPETITIVE_GAME_ID AS competitive_game_id
+       FROM wesnothd_game_info
+       WHERE INSTANCE_UUID = ? AND GAME_ID = ? LIMIT 1`,
+      [instanceUuid, gameId]
+    );
+    competitiveGameId = gameInfo[0]?.competitive_game_id ?? null;
+  } catch (error: any) {
+    // Old Wesnoth schemas do not have COMPETITIVE_GAME_ID.
+    if (!isMissingForumObject(error)) throw error;
+    console.log(`ℹ️  [FORUM] COMPETITIVE_GAME_ID is unavailable for ${instanceUuid}:${gameId} (${error.code})`);
+    return null;
+  }
+
+  if (competitiveGameId === null || competitiveGameId === '') {
+    console.log(`ℹ️  [FORUM] No competitive_game_id for ${instanceUuid}:${gameId}`);
+    return null;
+  }
+
+  console.log(`✅ [FORUM] competitive_game_id=${competitiveGameId} for ${instanceUuid}:${gameId}`);
+
+  let games: any[];
+  try {
+    games = await queryForum(
+      `SELECT * FROM competitive_game WHERE ID = ? LIMIT 1`,
+      [competitiveGameId]
+    );
+  } catch (error: any) {
+    // Accommodate the explicit column name used by some schema revisions.
+    if (!isMissingForumObject(error)) throw error;
+    games = await queryForum(
+      `SELECT * FROM competitive_game WHERE COMPETITIVE_GAME_ID = ? LIMIT 1`,
+      [competitiveGameId]
+    );
+  }
+
+  if (games.length === 0) {
+    // The identifier is present, so silently falling back to content markers
+    // could misclassify a new-model replay.
+    throw new Error(`competitive_game ${competitiveGameId} was not found`);
+  }
+
+  const players = await queryForum(
+    `SELECT * FROM competitive_game_player
+     WHERE COMPETITIVE_GAME_ID = ?`,
+    [competitiveGameId]
+  );
+  console.log(`✅ [FORUM] competitive_game=${competitiveGameId} status=${games[0].STATUS ?? games[0].status ?? 'unknown'} players=${players.length}`);
+  return { game: games[0], players };
+}
+
+function isMissingForumObject(error: any): boolean {
+  return error?.code === 'ER_NO_SUCH_TABLE' || error?.code === 'ER_BAD_FIELD_ERROR';
+}
+
 /**
  * Check if a game has tournament addon
  * 
@@ -301,6 +373,7 @@ export default {
   getNewGamesFromForum,
   getGamePlayers,
   getGameContent,
+  getCompetitiveGameData,
   hasGameTournamentAddon,
   getTournamentAddonVersion,
   closeForumPool

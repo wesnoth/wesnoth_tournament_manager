@@ -4,7 +4,8 @@
  * 
  * Purpose: Background job that runs every 60 seconds to:
  * 1. Query forum database (wesnothd_game_info) for new games
- * 2. Accept the legacy Ranked add-on or new ranked/tournament content markers
+ * 2. Prefer the competitive_game model; otherwise accept the legacy Ranked
+ *    add-on or wesnothd_game_content_info markers
  * 3. Insert new games into replays table as pending parse
  * 4. Update last_check_timestamp in system_settings
  * 
@@ -21,7 +22,8 @@ import {
   getNewGamesFromForum, 
   getGamePlayers, 
   getGameContent,
-  hasGameTournamentAddon
+  hasGameTournamentAddon,
+  getCompetitiveGameData
 } from '../config/forumDatabase.js';
 import { parseWesnothVersions, getBaseVersion } from '../utils/versionParser.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -147,8 +149,13 @@ export class SyncGamesFromForumJob {
 
           // The legacy Ranked add-on remains valid. The new client writes
           // ranked=yes or tournament=<id> into game content metadata.
-          const hasRankedAddon = await hasGameTournamentAddon(instanceUuid, gameId, rankedAddonName);
-          const gameContent = await getGameContent(instanceUuid, gameId);
+          const competitiveGame = await getCompetitiveGameData(instanceUuid, gameId);
+          // A competitive_game_id is the replacement for the legacy Ranked
+          // add-on marker. Do not query legacy content markers in that case.
+          const hasRankedAddon = competitiveGame
+            ? false
+            : await hasGameTournamentAddon(instanceUuid, gameId, rankedAddonName);
+          const gameContent = competitiveGame ? [] : await getGameContent(instanceUuid, gameId);
           const normalize = (value: unknown): string => String(value ?? '').trim().toLowerCase();
           const hasRankedMetadata = gameContent.some(content =>
             normalize(content.TYPE) === 'ranked' && normalize(content.ID) === 'yes'
@@ -161,7 +168,9 @@ export class SyncGamesFromForumJob {
             return tournamentId !== '' && tournamentId !== 'none';
           });
 
-          if(!hasRankedAddon && !hasRankedMetadata && !hasTournamentMetadata) {
+          const hasCompetitiveGame = Boolean(competitiveGame);
+
+          if(!hasRankedAddon && !hasRankedMetadata && !hasTournamentMetadata && !hasCompetitiveGame) {
             skippedWithoutMarker++;
             continue; // Skip games unrelated to ranked/tournament processing.
           }
@@ -169,7 +178,8 @@ export class SyncGamesFromForumJob {
           const markers = [
             hasRankedAddon ? 'Ranked addon' : '',
             hasRankedMetadata ? 'ranked=yes' : '',
-            hasTournamentMetadata ? 'tournament metadata' : ''
+            hasTournamentMetadata ? 'tournament metadata' : '',
+            hasCompetitiveGame ? 'competitive_game_id' : ''
           ].filter(Boolean).join(', ');
           console.log(`🌐 [FORUM SYNC] Processing: ${game.game_name} (${instanceUuid}:${gameId}) [${markers}]`);
 
