@@ -311,7 +311,7 @@ Registry of discovered replay files from the Wesnoth game server.
 | Column | Type | Notes |
 |---|---|---|
 | `id` | char(36) PK | UUID |
-| `replay_filename` | varchar(500) | Filename on the replay server |
+| `replay_filename` | varchar(500) | Filename on the replay server; filenames may repeat across games |
 | `replay_path` | varchar(1000) | Full path on replay server filesystem |
 | `file_size_bytes` | bigint | File size |
 | `parsed` | tinyint(1) | Legacy parsed flag |

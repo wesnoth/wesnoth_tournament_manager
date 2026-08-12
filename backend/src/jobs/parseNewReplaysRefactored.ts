@@ -86,7 +86,7 @@ interface ParseSummary {
   competitiveGameStatus: string | null;
   competitiveGameType: string | null;
   competitivePlayers: Array<any>;
-  deferredUntilCompetitiveCompletion: boolean;
+  rejectedBecauseCompetitiveSave: boolean;
   forumAddon: any | null;
   // New server-side markers. These allow processing replays without the
   // Ranked add-on while the legacy add-on remains supported.
@@ -273,16 +273,6 @@ export class ParseNewReplaysRefactorized {
           }
 
           const parseSummary = await this.parseReplayForumFirst(replay);
-
-          if (parseSummary.deferredUntilCompetitiveCompletion) {
-            console.log(`⏳ [PARSE] Competitive game is still active; leaving replay queued`);
-            await query(
-              `UPDATE replays SET parse_status = 'new', parsed = 0, need_integration = 1,
-               parse_error_message = ?, parse_summary = ? WHERE id = ?`,
-              ['Waiting for competitive_game status=complete/completed', JSON.stringify(parseSummary), replay.id]
-            );
-            continue;
-          }
 
           if (parseSummary.matchType === 'rejected') {
             console.log(`❌ [PARSE] Match rejected → Update replay as rejected`);
@@ -486,7 +476,7 @@ export class ParseNewReplaysRefactorized {
       competitiveGameStatus: null,
       competitiveGameType: null,
       competitivePlayers: [],
-      deferredUntilCompetitiveCompletion: false,
+      rejectedBecauseCompetitiveSave: false,
       forumAddon: null,
       forumRankedMarker: false,
       forumTournamentMarker: false,
@@ -573,10 +563,20 @@ export class ParseNewReplaysRefactorized {
       console.log(`✅ [FORUM] competitive model type=${parseSummary.competitiveGameType} tournament=${competitiveTournamentId ?? 'none'} tournament_game=${competitiveTournamentGameId ?? 'none'}`);
 
       if (parseSummary.competitiveGameStatus === 'active') {
-        // A replay of an active game is a temporary save. Keep it queued so a
-        // later sync can observe the completed server-side result.
-        parseSummary.deferredUntilCompetitiveCompletion = true;
-        return parseSummary;
+        if (competitive.hasSave) {
+          // A retained save is resumable, so this replay must not become a
+          // match or a manual result. Reject it because the game can continue
+          // from the server-side save instead of leaving it pending forever.
+          parseSummary.rejectedBecauseCompetitiveSave = true;
+          parseSummary.matchType = 'rejected';
+          return parseSummary;
+        }
+
+        // The server still considers the game active, but no continuation
+        // save exists. Continue parsing so an explicit replay victory can be
+        // used; otherwise the normal unknown-victory path records confidence 1
+        // for manual confirmation instead of keeping the replay pending.
+        console.log(`⚠️ [FORUM] Active competitive game has no save; allowing provisional parsing`);
       }
     }
 

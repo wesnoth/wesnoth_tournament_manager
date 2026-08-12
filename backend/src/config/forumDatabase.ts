@@ -206,6 +206,8 @@ export async function getGameContent(
 export interface CompetitiveGameData {
   game: any;
   players: any[];
+  /** Whether the server retained a continuation save for this game. */
+  hasSave: boolean;
 }
 
 /**
@@ -269,8 +271,26 @@ export async function getCompetitiveGameData(
      WHERE COMPETITIVE_GAME_ID = ?`,
     [competitiveGameId]
   );
-  console.log(`✅ [FORUM] competitive_game=${competitiveGameId} status=${games[0].STATUS ?? games[0].status ?? 'unknown'} players=${players.length}`);
-  return { game: games[0], players };
+
+  // An active game with a retained save can still be resumed.  Do not turn
+  // that temporary replay into a provisional result.  Older deployments may
+  // not have the save table yet, so absence of the optional table means that
+  // no save is known rather than a fatal integration error.
+  let hasSave = false;
+  try {
+    const saves = await queryForum(
+      `SELECT SAVE_ID FROM competitive_game_save
+       WHERE COMPETITIVE_GAME_ID = ? LIMIT 1`,
+      [competitiveGameId]
+    );
+    hasSave = saves.length > 0;
+  } catch (error: any) {
+    if (!isMissingForumObject(error)) throw error;
+    console.log(`ℹ️  [FORUM] competitive_game_save is unavailable for ${competitiveGameId} (${error.code})`);
+  }
+
+  console.log(`✅ [FORUM] competitive_game=${competitiveGameId} status=${games[0].STATUS ?? games[0].status ?? 'unknown'} players=${players.length} save=${hasSave}`);
+  return { game: games[0], players, hasSave };
 }
 
 /**

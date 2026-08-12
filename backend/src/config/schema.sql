@@ -659,7 +659,6 @@ CREATE TABLE `replays` (
   `discard_vote_2` char(36) DEFAULT NULL COMMENT 'Second player user_id who voted to discard this replay',
   `cancel_requested_by` varchar(36) DEFAULT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `replay_filename` (`replay_filename`),
   UNIQUE KEY `uq_instance_game` (`instance_uuid`,`game_id`),
   KEY `idx_parsed` (`parsed`),
   KEY `idx_need_integration` (`need_integration`),
