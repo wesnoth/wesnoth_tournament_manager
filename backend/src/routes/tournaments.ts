@@ -716,7 +716,8 @@ router.get('/:id/organizers', async (req, res) => {
   }
 });
 
-// Add tournament organizer (existing organizers only)
+// Add a tournament co-organizer. Only the creator owns organizer membership;
+// co-organizers receive tournament-management permissions but cannot delegate them.
 router.post('/:id/organizers', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
@@ -727,15 +728,19 @@ router.post('/:id/organizers', authMiddleware, async (req: AuthRequest, res) => 
     }
 
     const tournamentResult = await query(
-      'SELECT id FROM tournaments WHERE id = ?',
+      'SELECT id, creator_id, status FROM tournaments WHERE id = ?',
       [id]
     );
     if (tournamentResult.rows.length === 0) {
       return res.status(404).json({ error: 'Tournament not found' });
     }
 
-    if (!(await isTournamentOrganizer(id, req.userId!))) {
-      return res.status(403).json({ error: 'Only tournament organizers can manage organizers' });
+    const tournament = tournamentResult.rows[0];
+    if (tournament.creator_id !== req.userId) {
+      return res.status(403).json({ error: 'Only the tournament creator can manage organizers' });
+    }
+    if (tournament.status === 'finished') {
+      return res.status(409).json({ error: 'Cannot change organizers after the tournament has finished' });
     }
 
     const targetUser = await query(
@@ -762,24 +767,28 @@ router.post('/:id/organizers', authMiddleware, async (req: AuthRequest, res) => 
   }
 });
 
-// Remove tournament organizer
+// Remove a tournament co-organizer under the same creator-only lifecycle rule.
 router.delete('/:id/organizers/:organizerUserId', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { id, organizerUserId } = req.params;
 
     const tournamentResult = await query(
-      'SELECT id, creator_id FROM tournaments WHERE id = ?',
+      'SELECT id, creator_id, status FROM tournaments WHERE id = ?',
       [id]
     );
     if (tournamentResult.rows.length === 0) {
       return res.status(404).json({ error: 'Tournament not found' });
     }
 
-    if (!(await isTournamentOrganizer(id, req.userId!))) {
-      return res.status(403).json({ error: 'Only tournament organizers can manage organizers' });
+    const tournament = tournamentResult.rows[0];
+    if (tournament.creator_id !== req.userId) {
+      return res.status(403).json({ error: 'Only the tournament creator can manage organizers' });
+    }
+    if (tournament.status === 'finished') {
+      return res.status(409).json({ error: 'Cannot change organizers after the tournament has finished' });
     }
 
-    const creatorId = tournamentResult.rows[0].creator_id;
+    const creatorId = tournament.creator_id;
     if (organizerUserId === creatorId) {
       return res.status(400).json({ error: 'Cannot remove tournament creator from organizers' });
     }

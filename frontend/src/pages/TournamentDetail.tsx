@@ -142,6 +142,11 @@ interface TournamentOrganizer {
   nickname: string;
 }
 
+interface OrganizerUserOption {
+  id: string;
+  nickname: string;
+}
+
 interface TournamentParticipant {
   id: string;
   user_id: string;
@@ -227,6 +232,9 @@ const TournamentDetail: React.FC = () => {
   const [rounds, setRounds] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [organizers, setOrganizers] = useState<TournamentOrganizer[]>([]);
+  const [organizerUsers, setOrganizerUsers] = useState<OrganizerUserOption[]>([]);
+  const [organizerCandidateId, setOrganizerCandidateId] = useState('');
+  const [organizerMutationLoading, setOrganizerMutationLoading] = useState(false);
   const [unrankedFactions, setUnrankedFactions] = useState<Array<{ id: string; name: string }>>([]);
   const [unrankedMaps, setUnrankedMaps] = useState<Array<{ id: string; name: string }>>([]);
   const [allFactions, setAllFactions] = useState<Array<{ id: string; name: string }>>([]);
@@ -317,6 +325,30 @@ const TournamentDetail: React.FC = () => {
       fetchTournamentData();
     }
   }, [id, userId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    // The user directory is only needed by the creator while membership is editable.
+    // Avoid exposing an inoperative selector or doing extra work for co-organizers.
+    if (!tournament || tournament.creator_id !== userId || tournament.status === 'finished') {
+      setOrganizerUsers([]);
+      setOrganizerCandidateId('');
+      return () => { cancelled = true; };
+    }
+
+    userService.getAllUsers()
+      .then((response) => {
+        if (cancelled) return;
+        const users = response.data?.data || response.data || [];
+        setOrganizerUsers(Array.isArray(users) ? users : []);
+      })
+      .catch((loadError) => {
+        console.error('Failed to load co-organizer candidates:', loadError);
+      });
+
+    return () => { cancelled = true; };
+  }, [tournament?.id, tournament?.creator_id, tournament?.status, userId]);
 
   // Fetch user timezone once
   useEffect(() => {
@@ -1116,11 +1148,50 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
     return '';
   };
 
-  const isCreator = Boolean(userId && organizers.some((organizer) => organizer.user_id === userId));
+  const isOrganizer = Boolean(userId && organizers.some((organizer) => organizer.user_id === userId));
+  const isPrimaryOrganizer = Boolean(userId && tournament?.creator_id === userId);
   const isAcceptedParticipant = userParticipationStatus === 'accepted';
-  const canManageParticipants = isCreator || isAdmin || isTournamentModerator;
+  const canManageParticipants = isOrganizer || isAdmin || isTournamentModerator;
   const canRenameTeam = (team: any) =>
-    isCreator || isAdmin || isTournamentModerator || (userTeamId && team.id === userTeamId);
+    isOrganizer || isAdmin || isTournamentModerator || (userTeamId && team.id === userTeamId);
+
+  const refreshOrganizers = async () => {
+    const response = await tournamentService.getTournamentOrganizers(id!);
+    setOrganizers(response.data || []);
+  };
+
+  const handleAddOrganizer = async () => {
+    if (!id || !organizerCandidateId) return;
+    try {
+      setOrganizerMutationLoading(true);
+      setError('');
+      await tournamentService.addTournamentOrganizer(id, organizerCandidateId);
+      await refreshOrganizers();
+      setOrganizerCandidateId('');
+      setSuccess(t('tournament.organizer_added', 'Co-organizer added successfully.'));
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (mutationError: any) {
+      setError(mutationError.response?.data?.error || t('tournament.organizer_add_failed', 'Failed to add co-organizer.'));
+    } finally {
+      setOrganizerMutationLoading(false);
+    }
+  };
+
+  const handleRemoveOrganizer = async (organizer: TournamentOrganizer) => {
+    if (!id) return;
+    try {
+      setOrganizerMutationLoading(true);
+      setError('');
+      await tournamentService.removeTournamentOrganizer(id, organizer.user_id);
+      await refreshOrganizers();
+      setSuccess(t('tournament.organizer_removed', 'Co-organizer removed successfully.'));
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (mutationError: any) {
+      setError(mutationError.response?.data?.error || t('tournament.organizer_remove_failed', 'Failed to remove co-organizer.'));
+    } finally {
+      setOrganizerMutationLoading(false);
+    }
+  };
 
   const canScheduleMatch = (match: any): boolean => {
     // User must be one of the match participants
@@ -1399,6 +1470,62 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
             </React.Fragment>
           ))}
         </p>
+        {isPrimaryOrganizer && tournament.status !== 'finished' && (
+          <div data-help-id="region-tournament-organizer-management" className="mt-4 rounded border border-gray-200 bg-gray-50 p-4">
+            <h2 className="font-semibold text-gray-800">
+              {t('tournament.manage_organizers', 'Manage co-organizers')}
+            </h2>
+            <p className="mt-1 text-sm text-gray-600">
+              {t('tournament.manage_organizers_help', 'Co-organizers can manage this tournament. Only you, as its creator, can change this list.')}
+            </p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <select
+                data-help-id="field-tournament-co-organizer"
+                value={organizerCandidateId}
+                onChange={(event) => setOrganizerCandidateId(event.target.value)}
+                disabled={organizerMutationLoading}
+                className="min-w-0 flex-1 rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+              >
+                <option value="">{t('tournament.select_co_organizer', 'Select co-organizer')}</option>
+                {organizerUsers
+                  .filter((candidate) => candidate.id !== tournament.creator_id && !organizers.some((organizer) => organizer.user_id === candidate.id))
+                  .map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>{candidate.nickname}</option>
+                  ))}
+              </select>
+              <button
+                data-help-id="action-add-tournament-organizer"
+                type="button"
+                onClick={handleAddOrganizer}
+                disabled={organizerMutationLoading || !organizerCandidateId}
+                className="rounded-md bg-blue-500 px-4 py-2 text-white hover:bg-blue-600 disabled:opacity-50"
+              >
+                {t('tournament.add_organizer', 'Add co-organizer')}
+              </button>
+            </div>
+            {organizers.some((organizer) => organizer.user_id !== tournament.creator_id) && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {organizers
+                  .filter((organizer) => organizer.user_id !== tournament.creator_id)
+                  .map((organizer) => (
+                    <span key={organizer.user_id} className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-sm ring-1 ring-gray-300">
+                      {organizer.nickname}
+                      <button
+                        data-help-id="action-remove-tournament-organizer"
+                        type="button"
+                        onClick={() => handleRemoveOrganizer(organizer)}
+                        disabled={organizerMutationLoading}
+                        className="font-semibold text-red-600 hover:text-red-800 disabled:opacity-50"
+                        aria-label={t('tournament.remove_organizer_aria', 'Remove {{nickname}} as co-organizer', { nickname: organizer.nickname })}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+              </div>
+            )}
+          </div>
+        )}
         <p><strong>{t('tournament.col_type')}:</strong> {usesPhaseEngine ? 'Flexible phases' : tournament.tournament_type}</p>
         <p><strong>Wesnoth game name:</strong> <code className="px-1 bg-gray-100 rounded">{tournament.forum_topic_id ? `T${tournament.forum_topic_id}` : tournament.name}</code></p>
         {tournament.forum_topic_id && (
@@ -1581,12 +1708,12 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
             </button>
           )
         )}
-        {(!tournament.status || tournament.status !== 'registration_open' || userParticipationStatus || !userId || editMode) && !isCreator && (
+        {(!tournament.status || tournament.status !== 'registration_open' || userParticipationStatus || !userId || editMode) && !isOrganizer && (
           <div></div>
         )}
 
         {/* Organizer Controls - Right side */}
-        {isCreator && !editMode && (
+        {isOrganizer && !editMode && (
           <div className="flex flex-wrap gap-3">
             {tournament.status !== 'prepared' && tournament.status !== 'in_progress' && tournament.status !== 'finished' && (
               <button 
@@ -1611,7 +1738,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
               <button data-help-id="action-start-tournament" onClick={handleStartTournament} className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors">{t('tournaments.btn_start')}</button>
             )}
 
-            {(tournament.status === 'in_progress' || tournament.status === 'finished') && isCreator && (
+            {(tournament.status === 'in_progress' || tournament.status === 'finished') && isOrganizer && (
               <div className="flex items-center gap-3">
                 {tournament.status === 'in_progress' && (
                   <p className="text-green-600">✓ {t('tournaments.started_locked')}</p>
@@ -1652,12 +1779,12 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
         )}
       </div>
 
-      {isCreator && (isAdmin || isTournamentModerator) && tournament.status === 'registration_open' && (
+      {isOrganizer && (isAdmin || isTournamentModerator) && tournament.status === 'registration_open' && (
         <SimulateJoinPanel tournament={tournament} onCompleted={() => fetchTournamentData()} />
       )}
 
       {/* Edit form - shown when in edit mode */}
-      {isCreator && editMode && tournament.status !== 'in_progress' && (
+      {isOrganizer && editMode && tournament.status !== 'in_progress' && (
         <TournamentForm 
           mode="edit"
           formData={editData}
@@ -1948,7 +2075,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                       {t('btn_confirm') || 'Confirm'}
                                     </button>
                                   )}
-                                  {isCreator && member.participation_status === 'pending' && (
+                                  {isOrganizer && member.participation_status === 'pending' && (
                                     <>
                                       <button
                                         data-help-id="action-accept-participant"
@@ -1968,13 +2095,13 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                       </button>
                                     </>
                                   )}
-                                  {isCreator && member.participation_status === 'unconfirmed' && (
+                                  {isOrganizer && member.participation_status === 'unconfirmed' && (
                                     <span title="Awaiting player confirmation" className="text-sm text-gray-600">
                                       Awaiting confirmation
                                     </span>
                                   )}
                                   {/* Substitute Player — organizer only, after tournament starts, team active, for accepted members */}
-                                  {isCreator && ['registration_closed', 'prepared', 'in_progress'].includes(tournament?.status || '') && team.status === 'active' && member.participation_status === 'accepted' && (
+                                  {isOrganizer && ['registration_closed', 'prepared', 'in_progress'].includes(tournament?.status || '') && team.status === 'active' && member.participation_status === 'accepted' && (
                                     <button
                                       data-help-id="action-replace-team-member"
                                       className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
@@ -2041,7 +2168,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                       <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_losses')}</th>
                       <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_points')}</th>
                     </>}
-                    {(isCreator || canManageParticipants || userId) && tournament?.status === 'registration_open' && <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_actions')}</th>}
+                    {(isOrganizer || canManageParticipants || userId) && tournament?.status === 'registration_open' && <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_actions')}</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -2070,7 +2197,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                       {tournament?.status === 'registration_open' && (
                       <td className="px-4 py-3 text-gray-700">
                         <div className="flex gap-1 flex-wrap">
-                        {isCreator && p.participation_status === 'pending' && (
+                        {isOrganizer && p.participation_status === 'pending' && (
                           <>
                           <button 
                             data-help-id="action-accept-participant"
@@ -2645,7 +2772,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                          {t('match_inform')}
                                        </button>
                                      )}
-                                     {isCreator && !isPendingReplay && confirmationStatus === 'disputed' && (
+                                     {isOrganizer && !isPendingReplay && confirmationStatus === 'disputed' && (
                                        <button
                                          data-help-id="action-manage-match-dispute"
                                          className="px-2 py-1 text-xs bg-orange-500 hover:bg-orange-600 text-white rounded transition-colors"
@@ -2689,7 +2816,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                   <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_start_date')}</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_end_date')}</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_format')}</th>
-                  {isCreator && tournament.tournament_type !== 'league' && <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_actions')}</th>}
+                  {isOrganizer && tournament.tournament_type !== 'league' && <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_actions')}</th>}
                 </tr>
               </thead>
               <tbody>
@@ -2707,7 +2834,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                     <td className="px-4 py-3 text-gray-700">{round.round_start_date ? formatDate(round.round_start_date) : '-'}</td>
                     <td className="px-4 py-3 text-gray-700">{round.round_end_date ? formatDate(round.round_end_date) : '-'}</td>
                     <td className="px-4 py-3 text-gray-700">{(round as any)?.match_format ? t('match_format.' + (round as any).match_format) : '-'}</td>
-                    {isCreator && tournament.tournament_type !== 'league' && (
+                    {isOrganizer && tournament.tournament_type !== 'league' && (
                       <td className="px-4 py-3 text-gray-700">
                         {round.round_status === 'completed' && round.round_number < rounds.length ? (
                           (() => {
@@ -3009,7 +3136,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
         <div className="bg-white rounded-lg shadow-lg p-8 mb-8 mt-6">
           <TournamentCompetitionView
             tournamentId={tournament.id}
-            canManage={isCreator}
+            canManage={isOrganizer}
             currentUserId={userId}
             participantTeamIds={participants.map((participant: any) => participant.team_id).filter(Boolean)}
             onScheduleGame={(game) => handlePreloadSchedulingData(game.series_id, false, undefined, true)}
