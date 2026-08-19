@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
 import { publicService } from '../services/api';
-import { useAuthStore } from '../store/authStore';
 import UserBadge from '../components/UserBadge';
+import PlayerLink from '../components/PlayerLink';
 
 interface PlayerStats {
   id: string;
@@ -34,8 +33,6 @@ type SortDirection = 'asc' | 'desc';
 
 const Players: React.FC = () => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
-  const { userId } = useAuthStore();
   const [players, setPlayers] = useState<PlayerStats[]>([]);
   const [sortColumn, setSortColumn] = useState<SortColumn>('nickname');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -408,20 +405,12 @@ const Players: React.FC = () => {
                       username={player.nickname}
                       size="medium-small"
                     />
-                    <a data-help-id="action-view-player-profile"
-                      href="#" 
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (userId === player.id) {
-                          navigate('/user');
-                        } else {
-                          navigate(`/player/${player.id}`);
-                        }
-                      }}
+                    <PlayerLink
+                      nickname={player.nickname}
+                      userId={player.id}
+                      helpId="action-view-player-profile"
                       className="font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
-                    >
-                      {player.nickname}
-                    </a>
+                    />
                   </div>
                 </td>
                 <td className="px-4 py-3 text-gray-700">

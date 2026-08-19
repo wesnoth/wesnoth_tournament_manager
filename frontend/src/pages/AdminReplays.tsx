@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { adminService, featureService } from '../services/api';
 import MainLayout from '../components/MainLayout';
+import PlayerLink from '../components/PlayerLink';
 import { SimulateMatchPanel } from '../components/TestSimulationControls';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -514,32 +515,22 @@ const AdminReplays: React.FC = () => {
                       </td>
                       <td className="px-3 py-2 text-gray-700">
                         {side1 !== '—' && side1Id ? (
-                          <a 
-                            href="#" 
-                            onClick={(e) => {
-                              e.preventDefault();
-                              navigate(`/player/${side1Id}`);
-                            }}
+                          <PlayerLink
+                            nickname={side1}
+                            userId={side1Id}
                             className="font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
-                          >
-                            {side1}
-                          </a>
+                          />
                         ) : (
                           side1
                         )}
                       </td>
                       <td className="px-3 py-2 text-gray-700">
                         {side2 !== '—' && side2Id ? (
-                          <a 
-                            href="#" 
-                            onClick={(e) => {
-                              e.preventDefault();
-                              navigate(`/player/${side2Id}`);
-                            }}
+                          <PlayerLink
+                            nickname={side2}
+                            userId={side2Id}
                             className="font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
-                          >
-                            {side2}
-                          </a>
+                          />
                         ) : (
                           side2
                         )}

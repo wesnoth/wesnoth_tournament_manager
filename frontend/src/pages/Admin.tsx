@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { adminService } from '../services/api';
 import MainLayout from '../components/MainLayout';
+import PlayerLink from '../components/PlayerLink';
 import GlobalStatsRecalculationProgress from '../components/GlobalStatsRecalculationProgress';
 import { useGlobalStatsRecalculation } from '../hooks/useGlobalStatsRecalculation';
 
@@ -381,16 +382,11 @@ const AdminUsers: React.FC = () => {
                 return (
                 <tr key={user.id} className="border-b border-gray-200 hover:bg-gray-50">
                  <td className="px-4 py-3 text-gray-700">
-                   <a 
-                     href="#" 
-                     onClick={(e) => {
-                       e.preventDefault();
-                       navigate(`/player/${user.id}`);
-                     }}
+                   <PlayerLink
+                     nickname={user.nickname}
+                     userId={user.id}
                      className="font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
-                   >
-                     {user.nickname}
-                   </a>
+                   />
                  </td>
                   <td className="px-4 py-3 text-gray-700">{user.elo_rating || 1200}</td>
                   <td className="px-4 py-3 text-gray-700">{user.level || t('level_novice')}</td>

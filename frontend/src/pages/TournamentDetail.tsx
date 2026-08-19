@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
@@ -170,6 +170,36 @@ interface TournamentParticipant {
   current_round?: number;
 }
 
+type TournamentDetailTab = 'participants' | 'matches' | 'rounds' | 'roundMatches' | 'ranking' | 'competition' | 'tournamentStandings' | 'teams';
+
+const tournamentDetailTabs = new Set<TournamentDetailTab>([
+  'participants',
+  'matches',
+  'rounds',
+  'roundMatches',
+  'ranking',
+  'competition',
+  'tournamentStandings',
+  'teams',
+]);
+
+function getRequestedTournamentTab(searchParams: URLSearchParams): TournamentDetailTab | null {
+  const tab = searchParams.get('tab');
+  return tab && tournamentDetailTabs.has(tab as TournamentDetailTab) ? tab as TournamentDetailTab : null;
+}
+
+/**
+ * Select the most useful landing view for phase-engine tournaments. Standings
+ * are authoritative after completion, while pre-start states are primarily
+ * concerned with the registered field.
+ */
+function getDefaultTournamentTab(status: string, usesPhaseEngine: boolean): TournamentDetailTab {
+  if (!usesPhaseEngine) return 'participants';
+  if (status === 'in_progress') return 'competition';
+  if (['finished', 'complete', 'completed'].includes(status)) return 'tournamentStandings';
+  return 'participants';
+}
+
 interface TournamentMatch {
   id: string;
   tournament_id: string;
@@ -246,13 +276,8 @@ const TournamentDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [activeTab, setActiveTab] = useState<'participants' | 'matches' | 'rounds' | 'roundMatches' | 'ranking' | 'competition' | 'tournamentStandings' | 'teams'>(() => {
-    const tabParam = searchParams.get('tab');
-    if (tabParam === 'roundMatches' || tabParam === 'matches' || tabParam === 'rounds' || tabParam === 'ranking' || tabParam === 'competition' || tabParam === 'tournamentStandings' || tabParam === 'teams') {
-      return tabParam;
-    }
-    return 'participants';
-  });
+  const [activeTab, setActiveTab] = useState<TournamentDetailTab>(() => getRequestedTournamentTab(searchParams) || 'participants');
+  const tabInitializedForTournament = useRef<string | null>(null);
   const [highlightedMatchId, setHighlightedMatchId] = useState<string | null>(searchParams.get('matchId'));
   const [highlightedSeriesId] = useState<string | null>(searchParams.get('seriesId'));
   const [myMatchesOnly, setMyMatchesOnly] = useState(false);
@@ -377,13 +402,20 @@ const TournamentDetail: React.FC = () => {
       ]);
 
       setTournament(tournamentRes.data);
-      if (Number(tournamentRes.data.competition_model_version) === 2) {
-        // Phase-engine tournaments do not populate the legacy match, round,
-        // or aggregate-ranking tables. Open their authoritative competition
-        // view unless the caller explicitly requested Participants.
-        const requestedTab = searchParams.get('tab');
-        if (requestedTab === 'tournamentStandings') setActiveTab('tournamentStandings');
-        else if (requestedTab !== 'participants') setActiveTab('competition');
+      const usesLoadedPhaseEngine = Number(tournamentRes.data.competition_model_version) === 2;
+      if (tabInitializedForTournament.current !== tournamentRes.data.id) {
+        const requestedTab = getRequestedTournamentTab(searchParams);
+        const availableRequestedTab = !usesLoadedPhaseEngine
+          || requestedTab === 'participants'
+          || requestedTab === 'competition'
+          || requestedTab === 'tournamentStandings';
+
+        // Explicit deep links win when the requested view exists for this
+        // tournament model; otherwise choose the state-aware landing view.
+        setActiveTab(requestedTab && availableRequestedTab
+          ? requestedTab
+          : getDefaultTournamentTab(tournamentRes.data.status, usesLoadedPhaseEngine));
+        tabInitializedForTournament.current = tournamentRes.data.id;
       }
       console.log('📋 Tournament loaded:', {
         id: tournamentRes.data.id,

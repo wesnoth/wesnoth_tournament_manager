@@ -1,34 +1,26 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 
 interface PlayerLinkProps {
   nickname: string;
   userId: string;
   className?: string;
+  helpId?: string;
 }
 
-const PlayerLink: React.FC<PlayerLinkProps> = ({ nickname, userId, className = '' }) => {
-  const navigate = useNavigate();
+const PlayerLink: React.FC<PlayerLinkProps> = ({ nickname, userId, className = '', helpId = 'action-player-profile' }) => {
   const { userId: currentUserId } = useAuthStore();
-
-  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    e.preventDefault();
-    if (currentUserId === userId) {
-      navigate('/user');
-    } else {
-      navigate(`/player/${userId}`);
-    }
-  };
+  const profilePath = currentUserId === userId ? '/user' : `/player/${userId}`;
 
   return (
-    <a 
-      href="#" 
-      onClick={handleClick}
+    <Link
+      to={profilePath}
+      data-help-id={helpId}
       className={`player-link ${className}`}
     >
       {nickname}
-    </a>
+    </Link>
   );
 };
 
