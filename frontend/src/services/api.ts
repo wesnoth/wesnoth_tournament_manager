@@ -341,6 +341,7 @@ export const publicService = {
   },
   getTournamentById: (id: string) => api.get(`/public/tournaments/${id}`),
   getTournamentParticipants: (id: string) => api.get(`/public/tournaments/${id}/participants`),
+  getTournamentTeams: (id: string) => api.get(`/public/tournaments/${id}/teams`),
   getTournamentMatches: (id: string) => api.get(`/public/tournaments/${id}/matches`),
   getTournamentUnrankedAssets: (id: string) => api.get(`/public/tournaments/${id}/unranked-assets`),
   getMatch: (id: string) => api.get(`/matches/${id}`),

@@ -978,7 +978,8 @@ router.get('/tournaments/:id/teams', async (req, res) => {
     // Get members for each team
     const teams = await Promise.all(teamsResult.rows.map(async (team) => {
       const membersResult = await query(
-        `SELECT tp.id as participant_id, u.id, u.nickname, tp.team_position, tp.participation_status
+        `SELECT tp.id as participant_id, u.id as user_id, u.nickname, u.elo_rating,
+                tp.team_position, tp.participation_status
          FROM tournament_participants tp
          LEFT JOIN users_extension u ON tp.user_id = u.id
          WHERE tp.team_id = ? AND tp.participation_status IN ('pending', 'unconfirmed', 'accepted', 'pending_replacement')
@@ -986,9 +987,19 @@ router.get('/tournaments/:id/teams', async (req, res) => {
         [team.id]
       );
 
+      const members = membersResult.rows;
+
       return {
         ...team,
-        members: membersResult.rows
+        // Keep the existing fields used by the join modal while also exposing
+        // the aggregate shape consumed by Tournament Detail. Both views must
+        // derive membership from the same authoritative participant rows.
+        nickname: team.name,
+        team_size: Number(team.member_count || 0),
+        team_total_elo: members.reduce((total: number, member: any) => total + Number(member.elo_rating || 0), 0),
+        member_user_ids: members.map((member: any) => member.user_id),
+        members,
+        members_with_elo: members,
       };
     }));
 

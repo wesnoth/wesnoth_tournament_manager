@@ -426,6 +426,12 @@ const TournamentDetail: React.FC = () => {
         tournament_mode: tournamentRes.data.tournament_mode
       });
       setParticipants(participantsRes.data || []);
+      if (tournamentRes.data.tournament_mode === 'team') {
+        const teamsRes = await publicService.getTournamentTeams(id!);
+        setTeams(teamsRes.data?.data || []);
+      } else {
+        setTeams([]);
+      }
       // Version 2 is authoritative in the phase-engine competition view;
       // legacy rounds, series aggregates, and match rows are no longer loaded.
       setMatches([]);
@@ -433,15 +439,12 @@ const TournamentDetail: React.FC = () => {
       setRounds([]);
       setOrganizers(organizersRes.data || []);
       
-      // For team mode, extract user's team_id from standings
+      // Raw participant rows remain authoritative for the current user's team.
       if (tournamentRes.data.tournament_mode === 'team' && userId) {
-        const userTeam = (participantsRes.data || []).find((p: any) =>
-          p.member_user_ids && p.member_user_ids.includes(userId)
-        );
-        if (userTeam) {
-          setUserTeamId(userTeam.id);
-          console.log('🎯 User team found:', { teamId: userTeam.id, teamName: userTeam.nickname });
-        }
+        const userParticipant = (participantsRes.data || []).find((participant: any) => participant.user_id === userId);
+        setUserTeamId(userParticipant?.team_id || null);
+      } else {
+        setUserTeamId(null);
       }
       
       // Initialize edit data when tournament loads
@@ -1179,9 +1182,9 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
     }
   };
 
-  // Get team members from participants array by team ID
+  // Get team members from the team aggregates by team ID.
   const getTeamMembersString = (teamId: string): string => {
-    const teamParticipant = participants.find((p: any) => p.id === teamId);
+    const teamParticipant = teams.find((team: any) => team.id === teamId);
     if (!teamParticipant) return '';
     
     // Only return members if this is actually a team (members_with_elo is an array)
@@ -1440,9 +1443,8 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
       setSuccess('Team renamed successfully');
       setTimeout(() => setSuccess(''), 3000);
       setRenameTeamModal({ open: false, teamId: '', currentName: '' });
-      // Refresh participants to reflect the new name
-      const participantsRes = await publicService.getTournamentParticipants(tournament.id);
-      setParticipants(participantsRes.data || []);
+      const teamsRes = await publicService.getTournamentTeams(tournament.id);
+      setTeams(teamsRes.data?.data || []);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to rename team');
       setTimeout(() => setError(''), 4000);
@@ -1458,9 +1460,13 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
       await tournamentService.removeParticipant(tournament.id, participantId);
       setSuccess(`${nickname} removed from tournament`);
       setTimeout(() => setSuccess(''), 3000);
-      // Refresh participants
-      const participantsRes = await publicService.getTournamentParticipants(tournament.id);
+      // Refresh both individual membership and the team aggregates rendered by this page.
+      const [participantsRes, teamsRes] = await Promise.all([
+        publicService.getTournamentParticipants(tournament.id),
+        publicService.getTournamentTeams(tournament.id),
+      ]);
       setParticipants(participantsRes.data || []);
+      setTeams(teamsRes.data?.data || []);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to remove participant');
       setTimeout(() => setError(''), 4000);
@@ -1853,7 +1859,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
             setUnrankedMaps(selected);
           }}
           onCancel={() => setEditMode(false)}
-          entryOptions={participants.map(participant => ({ id: participant.id, name: participant.nickname }))}
+          entryOptions={(tournament?.tournament_mode === 'team' ? teams : participants).map(entry => ({ id: entry.id, name: entry.nickname }))}
         />
       )}
 
@@ -2010,10 +2016,10 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
       {activeTab === 'participants' && (
         <div className="mb-8 mt-6">
           {tournament?.tournament_mode === 'team' ? (
-            // Team view: Group participants by team from standings (which has team_total_elo and members_with_elo)
-            participants.length > 0 ? (
+            // Team aggregates include the authoritative member rows returned by the public teams endpoint.
+            teams.length > 0 ? (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {participants
+                {teams
                   .filter((team: any) => {
                     // Show "Rejected players" team only if registration is open
                     const isRejectedTeam = team.nickname === 'Rejected players';
@@ -3203,7 +3209,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
         <div className="bg-white rounded-lg shadow-lg p-8 mb-8 mt-6 overflow-x-auto">
           {tournament?.tournament_mode === 'team' ? (
             // Team ranking
-            participants.length > 0 ? (
+            teams.length > 0 ? (
               <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-100">
@@ -3221,7 +3227,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                   </tr>
                 </thead>
                 <tbody>
-                  {participants
+                  {teams
                     .sort((a, b) => {
                       const pointsDiff = (b.tournament_points || 0) - (a.tournament_points || 0);
                       if (pointsDiff !== 0) return pointsDiff;
