@@ -746,6 +746,7 @@ CREATE TABLE `tournament_participants` (
   `replaced_by_participant_id` char(36) DEFAULT NULL,
   `requested_replacement_of_id` char(36) DEFAULT NULL,
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_tournament_participants_tournament_user` (`tournament_id`,`user_id`),
   KEY `idx_tournament_id` (`tournament_id`),
   KEY `idx_user_id` (`user_id`),
   KEY `idx_team_id` (`team_id`),

@@ -1262,6 +1262,19 @@ router.post('/:id/request-join', authMiddleware, async (req: AuthRequest, res) =
       return res.status(400).json({ error: 'Tournament registration is not open' });
     }
 
+    // Every historical participation state reserves the user/tournament pair.
+    // The database unique key is the final concurrency guard, while this check
+    // provides a stable response before any team or notification side effects.
+    const existingParticipation = await query(
+      `SELECT id FROM tournament_participants
+       WHERE tournament_id = ? AND user_id = ?
+       LIMIT 1`,
+      [id, req.userId]
+    );
+    if (existingParticipation.rows.length > 0) {
+      return res.status(409).json({ error: 'You are already registered in this tournament' });
+    }
+
     if (tournament.tournament_mode === 'ranked') {
       const rankedEligibility = await query(
         'SELECT enable_ranked FROM users_extension WHERE id = ?',
@@ -1295,16 +1308,6 @@ router.post('/:id/request-join', authMiddleware, async (req: AuthRequest, res) =
       }
       const currentUserNickname = currentUserResult.rows[0].nickname;
 
-      // Check if current user is already in this tournament
-      const userAlreadyInResult = await query(
-        `SELECT id FROM tournament_participants 
-         WHERE tournament_id = ? AND user_id = ? AND participation_status IN ('pending', 'unconfirmed', 'accepted')`,
-        [id, req.userId]
-      );
-      if (userAlreadyInResult.rows.length > 0) {
-        return res.status(400).json({ error: 'You are already registered in this tournament' });
-      }
-
       // Check if trying to add self as teammate
       if (teammate_name && teammate_name.toLowerCase() === currentUserNickname.toLowerCase()) {
         return res.status(400).json({ error: 'You cannot select yourself as a teammate' });
@@ -1331,7 +1334,7 @@ router.post('/:id/request-join', authMiddleware, async (req: AuthRequest, res) =
         // Check if teammate is already in this tournament
         const existingParticipantResult = await query(
           `SELECT id FROM tournament_participants 
-           WHERE tournament_id = ? AND user_id = ? AND participation_status IN ('pending', 'unconfirmed', 'accepted')`,
+           WHERE tournament_id = ? AND user_id = ?`,
           [id, teammateUserId]
         );
         if (existingParticipantResult.rows.length > 0) {
@@ -1492,7 +1495,7 @@ router.post('/:id/request-join', authMiddleware, async (req: AuthRequest, res) =
     console.error('Request-join error:', error.message || error);
     console.error('Full error:', error);
     if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(400).json({ error: 'Already requested to join this tournament' });
+      return res.status(409).json({ error: 'You are already registered in this tournament' });
     }
     res.status(500).json({ error: 'Failed to request join tournament', details: error.message });
   }

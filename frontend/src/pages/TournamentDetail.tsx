@@ -284,6 +284,8 @@ const TournamentDetail: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'scheduled' | 'completed'>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [userParticipationStatus, setUserParticipationStatus] = useState<string | null>(null);
+  const [isUserInTournament, setIsUserInTournament] = useState(false);
+  const [isJoinRequestLoading, setIsJoinRequestLoading] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [confirmMatchData, setConfirmMatchData] = useState<any>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -469,7 +471,14 @@ const TournamentDetail: React.FC = () => {
       // Check user's participation status
       if (userId) {
         const userParticipant = (participantsRes.data || []).find((p: TournamentParticipant) => p.user_id === userId);
+        // Row existence, rather than a subset of statuses, controls whether a
+        // user may request entry again. Rejected and replaced rows still mean
+        // the user has already participated in this tournament.
+        setIsUserInTournament(Boolean(userParticipant));
         setUserParticipationStatus(userParticipant?.participation_status || null);
+      } else {
+        setIsUserInTournament(false);
+        setUserParticipationStatus(null);
       }
 
       setError('');
@@ -603,8 +612,10 @@ const TournamentDetail: React.FC = () => {
       // Direct join for ranked/unranked tournaments
       console.log('❌ Direct join (not team mode)');
       try {
+        setIsJoinRequestLoading(true);
         await tournamentService.requestJoinTournament(id!);
         setSuccess(t('success_join_request_sent'));
+        setIsUserInTournament(true);
         setUserParticipationStatus('pending');
         // Refresh the page after 2 seconds
         setTimeout(() => {
@@ -612,6 +623,9 @@ const TournamentDetail: React.FC = () => {
         }, 2000);
       } catch (err: any) {
         setError(err.response?.data?.error || t('error_failed_join_tournament'));
+        if (err.response?.status === 409) fetchTournamentData();
+      } finally {
+        setIsJoinRequestLoading(false);
       }
     }
   };
@@ -733,6 +747,7 @@ const TournamentDetail: React.FC = () => {
       });
       
       setSuccess(t('success_join_request_sent'));
+      setIsUserInTournament(true);
       setUserParticipationStatus('pending');
       setShowTeamJoinModal(false);
       
@@ -1724,7 +1739,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
       {/* Tournament Actions Section */}
       <div className="flex flex-row flex-wrap gap-3 items-center justify-between mb-6">
         {/* Join button (only if logged in and NOT in edit mode) - Left side */}
-        {!editMode && tournament.status === 'registration_open' && !userParticipationStatus && userId && (
+        {!editMode && tournament.status === 'registration_open' && !isUserInTournament && userId && (
           tournament.tournament_mode === 'ranked' && !enableRanked ? (
             <div className="flex flex-col gap-1">
               <button data-help-id="action-join-tournament-disabled" className="px-6 py-2 bg-gray-300 text-gray-500 rounded cursor-not-allowed" disabled>
@@ -1735,12 +1750,12 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
               </p>
             </div>
           ) : (
-            <button data-help-id="action-join-tournament" className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors" onClick={handleJoinTournament}>
+            <button data-help-id="action-join-tournament" className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" onClick={handleJoinTournament} disabled={isJoinRequestLoading}>
               {t('tournaments.request_join')}
             </button>
           )
         )}
-        {(!tournament.status || tournament.status !== 'registration_open' || userParticipationStatus || !userId || editMode) && !isOrganizer && (
+        {(!tournament.status || tournament.status !== 'registration_open' || isUserInTournament || !userId || editMode) && !isOrganizer && (
           <div></div>
         )}
 

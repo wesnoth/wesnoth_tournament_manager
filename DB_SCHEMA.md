@@ -431,6 +431,7 @@ Links users to tournaments. Tracks participant status throughout tournament life
 
 **Constraints:**
 - PRIMARY KEY: `id`
+- UNIQUE: (`tournament_id`, `user_id`) prevents a user from having multiple participation records in one tournament
 - FOREIGN KEY: `replaced_by_participant_id` → `tournament_participants(id)` ON DELETE SET NULL
 - FOREIGN KEY: `requested_replacement_of_id` → `tournament_participants(id)` ON DELETE SET NULL
 - CHECK: `participation_status` IN ('pending', 'accepted', 'pending_replacement', 'replaced', 'rejected', 'unconfirmed')
@@ -458,6 +459,7 @@ Links users to tournaments. Tracks participant status throughout tournament life
 | `team_position` | smallint(6) | YES | | Player slot within team: 1 or 2 (default: NULL) |
 
 **Indices:**
+- `uq_tournament_participants_tournament_user` UNIQUE on (`tournament_id`, `user_id`)
 - `idx_tournament_id` on `tournament_id`
 - `idx_user_id` on `user_id`
 - `idx_team_id` on `team_id`
