@@ -10,6 +10,7 @@ interface PlayerStats {
   elo_rating: number;
   global_ranking_position?: number | null;
   is_rated: boolean;
+  is_streamer: boolean;
   enable_ranked: boolean;
   matches_played: number;
   total_wins: number;
@@ -134,6 +135,7 @@ const Players: React.FC = () => {
             elo_rating: user.elo_rating || 1200,
             global_ranking_position: user.global_ranking_position,
             is_rated: user.is_rated || false,
+            is_streamer: user.is_streamer || false,
             enable_ranked: user.enable_ranked || false,
             matches_played: totalMatches,
             total_wins: wins,
@@ -370,6 +372,7 @@ const Players: React.FC = () => {
                 <th className="px-4 py-3 text-left font-semibold text-gray-700">
                   {t('label_ranked', 'Ranked')}
                 </th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">{t('role_streamer')}</th>
                 <th data-help-id="action-sort-players-by-matches" className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700" onClick={() => handleSort('matches_played')} style={{cursor:'pointer'}}>
                   {t('label_total')}
                   {sortColumn === 'matches_played' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
@@ -425,6 +428,9 @@ const Players: React.FC = () => {
                   <span className={`text-xs rounded-full px-2 py-1 ${player.enable_ranked ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-500'}`}>
                     {player.enable_ranked ? t('label_ranked_enabled', 'Enabled') : t('label_ranked_disabled', 'Disabled')}
                   </span>
+                </td>
+                <td className="px-4 py-3 text-gray-700">
+                  {player.is_streamer && <span data-help-id="option-player-streamer-status" className="text-xs rounded-full px-2 py-1 bg-orange-100 text-orange-800">{t('role_streamer')}</span>}
                 </td>
                 <td className="px-4 py-3 text-gray-700">{player.matches_played}</td>
                 <td className="px-4 py-3 text-gray-700">

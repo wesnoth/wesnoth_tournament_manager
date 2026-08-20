@@ -241,6 +241,8 @@ export const adminService = {
   unlockAccount: (id: string) => api.post(`/admin/users/${id}/unlock`),
   makeAdmin: (id: string) => api.post(`/admin/users/${id}/make-admin`),
   removeAdmin: (id: string) => api.post(`/admin/users/${id}/remove-admin`),
+  makeStreamer: (id: string) => api.post(`/admin/users/${id}/make-streamer`),
+  removeStreamer: (id: string) => api.post(`/admin/users/${id}/remove-streamer`),
 
   // Maintenance mode
   getMaintenanceStatus: () => api.get('/admin/maintenance-status'),

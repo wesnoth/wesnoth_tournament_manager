@@ -9,6 +9,7 @@ export interface User {
   is_rated?: boolean;
   matches_played?: number;
   is_admin: boolean;
+  is_streamer?: boolean;
   created_at: string;
 }
 

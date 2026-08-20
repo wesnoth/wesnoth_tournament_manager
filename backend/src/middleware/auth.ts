@@ -99,3 +99,19 @@ export const moderatorOrAdminMiddleware = async (req: AuthRequest, res: Response
     return res.status(403).json({ error: 'Not authorized' });
   });
 };
+
+/** Require the global streamer capability without changing the user's other roles. */
+export const streamerMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  await authMiddleware(req, res, async () => {
+    const result = await query(
+      'SELECT is_streamer FROM users_extension WHERE id = ? AND is_streamer = 1',
+      [req.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(403).json({ error: 'Streamer capability required' });
+    }
+
+    next();
+  });
+};

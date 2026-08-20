@@ -16,6 +16,7 @@ interface ManagedUser {
   is_blocked?: boolean;
   is_active?: boolean;
   is_admin?: boolean;
+  is_streamer?: boolean;
   is_moderator?: boolean;
   enable_ranked?: boolean;
 }
@@ -183,6 +184,14 @@ const AdminUsers: React.FC = () => {
         case 'removeAdmin':
           await adminService.removeAdmin(selectedUser.id);
           setMessage(t('admin.user_demoted', { nickname: selectedUser.nickname }));
+          break;
+        case 'makeStreamer':
+          await adminService.makeStreamer(selectedUser.id);
+          setMessage(t('admin.streamer_granted', { nickname: selectedUser.nickname }));
+          break;
+        case 'removeStreamer':
+          await adminService.removeStreamer(selectedUser.id);
+          setMessage(t('admin.streamer_removed', { nickname: selectedUser.nickname }));
           break;
         case 'delete':
           await adminService.deleteUser(selectedUser.id);
@@ -398,13 +407,18 @@ const AdminUsers: React.FC = () => {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                      user.is_admin ? 'bg-purple-100 text-purple-800' :
-                      user.is_moderator ? 'bg-blue-100 text-blue-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {user.is_admin ? t('role_admin') : user.is_moderator ? t('role_moderator', 'Moderator') : t('role_user')}
-                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                        user.is_admin ? 'bg-purple-100 text-purple-800' :
+                        user.is_moderator ? 'bg-blue-100 text-blue-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {user.is_admin ? t('role_admin') : user.is_moderator ? t('role_moderator', 'Moderator') : t('role_user')}
+                      </span>
+                      {user.is_streamer && (
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">{t('role_streamer')}</span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
@@ -449,6 +463,23 @@ const AdminUsers: React.FC = () => {
                               onClick={() => handleAction(user, 'makeAdmin')}
                             >
                               {t('btn_make_admin')}
+                            </button>
+                          )}
+                          {user.is_streamer ? (
+                            <button
+                              data-help-id="action-remove-streamer"
+                              className="px-2 py-1 text-xs bg-orange-500 text-white rounded hover:bg-orange-600"
+                              onClick={() => handleAction(user, 'removeStreamer')}
+                            >
+                              {t('admin.remove_streamer')}
+                            </button>
+                          ) : (
+                            <button
+                              data-help-id="action-make-streamer"
+                              className="px-2 py-1 text-xs bg-orange-600 text-white rounded hover:bg-orange-700"
+                              onClick={() => handleAction(user, 'makeStreamer')}
+                            >
+                              {t('admin.make_streamer')}
                             </button>
                           )}
                           <button
@@ -520,6 +551,7 @@ const AdminUsers: React.FC = () => {
               {actionType === 'unblock' && t('admin.confirm_unblock_title', 'Unblock User')}
               {actionType === 'makeAdmin' && t('admin.confirm_action_title')}
               {actionType === 'removeAdmin' && t('admin.confirm_action_title')}
+              {(actionType === 'makeStreamer' || actionType === 'removeStreamer') && t('admin.confirm_streamer_title')}
             </h3>
             <p className="text-gray-700 mb-6">
               {actionType === 'delete' && t('admin.confirm_delete', { nickname: selectedUser.nickname })}
@@ -527,6 +559,8 @@ const AdminUsers: React.FC = () => {
               {actionType === 'unblock' && t('admin.confirm_unblock', { nickname: selectedUser.nickname })}
               {actionType === 'makeAdmin' && t('admin.confirm_make_admin', { nickname: selectedUser.nickname })}
               {actionType === 'removeAdmin' && t('admin.confirm_remove_admin', { nickname: selectedUser.nickname })}
+              {actionType === 'makeStreamer' && t('admin.confirm_make_streamer', { nickname: selectedUser.nickname })}
+              {actionType === 'removeStreamer' && t('admin.confirm_remove_streamer', { nickname: selectedUser.nickname })}
             </p>
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
               <button className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600" onClick={() => setShowModal(false)}>

@@ -62,4 +62,14 @@ Apply mode locks the legacy tournament row, writes the complete version 2 graph 
 
 ## Deferred streaming scope
 
-Streams remain a low-priority follow-up. The intended model attaches multiple stream records to a scheduled series, game, or broad round time window and introduces a streamer role. No stream field is embedded in a round or game because a round can span days and may have several simultaneous broadcasts.
+Streaming remains a low-priority follow-up. The platform will not host or deliver video; it will manage external stream links and their relationship with tournament games.
+
+`streamer` is a global user capability, independent of the user's other capabilities. A user may therefore be a regular user, moderator, administrator, or any combination of one of those capabilities with streamer status. Streamer status is not declared, approved, or scoped per tournament. Any user with streamer status may prepare streams for any tournament; tournament organizers do not need to maintain a tournament-specific streamer roster.
+
+The players query and player list must expose streamer status so users can identify which accounts are available to prepare broadcasts. This indicator is additive and must remain visible alongside, rather than replace, the user's regular, moderator, or administrator role information.
+
+Granting or revoking streamer status is an administrative security-sensitive action and must create an audit event containing the acting administrator and the target user's identity.
+
+A stream link is planned by linking it directly to one pending game. Phase, group, round, series, tournament, and participant context is derived from that game link rather than being a separate stream target. The initial version does not support phase-level or group-level broadcasts without game links. A game may have multiple stream links. If one broadcast covers multiple games, the streamer creates one game link for each covered game; the model does not introduce a separate multi-game association.
+
+The external URL may be added or updated while the game is pending. Completing a game does not remove or invalidate its stream links: the relationship remains queryable from the completed game and from the finalized tournament, allowing users to access the broadcast after competition has ended. Deleting or replacing a stream link must be an explicit action and must not be coupled to result recording or tournament finalization.
