@@ -439,7 +439,7 @@ router.get('/players', async (req, res) => {
     params.push(limit);
     params.push(offset);
     const result = await query(
-      `SELECT u.id, u.nickname, u.elo_rating, u.is_rated, u.enable_ranked, u.matches_played, u.total_wins, u.total_losses, u.country, u.avatar,
+      `SELECT u.id, u.nickname, u.elo_rating, u.is_rated, u.is_streamer, u.enable_ranked, u.matches_played, u.total_wins, u.total_losses, u.country, u.avatar,
               CASE WHEN u.is_blocked = 0 THEN (
                 SELECT COUNT(*) + 1 FROM users_extension ranked_user
                 WHERE ranked_user.is_blocked = 0

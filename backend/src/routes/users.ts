@@ -21,6 +21,7 @@ router.get('/profile', authMiddleware, async (req: AuthRequest, res) => {
         u.elo_rating, 
         u.level, 
         u.is_admin, 
+        u.is_streamer,
         u.created_at, 
         u.is_rated, 
         COALESCE(pms.total_games, u.matches_played) AS matches_played,

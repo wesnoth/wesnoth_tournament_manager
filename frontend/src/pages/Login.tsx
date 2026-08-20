@@ -7,7 +7,7 @@ import { useAuthStore } from '../store/authStore';
 const Login: React.FC = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const { setToken, setUserId, setIsAdmin, setIsTournamentModerator, setEnableRanked } = useAuthStore();
+  const { setToken, setUserId, setIsAdmin, setIsStreamer, setIsTournamentModerator, setEnableRanked } = useAuthStore();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -40,6 +40,7 @@ const Login: React.FC = () => {
       try {
         const profileRes = await userService.getProfile();
         setIsAdmin(profileRes.data.is_admin || false);
+        setIsStreamer(profileRes.data.is_streamer || false);
         setEnableRanked(!!profileRes.data.enable_ranked);
         
         const userLanguage = profileRes.data.language || 'en';
@@ -49,6 +50,7 @@ const Login: React.FC = () => {
       } catch (err) {
         console.error('Error getting profile:', err);
         setIsAdmin(false);
+        setIsStreamer(false);
       }
       
       navigate('/');

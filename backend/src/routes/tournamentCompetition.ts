@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
+import { v4 as uuidv4 } from 'uuid';
+import { authMiddleware, streamerMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { isTournamentOrganizer } from '../services/tournamentAuthorizationService.js';
 import { validateTournamentFormat } from '../tournament-engine/formatValidator.js';
 import { getTournamentFormat, saveTournamentFormat } from '../tournament-engine/formatService.js';
@@ -11,6 +12,130 @@ import { forumTopicUrl, tournamentGameName } from '../tournament-engine/forumTop
 import { getUserAgent, getUserIP, logAuditEvent } from '../middleware/audit.js';
 
 const router = Router();
+
+const isExternalStreamUrl = (value: unknown): value is string => {
+  if (typeof value !== 'string' || value.length > 2048) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
+/** Return links for a game; links intentionally remain available after completion. */
+router.get('/:id/games/:gameId/streams', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT streams.id, streams.game_id, streams.stream_url, streams.streamer_user_id,
+              streamer.nickname AS streamer_nickname, streams.created_at, streams.updated_at
+       FROM tournament_game_streams streams
+       JOIN tournament_games games ON games.id = streams.game_id
+       JOIN tournament_series series ON series.id = games.series_id
+       JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+       JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+       JOIN tournament_phases phases ON phases.id = groups.phase_id
+       JOIN users_extension streamer ON streamer.id = streams.streamer_user_id
+       WHERE phases.tournament_id = ? AND games.id = ?
+       ORDER BY streams.created_at ASC`,
+      [req.params.id, req.params.gameId]
+    );
+    return res.json({ streams: result.rows });
+  } catch (error) {
+    console.error('Get tournament game streams error:', error);
+    return res.status(500).json({ error: 'Failed to fetch game streams' });
+  }
+});
+
+/** Create one stream-to-game link. A broadcast covering several games uses several links. */
+router.post('/:id/games/:gameId/streams', streamerMiddleware, async (req: AuthRequest, res) => {
+  try {
+    if (!isExternalStreamUrl(req.body?.stream_url)) {
+      return res.status(400).json({ error: 'stream_url must be a valid HTTP(S) URL' });
+    }
+
+    const gameResult = await query(
+      `SELECT games.id
+       FROM tournament_games games
+       JOIN tournament_series series ON series.id = games.series_id
+       JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+       JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+       JOIN tournament_phases phases ON phases.id = groups.phase_id
+       WHERE phases.tournament_id = ? AND games.id = ? AND games.status = 'pending'
+       LIMIT 1`,
+      [req.params.id, req.params.gameId]
+    );
+    if (!gameResult.rows.length) {
+      return res.status(409).json({ error: 'Only pending tournament games can receive a new stream link' });
+    }
+
+    const id = uuidv4();
+    await query(
+      `INSERT INTO tournament_game_streams (id, game_id, streamer_user_id, stream_url)
+       VALUES (?, ?, ?, ?)`,
+      [id, req.params.gameId, req.userId, req.body.stream_url]
+    );
+    const result = await query(
+      `SELECT streams.id, streams.game_id, streams.stream_url, streams.streamer_user_id,
+              streamer.nickname AS streamer_nickname, streams.created_at, streams.updated_at
+       FROM tournament_game_streams streams
+       JOIN users_extension streamer ON streamer.id = streams.streamer_user_id
+       WHERE streams.id = ?`,
+      [id]
+    );
+    return res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Create tournament game stream error:', error);
+    return res.status(500).json({ error: 'Failed to create game stream' });
+  }
+});
+
+/** Update or delete only links owned by the authenticated streamer. */
+router.put('/:id/games/:gameId/streams/:streamId', streamerMiddleware, async (req: AuthRequest, res) => {
+  try {
+    if (!isExternalStreamUrl(req.body?.stream_url)) {
+      return res.status(400).json({ error: 'stream_url must be a valid HTTP(S) URL' });
+    }
+    const result = await query(
+      `UPDATE tournament_game_streams streams
+       JOIN tournament_games games ON games.id = streams.game_id
+       JOIN tournament_series series ON series.id = games.series_id
+       JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+       JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+       JOIN tournament_phases phases ON phases.id = groups.phase_id
+       SET streams.stream_url = ?
+       WHERE streams.id = ? AND streams.game_id = ? AND streams.streamer_user_id = ?
+         AND phases.tournament_id = ?`,
+      [req.body.stream_url, req.params.streamId, req.params.gameId, req.userId, req.params.id]
+    );
+    if (!result.rowCount) return res.status(404).json({ error: 'Stream link not found' });
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Update tournament game stream error:', error);
+    return res.status(500).json({ error: 'Failed to update game stream' });
+  }
+});
+
+router.delete('/:id/games/:gameId/streams/:streamId', streamerMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const result = await query(
+      `DELETE streams FROM tournament_game_streams streams
+       JOIN tournament_games games ON games.id = streams.game_id
+       JOIN tournament_series series ON series.id = games.series_id
+       JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+       JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+       JOIN tournament_phases phases ON phases.id = groups.phase_id
+       WHERE streams.id = ? AND streams.game_id = ? AND streams.streamer_user_id = ?
+         AND phases.tournament_id = ?`,
+      [req.params.streamId, req.params.gameId, req.userId, req.params.id]
+    );
+    if (!result.rowCount) return res.status(404).json({ error: 'Stream link not found' });
+    return res.status(204).send();
+  } catch (error) {
+    console.error('Delete tournament game stream error:', error);
+    return res.status(500).json({ error: 'Failed to delete game stream' });
+  }
+});
 
 /**
  * Produce the canonical competition label for either an individual or a team.
@@ -625,6 +750,19 @@ router.get('/:id/phases/:phaseId/games', async (req, res) => {
             pending_replay.integration_confidence AS pending_replay_confidence,
             pending_replay.parse_status AS pending_replay_parse_status,
             pending_replay.replay_url AS pending_replay_url,
+            COALESCE((
+              SELECT JSON_ARRAYAGG(JSON_OBJECT(
+                'id', stream.id,
+                'stream_url', stream.stream_url,
+                'streamer_user_id', stream.streamer_user_id,
+                'streamer_nickname', stream_user.nickname,
+                'created_at', stream.created_at,
+                'updated_at', stream.updated_at
+              ))
+              FROM tournament_game_streams stream
+              JOIN users_extension stream_user ON stream_user.id = stream.streamer_user_id
+              WHERE stream.game_id = games.id
+            ), JSON_ARRAY()) AS stream_links,
             ${competitionEntryNameSql('user1', 'team1')} AS entry1_name,
             ${competitionEntryNameSql('user2', 'team2')} AS entry2_name,
             CASE WHEN team1.id IS NULL THEN JSON_ARRAY() ELSE COALESCE((

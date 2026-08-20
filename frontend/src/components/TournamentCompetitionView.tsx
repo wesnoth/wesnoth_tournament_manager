@@ -55,7 +55,63 @@ const TournamentCompetitionView: React.FC<Props> = ({
   const [selectedGameConfirmation, setSelectedGameConfirmation] = useState<{ game: any; action: 'report' | 'respond' } | null>(null);
   const [replayChoice, setReplayChoice] = useState<'I won' | 'I lost' | 'cancel'>('I won');
   const [scheduleProposals, setScheduleProposals] = useState<Record<string, any>>({});
-  const { user } = useAuthStore();
+  const [streamUrls, setStreamUrls] = useState<Record<string, string>>({});
+  const [savingStreamGameId, setSavingStreamGameId] = useState<string | null>(null);
+  const [editingStreamId, setEditingStreamId] = useState<string | null>(null);
+  const [editingStreamUrl, setEditingStreamUrl] = useState('');
+  const { user, isStreamer } = useAuthStore();
+
+  const streamLinksFor = (game: any): any[] => {
+    if (Array.isArray(game.stream_links)) return game.stream_links;
+    if (typeof game.stream_links === 'string') {
+      try { return JSON.parse(game.stream_links) || []; } catch { return []; }
+    }
+    return [];
+  };
+
+  const addStreamLink = async (gameId: string) => {
+    const streamUrl = streamUrls[gameId]?.trim();
+    if (!streamUrl) return;
+    try {
+      setSavingStreamGameId(gameId);
+      await api.post(`/tournaments/${tournamentId}/games/${gameId}/streams`, { stream_url: streamUrl });
+      setStreamUrls(current => ({ ...current, [gameId]: '' }));
+      setReloadKey(value => value + 1);
+    } catch (streamError: any) {
+      setError(streamError.response?.data?.error || t('stream.add_error'));
+    } finally {
+      setSavingStreamGameId(null);
+    }
+  };
+
+  const updateStreamLink = async (gameId: string, streamId: string) => {
+    const streamUrl = editingStreamUrl.trim();
+    if (!streamUrl) return;
+    try {
+      setSavingStreamGameId(gameId);
+      await api.put(`/tournaments/${tournamentId}/games/${gameId}/streams/${streamId}`, { stream_url: streamUrl });
+      setEditingStreamId(null);
+      setEditingStreamUrl('');
+      setReloadKey(value => value + 1);
+    } catch (streamError: any) {
+      setError(streamError.response?.data?.error || t('stream.update_error'));
+    } finally {
+      setSavingStreamGameId(null);
+    }
+  };
+
+  const deleteStreamLink = async (gameId: string, streamId: string) => {
+    if (!window.confirm(t('stream.delete_confirm'))) return;
+    try {
+      setSavingStreamGameId(gameId);
+      await api.delete(`/tournaments/${tournamentId}/games/${gameId}/streams/${streamId}`);
+      setReloadKey(value => value + 1);
+    } catch (streamError: any) {
+      setError(streamError.response?.data?.error || t('stream.delete_error'));
+    } finally {
+      setSavingStreamGameId(null);
+    }
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -386,6 +442,57 @@ const TournamentCompetitionView: React.FC<Props> = ({
                   </div>}
                 </td>
                 <td className="px-4 py-3 text-gray-700">
+                  {streamLinksFor(game).length > 0 && <div className="mb-2 flex flex-wrap items-center gap-1 border-b border-gray-100 pb-2">
+                    <span className="text-xs font-semibold text-purple-700">{t('stream.label')}:</span>
+                    {streamLinksFor(game).map((stream: any) => {
+                      const canEditStream = isStreamer && currentUserId === stream.streamer_user_id;
+                      return <div key={stream.id} className="flex items-center gap-1">
+                        {editingStreamId === stream.id ? <>
+                          <input
+                            data-help-id="field-edit-game-stream-url"
+                            type="url"
+                            value={editingStreamUrl}
+                            onChange={(event) => setEditingStreamUrl(event.target.value)}
+                            maxLength={2048}
+                            className="w-64 rounded border border-gray-300 px-2 py-1 text-xs"
+                          />
+                          <button
+                            data-help-id="action-save-game-stream"
+                            type="button"
+                            disabled={savingStreamGameId === game.game_id}
+                            onClick={() => void updateStreamLink(game.game_id, stream.id)}
+                            className="rounded bg-green-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                          >{t('stream.save')}</button>
+                          <button type="button" onClick={() => setEditingStreamId(null)} className="text-xs text-gray-600">{t('stream.cancel')}</button>
+                        </> : <>
+                          <a
+                            data-help-id="action-open-game-stream"
+                            href={stream.stream_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-800 hover:bg-purple-200"
+                            title={`${t('stream.streamer')}: ${stream.streamer_nickname || t('stream.unknown_streamer')}`}
+                          >
+                            {t('stream.watch')}{stream.streamer_nickname ? ` · ${stream.streamer_nickname}` : ''}
+                          </a>
+                          {canEditStream && <>
+                            <button
+                              data-help-id="action-edit-game-stream"
+                              type="button"
+                              onClick={() => { setEditingStreamId(stream.id); setEditingStreamUrl(stream.stream_url); }}
+                              className="text-xs text-blue-700 hover:underline"
+                            >{t('stream.edit')}</button>
+                            <button
+                              data-help-id="action-delete-game-stream"
+                              type="button"
+                              onClick={() => void deleteStreamLink(game.game_id, stream.id)}
+                              className="text-xs text-red-700 hover:underline"
+                            >{t('stream.delete')}</button>
+                          </>}
+                        </>}
+                      </div>;
+                    })}
+                  </div>}
                   {completed ? <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded-full px-3 py-1 text-xs font-semibold text-white ${pendingReplay ? 'bg-yellow-500' : 'bg-green-500'}`}>{pendingReplay ? 'Pending confirmation' : 'Completed'}</span>
                     {canConfirmReplay && <>
@@ -416,6 +523,25 @@ const TournamentCompetitionView: React.FC<Props> = ({
                       : !pendingReplay && <span className="text-xs text-gray-500">No replay</span>}
                   </div> : <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full bg-yellow-500 px-3 py-1 text-xs font-semibold text-white">Pending</span>
+                    {isStreamer && <form className="flex w-full flex-wrap items-center gap-1" onSubmit={(event) => { event.preventDefault(); void addStreamLink(game.game_id); }}>
+                      <input
+                        data-help-id="field-game-stream-url"
+                        type="url"
+                        value={streamUrls[game.game_id] || ''}
+                        onChange={(event) => setStreamUrls(current => ({ ...current, [game.game_id]: event.target.value }))}
+                        placeholder={t('stream.url_placeholder')}
+                        className="min-w-[220px] flex-1 rounded border border-gray-300 px-2 py-1 text-xs"
+                        maxLength={2048}
+                      />
+                      <button
+                        data-help-id="action-add-game-stream"
+                        type="submit"
+                        disabled={savingStreamGameId === game.game_id || !streamUrls[game.game_id]?.trim()}
+                        className="rounded bg-purple-600 px-2 py-1 text-xs font-semibold text-white hover:bg-purple-700 disabled:opacity-50"
+                      >
+                        {savingStreamGameId === game.game_id ? t('stream.saving') : t('stream.add')}
+                      </button>
+                    </form>}
                     {scheduleStatus !== 'none' && <div className="flex flex-col gap-1">
                       <span className={`rounded-full px-3 py-1 text-xs font-semibold text-white ${scheduleStatus === 'confirmed' ? 'bg-green-500' : 'bg-purple-500'}`}>
                         {scheduleStatus === 'confirmed' ? '✅ Schedule confirmed' : '⏳ Schedule proposed'}

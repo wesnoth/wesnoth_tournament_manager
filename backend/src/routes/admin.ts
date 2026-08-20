@@ -26,7 +26,7 @@ const REPLACED_PLAYERS_TEAM_ID = '00000000-0000-0000-0000-000000000001';
 router.get('/users/all', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
   try {
     const result = await query(
-      `SELECT id, nickname, language, discord_id, is_admin, is_active, is_blocked, is_rated, elo_rating, enable_ranked, matches_played, total_wins, total_losses, created_at, updated_at
+      `SELECT id, nickname, language, discord_id, is_admin, is_streamer, is_active, is_blocked, is_rated, elo_rating, enable_ranked, matches_played, total_wins, total_losses, created_at, updated_at
        FROM users_extension 
        WHERE id != '00000000-0000-0000-0000-000000000000'
        ORDER BY created_at DESC`
@@ -281,6 +281,56 @@ router.post('/users/:id/remove-admin', authMiddleware, adminMiddleware, async (r
     res.json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: 'Failed to remove admin' });
+  }
+});
+
+// Grant streamer capability. This is global and does not alter admin or moderator status.
+router.post('/users/:id/make-streamer', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const target = await query('SELECT id, nickname FROM users_extension WHERE id = ?', [req.params.id]);
+    if (!target.rows.length) return res.status(404).json({ error: 'User not found' });
+    await query(
+      'UPDATE users_extension SET is_streamer = 1 WHERE id = ?',
+      [req.params.id]
+    );
+    await logAuditEvent({
+      event_type: 'STREAMER_GRANTED',
+      user_id: req.userId,
+      username: req.username,
+      ip_address: getUserIP(req),
+      user_agent: getUserAgent(req),
+      details: { target_user_id: target.rows[0].id, target_nickname: target.rows[0].nickname },
+    });
+    const user = await query('SELECT id, nickname, is_admin, is_streamer FROM users_extension WHERE id = ?', [req.params.id]);
+    return res.json(user.rows[0]);
+  } catch (error) {
+    console.error('Make streamer error:', error);
+    return res.status(500).json({ error: 'Failed to grant streamer capability' });
+  }
+});
+
+// Revoke streamer capability without changing any other user role.
+router.post('/users/:id/remove-streamer', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const target = await query('SELECT id, nickname FROM users_extension WHERE id = ?', [req.params.id]);
+    if (!target.rows.length) return res.status(404).json({ error: 'User not found' });
+    await query(
+      'UPDATE users_extension SET is_streamer = 0 WHERE id = ?',
+      [req.params.id]
+    );
+    await logAuditEvent({
+      event_type: 'STREAMER_REVOKED',
+      user_id: req.userId,
+      username: req.username,
+      ip_address: getUserIP(req),
+      user_agent: getUserAgent(req),
+      details: { target_user_id: target.rows[0].id, target_nickname: target.rows[0].nickname },
+    });
+    const user = await query('SELECT id, nickname, is_admin, is_streamer FROM users_extension WHERE id = ?', [req.params.id]);
+    return res.json(user.rows[0]);
+  } catch (error) {
+    console.error('Remove streamer error:', error);
+    return res.status(500).json({ error: 'Failed to revoke streamer capability' });
   }
 });
 
