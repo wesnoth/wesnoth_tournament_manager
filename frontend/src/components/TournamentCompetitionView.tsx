@@ -59,7 +59,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
   const [savingStreamGameId, setSavingStreamGameId] = useState<string | null>(null);
   const [editingStreamId, setEditingStreamId] = useState<string | null>(null);
   const [editingStreamUrl, setEditingStreamUrl] = useState('');
-  const { user, isStreamer } = useAuthStore();
+  const { user, isAdmin, isTournamentModerator, isStreamer } = useAuthStore();
 
   const streamLinksFor = (game: any): any[] => {
     if (Array.isArray(game.stream_links)) return game.stream_links;
@@ -446,6 +446,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
                     <span className="text-xs font-semibold text-purple-700">{t('stream.label')}:</span>
                     {streamLinksFor(game).map((stream: any) => {
                       const canEditStream = isStreamer && currentUserId === stream.streamer_user_id;
+                      const canDeleteStream = canEditStream || isAdmin || isTournamentModerator || canManage;
                       return <div key={stream.id} className="flex items-center gap-1">
                         {editingStreamId === stream.id ? <>
                           <input
@@ -482,13 +483,13 @@ const TournamentCompetitionView: React.FC<Props> = ({
                               onClick={() => { setEditingStreamId(stream.id); setEditingStreamUrl(stream.stream_url); }}
                               className="text-xs text-blue-700 hover:underline"
                             >{t('stream.edit')}</button>
-                            <button
+                          </>}
+                          {canDeleteStream && <button
                               data-help-id="action-delete-game-stream"
                               type="button"
                               onClick={() => void deleteStreamLink(game.game_id, stream.id)}
                               className="text-xs text-red-700 hover:underline"
-                            >{t('stream.delete')}</button>
-                          </>}
+                            >{t('stream.delete')}</button>}
                         </>}
                       </div>;
                     })}

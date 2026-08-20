@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { authMiddleware, streamerMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { isTournamentOrganizer } from '../services/tournamentAuthorizationService.js';
+import { checkUserIsForumModerator } from '../services/phpbbAuth.js';
 import { validateTournamentFormat } from '../tournament-engine/formatValidator.js';
 import { getTournamentFormat, saveTournamentFormat } from '../tournament-engine/formatService.js';
 import type { TournamentFormatDefinition } from '../tournament-engine/types.js';
@@ -116,8 +117,36 @@ router.put('/:id/games/:gameId/streams/:streamId', streamerMiddleware, async (re
   }
 });
 
-router.delete('/:id/games/:gameId/streams/:streamId', streamerMiddleware, async (req: AuthRequest, res) => {
+router.delete('/:id/games/:gameId/streams/:streamId', authMiddleware, async (req: AuthRequest, res) => {
   try {
+    const adminResult = await query(
+      'SELECT is_admin FROM users_extension WHERE id = ?',
+      [req.userId]
+    );
+    const isAdmin = Boolean(adminResult.rows[0]?.is_admin);
+    const isOrganizer = await isTournamentOrganizer(req.params.id, req.userId!);
+    const isModerator = await checkUserIsForumModerator(req.username!);
+    const streamResult = await query(
+      `SELECT streams.stream_url, streams.streamer_user_id,
+              streamer.nickname AS streamer_owner_nickname
+       FROM tournament_game_streams streams
+       JOIN tournament_games games ON games.id = streams.game_id
+       JOIN tournament_series series ON series.id = games.series_id
+       JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+       JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+       JOIN tournament_phases phases ON phases.id = groups.phase_id
+       JOIN users_extension streamer ON streamer.id = streams.streamer_user_id
+       WHERE streams.id = ? AND streams.game_id = ? AND phases.tournament_id = ?
+       LIMIT 1`,
+      [req.params.streamId, req.params.gameId, req.params.id]
+    );
+    if (!streamResult.rows.length) return res.status(404).json({ error: 'Stream link not found' });
+
+    const isOwner = streamResult.rows[0].streamer_user_id === req.userId;
+    if (!isAdmin && !isOrganizer && !isModerator && !isOwner) {
+      return res.status(403).json({ error: 'Only the stream owner, tournament organizer, moderator, or administrator can delete this link' });
+    }
+
     const result = await query(
       `DELETE streams FROM tournament_game_streams streams
        JOIN tournament_games games ON games.id = streams.game_id
@@ -125,11 +154,27 @@ router.delete('/:id/games/:gameId/streams/:streamId', streamerMiddleware, async 
        JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
        JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
        JOIN tournament_phases phases ON phases.id = groups.phase_id
-       WHERE streams.id = ? AND streams.game_id = ? AND streams.streamer_user_id = ?
+       WHERE streams.id = ? AND streams.game_id = ?
          AND phases.tournament_id = ?`,
-      [req.params.streamId, req.params.gameId, req.userId, req.params.id]
+      [req.params.streamId, req.params.gameId, req.params.id]
     );
     if (!result.rowCount) return res.status(404).json({ error: 'Stream link not found' });
+    await logAuditEvent({
+      event_type: 'STREAM_LINK_DELETED',
+      user_id: req.userId,
+      username: req.username,
+      ip_address: getUserIP(req),
+      user_agent: getUserAgent(req),
+      details: {
+        tournament_id: req.params.id,
+        game_id: req.params.gameId,
+        stream_id: req.params.streamId,
+        stream_url: streamResult.rows[0].stream_url,
+        stream_owner_user_id: streamResult.rows[0].streamer_user_id,
+        stream_owner_nickname: streamResult.rows[0].streamer_owner_nickname,
+        deleted_by_role: isAdmin ? 'admin' : isOrganizer ? 'organizer' : isModerator ? 'moderator' : 'streamer',
+      },
+    });
     return res.status(204).send();
   } catch (error) {
     console.error('Delete tournament game stream error:', error);
