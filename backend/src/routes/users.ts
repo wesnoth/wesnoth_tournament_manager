@@ -258,7 +258,8 @@ router.get('/:id/matches', async (req, res) => {
       `SELECT 
         m.*,
         w.nickname as winner_nickname,
-        l.nickname as loser_nickname
+        l.nickname as loser_nickname,
+        COALESCE((SELECT JSON_ARRAYAGG(JSON_OBJECT('id', s.id, 'stream_url', s.stream_url, 'streamer_user_id', s.streamer_user_id, 'streamer_nickname', su.nickname, 'created_at', s.created_at, 'updated_at', s.updated_at)) FROM tournament_game_streams s JOIN users_extension su ON su.id = s.streamer_user_id LEFT JOIN tournament_games sg ON sg.id = s.game_id WHERE s.match_id = m.id OR sg.match_id = m.id), JSON_ARRAY()) AS stream_links
        FROM matches m
        JOIN users_extension w ON m.winner_id = w.id
        JOIN users_extension l ON m.loser_id = l.id

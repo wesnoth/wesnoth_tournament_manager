@@ -1272,17 +1272,21 @@ CREATE TABLE `tournament_games` (
 
 CREATE TABLE `tournament_game_streams` (
   `id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT 'Immutable UUID for one stream link assignment',
-  `game_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT 'Tournament game covered by this link',
+  `game_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'Tournament game covered by this link; null for standalone ranked matches',
+  `match_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'Standalone ranked match covered by this link; null for tournament-game links',
   `streamer_user_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT 'User who created and owns the link',
   `stream_url` varchar(2048) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'External HTTP(S) stream URL',
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_tournament_game_streams_game` (`game_id`),
+  KEY `idx_tournament_game_streams_match` (`match_id`),
   KEY `idx_tournament_game_streams_streamer` (`streamer_user_id`),
   CONSTRAINT `fk_tournament_game_streams_game` FOREIGN KEY (`game_id`) REFERENCES `tournament_games` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_tournament_game_streams_match` FOREIGN KEY (`match_id`) REFERENCES `matches` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `chk_tournament_game_streams_target` CHECK ((`game_id` is null and `match_id` is not null) or (`game_id` is not null and `match_id` is null)),
   CONSTRAINT `fk_tournament_game_streams_streamer` FOREIGN KEY (`streamer_user_id`) REFERENCES `users_extension` (`id`) ON DELETE RESTRICT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='External stream links assigned independently to tournament games';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='External stream links assigned independently to tournament games or ranked matches';
 
 CREATE TABLE `tournament_byes` (
   `id` char(36) NOT NULL,

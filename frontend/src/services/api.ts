@@ -141,6 +141,10 @@ export const userService = {
 };
 
 export const matchService = {
+  getStreams: (matchId: string) => api.get(`/matches/${matchId}/streams`),
+  addStream: (matchId: string, stream_url: string) => api.post(`/matches/${matchId}/streams`, { stream_url }),
+  updateStream: (matchId: string, streamId: string, stream_url: string) => api.put(`/matches/${matchId}/streams/${streamId}`, { stream_url }),
+  deleteStream: (matchId: string, streamId: string) => api.delete(`/matches/${matchId}/streams/${streamId}`),
   confirmMatch: (id: string, data: any) => api.post(`/matches/${id}/confirm`, data),
   getAllMatches: (page: number = 1, filters?: any) => {
     const params: any = { page };

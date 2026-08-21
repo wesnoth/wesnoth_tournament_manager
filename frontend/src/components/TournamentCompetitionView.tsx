@@ -494,6 +494,23 @@ const TournamentCompetitionView: React.FC<Props> = ({
                       </div>;
                     })}
                   </div>}
+                  {isStreamer && <form className="flex w-full flex-wrap items-center gap-1" onSubmit={(event) => { event.preventDefault(); void addStreamLink(game.game_id); }}>
+                    <input
+                      data-help-id="field-game-stream-url"
+                      type="url"
+                      value={streamUrls[game.game_id] || ''}
+                      onChange={(event) => setStreamUrls(current => ({ ...current, [game.game_id]: event.target.value }))}
+                      placeholder={t('stream.url_placeholder')}
+                      className="min-w-[220px] flex-1 rounded border border-gray-300 px-2 py-1 text-xs"
+                      maxLength={2048}
+                    />
+                    <button
+                      data-help-id="action-add-game-stream"
+                      type="submit"
+                      disabled={savingStreamGameId === game.game_id || !streamUrls[game.game_id]?.trim()}
+                      className="rounded bg-purple-600 px-2 py-1 text-xs font-semibold text-white hover:bg-purple-700 disabled:opacity-50"
+                    >{savingStreamGameId === game.game_id ? t('stream.saving') : t('stream.add')}</button>
+                  </form>}
                   {completed ? <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded-full px-3 py-1 text-xs font-semibold text-white ${pendingReplay ? 'bg-yellow-500' : 'bg-green-500'}`}>{pendingReplay ? 'Pending confirmation' : 'Completed'}</span>
                     {canConfirmReplay && <>
@@ -524,25 +541,6 @@ const TournamentCompetitionView: React.FC<Props> = ({
                       : !pendingReplay && <span className="text-xs text-gray-500">No replay</span>}
                   </div> : <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full bg-yellow-500 px-3 py-1 text-xs font-semibold text-white">Pending</span>
-                    {isStreamer && <form className="flex w-full flex-wrap items-center gap-1" onSubmit={(event) => { event.preventDefault(); void addStreamLink(game.game_id); }}>
-                      <input
-                        data-help-id="field-game-stream-url"
-                        type="url"
-                        value={streamUrls[game.game_id] || ''}
-                        onChange={(event) => setStreamUrls(current => ({ ...current, [game.game_id]: event.target.value }))}
-                        placeholder={t('stream.url_placeholder')}
-                        className="min-w-[220px] flex-1 rounded border border-gray-300 px-2 py-1 text-xs"
-                        maxLength={2048}
-                      />
-                      <button
-                        data-help-id="action-add-game-stream"
-                        type="submit"
-                        disabled={savingStreamGameId === game.game_id || !streamUrls[game.game_id]?.trim()}
-                        className="rounded bg-purple-600 px-2 py-1 text-xs font-semibold text-white hover:bg-purple-700 disabled:opacity-50"
-                      >
-                        {savingStreamGameId === game.game_id ? t('stream.saving') : t('stream.add')}
-                      </button>
-                    </form>}
                     {scheduleStatus !== 'none' && <div className="flex flex-col gap-1">
                       <span className={`rounded-full px-3 py-1 text-xs font-semibold text-white ${scheduleStatus === 'confirmed' ? 'bg-green-500' : 'bg-purple-500'}`}>
                         {scheduleStatus === 'confirmed' ? '✅ Schedule confirmed' : '⏳ Schedule proposed'}

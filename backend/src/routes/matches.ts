@@ -1,7 +1,9 @@
 import { Router, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../config/database.js';
-import { authMiddleware, moderatorOrAdminMiddleware, AuthRequest } from '../middleware/auth.js';
+import { authMiddleware, moderatorOrAdminMiddleware, streamerMiddleware, AuthRequest } from '../middleware/auth.js';
+import { isTournamentOrganizer } from '../services/tournamentAuthorizationService.js';
+import { checkUserIsForumModerator } from '../services/phpbbAuth.js';
 import { getUserLevel } from '../utils/auth.js';
 import {
   enqueueGlobalStatsRecalculation,
@@ -1563,6 +1565,116 @@ router.post('/cancel-confidence-1-replay', authMiddleware, globalRecalculationMi
 });
 
 
+/** Return streams attached to a ranked match or to its tournament game. */
+router.get('/:id/streams', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT streams.id, streams.stream_url, streams.streamer_user_id,
+              streamer.nickname AS streamer_nickname, streams.created_at, streams.updated_at
+       FROM tournament_game_streams streams
+       JOIN users_extension streamer ON streamer.id = streams.streamer_user_id
+       LEFT JOIN tournament_games tournament_game ON tournament_game.id = streams.game_id
+       WHERE streams.match_id = ? OR tournament_game.match_id = ?
+       ORDER BY streams.created_at ASC`,
+      [req.params.id, req.params.id]
+    );
+    return res.json({ streams: result.rows });
+  } catch (error) {
+    console.error('Get match streams error:', error);
+    return res.status(500).json({ error: 'Failed to fetch match streams' });
+  }
+});
+
+/** Create a stream link for a completed ranked match, including non-tournament matches. */
+router.post('/:id/streams', streamerMiddleware, async (req: AuthRequest, res) => {
+  try {
+    if (typeof req.body?.stream_url !== 'string' || req.body.stream_url.length > 2048) {
+      return res.status(400).json({ error: 'stream_url must be a valid HTTP(S) URL' });
+    }
+    let streamUrl: URL;
+    try { streamUrl = new URL(req.body.stream_url); } catch { return res.status(400).json({ error: 'stream_url must be a valid HTTP(S) URL' }); }
+    if (!['http:', 'https:'].includes(streamUrl.protocol)) return res.status(400).json({ error: 'stream_url must be a valid HTTP(S) URL' });
+
+    const matchResult = await query(
+      `SELECT m.id, tg.id AS tournament_game_id
+       FROM matches m
+       LEFT JOIN tournament_games tg ON tg.match_id = m.id
+       WHERE m.id = ? LIMIT 1`,
+      [req.params.id]
+    );
+    if (!matchResult.rows.length) return res.status(404).json({ error: 'Match not found' });
+    const id = uuidv4();
+    const tournamentGameId = matchResult.rows[0].tournament_game_id || null;
+    await query(
+      `INSERT INTO tournament_game_streams (id, game_id, match_id, streamer_user_id, stream_url)
+       VALUES (?, ?, ?, ?, ?)`,
+      [id, tournamentGameId, tournamentGameId ? null : req.params.id, req.userId, req.body.stream_url]
+    );
+    const result = await query(
+      `SELECT streams.id, streams.stream_url, streams.streamer_user_id,
+              streamer.nickname AS streamer_nickname, streams.created_at, streams.updated_at
+       FROM tournament_game_streams streams
+       JOIN users_extension streamer ON streamer.id = streams.streamer_user_id
+       WHERE streams.id = ?`, [id]
+    );
+    return res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Create match stream error:', error);
+    return res.status(500).json({ error: 'Failed to create match stream' });
+  }
+});
+
+router.put('/:id/streams/:streamId', streamerMiddleware, async (req: AuthRequest, res) => {
+  try {
+    if (typeof req.body?.stream_url !== 'string' || req.body.stream_url.length > 2048) return res.status(400).json({ error: 'stream_url must be a valid HTTP(S) URL' });
+    const parsed = new URL(req.body.stream_url);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return res.status(400).json({ error: 'stream_url must be a valid HTTP(S) URL' });
+    const result = await query(
+      `UPDATE tournament_game_streams streams
+       LEFT JOIN tournament_games tg ON tg.id = streams.game_id
+       SET streams.stream_url = ?
+       WHERE streams.id = ? AND streams.streamer_user_id = ?
+         AND (streams.match_id = ? OR tg.match_id = ?)`,
+      [req.body.stream_url, req.params.streamId, req.userId, req.params.id, req.params.id]
+    );
+    if (!result.rowCount) return res.status(404).json({ error: 'Stream link not found' });
+    return res.json({ success: true });
+  } catch { return res.status(400).json({ error: 'stream_url must be a valid HTTP(S) URL' }); }
+});
+
+router.delete('/:id/streams/:streamId', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const permission = await query(
+      `SELECT streams.stream_url, streams.streamer_user_id, streamer.nickname AS stream_owner_nickname,
+              COALESCE(m.tournament_id, tournament_match.tournament_id) AS tournament_id
+       FROM tournament_game_streams streams
+       JOIN users_extension streamer ON streamer.id = streams.streamer_user_id
+       LEFT JOIN matches m ON m.id = streams.match_id
+       LEFT JOIN tournament_games tg ON tg.id = streams.game_id
+       LEFT JOIN matches tournament_match ON tournament_match.id = tg.match_id
+       WHERE streams.id = ? AND (streams.match_id = ? OR tg.match_id = ?) LIMIT 1`,
+      [req.params.streamId, req.params.id, req.params.id]
+    );
+    if (!permission.rows.length) return res.status(404).json({ error: 'Stream link not found' });
+    const row = permission.rows[0];
+    const tournamentId = row.tournament_id || null;
+    const admin = Boolean((await query('SELECT is_admin FROM users_extension WHERE id = ?', [req.userId])).rows[0]?.is_admin);
+    const organizer = Boolean(tournamentId && await isTournamentOrganizer(tournamentId, req.userId!));
+    const moderator = await checkUserIsForumModerator(req.username!);
+    const owner = row.streamer_user_id === req.userId;
+    if (!admin && !organizer && !moderator && !owner) return res.status(403).json({ error: 'Stream removal permission denied' });
+    await query('DELETE FROM tournament_game_streams WHERE id = ?', [req.params.streamId]);
+    await logAuditEvent({
+      event_type: 'STREAM_LINK_DELETED', user_id: req.userId, username: req.username,
+      ip_address: getUserIP(req), user_agent: getUserAgent(req),
+      details: { match_id: req.params.id, stream_id: req.params.streamId, stream_url: row.stream_url,
+        stream_owner_user_id: row.streamer_user_id, stream_owner_nickname: row.stream_owner_nickname,
+        deleted_by_role: admin ? 'admin' : organizer ? 'organizer' : moderator ? 'moderator' : 'streamer' },
+    });
+    return res.status(204).send();
+  } catch (error) { console.error('Delete match stream error:', error); return res.status(500).json({ error: 'Failed to delete match stream' }); }
+});
+
 router.get('/', authMiddleware, async (req: AuthRequest, res) => {
   try {
     // Get page from query params, default to 1
@@ -1634,6 +1746,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
               m.admin_reviewed, m.tournament_id,
               w.nickname as winner_nickname,
               l.nickname as loser_nickname,
+              COALESCE((SELECT JSON_ARRAYAGG(JSON_OBJECT('id', s.id, 'stream_url', s.stream_url, 'streamer_user_id', s.streamer_user_id, 'streamer_nickname', su.nickname, 'created_at', s.created_at, 'updated_at', s.updated_at)) FROM tournament_game_streams s JOIN users_extension su ON su.id = s.streamer_user_id LEFT JOIN tournament_games sg ON sg.id = s.game_id WHERE s.match_id = m.id OR sg.match_id = m.id), JSON_ARRAY()) AS stream_links,
               'match' as source_type
        FROM matches m
        JOIN users_extension w ON m.winner_id = w.id

@@ -62,12 +62,12 @@ router.post('/:id/games/:gameId/streams', streamerMiddleware, async (req: AuthRe
        JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
        JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
        JOIN tournament_phases phases ON phases.id = groups.phase_id
-       WHERE phases.tournament_id = ? AND games.id = ? AND games.status = 'pending'
+       WHERE phases.tournament_id = ? AND games.id = ?
        LIMIT 1`,
       [req.params.id, req.params.gameId]
     );
     if (!gameResult.rows.length) {
-      return res.status(409).json({ error: 'Only pending tournament games can receive a new stream link' });
+      return res.status(404).json({ error: 'Tournament game not found' });
     }
 
     const id = uuidv4();

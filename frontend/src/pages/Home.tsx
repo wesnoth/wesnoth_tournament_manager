@@ -7,6 +7,7 @@ import { getLevelTranslationKey } from '../utils/levelTranslation';
 import PlayerLink from '../components/PlayerLink';
 import GlobalStats from '../components/GlobalStats';
 import { renderWikiMarkdown } from '../utils/wikiMarkdown';
+import MatchStreams from '../components/MatchStreams';
 
 // Get API URL for direct backend calls
 // Determine API URL based on frontend hostname and Vite environment variables
@@ -424,6 +425,7 @@ const Home: React.FC = () => {
                           </td>
                           
                           <td className="px-4 py-3">
+                            <MatchStreams match={match} compact />
                             {match.replay_file_path && (
                               <a
                                 href={match.replay_url || match.replay_file_path}

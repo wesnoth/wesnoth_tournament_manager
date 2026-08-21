@@ -303,6 +303,7 @@ const AdminUsers: React.FC = () => {
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <div className="flex gap-4 mb-4">
             <input
+              data-help-id="field-admin-users-nickname"
               type="text"
               placeholder={t('admin.search_by_nic')}
               value={searchNIC}
@@ -321,6 +322,7 @@ const AdminUsers: React.FC = () => {
               <option value="blocked">{t('admin.filter_blocked', 'Blocked')}</option>
             </select>
             <button
+              data-help-id="action-refresh-admin-users"
               type="button"
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               onClick={handleRefresh}
@@ -373,7 +375,7 @@ const AdminUsers: React.FC = () => {
         )}
 
         {users.length > 0 ? (
-          <div className="overflow-x-auto">
+        <div data-help-id="region-admin-user-management" className="overflow-x-auto">
           <table className="w-full border-collapse bg-white shadow-md rounded-lg overflow-hidden">
             <thead>
               <tr className="bg-gray-200">
@@ -566,7 +568,7 @@ const AdminUsers: React.FC = () => {
               <button className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600" onClick={() => setShowModal(false)}>
                 {t('btn_cancel')}
               </button>
-              <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700" onClick={confirmAction}>
+              <button data-help-id="action-confirm-user-role" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700" onClick={confirmAction}>
                 {t('btn_confirm')}
               </button>
             </div>

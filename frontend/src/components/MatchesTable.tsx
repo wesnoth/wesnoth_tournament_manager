@@ -5,6 +5,7 @@ import PlayerLink from './PlayerLink';
 import StarDisplay from './StarDisplay';
 import ReplayConfirmationModal from './ReplayConfirmationModal';
 import { useAuthStore } from '../store/authStore';
+import MatchStreams from './MatchStreams';
 
 interface MatchesTableProps {
   matches: any[];
@@ -518,6 +519,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                       <span className="px-2 py-1 text-xs text-gray-500">{t('no_replay')}</span>
                     )}
                   </div>
+                  <MatchStreams match={match} />
                 </div>
               </td>
             </tr>
