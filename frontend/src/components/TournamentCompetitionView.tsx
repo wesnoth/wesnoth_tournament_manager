@@ -314,7 +314,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
         const completed = section.status === 'completed';
         return <div key={section.status}>
           <h3 className="mb-4 border-b-2 border-blue-500 pb-3 text-2xl font-bold text-gray-800">{section.title}</h3>
-          <div className="overflow-x-auto"><table className="w-full text-sm">
+          <div className="overflow-x-auto"><table data-help-id="region-tournament-scheduled-games-table" className="w-full text-sm">
             <thead className="bg-gray-200"><tr>
               <th className="px-4 py-3 text-left font-semibold text-gray-700">Phase / Round</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-700">{completed ? 'Winner' : 'Player 1'}</th>
@@ -404,7 +404,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
                 });
                 setReplayChoice(choice);
               };
-              return <tr id={`series-${game.series_id}`} key={game.game_id} className={`border-b border-gray-200 ${highlightedSeriesId === game.series_id ? 'bg-yellow-200 ring-2 ring-yellow-400' : pendingReplay ? 'bg-yellow-50 hover:bg-yellow-100' : 'hover:bg-gray-50'}`}>
+              return <tr data-help-id="region-tournament-game-row" id={`series-${game.series_id}`} key={game.game_id} className={`border-b border-gray-200 ${highlightedSeriesId === game.series_id ? 'bg-yellow-200 ring-2 ring-yellow-400' : pendingReplay ? 'bg-yellow-50 hover:bg-yellow-100' : 'hover:bg-gray-50'}`}>
                 <td className="px-4 py-3 text-gray-700">
                   <div className="font-medium">{game.phase_name}</div>
                   <div className="text-xs text-gray-500">{game.group_name} · Round {game.round_number} · Game {game.game_number} · Bo{game.best_of}</div>
@@ -441,7 +441,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
                       </>}
                   </div>}
                 </td>
-                <td className="px-4 py-3 text-gray-700">
+                <td data-help-id="region-game-stream-links" className="px-4 py-3 text-gray-700">
                   {streamLinksFor(game).length > 0 && <div className="mb-2 flex flex-wrap items-center gap-1 border-b border-gray-100 pb-2">
                     <span className="text-xs font-semibold text-purple-700">{t('stream.label')}:</span>
                     {streamLinksFor(game).map((stream: any) => {

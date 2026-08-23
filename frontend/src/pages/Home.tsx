@@ -371,7 +371,7 @@ const Home: React.FC = () => {
                       const loserEloChange = (match.loser_elo_after || 0) - (match.loser_elo_before || 0);
 
                       return (
-                        <tr key={match.id} className="border-b hover:bg-gray-50 transition-colors">
+                        <tr data-help-id="region-home-recent-match-row" key={match.id} className="border-b hover:bg-gray-50 transition-colors">
                           <td className="px-4 py-3 text-gray-700">
                             {new Date(match.created_at).toLocaleDateString()}
                           </td>

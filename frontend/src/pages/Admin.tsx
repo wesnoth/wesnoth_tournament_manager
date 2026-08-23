@@ -454,6 +454,7 @@ const AdminUsers: React.FC = () => {
                         <>
                           {user.is_admin ? (
                             <button
+                              data-help-id="action-remove-admin"
                               className="px-2 py-1 text-xs bg-yellow-500 text-white rounded hover:bg-yellow-600"
                               onClick={() => handleAction(user, 'removeAdmin')}
                             >
@@ -461,6 +462,7 @@ const AdminUsers: React.FC = () => {
                             </button>
                           ) : (
                             <button
+                              data-help-id="action-make-admin"
                               className="px-2 py-1 text-xs bg-purple-500 text-white rounded hover:bg-purple-600"
                               onClick={() => handleAction(user, 'makeAdmin')}
                             >
@@ -546,7 +548,7 @@ const AdminUsers: React.FC = () => {
 
       {showModal && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm">
+          <div data-help-id="region-admin-role-confirmation" className="bg-white rounded-lg shadow-lg p-6 max-w-sm">
             <h3 className="text-lg font-semibold text-gray-800 mb-4">
               {actionType === 'delete' && t('admin.confirm_delete_title')}
               {actionType === 'block' && t('admin.confirm_block_title')}

@@ -355,7 +355,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
             const matchRowHoverColor = isCancelled ? 'hover:bg-red-50' : 'hover:bg-gray-50';
 
             return (
-              <tr key={match.id} className={`border-b ${matchRowBorderColor} ${matchRowHoverColor} ${matchRowBgColor}`}>
+              <tr data-help-id="region-match-row" key={match.id} className={`border-b ${matchRowBorderColor} ${matchRowHoverColor} ${matchRowBgColor}`}>
               <td className="px-4 py-3 text-sm text-gray-700">{new Date(match.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</td>
 
               <td className="px-4 py-3 text-sm">
