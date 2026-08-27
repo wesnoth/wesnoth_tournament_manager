@@ -98,10 +98,11 @@ interface ParseSummary {
   forumMap: string | null;
   forumMapId: string | null;
   forumFactions: Record<string, string>;
-  // Addon detection: ladder_era/ranked_era or ranked_map_picker
+  // Addon detection: ladder_era/ranked_era or ranked_map_picker.
+  // The selected map can now also be emitted by the merged Ranked addon.
   hasRankedEra: boolean;
   hasRankedMapPicker: boolean;
-  selectedMapName: string | null; // Map name from selected_map_name in replay when ranked_map_picker is used
+  selectedMapName: string | null; // Map name from selected_map_name in the replay
   replayRankedMode: boolean;
   replayTournamentFlag: boolean; // tournament flag from WML
   replayTournament: string | null;
@@ -739,7 +740,7 @@ export class ParseNewReplaysRefactorized {
     // ======== STEPS 5-7: Parse replay only when it still provides metadata ========
     // New-model games get their victory from competitive_game_player. WML is
     // retained only for narrow metadata gaps: era map/factions and the map
-    // selected by ranked_map_picker. It never supplies the result or mode.
+    // selected by a Ranked map selector. It never supplies the result or mode.
     const shouldParseReplayWml = !competitive || parseSummary.hasRankedEra || parseSummary.hasRankedMapPicker;
     const needsLadderFactionWml = Boolean(
       competitive && eraAddonId?.toLowerCase() === 'ladder_era'
@@ -784,8 +785,10 @@ export class ParseNewReplaysRefactorized {
           console.log(`   ✅ 5.1b Teams: ${teamInfo}`);
         }
 
-        // 5.1c Extract selected map name only for legacy ranked-map-picker games.
-        if ((!competitive || parseSummary.hasRankedMapPicker) && parsed.selectedMapName) {
+        // 5.1c Extract selected map name from every parsed Ranked replay. The
+        // selector is being merged into Ranked, so requiring the legacy
+        // ranked_map_picker marker would discard valid map metadata.
+        if (parsed.selectedMapName) {
           parseSummary.selectedMapName = parsed.selectedMapName;
           console.log(`   ✅ 5.1c Selected map name: ${parsed.selectedMapName}`);
         }
@@ -1012,8 +1015,10 @@ export class ParseNewReplaysRefactorized {
 
       // ======== VALIDATE AND RESOLVE MAP ========
       console.log(`🔍 [PARSE] Validating map against game_maps table...`);
-      // Use selectedMapName if ranked_map_picker is detected, otherwise use forumMap
-      const mapSource = parseSummary.hasRankedMapPicker && parseSummary.selectedMapName
+      // selected_map_name is authoritative whenever it exists. The map
+      // selector is now part of Ranked, so checking only the legacy
+      // ranked_map_picker addon would fall back to the generic forum map.
+      const mapSource = parseSummary.selectedMapName
         ? parseSummary.selectedMapName
         : (parseSummary.forumMap || 'Unknown');
       const mapRaw = mapSource;
@@ -1024,8 +1029,8 @@ export class ParseNewReplaysRefactorized {
       parseSummary.resolvedMap = mapResolved.name;
       parseSummary.mapIsRanked = mapResolved.isRanked;
 
-      if (parseSummary.hasRankedMapPicker && parseSummary.selectedMapName) {
-        console.log(`   ℹ️  Using selected_map_name (ranked_map_picker detected): "${parseSummary.selectedMapName}"`);
+      if (parseSummary.selectedMapName) {
+        console.log(`   ℹ️  Using selected_map_name from Ranked replay: "${parseSummary.selectedMapName}"`);
       }
       if (mapResolved.name !== mapRaw) {
         console.log(`   ✅ Map: "${mapRaw}" → "${mapResolved.name}" (ranked: ${mapResolved.isRanked})`);
