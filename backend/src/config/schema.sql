@@ -334,6 +334,27 @@ CREATE TABLE `match_schedule_proposals` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `p2p_challenge_waiting`
+--
+
+DROP TABLE IF EXISTS `p2p_challenge_waiting`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `p2p_challenge_waiting` (
+  `id` char(36) COLLATE utf8mb4_general_ci NOT NULL,
+  `user_id` char(36) COLLATE utf8mb4_general_ci NOT NULL,
+  `available_until` datetime NOT NULL COMMENT 'UTC instant at which the public announcement expires',
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_p2p_waiting_user` (`user_id`),
+  KEY `idx_p2p_waiting_user_id` (`user_id`),
+  KEY `idx_p2p_waiting_until` (`available_until`),
+  CONSTRAINT `fk_p2p_waiting_user` FOREIGN KEY (`user_id`) REFERENCES `users_extension` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Short-lived public P2P challenge availability announcements';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `match_schedule_slots`
 --
 

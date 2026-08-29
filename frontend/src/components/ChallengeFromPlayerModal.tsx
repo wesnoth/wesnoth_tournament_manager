@@ -34,6 +34,12 @@ const ChallengeFromPlayerModal: React.FC<ChallengeFromPlayerModalProps> = ({
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [viewingTimezone, setViewingTimezone] = useState('UTC');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  // The schedule grid is opened at the next half-hour boundary, matching the
+  // backend's supported slot granularity. It is intentionally only a visual
+  // focus: the proposer must explicitly select a slot before submitting.
+  const initialSlot = new Date();
+  initialSlot.setSeconds(0, 0);
+  initialSlot.setMinutes(initialSlot.getMinutes() + (30 - initialSlot.getMinutes() % 30));
 
   // Load participant data
   useEffect(() => {
@@ -157,7 +163,9 @@ const ChallengeFromPlayerModal: React.FC<ChallengeFromPlayerModalProps> = ({
       opponentId={opponentId}
       initialParticipants={participants}
       initialViewingTimezone={viewingTimezone}
-      initialDisplayDateStart={new Date()}
+      initialDisplayDateStart={initialSlot}
+      initialScrollToHour={initialSlot.getHours()}
+      initialSelectedSlots={[initialSlot.toISOString()]}
     />
   );
 };

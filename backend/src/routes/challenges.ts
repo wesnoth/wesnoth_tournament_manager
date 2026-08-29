@@ -15,6 +15,7 @@ import {
 import { getSchedulingConflictsForUsers } from '../services/schedulingConflictService.js';
 import { buildNotificationMessage, formatTimeRangesForDiscord, groupSlotsIntoRanges } from '../utils/slotGrouping.js';
 import { sendUserActionRateLimitError } from '../utils/userActionRateLimitResponse.js';
+import { cancelWaiting, getWaitingForUser, listWaitingPlayers, publishWaiting } from '../services/p2pWaitingLobbyService.js';
 
 const router = Router();
 const DISCORD_P2P_CHALLENGE_CHANNEL_ID = process.env.DISCORD_P2P_CHALLENGE_CHANNEL_ID || '';
@@ -76,6 +77,43 @@ const getUserSummary = async (userId: string): Promise<{ nickname: string }> => 
     nickname: result.rows[0].nickname,
   };
 };
+
+/**
+ * Public waiting lobby endpoint. SQL filters expiry as a correctness boundary,
+ * while the scheduled purge later removes rows that have already disappeared
+ * from the public response.
+ */
+router.get('/waiting', optionalAuthMiddleware, async (_req: AuthRequest, res: Response) => {
+  try { return res.json({ waiting: await listWaitingPlayers() }); }
+  catch (error) { console.error('[CHALLENGES] Error listing waiting lobby:', error); return res.status(500).json({ error: 'Failed to list waiting players' }); }
+});
+
+router.get('/waiting/me', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try { return res.json({ waiting: await getWaitingForUser(req.userId!) }); }
+  catch (error) { return res.status(500).json({ error: 'Failed to fetch waiting status' }); }
+});
+
+router.post('/waiting', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    // The service validates the stored profile timezone and all temporal limits;
+    // the route only coordinates persistence and the optional Discord side effect.
+    const waiting = await publishWaiting(req.userId!, req.body?.available_until);
+    const player = await getUserSummary(req.userId!);
+    const expiry = new Date(waiting.available_until).toLocaleString('en-GB', {
+      timeZone: 'UTC', dateStyle: 'short', timeStyle: 'short', hour12: false,
+    });
+    await sendChallengeDiscord(waiting.id, 'waiting_published', '🟢 Player accepting challenges', 0x2ecc71, [
+      { name: 'Player', value: player.nickname, inline: true },
+      { name: 'Available until', value: `${expiry} UTC`, inline: true },
+    ]);
+    return res.json({ success: true, waiting });
+  } catch (error) { return res.status(400).json({ error: (error as Error).message || 'Failed to publish waiting status' }); }
+});
+
+router.delete('/waiting', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try { await cancelWaiting(req.userId!); return res.json({ success: true }); }
+  catch (error) { return res.status(500).json({ error: 'Failed to cancel waiting status' }); }
+});
 
 /** List public P2P proposals, plus the authenticated player's own proposals when available. */
 router.get('/proposals', optionalAuthMiddleware, async (req: AuthRequest, res: Response) => {
@@ -197,6 +235,15 @@ router.post('/proposals/:proposalId/confirm-slots', authMiddleware, async (req: 
     const proposal = await getP2PProposalForUser(proposalId, userId);
     if (!proposal) {
       return res.status(404).json({ error: 'Proposal not found after confirmation' });
+    }
+
+    if (result.status === 'confirmed') {
+      // A confirmed challenge consumes the waiting player's availability. Do
+      // not make the scheduling decision depend on this cleanup side effect:
+      // the accepted proposal must remain successful even if deletion fails.
+      await cancelWaiting(userId).catch((cleanupError) => {
+        console.error(`[CHALLENGES][WAITING] Failed to remove waiting entry for user ${userId}:`, cleanupError);
+      });
     }
 
     const proposerId = proposal.proposed_by_user_id;

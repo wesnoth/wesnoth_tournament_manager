@@ -461,7 +461,10 @@ function SchedulingFreeBusyGrid({
 
     // Reserved slots remain visible but cannot be selected. The current
     // proposal is represented by proposedSlots and remains selectable.
-    if (reservedSlotsMap.has(key) && !proposedSlotsSet.has(key)) {
+    // A preselected slot can become reserved while conflicts load. It must
+    // remain clickable for deselection, even though a new reserved slot cannot
+    // be selected.
+    if (reservedSlotsMap.has(key) && !proposedSlotsSet.has(key) && !selectedSlots.has(key)) {
       return;
     }
 

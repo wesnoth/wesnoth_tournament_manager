@@ -14,6 +14,8 @@ interface ScheduleProposalModalP2PProps {
   initialProposal?: ProposalData | null;
   initialViewingTimezone?: string;
   initialDisplayDateStart?: Date;
+  /** Canonical UTC slots selected when opening a new proposal. */
+  initialSelectedSlots?: string[];
   initialScrollToHour?: number | null;
   onClose: () => void;
   onSuccess?: () => void;
@@ -90,6 +92,7 @@ export default function ScheduleProposalModalP2P({
   initialProposal,
   initialViewingTimezone,
   initialDisplayDateStart,
+  initialSelectedSlots,
   initialScrollToHour,
   onClose,
   onSuccess
@@ -140,10 +143,12 @@ export default function ScheduleProposalModalP2P({
     } else {
       // Clear proposal data when opening modal for new schedule (no existing proposal)
       setProposal(null);
-      setSelectedSlots(new Set());
+      // Preserve the caller's suggested slot so the form can be submitted
+      // immediately, while still allowing the proposer to change it.
+      setSelectedSlots(new Set(initialSelectedSlots || []));
       setNotes('');
     }
-  }, [isOpen, initialParticipants, initialProposal, initialViewingTimezone, initialDisplayDateStart, initialScrollToHour]);
+  }, [isOpen, initialParticipants, initialProposal, initialViewingTimezone, initialDisplayDateStart, initialSelectedSlots, initialScrollToHour]);
 
   // Load conflicts shared by both players so the grid blocks overlapping P2P
   // and tournament proposals. The current proposal is excluded when editing.
@@ -160,6 +165,10 @@ export default function ScheduleProposalModalP2P({
           next[new Date(conflict.slot_datetime).toISOString()] = conflict.source;
         }
         setReservedSlots(next);
+        // A suggested slot may already be occupied by another proposal. Drop
+        // that suggestion once conflicts arrive so the proposer can submit a
+        // different free slot instead of being left with an invalid selection.
+        setSelectedSlots((previous) => new Set([...previous].filter((slot) => !next[slot])));
       })
       .catch((error) => {
         console.error('Error loading occupied scheduling slots:', error);
@@ -205,11 +214,13 @@ export default function ScheduleProposalModalP2P({
       }
     } else {
       setMode('propose');
-      setSelectedSlots(new Set());
+      // Keep the caller-provided suggestion after mode initialization; this
+      // effect runs after the preload effect and must not clear the proposal.
+      setSelectedSlots(new Set(initialSelectedSlots || []));
       setHasStartedConfirmationSelection(false);
       hasStartedConfirmationSelectionRef.current = false;
     }
-  }, [isOpen, proposal, userId]);
+  }, [isOpen, proposal, userId, initialSelectedSlots]);
 
   const handleSlotToggle = useCallback((slotDatetime: string, selected: boolean) => {
     // In edit_proposal mode, first click triggers showing only selected slots

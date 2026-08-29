@@ -8,6 +8,8 @@ import ScheduleProposalModal from '../components/ScheduleProposalModal';
 import ChallengeFromEventsModal from '../components/ChallengeFromEventsModal';
 import ChallengeActionButtons from '../components/ChallengeActionButtons';
 import { useAuthStore } from '../store/authStore';
+import WaitingLobby from '../components/WaitingLobby';
+import ChallengeFromPlayerModal from '../components/ChallengeFromPlayerModal';
 
 type EventSourceType = 'tournament' | 'p2p';
 
@@ -68,6 +70,7 @@ const Events: React.FC = () => {
   const [toDateFilter, setToDateFilter] = useState('');
   const [myEventsOnly, setMyEventsOnly] = useState(false);
   const [scheduleModal, setScheduleModal] = useState<any>({ isOpen: false });
+  const [waitingChallenge, setWaitingChallenge] = useState<any>(null);
 
   const getEventStatusLabel = (status: string): string => {
     const normalizedStatus = String(status || '').trim().toLowerCase();
@@ -365,6 +368,8 @@ const Events: React.FC = () => {
           </span>
         </div>
 
+        <WaitingLobby onChallenge={(player) => setWaitingChallenge(player)} />
+
         <div className="bg-white rounded-lg shadow p-4 grid grid-cols-1 md:grid-cols-6 gap-3">
           <select
             className="px-3 py-2 border border-gray-300 rounded"
@@ -599,6 +604,13 @@ const Events: React.FC = () => {
         isOpen={showChallengeModal}
         onClose={() => setShowChallengeModal(false)}
         onSuccess={loadEvents}
+      />
+      <ChallengeFromPlayerModal
+        isOpen={!!waitingChallenge}
+        onClose={() => setWaitingChallenge(null)}
+        onSuccess={() => setWaitingChallenge(null)}
+        opponentId={waitingChallenge?.user_id || ''}
+        opponentNickname={waitingChallenge?.nickname || ''}
       />
       <ScheduleProposalModal
         isOpen={scheduleModal.isOpen}

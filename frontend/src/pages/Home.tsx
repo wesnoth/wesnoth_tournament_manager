@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { userService, matchService, publicService } from '../services/api';
@@ -8,6 +9,9 @@ import PlayerLink from '../components/PlayerLink';
 import GlobalStats from '../components/GlobalStats';
 import { renderWikiMarkdown } from '../utils/wikiMarkdown';
 import MatchStreams from '../components/MatchStreams';
+import WaitingLobby from '../components/WaitingLobby';
+import ChallengeFromPlayerModal from '../components/ChallengeFromPlayerModal';
+import { useAuthStore } from '../store/authStore';
 
 // Get API URL for direct backend calls
 // Determine API URL based on frontend hostname and Vite environment variables
@@ -52,6 +56,9 @@ const setCachedData = (key: string, data: any) => {
 
 const Home: React.FC = () => {
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuthStore();
+  const [waitingChallenge, setWaitingChallenge] = useState<any>(null);
   const [topPlayers, setTopPlayers] = useState<any[]>([]);
   const [recentMatches, setRecentMatches] = useState<any[]>([]);
   const [recentPlayers, setRecentPlayers] = useState<any[]>([]);
@@ -264,6 +271,10 @@ const Home: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 w-full">
         {/* Left Column: 3/4 width */}
         <div className="lg:col-span-3 flex flex-col gap-8">
+          <WaitingLobby onChallenge={(player) => {
+            if (!isAuthenticated) { navigate('/login'); return; }
+            setWaitingChallenge(player);
+          }} />
           {/* Recent Matches */}
           <section className="bg-white rounded-xl shadow-lg p-8">
             <div className="flex justify-between items-center mb-6 pb-4 border-b-2 border-gray-200">
@@ -555,6 +566,7 @@ const Home: React.FC = () => {
           <GlobalStats />
         </div>
       </div>
+      <ChallengeFromPlayerModal isOpen={!!waitingChallenge} onClose={() => setWaitingChallenge(null)} onSuccess={() => setWaitingChallenge(null)} opponentId={waitingChallenge?.user_id || ''} opponentNickname={waitingChallenge?.nickname || ''} />
     </div>
   );
 };

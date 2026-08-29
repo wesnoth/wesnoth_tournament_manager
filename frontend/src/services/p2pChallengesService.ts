@@ -1,6 +1,10 @@
 import { api } from './api';
 
 export const p2pChallengesService = {
+  listWaiting: async () => (await api.get('/challenges/waiting')).data,
+  getMyWaiting: async () => (await api.get('/challenges/waiting/me')).data,
+  publishWaiting: async (availableUntil?: string) => (await api.post('/challenges/waiting', { available_until: availableUntil })).data,
+  cancelWaiting: async () => (await api.delete('/challenges/waiting')).data,
   /**
    * Create a new P2P challenge proposal with the selected UTC slots.
    */

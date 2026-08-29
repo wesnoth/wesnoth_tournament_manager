@@ -9,6 +9,7 @@ import { cleanupOldNotifications } from './cleanupOldNotificationsJob.js';
 import { createFactionMapStatisticsSnapshot, recalculatePlayerMatchStatistics } from '../services/statisticsCalculator.js';
 import { logAuditEvent } from '../middleware/audit.js';
 import { shouldPauseReplayProcessing } from '../services/systemPauseService.js';
+import { cleanupExpiredWaiting } from '../services/p2pWaitingLobbyService.js';
 
 /**
  * Mark unconfirmed replays as 'due' when they exceed the age threshold
@@ -205,6 +206,14 @@ export const initializeScheduledJobs = (): void => {
       } catch (error) {
         console.error('❌ [CRON] Expired schedules cleanup failed:', error);
       }
+    });
+
+    // Remove expired public challenge-waiting announcements every 15 minutes.
+    // Public reads still filter by time, so this job is storage maintenance,
+    // not the mechanism that determines whether a player is currently visible.
+    cron.schedule('*/15 * * * *', async () => {
+      try { await cleanupExpiredWaiting(); }
+      catch (error) { console.error('❌ [CRON] Waiting lobby cleanup failed:', error); }
     });
 
     // Schedule old notifications cleanup at 03:00 UTC daily

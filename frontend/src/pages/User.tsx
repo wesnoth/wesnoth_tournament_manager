@@ -13,6 +13,7 @@ import PlayerLink from '../components/PlayerLink';
 import RouteLoader from '../components/RouteLoader';
 import ScheduleDisplay from '../components/ScheduleDisplay';
 import ProfileMatchesPagination from '../components/ProfileMatchesPagination';
+import WaitingLobby from '../components/WaitingLobby';
 
 // Lazy-load heavy chart and statistics components
 const EloChart = lazy(() => import('../components/EloChart'));
@@ -207,6 +208,8 @@ const User: React.FC = () => {
         {profile && (
           <>
             <div data-help-id="region-user-profile-statistics"><ProfileStats player={profile} /></div>
+            {/* Challenge availability is an operational action, so keep it on /user with other player actions. */}
+            <div className="mb-8"><WaitingLobby manage timezone={profile?.timezone || 'UTC'} /></div>
             
             <div className="mb-8">
               <ScheduleDisplay 
