@@ -925,5 +925,12 @@
     "slots": "时段",
     "viewing_as": "查看为"
   },
+  "waiting_lobby_title": "我在等待",
+  "waiting_lobby_until": "截止时间",
+  "waiting_lobby_button": "挑战我",
+  "waiting_lobby_extend": "延长",
+  "waiting_lobby_cancel": "取消",
+  "waiting_lobby_empty": "目前没有等待中的玩家。",
+  "waiting_lobby_challenged_by": "挑战者",
   "help": "帮助"
 }

@@ -351,9 +351,10 @@ const Events: React.FC = () => {
   return (
     <div data-help-id="region-events" className="bg-gradient-to-br from-gray-100 to-gray-300 min-h-screen py-8 px-4">
       <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div data-help-id="region-events-header" className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-3xl font-bold text-gray-800">{t('events_title') || 'Events'}</h1>
           <button
+            data-help-id="action-events-challenge"
             className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 font-semibold"
             onClick={() => setShowChallengeModal(true)}
           >
@@ -372,6 +373,7 @@ const Events: React.FC = () => {
 
         <div className="bg-white rounded-lg shadow p-4 grid grid-cols-1 md:grid-cols-6 gap-3">
           <select
+            data-help-id="option-events-view-mode"
             className="px-3 py-2 border border-gray-300 rounded"
             value={viewMode}
             onChange={(e) => setViewMode(e.target.value as 'calendar' | 'list')}
@@ -381,6 +383,7 @@ const Events: React.FC = () => {
           </select>
 
           <select
+            data-help-id="option-events-type-filter"
             className="px-3 py-2 border border-gray-300 rounded"
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value as 'all' | EventSourceType)}
@@ -391,6 +394,7 @@ const Events: React.FC = () => {
           </select>
 
           <input
+            data-help-id="field-events-tournament-name"
             type="text"
             className="px-3 py-2 border border-gray-300 rounded"
             placeholder={t('events_filter_tournament_name') || 'Tournament name'}
@@ -399,6 +403,7 @@ const Events: React.FC = () => {
           />
 
           <input
+            data-help-id="field-events-player"
             type="text"
             className="px-3 py-2 border border-gray-300 rounded"
             placeholder={t('events_filter_players') || 'Players'}
@@ -407,6 +412,7 @@ const Events: React.FC = () => {
           />
 
           <input
+            data-help-id="field-events-from-date"
             type="date"
             className="px-3 py-2 border border-gray-300 rounded"
             value={fromDateFilter}
@@ -414,6 +420,7 @@ const Events: React.FC = () => {
           />
 
           <input
+            data-help-id="field-events-to-date"
             type="date"
             className="px-3 py-2 border border-gray-300 rounded"
             value={toDateFilter}
@@ -422,6 +429,7 @@ const Events: React.FC = () => {
 
           <label className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded bg-white hover:bg-gray-50 cursor-pointer">
             <input
+              data-help-id="option-events-my-events"
               type="checkbox"
               checked={myEventsOnly}
               onChange={(e) => setMyEventsOnly(e.target.checked)}
@@ -446,7 +454,7 @@ const Events: React.FC = () => {
         )}
 
         {!loading && !error && filteredEvents.length > 0 && viewMode === 'list' && (
-          <div className="bg-white rounded-lg shadow overflow-auto">
+          <div data-help-id="region-events-list" className="bg-white rounded-lg shadow overflow-auto">
             <table className="w-full min-w-[900px] text-sm">
               <thead className="bg-gray-50 text-gray-700">
                 <tr>
@@ -524,7 +532,7 @@ const Events: React.FC = () => {
         )}
 
         {!loading && !error && filteredEvents.length > 0 && viewMode === 'calendar' && (
-          <div className="space-y-4">
+          <div data-help-id="region-events-calendar" className="space-y-4">
             {groupedByDay.map(([dateKey, dayEvents]) => (
               <section key={dateKey} className="bg-white rounded-lg shadow">
                 <div className="px-4 py-3 border-b border-gray-200 font-semibold text-gray-800">

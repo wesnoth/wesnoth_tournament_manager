@@ -518,7 +518,7 @@ export default function ScheduleProposalModalP2P({
 
               {/* Selected slots summary */}
               {((mode === 'confirm' && confirmedSlotIds.size > 0) || (mode !== 'confirm' && selectedSlots.size > 0)) && (
-                <div className={`p-3 rounded ${mode === 'confirm' ? 'bg-green-50 border border-green-200' : 'bg-blue-50 border border-blue-200'}`}>
+                <div data-help-id="region-p2p-selected-slots" className={`p-3 rounded ${mode === 'confirm' ? 'bg-green-50 border border-green-200' : 'bg-blue-50 border border-blue-200'}`}>
                   <p className={`text-sm font-semibold ${mode === 'confirm' ? 'text-green-900' : 'text-blue-900'}`}>
                     {mode === 'confirm' 
                       ? `${confirmedSlotIds.size} slot${confirmedSlotIds.size !== 1 ? 's' : ''} to confirm` 

@@ -925,5 +925,12 @@
     "slots": "слоты",
     "viewing_as": "Просмотр как"
   },
+  "waiting_lobby_title": "Я жду",
+  "waiting_lobby_until": "До",
+  "waiting_lobby_button": "Бросить мне вызов",
+  "waiting_lobby_extend": "Продлить",
+  "waiting_lobby_cancel": "Отменить",
+  "waiting_lobby_empty": "Сейчас никто не ждёт.",
+  "waiting_lobby_challenged_by": "Вызов от",
   "help": "Помощь"
 }

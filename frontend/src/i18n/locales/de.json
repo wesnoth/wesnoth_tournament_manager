@@ -925,5 +925,12 @@
     "slots": "Slots",
     "viewing_as": "Angezeigt als"
   },
+  "waiting_lobby_title": "Ich warte",
+  "waiting_lobby_until": "Bis",
+  "waiting_lobby_button": "Fordere mich heraus",
+  "waiting_lobby_extend": "Verlängern",
+  "waiting_lobby_cancel": "Abbrechen",
+  "waiting_lobby_empty": "Derzeit wartet niemand.",
+  "waiting_lobby_challenged_by": "Herausgefordert von",
   "help": "Hilfe"
 }
