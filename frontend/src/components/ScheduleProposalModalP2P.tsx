@@ -97,6 +97,7 @@ export default function ScheduleProposalModalP2P({
   onClose,
   onSuccess
 }: ScheduleProposalModalP2PProps) {
+  const { i18n } = useTranslation();
   const { userId } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -486,7 +487,7 @@ export default function ScheduleProposalModalP2P({
                     className="px-3 py-2 border border-gray-300 rounded text-sm"
                   />
                   <span className="text-sm text-gray-500 self-center">
-                    Next 14 days ({dateEnd.toLocaleDateString()})
+                    Next 14 days ({dateEnd.toLocaleDateString(i18n.language || 'en-US')})
                   </span>
                   <span className="text-sm text-gray-600 self-center font-semibold">
                     | Viewing: {viewingTimezone}
@@ -527,7 +528,7 @@ export default function ScheduleProposalModalP2P({
                     {selectedRanges.map((range, idx) => (
                       <div key={idx} className={`text-sm p-2 bg-white rounded border ${mode === 'confirm' ? 'text-green-800 border-green-100' : 'text-blue-800 border-blue-100'}`}>
                         <div className="font-semibold">
-                          {range.start.toLocaleDateString()} - {range.hours}
+                          {range.start.toLocaleDateString(i18n.language || 'en-US')} - {range.hours}
                         </div>
                         <div className="text-xs text-gray-600">
                           UTC: {range.start.toISOString()} to {range.end.toISOString()}
@@ -557,7 +558,7 @@ export default function ScheduleProposalModalP2P({
                         {proposalRanges.map((range, idx) => (
                           <div key={idx} className="text-xs text-yellow-800 bg-white rounded px-2 py-1 border border-yellow-100">
                             <div className="font-semibold">
-                              {range.start.toLocaleDateString()} - {range.hours}
+                              {range.start.toLocaleDateString(i18n.language || 'en-US')} - {range.hours}
                             </div>
                             <div className="text-xs text-gray-600">
                               ({proposalStatusesByRange[idx]})

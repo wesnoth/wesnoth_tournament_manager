@@ -1,4 +1,5 @@
 import React, { useMemo, useEffect, useRef, useState, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface Participant {
   id: string;
@@ -210,6 +211,7 @@ function SchedulingFreeBusyGrid({
   scrollToHour = null,
   confirmMode = false
 }: SchedulingFreeBusyGridProps) {
+  const { i18n } = useTranslation();
   const gridContainerRef = useRef<HTMLDivElement>(null);
   const scrollRafRef = useRef<number | null>(null);
   const lastTouchActivationRef = useRef(0);
@@ -268,14 +270,14 @@ function SchedulingFreeBusyGrid({
         dateKey,
         daySlots,
         dayColor: index % 2 === 0 ? 'bg-blue-50' : 'bg-green-50',
-        dateLabel: date.toLocaleDateString('es-ES', {
+        dateLabel: date.toLocaleDateString(i18n.language || 'en-US', {
           weekday: 'short',
           month: '2-digit',
           day: '2-digit'
         })
       };
     });
-  }, [slotsByDate]);
+  }, [slotsByDate, i18n.language]);
 
   const dateSectionMeta = useMemo(() => {
     const map = new Map<string, { dayColor: string; dateLabel: string }>();
