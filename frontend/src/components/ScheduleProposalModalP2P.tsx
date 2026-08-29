@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useDeferredValue, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import SchedulingFreeBusyGrid from './SchedulingFreeBusyGrid';
 import { useAuthStore } from '../store/authStore';
 import { p2pChallengesService } from '../services/p2pChallengesService';
