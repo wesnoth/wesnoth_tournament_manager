@@ -96,8 +96,8 @@
 - `[GET] /api/tournaments/:id/ranking` — Public — Tournament ranking.
 - `[GET] /api/tournaments/:id/standings` — Public — query: `round_id?` — Tournament standings (with tiebreakers).
 - `[POST] /api/tournaments/:id/close-registration` — Private (organizer) — Close registration.
-- `[POST] /api/tournaments/:id/prepare` — Private (organizer) — Generate rounds.
-- `[POST] /api/tournaments/:id/start` — Private (organizer) — Start tournament.
+- `[POST] /api/tournaments/:id/prepare` — Private (organizer) — Compile the first phase competition for a v2 tournament after registration closes.
+- `[POST] /api/tournaments/:id/start` — Private (organizer) — Start the prepared v2 tournament's first phase according to its round-opening policy.
 - `[GET] /api/tournaments/:id/rounds/:roundId/matches` — Public — Matches for a specific round.
 - `[GET] /api/tournaments/:id/round-matches` — Public — Best-Of series summaries.
 - `[GET] /api/tournaments/:id/matches` — Public — All individual matches.

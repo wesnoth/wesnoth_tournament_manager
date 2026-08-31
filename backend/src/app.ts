@@ -85,9 +85,10 @@ app.use('/api/users', userRoutes);
 app.use('/api/matches', matchRoutes);
 app.use('/api/tournaments', tournamentCompetitionRoutes);
 
-// Legacy tournament endpoints were replaced by the phase-engine competition
-// API. Keep an explicit 410 response while old route implementations are
-// removed from the source tree, so no request can reach legacy-table queries.
+// Remaining legacy tournament endpoints were replaced by the phase-engine
+// competition API. Keep an explicit 410 response for paths that are not
+// implemented by the phase-engine router, so no request can reach
+// legacy-table queries. The phase-engine router is mounted above this block.
 const legacyTournamentEndpoint = (_req: express.Request, res: express.Response) =>
   res.status(410).json({ error: 'Legacy tournament endpoint has been removed' });
 app.use('/api/tournaments/:id/rounds', legacyTournamentEndpoint);

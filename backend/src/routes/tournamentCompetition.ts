@@ -8,11 +8,57 @@ import { getTournamentFormat, saveTournamentFormat } from '../tournament-engine/
 import type { TournamentFormatDefinition } from '../tournament-engine/types.js';
 import { query } from '../config/database.js';
 import { recordPhaseGameResult } from '../tournament-engine/competitionProgression.js';
-import { compileNextPhaseCompetition, startReadyPhase } from '../tournament-engine/competitionCompiler.js';
+import {
+  compileNextPhaseCompetition,
+  preparePhaseCompetition,
+  startPhaseCompetition,
+  startReadyPhase,
+} from '../tournament-engine/competitionCompiler.js';
 import { forumTopicUrl, tournamentGameName } from '../tournament-engine/forumTopic.js';
 import { getUserAgent, getUserIP, logAuditEvent } from '../middleware/audit.js';
 
 const router = Router();
+
+/**
+ * Compile the first phase of a v2 tournament after registration is closed.
+ * These compatibility paths live on the phase-engine router so the old URL
+ * remains usable without reintroducing any legacy tournament-table queries.
+ */
+router.post('/:id/prepare', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    if (!(await isTournamentOrganizer(req.params.id, req.userId!))) {
+      return res.status(403).json({ error: 'Only tournament organizers can prepare the tournament' });
+    }
+    return res.json({
+      message: 'Tournament phase competition prepared successfully',
+      ...(await preparePhaseCompetition(req.params.id)),
+    });
+  } catch (error: any) {
+    if (error.message === 'Tournament not found') return res.status(404).json({ error: error.message });
+    if (error.message?.includes('must be') || error.message?.includes('does not use') || error.message?.includes('requires') || error.message?.includes('no phase') || error.message?.includes('Group')) {
+      return res.status(409).json({ error: error.message });
+    }
+    console.error('Prepare tournament phase competition error:', error);
+    return res.status(500).json({ error: 'Failed to compile tournament phases' });
+  }
+});
+
+/** Start the prepared first phase using its configured round-opening policy. */
+router.post('/:id/start', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    if (!(await isTournamentOrganizer(req.params.id, req.userId!))) {
+      return res.status(403).json({ error: 'Only tournament organizers can start the tournament' });
+    }
+    return res.json(await startPhaseCompetition(req.params.id));
+  } catch (error: any) {
+    if (error.message === 'Tournament not found') return res.status(404).json({ error: error.message });
+    if (error.message?.includes('must be') || error.message?.includes('does not use') || error.message?.includes('no first phase')) {
+      return res.status(409).json({ error: error.message });
+    }
+    console.error('Start tournament phase competition error:', error);
+    return res.status(500).json({ error: 'Failed to start tournament' });
+  }
+});
 
 const isExternalStreamUrl = (value: unknown): value is string => {
   if (typeof value !== 'string' || value.length > 2048) return false;
