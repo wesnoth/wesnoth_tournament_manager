@@ -362,9 +362,9 @@ const TournamentCompetitionView: React.FC<Props> = ({
       ].map(section => {
         const sectionGames = games.filter(game => {
           const hasPendingReplay = Boolean(game.pending_replay_id);
-          // A confidence-one replay is already a completed game. It remains
-          // in this section while awaiting a player or organizer decision.
-          const isCompleted = game.status === 'completed';
+          // A confidence-one replay represents a completed game even when
+          // the underlying game row has not been finalized yet.
+          const isCompleted = game.status === 'completed' || hasPendingReplay;
           const isMine = Boolean(currentUserId && (
             currentUserId === game.entry1_user_id || currentUserId === game.entry2_user_id
             || participantTeamIds.includes(game.entry1_team_id) || participantTeamIds.includes(game.entry2_team_id)
