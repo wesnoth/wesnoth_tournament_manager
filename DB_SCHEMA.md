@@ -348,6 +348,7 @@ Registry of discovered replay files from the Wesnoth game server.
 | `discard_vote_1` | char(36) | First player UUID who voted to discard |
 | `discard_vote_2` | char(36) | Second player UUID who voted to discard |
 | `cancel_requested_by` | varchar(36) | UUID of user who requested cancellation |
+| `reprocess_overrides` | text | One-shot administrator mode and tournament values consumed by the replay parser |
 | `tournament_round_match_id` | char(36) FK→tournament_round_matches | If applicable |
 | `created_at` | datetime | |
 | `updated_at` | datetime | |

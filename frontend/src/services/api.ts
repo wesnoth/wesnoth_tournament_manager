@@ -266,7 +266,8 @@ export const adminService = {
   // Replays
   getReplays: (params?: any) => api.get('/admin/replays', { params }),
   forceDiscardReplay: (replayId: string) => api.post(`/admin/replays/${replayId}/force-discard`),
-  reprocessReplay: (replayId: string) => api.post(`/admin/replays/${replayId}/reprocess`),
+  reprocessReplay: (replayId: string, overrides: { ranked_mode: boolean; tournament: boolean; tournament_name: string | null }) =>
+    api.post(`/admin/replays/${replayId}/reprocess`, overrides),
   
   // System Settings
   getSystemSettings: () => api.get('/admin/system-settings'),

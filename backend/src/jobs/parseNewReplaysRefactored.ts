@@ -79,6 +79,13 @@ interface UnparsedReplay {
   end_time: string;
   created_at: string;
   oos: number;
+  reprocess_overrides: string | null;
+}
+
+interface ReplayAdminOverrides {
+  rankedMode: boolean;
+  tournament: boolean;
+  tournamentName: string | null;
 }
 
 interface ParseSummary {
@@ -273,7 +280,13 @@ export class ParseNewReplaysRefactorized {
             continue;
           }
 
-          const parseSummary = await this.parseReplayForumFirst(replay);
+          const adminOverrides = this.readAdminOverrides(replay.reprocess_overrides);
+          const parseSummary = await this.parseReplayForumFirst(replay, adminOverrides);
+          // Consume the one-shot override before continuing. The parsed
+          // summary written by each outcome below is the durable result.
+          if (adminOverrides) {
+            await query(`UPDATE replays SET reprocess_overrides = NULL WHERE id = ?`, [replay.id]);
+          }
 
           if (parseSummary.matchType === 'rejected') {
             console.log(`❌ [PARSE] Match rejected → Update replay as rejected`);
@@ -471,7 +484,22 @@ export class ParseNewReplaysRefactorized {
    * STEP 5-7: Parse replay for complementary info
    * Returns complete ParseSummary
    */
-  private async parseReplayForumFirst(replay: UnparsedReplay): Promise<ParseSummary> {
+  private readAdminOverrides(value: string | null): ReplayAdminOverrides | null {
+    if (!value) return null;
+    try {
+      const overrides = typeof value === 'string' ? JSON.parse(value) : value;
+      if (typeof overrides?.rankedMode !== 'boolean' || typeof overrides?.tournament !== 'boolean') return null;
+      return {
+        rankedMode: overrides.rankedMode,
+        tournament: overrides.tournament,
+        tournamentName: typeof overrides.tournamentName === 'string' ? overrides.tournamentName.trim() || null : null,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private async parseReplayForumFirst(replay: UnparsedReplay, adminOverrides?: ReplayAdminOverrides | null): Promise<ParseSummary> {
     const parseSummary: ParseSummary = {
       competitiveGameId: null,
       competitiveGameStatus: null,
@@ -828,6 +856,14 @@ export class ParseNewReplaysRefactorized {
       console.warn(`⚠️  Could not parse replay file:`, err);
     }
 
+    if (adminOverrides) {
+      // Temporary admin overrides compensate for a bad game setup while the
+      // client cannot yet provide authoritative mode and tournament metadata.
+      parseSummary.replayRankedMode = adminOverrides.rankedMode;
+      parseSummary.replayTournamentFlag = adminOverrides.tournament;
+      parseSummary.replayTournament = adminOverrides.tournamentName;
+    }
+
     // ======== CONFIDENCE LEVEL (from replayVictory) ========
     console.log(`🎯 [PARSE] Determining confidence level...`);
     // A completed competitive_game result is authoritative and never uses
@@ -903,7 +939,7 @@ export class ParseNewReplaysRefactorized {
         // tournament_flag=true → search for unranked/team tournament
         console.log(`   ℹ️  tournament_flag=true → Searching for unranked/team tournament...`);
         
-        const searchName = (replay.game_name || '').trim();
+        const searchName = (parseSummary.replayTournament || replay.game_name || '').trim();
         console.log(`   [TOURNAMENT] Searching by game_name: "${searchName}"`);
         
         const metadataTournament = parseSummary.forumTournamentId
@@ -946,7 +982,7 @@ export class ParseNewReplaysRefactorized {
         // tournament_flag=true → search for ranked tournament
         console.log(`   ℹ️  tournament_flag=true → Searching for ranked tournament...`);
         
-        const searchName = (replay.game_name || '').trim();
+        const searchName = (parseSummary.replayTournament || replay.game_name || '').trim();
         console.log(`   [TOURNAMENT] Searching by game_name: "${searchName}"`);
         
         const metadataTournament = parseSummary.forumTournamentId
@@ -1628,7 +1664,8 @@ export class ParseNewReplaysRefactorized {
   private async getUnparsedReplays(): Promise<UnparsedReplay[]> {
     const result = await query(
       `SELECT id, instance_uuid, game_id, replay_filename, replay_url, 
-              wesnoth_version, game_name, start_time, end_time, created_at, oos
+              wesnoth_version, game_name, start_time, end_time, created_at, oos,
+              reprocess_overrides
        FROM replays
        WHERE parse_status = 'new' AND parsed = 0
        ORDER BY created_at ASC

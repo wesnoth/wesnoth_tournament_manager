@@ -679,6 +679,7 @@ CREATE TABLE `replays` (
   `discard_vote_1` char(36) DEFAULT NULL COMMENT 'First player user_id who voted to discard this replay',
   `discard_vote_2` char(36) DEFAULT NULL COMMENT 'Second player user_id who voted to discard this replay',
   `cancel_requested_by` varchar(36) DEFAULT NULL,
+  `reprocess_overrides` text DEFAULT NULL COMMENT 'Temporary administrator overrides consumed by replay reprocessing',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_instance_game` (`instance_uuid`,`game_id`),
   KEY `idx_parsed` (`parsed`),

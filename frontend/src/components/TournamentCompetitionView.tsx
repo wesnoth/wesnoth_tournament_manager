@@ -393,7 +393,14 @@ const TournamentCompetitionView: React.FC<Props> = ({
               const currentUserNickname = user?.nickname?.toLowerCase() || '';
               const currentUserTeam = Object.values(detectedTeams).find((team: any) =>
                 (team.members || []).some((member: string) => member.toLowerCase() === currentUserNickname)
-              ) as any;
+              ) as any || (
+                currentUserId && (
+                  currentUserId === game.entry1_user_id || currentUserId === game.entry2_user_id
+                  || participantTeamIds.includes(game.entry1_team_id) || participantTeamIds.includes(game.entry2_team_id)
+                )
+                  ? { team_id: null, members: [currentUserNickname] }
+                  : null
+              );
               const canConfirmReplay = pendingReplay && game.pending_replay_parse_status !== 'due' && Boolean(currentUserTeam);
               const scheduleSeriesId = game.series_id;
               const proposal = scheduleSeriesId ? scheduleProposals[scheduleSeriesId] : null;
@@ -554,9 +561,9 @@ const TournamentCompetitionView: React.FC<Props> = ({
                   {completed ? <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded-full px-3 py-1 text-xs font-semibold text-white ${pendingReplay ? 'bg-yellow-500' : 'bg-green-500'}`}>{pendingReplay ? 'Pending confirmation' : 'Completed'}</span>
                     {canConfirmReplay && <>
-                      <button type="button" onClick={() => openReplayAction('I won')} className="rounded bg-green-600 px-2 py-1 text-xs font-semibold text-white hover:bg-green-700">I won</button>
-                      <button type="button" onClick={() => openReplayAction('I lost')} className="rounded bg-red-600 px-2 py-1 text-xs font-semibold text-white hover:bg-red-700">I lost</button>
-                      <button type="button" onClick={() => openReplayAction('cancel')} className="rounded bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700">Discard</button>
+                      <button data-help-id="action-confirm-confidence-one-replay-won" type="button" onClick={() => openReplayAction('I won')} className="rounded bg-green-600 px-2 py-1 text-xs font-semibold text-white hover:bg-green-700">I won</button>
+                      <button data-help-id="action-confirm-confidence-one-replay-lost" type="button" onClick={() => openReplayAction('I lost')} className="rounded bg-red-600 px-2 py-1 text-xs font-semibold text-white hover:bg-red-700">I lost</button>
+                      <button data-help-id="action-discard-confidence-one-replay" type="button" onClick={() => openReplayAction('cancel')} className="rounded bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700">Discard</button>
                     </>}
                     {!pendingReplay && !game.organizer_action && ['unconfirmed', 'reported'].includes(confirmationStatus) && isCurrentUserWinner && <button
                       data-help-id="action-inform-phase-game-result"
@@ -634,7 +641,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
       replayId={selectedReplay.pending_replay_id}
       player1_nickname={selectedReplay.player1_nickname}
       player2_nickname={selectedReplay.player2_nickname}
-      currentUserNickname={selectedReplay.current_user_team_name.toLowerCase()}
+      currentUserNickname={user?.nickname || ''}
       your_choice={replayChoice}
       map={selectedReplay.pending_replay_summary?.finalMap || selectedReplay.pending_replay_summary?.forumMap || '—'}
       player1_faction={selectedReplay.player1_faction}

@@ -36,6 +36,20 @@ function parseSummaryPlayers(summaryJson: string | null): { side1: string; side1
   }
 }
 
+function parseSummaryMode(summaryJson: string | null): { rankedMode: boolean; tournament: boolean; tournamentName: string } {
+  if (!summaryJson) return { rankedMode: false, tournament: false, tournamentName: '' };
+  try {
+    const summary = JSON.parse(summaryJson);
+    return {
+      rankedMode: Boolean(summary.replayRankedMode),
+      tournament: Boolean(summary.replayTournamentFlag),
+      tournamentName: summary.detectedTournament?.name || summary.replayTournament || '',
+    };
+  } catch {
+    return { rankedMode: false, tournament: false, tournamentName: '' };
+  }
+}
+
 const CONFIDENCE_LABELS: Record<number, string> = {
   0: '—',
   1: 'Manual',
@@ -79,6 +93,7 @@ const AdminReplays: React.FC = () => {
   const [refreshKey, setRefreshKey] = useState(0);
   const [discarding, setDiscarding] = useState<string | null>(null);
   const [reprocessing, setReprocessing] = useState<string | null>(null);
+  const [reprocessModal, setReprocessModal] = useState<{ replay: any; rankedMode: boolean; tournament: boolean; tournamentName: string } | null>(null);
   const [summaryModal, setSummaryModal] = useState<{ open: boolean; json: string; filename: string }>({ open: false, json: '', filename: '' });
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -177,11 +192,26 @@ const AdminReplays: React.FC = () => {
     }
   };
 
-  const handleReprocess = async (replayId: string, filename: string) => {
-    if (!window.confirm(t('label_replay_reprocess_confirm'))) return;
-    setReprocessing(replayId);
+  const openReprocessModal = (replay: any) => {
+    const mode = parseSummaryMode(replay.parse_summary);
+    setReprocessModal({ replay, ...mode });
+  };
+
+  const handleReprocess = async () => {
+    if (!reprocessModal) return;
+    const { replay, rankedMode, tournament, tournamentName } = reprocessModal;
+    if (tournament && !tournamentName.trim()) {
+      setError('Tournament name is required when Tournament is enabled');
+      return;
+    }
+    setReprocessing(replay.id);
     try {
-      await adminService.reprocessReplay(replayId);
+      await adminService.reprocessReplay(replay.id, {
+        ranked_mode: rankedMode,
+        tournament,
+        tournament_name: tournamentName.trim() || null,
+      });
+      setReprocessModal(null);
       setMessage(t('label_replay_reprocess_success'));
       setTimeout(() => setMessage(''), 4000);
       fetchReplays();
@@ -564,7 +594,7 @@ const AdminReplays: React.FC = () => {
                               data-help-id="action-reprocess-replay"
                               className="px-2 py-1 text-xs bg-amber-500 text-white rounded hover:bg-amber-600 disabled:opacity-50"
                               disabled={reprocessing === replay.id}
-                              onClick={() => handleReprocess(replay.id, replay.replay_filename || replay.id)}
+                              onClick={() => openReprocessModal(replay)}
                             >
                               {reprocessing === replay.id ? '…' : t('button_reprocess')}
                             </button>
@@ -649,6 +679,48 @@ const AdminReplays: React.FC = () => {
                 className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
                 {savingSettings ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Replay reprocessing override form */}
+      {reprocessModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={() => setReprocessModal(null)}>
+          <div data-help-id="region-reprocess-replay-modal" className="bg-white rounded-xl shadow-2xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-800">Reprocess replay</h2>
+              <p className="mt-1 text-xs text-gray-500 truncate">{reprocessModal.replay.replay_filename || reprocessModal.replay.id}</p>
+            </div>
+            <div className="space-y-4 px-6 py-5">
+              <p className="text-sm text-gray-600">Review the values read from the replay. Change them only when the game setup was incorrect.</p>
+              <label className="flex items-center gap-3 text-sm font-semibold text-gray-700">
+                <input data-help-id="option-reprocess-ranked-mode" type="checkbox" checked={reprocessModal.rankedMode} onChange={(e) => setReprocessModal(current => current && ({ ...current, rankedMode: e.target.checked }))} />
+                Ranked mode
+              </label>
+              <label className="flex items-center gap-3 text-sm font-semibold text-gray-700">
+                <input data-help-id="option-reprocess-tournament" type="checkbox" checked={reprocessModal.tournament} onChange={(e) => setReprocessModal(current => current && ({ ...current, tournament: e.target.checked }))} />
+                Tournament
+              </label>
+              <label className="block text-sm font-semibold text-gray-700">
+                <span className="mb-1 block">Tournament name</span>
+                <input
+                  data-help-id="field-reprocess-tournament-name"
+                  type="text"
+                  value={reprocessModal.tournamentName}
+                  onChange={(e) => setReprocessModal(current => current && ({ ...current, tournamentName: e.target.value }))}
+                  maxLength={255}
+                  disabled={!reprocessModal.tournament}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal disabled:bg-gray-100"
+                  placeholder="Exact tournament name"
+                />
+              </label>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+              <button data-help-id="action-cancel-reprocess-replay" type="button" onClick={() => setReprocessModal(null)} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100">Cancel</button>
+              <button data-help-id="action-submit-reprocess-replay" type="button" onClick={() => void handleReprocess()} disabled={reprocessing === reprocessModal.replay.id} className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50">
+                {reprocessing === reprocessModal.replay.id ? 'Reprocessing…' : 'Reprocess'}
               </button>
             </div>
           </div>

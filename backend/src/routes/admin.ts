@@ -802,6 +802,14 @@ router.post('/replays/:replayId/force-discard', moderatorOrAdminMiddleware, glob
 router.post('/replays/:replayId/reprocess', moderatorOrAdminMiddleware, globalRecalculationMiddleware, async (req: AuthRequest, res) => {
   try {
     const { replayId } = req.params;
+    const { ranked_mode: rankedMode, tournament, tournament_name: tournamentName } = req.body || {};
+    if (typeof rankedMode !== 'boolean' || typeof tournament !== 'boolean') {
+      return res.status(400).json({ error: 'ranked_mode and tournament must be boolean values' });
+    }
+    const normalizedTournamentName = typeof tournamentName === 'string' ? tournamentName.trim() : '';
+    if (tournament && (!normalizedTournamentName || normalizedTournamentName.length > 255)) {
+      return res.status(400).json({ error: 'tournament_name is required and must be at most 255 characters for tournament replays' });
+    }
 
     const replayResult = await query(
       `SELECT id, parse_status, match_id, replay_filename FROM replays WHERE id = ? AND deleted_at IS NULL`,
@@ -830,13 +838,18 @@ router.post('/replays/:replayId/reprocess', moderatorOrAdminMiddleware, globalRe
            parsed = 0,
            parse_error_message = NULL,
            parse_summary = NULL,
+           reprocess_overrides = ?,
            integration_confidence = NULL,
            need_integration = 0,
            parsing_started_at = NULL,
            parsing_completed_at = NULL,
            updated_at = NOW()
        WHERE id = ?`,
-      [replayId]
+      [JSON.stringify({
+        rankedMode,
+        tournament,
+        tournamentName: normalizedTournamentName || null,
+      }), replayId]
     );
 
     await logAuditEvent({
@@ -845,7 +858,12 @@ router.post('/replays/:replayId/reprocess', moderatorOrAdminMiddleware, globalRe
       username: req.username,
       ip_address: getUserIP(req),
       user_agent: getUserAgent(req),
-      details: { replay_id: replayId, filename: replay.replay_filename, previous_status: replay.parse_status }
+      details: {
+        replay_id: replayId,
+        filename: replay.replay_filename,
+        previous_status: replay.parse_status,
+        reprocess_overrides: { ranked_mode: rankedMode, tournament, tournament_name: normalizedTournamentName || null },
+      }
     });
 
     res.json({ status: 'success', message: 'Replay queued for reprocessing', replay_id: replayId });
