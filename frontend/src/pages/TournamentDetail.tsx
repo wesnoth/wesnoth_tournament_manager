@@ -57,6 +57,14 @@ function parseReplaySummary(summaryJson: string | null): {
     const victory = summary.replayVictory;
     const detectedTeams = summary.detectedTeams || null;
     const wmlTeams = summary.wmlTeams || {};
+    const forumFactions = summary.forumFactions || {};
+    const winnerSide = victory?.winner_side || null;
+    const winnerFaction = victory?.winner_faction
+      || (winnerSide === 1 ? forumFactions.side1 : winnerSide === 2 ? forumFactions.side2 : null)
+      || null;
+    const loserFaction = victory?.loser_faction
+      || (winnerSide === 1 ? forumFactions.side2 : winnerSide === 2 ? forumFactions.side1 : null)
+      || null;
     
     let winnerTeamFactions: string[] | null = null;
     let loserTeamFactions: string[] | null = null;
@@ -93,10 +101,12 @@ function parseReplaySummary(summaryJson: string | null): {
     return {
       winnerName: victory?.winner_name || null,
       loserName: victory?.loser_name || null,
-      map: summary.finalMap || summary.forumMap || null,
-      winnerFaction: victory?.winner_faction || null,
-      loserFaction: victory?.loser_faction || null,
-      winnerSide: victory?.winner_side || null,
+      // forumMap is the addon/map-pack name. selectedMapName is the actual
+      // scenario played and must be preferred for pending replay displays.
+      map: summary.finalMap || summary.resolvedMap || summary.selectedMapName || summary.forumMap || null,
+      winnerFaction,
+      loserFaction,
+      winnerSide,
       winnerTeamName,
       loserTeamName,
       winnerTeamFactions,
