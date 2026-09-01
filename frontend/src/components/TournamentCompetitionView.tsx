@@ -19,6 +19,7 @@ interface Props {
   matchFilter?: 'all' | 'pending' | 'completed';
   showOnlyMine?: boolean;
   showPhasesGroups?: boolean;
+  refreshKey?: number;
 }
 
 // Bracket spacing assumes equal-height match cards. Each later round doubles
@@ -83,6 +84,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
   matchFilter = 'all',
   showOnlyMine = false,
   showPhasesGroups = true,
+  refreshKey = 0,
 }) => {
   const { t } = useTranslation();
   const [phases, setPhases] = useState<any[]>([]);
@@ -188,7 +190,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
       }
     };
     load();
-  }, [tournamentId, reloadKey]);
+  }, [tournamentId, reloadKey, refreshKey]);
 
   // Proposal reads are public for tournament games, so spectators can see the
   // same proposed/confirmed ranges while only participants receive the modal.

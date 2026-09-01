@@ -36,7 +36,7 @@ interface OverallStanding {
   history: PhaseHistory[];
 }
 
-interface Props { tournamentId: string }
+interface Props { tournamentId: string; refreshKey?: number }
 
 const statusStyle: Record<OverallStanding['status'], string> = {
   champion: 'bg-yellow-100 text-yellow-900 border-yellow-300',
@@ -46,7 +46,7 @@ const statusStyle: Record<OverallStanding['status'], string> = {
 };
 
 /** Summarize every entry's progression across the phase graph. */
-const TournamentOverallStandings: React.FC<Props> = ({ tournamentId }) => {
+const TournamentOverallStandings: React.FC<Props> = ({ tournamentId, refreshKey = 0 }) => {
   const [standings, setStandings] = useState<OverallStanding[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -65,7 +65,7 @@ const TournamentOverallStandings: React.FC<Props> = ({ tournamentId }) => {
         if (active) setLoading(false);
       });
     return () => { active = false; };
-  }, [tournamentId]);
+  }, [tournamentId, refreshKey]);
 
   if (loading) return <p className="text-gray-600">Loading tournament standings...</p>;
   if (error) return <p className="text-red-700">{error}</p>;

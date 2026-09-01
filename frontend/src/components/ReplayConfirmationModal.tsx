@@ -63,7 +63,9 @@ export const ReplayConfirmationModal: React.FC<ReplayConfirmationModalProps> = (
   const isCancel = your_choice === 'cancel';
 
   // Determine who is the current user and who is the opponent
-  const isPlayer1 = currentUserNickname === player1_nickname.toLowerCase();
+  // Nicknames are display data and may differ in case or contain incidental
+  // whitespace; the player's identity must still determine the left side.
+  const isPlayer1 = currentUserNickname.trim().toLowerCase() === player1_nickname.trim().toLowerCase();
   const isWinner = your_choice === 'I won';
   
   // Your info

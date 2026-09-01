@@ -286,6 +286,7 @@ const TournamentDetail: React.FC = () => {
   const [competitionShowOnlyMine, setCompetitionShowOnlyMine] = useState(false);
   const [competitionShowPhasesGroups, setCompetitionShowPhasesGroups] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [tabRefreshKey, setTabRefreshKey] = useState(0);
   const [userParticipationStatus, setUserParticipationStatus] = useState<string | null>(null);
   const [isUserInTournament, setIsUserInTournament] = useState(false);
   const [isJoinRequestLoading, setIsJoinRequestLoading] = useState(false);
@@ -494,6 +495,23 @@ const TournamentDetail: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const refreshActiveTab = async () => {
+    // Keep the tournament header and its fixed configuration untouched. Each
+    // tab owns its changing data, so refreshing should not reinitialize the
+    // page or alter the user's current scroll position.
+    if (!id) return;
+    if (activeTab === 'participants' || activeTab === 'teams') {
+      const participantsRes = await publicService.getTournamentParticipants(id);
+      setParticipants(participantsRes.data || []);
+      if (activeTab === 'teams' && tournament?.tournament_mode === 'team') {
+        const teamsRes = await publicService.getTournamentTeams(id);
+        setTeams(teamsRes.data?.data || []);
+      }
+      return;
+    }
+    setTabRefreshKey(value => value + 1);
   };
 
   const handlePreloadSchedulingData = async (roundMatchId: string, isRoundMatch: boolean, matchId?: string, isSeries = false) => {
@@ -1971,7 +1989,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
             data-help-id="action-refresh-tournament-detail"
             onClick={() => {
               setIsRefreshing(true);
-              fetchTournamentData().finally(() => setIsRefreshing(false));
+              refreshActiveTab().finally(() => setIsRefreshing(false));
             }}
             disabled={isRefreshing}
             className="ml-auto px-3 py-2 rounded bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
@@ -3235,13 +3253,14 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
             matchFilter={competitionMatchFilter}
             showOnlyMine={competitionShowOnlyMine}
             showPhasesGroups={competitionShowPhasesGroups}
+            refreshKey={tabRefreshKey}
           />
         </div>
       )}
 
       {activeTab === 'tournamentStandings' && tournament && (
         <div className="mb-8 mt-6">
-          <TournamentOverallStandings tournamentId={tournament.id} />
+          <TournamentOverallStandings tournamentId={tournament.id} refreshKey={tabRefreshKey} />
         </div>
       )}
 
@@ -3411,8 +3430,11 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
         <ReplayConfirmationModal
           isOpen={showReplayConfirmModal}
           replayId={selectedTournamentReplay.id}
-          player1_nickname={selectedTournamentReplay.player1_nickname}
-          player2_nickname={selectedTournamentReplay.player2_nickname}
+          // Keep the modal's player order aligned with the tournament match,
+          // rather than the replay's detected winner/loser order. The choice
+          // shown in the modal is relative to the authenticated user.
+          player1_nickname={selectedTournamentReplay.player1_nickname || selectedTournamentReplay.winner_nickname}
+          player2_nickname={selectedTournamentReplay.player2_nickname || selectedTournamentReplay.loser_nickname}
           currentUserNickname={user?.nickname?.toLowerCase() || ''}
           your_choice={replayModalChoice}
           map={selectedTournamentReplay.map}
