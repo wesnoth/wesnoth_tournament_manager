@@ -552,17 +552,23 @@ router.get('/:id/competition', async (req, res) => {
   try {
     const result = await query(
       `SELECT p.id AS phase_id, p.phase_order, p.name AS phase_name, p.format, p.status AS phase_status,
+              p.default_best_of,
               g.id AS group_id, g.group_order, g.name AS group_name, g.status AS group_status,
               COUNT(DISTINCT pe.entry_id) AS entry_count,
               COUNT(DISTINCT r.id) AS round_count,
-              COUNT(DISTINCT s.id) AS series_count
+              COUNT(DISTINCT s.id) AS series_count,
+              COALESCE(
+                (SELECT es.bracket_size FROM tournament_elimination_settings es WHERE es.phase_id = p.id LIMIT 1),
+                (SELECT MAX(ar.target_seed) FROM tournament_advancement_rules ar WHERE ar.target_group_id = g.id),
+                0
+              ) AS bracket_size
        FROM tournament_phases p
        LEFT JOIN tournament_phase_groups g ON g.phase_id = p.id
        LEFT JOIN tournament_phase_entries pe ON pe.group_id = g.id
        LEFT JOIN tournament_phase_rounds r ON r.group_id = g.id
        LEFT JOIN tournament_series s ON s.round_id = r.id
        WHERE p.tournament_id = ?
-       GROUP BY p.id, p.phase_order, p.name, p.format, p.status,
+       GROUP BY p.id, p.phase_order, p.name, p.format, p.status, p.default_best_of,
                 g.id, g.group_order, g.name, g.status
        ORDER BY p.phase_order, g.group_order`,
       [req.params.id]

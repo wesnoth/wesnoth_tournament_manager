@@ -39,6 +39,40 @@ function getBracketRoundSpacing(roundIndex: number): React.CSSProperties {
   };
 }
 
+/**
+ * Build a read-only bracket outline before the compiler creates real series.
+ * Advancement rules already define the target seed range, so showing the
+ * planned slots keeps the phase structure useful while registration results
+ * are still being finalized.
+ */
+function buildPlannedBracketSeries(phase: any): any[] {
+  const bracketSize = Number(phase.bracket_size || 0);
+  if (bracketSize < 2 || (bracketSize & (bracketSize - 1)) !== 0) return [];
+  const roundCount = Math.log2(bracketSize);
+  const planned: any[] = [];
+  for (let round = 1; round <= roundCount; round += 1) {
+    const seriesCount = bracketSize / (2 ** round);
+    for (let position = 1; position <= seriesCount; position += 1) {
+      planned.push({
+        series_id: `planned-${phase.phase_id}-${round}-${position}`,
+        group_name: phase.phase_name,
+        round_number: round,
+        series_position: position,
+        status: 'pending',
+        best_of: phase.default_best_of || 1,
+        entry1_wins: 0,
+        entry2_wins: 0,
+        winner_entry_id: null,
+        slots: [
+          { slot_number: 1, resolved_entry_name: round === 1 ? 'Seed ?' : 'TBD' },
+          { slot_number: 2, resolved_entry_name: round === 1 ? 'Seed ?' : 'TBD' },
+        ],
+      });
+    }
+  }
+  return planned;
+}
+
 const TournamentCompetitionView: React.FC<Props> = ({
   tournamentId,
   canManage = false,
@@ -207,16 +241,17 @@ const TournamentCompetitionView: React.FC<Props> = ({
       }
       const series = Array.from(new Map(rows.map((row: any) => [row.series_id, { ...row, slots: [] as any[] }])).values()) as any[];
       for (const row of rows) series.find(item => item.series_id === row.series_id)?.slots.push(row);
-      const bracketGroups = Array.from(new Set(series.map(item => item.group_name))) as string[];
+      const displaySeries = series.length > 0 ? series : buildPlannedBracketSeries(phase);
+      const bracketGroups = Array.from(new Set(displaySeries.map(item => item.group_name))) as string[];
       return <section key={phase.phase_id} className="border rounded-lg p-4 bg-white">
         <div className="flex justify-between items-center mb-3"><h3 className="font-semibold text-lg">{phase.phase_name}</h3>
           {canManage && phase.phase_status === 'ready' && <button data-help-id="action-start-tournament-phase" type="button" onClick={async () => {
             try { await api.post(`/tournaments/${tournamentId}/phases/${phase.phase_id}/start`); setReloadKey(value => value + 1); } catch (startError: any) { setError(startError.response?.data?.error || 'Failed to start phase'); }
           }} className="px-3 py-1 bg-green-600 text-white rounded">Start phase</button>}
         </div>
-        {bracketGroups.length === 0 ? <p className="text-sm text-gray-600">No elimination matches are available yet.</p> : <div className="space-y-5">
+        {bracketGroups.length === 0 ? <p className="text-sm text-gray-600">No elimination bracket is configured yet.</p> : <div className="space-y-5">
           {bracketGroups.map(groupName => {
-            const groupSeries = series.filter(item => item.group_name === groupName);
+            const groupSeries = displaySeries.filter(item => item.group_name === groupName);
             const rounds = Array.from(new Set(groupSeries.map(item => item.round_number))).sort((a: any, b: any) => a - b);
             return <div key={groupName} data-help-id="region-tournament-bracket" className="rounded-lg border bg-gray-50 p-3">
               <h4 className="mb-3 font-semibold text-gray-800">{groupName}</h4>
