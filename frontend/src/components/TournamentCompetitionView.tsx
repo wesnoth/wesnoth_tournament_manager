@@ -412,6 +412,13 @@ const TournamentCompetitionView: React.FC<Props> = ({
                 : (winnerIsEntry1 ? game.entry2_name : game.entry1_name);
               const winnerSide = Number(game.winner_side);
               const loserSide = winnerSide === 1 ? 2 : winnerSide === 2 ? 1 : null;
+              const pendingWinnerSide = Number(pendingSummary?.replayVictory?.winner_side);
+              const pendingSide1Faction = pendingSummary?.forumFactions?.side1
+                || (pendingWinnerSide === 1 ? pendingSummary?.replayVictory?.winner_faction : pendingSummary?.replayVictory?.loser_faction)
+                || null;
+              const pendingSide2Faction = pendingSummary?.forumFactions?.side2
+                || (pendingWinnerSide === 2 ? pendingSummary?.replayVictory?.winner_faction : pendingSummary?.replayVictory?.loser_faction)
+                || null;
               const detectedTeams = pendingSummary?.detectedTeams || {};
               // tournament_entries.id identifies the bracket entry; detectedTeams
               // is indexed by the entry's team_id.
@@ -476,8 +483,8 @@ const TournamentCompetitionView: React.FC<Props> = ({
                   player1_nickname: game.entry1_name,
                   player2_nickname: game.entry2_name,
                   current_user_team_name: currentUserTeam?.team_id === game.entry1_team_id ? game.entry1_name : game.entry2_name,
-                  player1_faction: entry1Team?.factions?.join(', ') || '—',
-                  player2_faction: entry2Team?.factions?.join(', ') || '—',
+                  player1_faction: entry1Team?.factions?.join(', ') || pendingSummary?.forumFactions?.side1 || '—',
+                  player2_faction: entry2Team?.factions?.join(', ') || pendingSummary?.forumFactions?.side2 || '—',
                 });
                 setReplayChoice(choice);
               };
@@ -505,16 +512,16 @@ const TournamentCompetitionView: React.FC<Props> = ({
                   </div>
                 </td>
                 <td className="px-4 py-3 text-gray-700">
-                  <div>{pendingSummary?.finalMap || pendingSummary?.forumMap || game.map || '—'}</div>
+                  <div>{pendingSummary?.finalMap || pendingSummary?.resolvedMap || pendingSummary?.selectedMapName || pendingSummary?.forumMap || game.map || '—'}</div>
                   {(completed || pendingReplay) && <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
                     {pendingReplay && pendingFactionLabels.length > 0
                       ? pendingFactionLabels.map((label: string, index: number) => <span key={index} className="rounded bg-blue-100 px-1.5 py-0.5 font-semibold text-blue-700">{label}</span>)
                       : <>
-                        <span className="rounded bg-blue-100 px-1.5 py-0.5 font-semibold text-blue-700">{game.winner_faction || '—'}</span>
-                        {winnerSide > 0 && <span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-700">S{winnerSide}</span>}
+                        <span className="rounded bg-blue-100 px-1.5 py-0.5 font-semibold text-blue-700">{pendingReplay ? pendingSide1Faction || '—' : game.winner_faction || '—'}</span>
+                        {pendingReplay ? <span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-700">S1</span> : winnerSide > 0 && <span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-700">S{winnerSide}</span>}
                         <span>vs</span>
-                        <span className="rounded bg-red-100 px-1.5 py-0.5 font-semibold text-red-700">{game.loser_faction || '—'}</span>
-                        {loserSide && <span className="rounded bg-purple-100 px-1.5 py-0.5 font-semibold text-purple-700">S{loserSide}</span>}
+                        <span className="rounded bg-red-100 px-1.5 py-0.5 font-semibold text-red-700">{pendingReplay ? pendingSide2Faction || '—' : game.loser_faction || '—'}</span>
+                        {pendingReplay ? <span className="rounded bg-purple-100 px-1.5 py-0.5 font-semibold text-purple-700">S2</span> : loserSide && <span className="rounded bg-purple-100 px-1.5 py-0.5 font-semibold text-purple-700">S{loserSide}</span>}
                       </>}
                   </div>}
                 </td>
@@ -673,9 +680,9 @@ const TournamentCompetitionView: React.FC<Props> = ({
       player2_nickname={selectedReplay.player2_nickname}
       currentUserNickname={user?.nickname || ''}
       your_choice={replayChoice}
-      map={selectedReplay.pending_replay_summary?.finalMap || selectedReplay.pending_replay_summary?.forumMap || '—'}
-      player1_faction={selectedReplay.player1_faction}
-      player2_faction={selectedReplay.player2_faction}
+      map={selectedReplay.pending_replay_summary?.finalMap || selectedReplay.pending_replay_summary?.resolvedMap || selectedReplay.pending_replay_summary?.selectedMapName || selectedReplay.pending_replay_summary?.forumMap || '—'}
+      player1_faction={selectedReplay.player1_faction || selectedReplay.pending_replay_summary?.forumFactions?.side1 || '—'}
+      player2_faction={selectedReplay.player2_faction || selectedReplay.pending_replay_summary?.forumFactions?.side2 || '—'}
       onClose={() => setSelectedReplay(null)}
       onSuccess={() => { setSelectedReplay(null); setReloadKey(value => value + 1); }}
     />}
