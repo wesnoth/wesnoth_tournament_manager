@@ -310,6 +310,68 @@ router.post('/:id/games/:gameId/result', authMiddleware, async (req: AuthRequest
   }
 });
 
+/** Resolve or discard a confidence-one replay as the tournament organizer. */
+router.post('/:id/games/:gameId/replay-decision', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    if (!(await isTournamentOrganizer(req.params.id, req.userId!))) {
+      return res.status(403).json({ error: 'Only tournament organizers can decide a tournament replay' });
+    }
+    const { action, replay_id: replayId, winner_entry_id: winnerEntryId } = req.body || {};
+    if (!['resolve', 'discard'].includes(action)) {
+      return res.status(400).json({ error: 'action must be resolve or discard' });
+    }
+    if (action === 'resolve' && typeof winnerEntryId !== 'string') {
+      return res.status(400).json({ error: 'winner_entry_id is required when resolving a replay' });
+    }
+
+    const replayResult = await query(
+      `SELECT replays.id AS replay_id, replays.parse_status, replays.integration_confidence,
+              games.id AS game_id, games.status AS game_status, games.winner_entry_id AS recorded_winner_entry_id,
+              games.entry1_id, games.entry2_id
+       FROM replays
+       JOIN tournament_games games ON games.id = replays.tournament_game_id
+       JOIN tournament_series series ON series.id = games.series_id
+       JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+       JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+       JOIN tournament_phases phases ON phases.id = groups.phase_id
+       WHERE replays.id = ? AND games.id = ? AND phases.tournament_id = ?
+         AND replays.integration_confidence = 1 AND replays.deleted_at IS NULL
+       LIMIT 1`,
+      [replayId, req.params.gameId, req.params.id]
+    );
+    const replay = replayResult.rows?.[0];
+    if (!replay) return res.status(404).json({ error: 'Confidence-one tournament replay not found' });
+    if (!['parsed', 'due'].includes(replay.parse_status)) {
+      return res.status(409).json({ error: 'Replay is no longer awaiting an organizer decision' });
+    }
+
+    if (action === 'discard') {
+      await query(
+        `UPDATE replays SET parse_status = 'rejected', need_integration = 0, updated_at = NOW() WHERE id = ?`,
+        [replay.replay_id]
+      );
+      return res.json({ success: true, action });
+    }
+
+    if (![replay.entry1_id, replay.entry2_id].includes(winnerEntryId)) {
+      return res.status(400).json({ error: 'Winner is not part of this tournament game' });
+    }
+    if (replay.game_status !== 'completed') {
+      await recordPhaseGameResult(req.params.id, req.params.gameId, winnerEntryId);
+    } else if (replay.game_status === 'completed' && replay.recorded_winner_entry_id !== winnerEntryId) {
+      return res.status(409).json({ error: 'The recorded game winner differs from the organizer decision' });
+    }
+    await query(
+      `UPDATE replays SET parse_status = 'completed', parsed = 1, need_integration = 0, updated_at = NOW() WHERE id = ?`,
+      [replay.replay_id]
+    );
+    return res.json({ success: true, action, winner_entry_id: winnerEntryId });
+  } catch (error: any) {
+    console.error('Tournament replay decision error:', error);
+    return res.status(500).json({ error: 'Failed to apply tournament replay decision' });
+  }
+});
+
 /** Record the winner's report or the loser's manual confirmation/dispute for a phase game. */
 router.post('/:id/games/:gameId/confirm', authMiddleware, async (req: AuthRequest, res) => {
   try {

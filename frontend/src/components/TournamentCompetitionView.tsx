@@ -59,6 +59,8 @@ const TournamentCompetitionView: React.FC<Props> = ({
   const [savingStreamGameId, setSavingStreamGameId] = useState<string | null>(null);
   const [editingStreamId, setEditingStreamId] = useState<string | null>(null);
   const [editingStreamUrl, setEditingStreamUrl] = useState('');
+  const [matchFilter, setMatchFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  const [showOnlyMine, setShowOnlyMine] = useState(false);
   const { user, isAdmin, isTournamentModerator, isStreamer } = useAuthStore();
 
   const streamLinksFor = (game: any): any[] => {
@@ -110,6 +112,21 @@ const TournamentCompetitionView: React.FC<Props> = ({
       setError(streamError.response?.data?.error || t('stream.delete_error'));
     } finally {
       setSavingStreamGameId(null);
+    }
+  };
+
+  const decideReplay = async (game: any, action: 'resolve' | 'discard', winnerEntryId?: string) => {
+    if (action === 'discard' && !window.confirm('Discard this confidence-one replay?')) return;
+    if (action === 'resolve' && !window.confirm('Resolve this replay with the selected winner?')) return;
+    try {
+      await api.post(`/tournaments/${tournamentId}/games/${game.game_id}/replay-decision`, {
+        replay_id: game.pending_replay_id,
+        action,
+        ...(winnerEntryId ? { winner_entry_id: winnerEntryId } : {}),
+      });
+      setReloadKey(value => value + 1);
+    } catch (decisionError: any) {
+      setError(decisionError.response?.data?.error || 'Failed to decide replay');
     }
   };
 
@@ -300,15 +317,38 @@ const TournamentCompetitionView: React.FC<Props> = ({
       </div>
     </section>}
     {games.length > 0 && <section data-help-id="region-tournament-phase-games" className="space-y-7 rounded-lg border bg-white p-4">
+      <div className="flex flex-wrap items-end gap-4 rounded border border-blue-200 bg-blue-50 p-3">
+        <label className="flex flex-col gap-1 text-sm font-semibold text-gray-700">
+          <span>Matches</span>
+          <select data-help-id="option-competition-match-status-filter" value={matchFilter} onChange={(event) => setMatchFilter(event.target.value as typeof matchFilter)} className="rounded border border-gray-300 bg-white px-3 py-2 font-normal">
+            <option value="all">All matches</option>
+            <option value="pending">Pending matches</option>
+            <option value="completed">Completed matches</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-2 pb-2 text-sm font-semibold text-gray-700">
+          <input data-help-id="option-competition-show-only-mine" type="checkbox" checked={showOnlyMine} onChange={(event) => setShowOnlyMine(event.target.checked)} />
+          Show only mine
+        </label>
+      </div>
       {[
         { status: 'pending', title: 'Scheduled Matches' },
         { status: 'completed', title: 'Completed Matches' },
       ].map(section => {
         const sectionGames = games.filter(game => {
           const hasPendingReplay = Boolean(game.pending_replay_id);
-          return !game.organizer_action && (section.status === 'completed'
-            ? game.status === 'completed' || hasPendingReplay
-            : game.status === section.status && !hasPendingReplay);
+          const isCompleted = game.status === 'completed' && !hasPendingReplay;
+          const isMine = Boolean(currentUserId && (
+            currentUserId === game.entry1_user_id || currentUserId === game.entry2_user_id
+            || participantTeamIds.includes(game.entry1_team_id) || participantTeamIds.includes(game.entry2_team_id)
+          ));
+          const matchesFilter = matchFilter === 'all' || (matchFilter === 'completed' ? isCompleted : !isCompleted);
+          return !game.organizer_action && matchesFilter && (!showOnlyMine || isMine) && (section.status === 'completed'
+            ? isCompleted || hasPendingReplay
+            : !isCompleted && !hasPendingReplay);
+        }).sort((first, second) => {
+          if (section.status !== 'completed') return 0;
+          return Number(Boolean(second.pending_replay_id)) - Number(Boolean(first.pending_replay_id));
         });
         if (sectionGames.length === 0) return null;
         const completed = section.status === 'completed';
@@ -536,6 +576,11 @@ const TournamentCompetitionView: React.FC<Props> = ({
                       </button>}
                     {!pendingReplay && confirmationStatus === 'disputed' && <span className="rounded-full bg-red-500 px-3 py-1 text-xs font-semibold text-white">Disputed</span>}
                     {pendingReplay && game.pending_replay_url && <a href={game.pending_replay_url} target="_blank" rel="noopener noreferrer" className="rounded bg-yellow-600 px-2 py-1 text-xs font-semibold text-white hover:bg-yellow-700">Replay ⬇</a>}
+                    {pendingReplay && canManage && <>
+                      <button data-help-id="action-resolve-tournament-replay" type="button" onClick={() => void decideReplay(game, 'resolve', game.entry1_id)} className="rounded bg-green-700 px-2 py-1 text-xs font-semibold text-white hover:bg-green-800">Resolve {game.entry1_name}</button>
+                      <button data-help-id="action-resolve-tournament-replay" type="button" onClick={() => void decideReplay(game, 'resolve', game.entry2_id)} className="rounded bg-green-700 px-2 py-1 text-xs font-semibold text-white hover:bg-green-800">Resolve {game.entry2_name}</button>
+                      <button data-help-id="action-discard-tournament-replay" type="button" onClick={() => void decideReplay(game, 'discard')} className="rounded bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700">Discard replay</button>
+                    </>}
                     {!pendingReplay && game.replay_url
                       ? <a data-help-id="action-download-phase-game-replay" href={game.replay_url} target="_blank" rel="noopener noreferrer" className="rounded bg-green-600 px-2 py-1 text-xs font-semibold text-white hover:bg-green-700" title={`Downloads: ${game.replay_downloads || 0}`}>Replay ⬇</a>
                       : !pendingReplay && <span className="text-xs text-gray-500">No replay</span>}
