@@ -282,6 +282,9 @@ const TournamentDetail: React.FC = () => {
   const [highlightedSeriesId] = useState<string | null>(searchParams.get('seriesId'));
   const [myMatchesOnly, setMyMatchesOnly] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'scheduled' | 'completed'>('all');
+  const [competitionMatchFilter, setCompetitionMatchFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  const [competitionShowOnlyMine, setCompetitionShowOnlyMine] = useState(false);
+  const [competitionShowPhasesGroups, setCompetitionShowPhasesGroups] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [userParticipationStatus, setUserParticipationStatus] = useState<string | null>(null);
   const [isUserInTournament, setIsUserInTournament] = useState(false);
@@ -1927,6 +1930,41 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
               Competition
             </button>
           )}
+          {usesPhaseEngine && activeTab === 'competition' && (
+            <div className="flex flex-wrap items-center gap-3 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-sm">
+              <label className="flex items-center gap-2 font-semibold text-gray-700">
+                <span>Matches</span>
+                <select
+                  data-help-id="option-competition-match-status-filter"
+                  value={competitionMatchFilter}
+                  onChange={(event) => setCompetitionMatchFilter(event.target.value as typeof competitionMatchFilter)}
+                  className="rounded border border-gray-300 bg-white px-2 py-1 font-normal"
+                >
+                  <option value="all">All</option>
+                  <option value="pending">Scheduled</option>
+                  <option value="completed">Completed</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-2 font-semibold text-gray-700">
+                <input
+                  data-help-id="option-competition-show-only-mine"
+                  type="checkbox"
+                  checked={competitionShowOnlyMine}
+                  onChange={(event) => setCompetitionShowOnlyMine(event.target.checked)}
+                />
+                Show only mine
+              </label>
+              <label className="flex items-center gap-2 font-semibold text-gray-700">
+                <input
+                  data-help-id="option-competition-hide-phases-groups"
+                  type="checkbox"
+                  checked={!competitionShowPhasesGroups}
+                  onChange={(event) => setCompetitionShowPhasesGroups(!event.target.checked)}
+                />
+                Hide phases / groups
+              </label>
+            </div>
+          )}
           
           {/* Refresh button */}
           <button
@@ -3194,6 +3232,9 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
             participantTeamIds={participants.map((participant: any) => participant.team_id).filter(Boolean)}
             onScheduleGame={(game) => handlePreloadSchedulingData(game.series_id, false, undefined, true)}
             highlightedSeriesId={highlightedSeriesId}
+            matchFilter={competitionMatchFilter}
+            showOnlyMine={competitionShowOnlyMine}
+            showPhasesGroups={competitionShowPhasesGroups}
           />
         </div>
       )}

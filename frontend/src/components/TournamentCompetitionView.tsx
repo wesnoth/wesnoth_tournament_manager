@@ -16,6 +16,9 @@ interface Props {
   participantTeamIds?: string[];
   onScheduleGame?: (game: any) => void;
   highlightedSeriesId?: string | null;
+  matchFilter?: 'all' | 'pending' | 'completed';
+  showOnlyMine?: boolean;
+  showPhasesGroups?: boolean;
 }
 
 // Bracket spacing assumes equal-height match cards. Each later round doubles
@@ -43,6 +46,9 @@ const TournamentCompetitionView: React.FC<Props> = ({
   participantTeamIds = [],
   onScheduleGame,
   highlightedSeriesId = null,
+  matchFilter = 'all',
+  showOnlyMine = false,
+  showPhasesGroups = true,
 }) => {
   const { t } = useTranslation();
   const [phases, setPhases] = useState<any[]>([]);
@@ -59,8 +65,6 @@ const TournamentCompetitionView: React.FC<Props> = ({
   const [savingStreamGameId, setSavingStreamGameId] = useState<string | null>(null);
   const [editingStreamId, setEditingStreamId] = useState<string | null>(null);
   const [editingStreamUrl, setEditingStreamUrl] = useState('');
-  const [matchFilter, setMatchFilter] = useState<'all' | 'pending' | 'completed'>('all');
-  const [showOnlyMine, setShowOnlyMine] = useState(false);
   const { user, isAdmin, isTournamentModerator, isStreamer } = useAuthStore();
 
   const streamLinksFor = (game: any): any[] => {
@@ -176,7 +180,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
 
   if (error) return <p className="text-red-600">{error}</p>;
   return <div data-help-id="region-tournament-competition" className="space-y-6">
-    {phases.map(phase => {
+    {showPhasesGroups && phases.map(phase => {
       const rows = details[phase.phase_id] || [];
       if (phase.format !== 'single_elimination') {
         const groups = Array.from(new Map(rows.map((row: any) => [row.group_id, {
@@ -190,7 +194,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
               try { await api.post(`/tournaments/${tournamentId}/phases/${phase.phase_id}/start`); setReloadKey(value => value + 1); } catch (startError: any) { setError(startError.response?.data?.error || 'Failed to start phase'); }
             }} className="px-3 py-1 bg-green-600 text-white rounded">Start phase</button>}
           </div>
-          <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+          {groups.length === 0 ? <p className="text-sm text-gray-600">No group standings are available yet.</p> : <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
             {groups.map(group => <article key={group.id} data-help-id="region-tournament-standings-group" className="overflow-hidden rounded-lg border border-blue-200 bg-blue-50 shadow-sm">
               <h4 className="border-b border-blue-200 bg-blue-100 px-4 py-3 font-semibold text-blue-900">{group.name}</h4>
               <div className="overflow-x-auto"><table className="w-full bg-white text-sm">
@@ -198,7 +202,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
                 <tbody>{group.rows.map((row: any) => <tr key={row.entry_id} className="border-t"><td className="p-2">{row.rank_position || '—'}</td><td className="p-2 font-medium"><TournamentEntryName name={row.entry_name} userId={row.entry_user_id} members={row.entry_members} /></td><td className="p-2 text-center">{row.matches_played}</td><td className="p-2 text-center">{row.wins}</td><td className="p-2 text-center">{row.losses}</td><td className="p-2 text-center font-semibold">{row.points}</td><td className="p-2 text-center">{row.omp}</td><td className="p-2 text-center">{row.gwp}</td><td className="p-2 text-center">{row.ogp}</td></tr>)}</tbody>
               </table></div>
             </article>)}
-          </div>
+          </div>}
         </section>;
       }
       const series = Array.from(new Map(rows.map((row: any) => [row.series_id, { ...row, slots: [] as any[] }])).values()) as any[];
@@ -210,7 +214,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
             try { await api.post(`/tournaments/${tournamentId}/phases/${phase.phase_id}/start`); setReloadKey(value => value + 1); } catch (startError: any) { setError(startError.response?.data?.error || 'Failed to start phase'); }
           }} className="px-3 py-1 bg-green-600 text-white rounded">Start phase</button>}
         </div>
-        <div className="space-y-5">
+        {bracketGroups.length === 0 ? <p className="text-sm text-gray-600">No elimination matches are available yet.</p> : <div className="space-y-5">
           {bracketGroups.map(groupName => {
             const groupSeries = series.filter(item => item.group_name === groupName);
             const rounds = Array.from(new Set(groupSeries.map(item => item.round_number))).sort((a: any, b: any) => a - b);
@@ -281,7 +285,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
               </div>
             </div>;
           })}
-        </div>
+        </div>}
       </section>;
     })}
     {administrativeDecisions.length > 0 && <section data-help-id="region-tournament-administrative-decisions" className="rounded-lg border border-amber-300 bg-amber-50 p-4">
@@ -317,35 +321,24 @@ const TournamentCompetitionView: React.FC<Props> = ({
       </div>
     </section>}
     {games.length > 0 && <section data-help-id="region-tournament-phase-games" className="space-y-7 rounded-lg border bg-white p-4">
-      <div className="flex flex-wrap items-end gap-4 rounded border border-blue-200 bg-blue-50 p-3">
-        <label className="flex flex-col gap-1 text-sm font-semibold text-gray-700">
-          <span>Matches</span>
-          <select data-help-id="option-competition-match-status-filter" value={matchFilter} onChange={(event) => setMatchFilter(event.target.value as typeof matchFilter)} className="rounded border border-gray-300 bg-white px-3 py-2 font-normal">
-            <option value="all">All matches</option>
-            <option value="pending">Pending matches</option>
-            <option value="completed">Completed matches</option>
-          </select>
-        </label>
-        <label className="flex items-center gap-2 pb-2 text-sm font-semibold text-gray-700">
-          <input data-help-id="option-competition-show-only-mine" type="checkbox" checked={showOnlyMine} onChange={(event) => setShowOnlyMine(event.target.checked)} />
-          Show only mine
-        </label>
-      </div>
       {[
         { status: 'pending', title: 'Scheduled Matches' },
         { status: 'completed', title: 'Completed Matches' },
       ].map(section => {
         const sectionGames = games.filter(game => {
           const hasPendingReplay = Boolean(game.pending_replay_id);
-          const isCompleted = game.status === 'completed' && !hasPendingReplay;
+          // A confidence-one replay is already a completed game. It remains
+          // in this section while awaiting a player or organizer decision.
+          const isCompleted = game.status === 'completed';
           const isMine = Boolean(currentUserId && (
             currentUserId === game.entry1_user_id || currentUserId === game.entry2_user_id
             || participantTeamIds.includes(game.entry1_team_id) || participantTeamIds.includes(game.entry2_team_id)
           ));
           const matchesFilter = matchFilter === 'all' || (matchFilter === 'completed' ? isCompleted : !isCompleted);
-          return !game.organizer_action && matchesFilter && (!showOnlyMine || isMine) && (section.status === 'completed'
-            ? isCompleted || hasPendingReplay
-            : !isCompleted && !hasPendingReplay);
+          const belongsToSection = section.status === 'completed'
+            ? isCompleted
+            : !isCompleted && !hasPendingReplay;
+          return !game.organizer_action && matchesFilter && (!showOnlyMine || isMine) && belongsToSection;
         }).sort((first, second) => {
           if (section.status !== 'completed') return 0;
           return Number(Boolean(second.pending_replay_id)) - Number(Boolean(first.pending_replay_id));
