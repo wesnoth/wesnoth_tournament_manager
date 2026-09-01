@@ -129,7 +129,15 @@ export async function getTournamentFormat(tournamentId: string): Promise<Tournam
     query(`SELECT s.* FROM tournament_round_robin_settings s JOIN tournament_phases p ON p.id = s.phase_id WHERE p.tournament_id = ?`, [tournamentId]),
     query(`SELECT s.* FROM tournament_elimination_settings s JOIN tournament_phases p ON p.id = s.phase_id WHERE p.tournament_id = ?`, [tournamentId]),
     query(`SELECT o.* FROM tournament_phase_round_overrides o JOIN tournament_phases p ON p.id = o.phase_id WHERE p.tournament_id = ?`, [tournamentId]),
-    query(`SELECT r.* FROM tournament_advancement_rules r JOIN tournament_phase_groups g ON g.id = r.source_group_id JOIN tournament_phases p ON p.id = g.phase_id WHERE p.tournament_id = ? ORDER BY p.phase_order, r.source_rank`, [tournamentId]),
+    query(`SELECT r.*
+           FROM tournament_advancement_rules r
+           JOIN tournament_phase_groups source_group ON source_group.id = r.source_group_id
+           JOIN tournament_phases source_phase ON source_phase.id = source_group.phase_id
+           JOIN tournament_phase_groups target_group ON target_group.id = r.target_group_id
+           JOIN tournament_phases target_phase ON target_phase.id = target_group.phase_id
+           WHERE source_phase.tournament_id = ?
+           ORDER BY source_phase.phase_order, source_group.group_order, r.source_rank,
+                    target_phase.phase_order, target_group.group_order, r.target_seed, r.id`, [tournamentId]),
   ]);
   const assignmentsByGroup = new Map<string, string[]>();
   for (const assignment of assignmentsResult.rows) {

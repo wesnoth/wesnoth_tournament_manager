@@ -62,9 +62,28 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
   const definition = value || { phases: [], advancement_rules: [] };
   const groupIds = useMemo(() => new Set(definition.phases.flatMap(item => item.groups.map(group => group.id))), [definition]);
   const groupOptions = useMemo(() => definition.phases.flatMap(item => item.groups.map(group => ({
-    id: group.id, label: `${item.name} / ${group.name}`, phaseOrder: item.order,
+    id: group.id,
+    label: `${item.name} / ${group.name}`,
+    phaseOrder: item.order,
+    groupOrder: group.order,
   }))), [definition]);
   const validMappings = definition.advancement_rules.every(rule => groupIds.has(rule.source_group_id) && groupIds.has(rule.target_group_id));
+  const orderedRules = useMemo(() => {
+    const groupsById = new Map(groupOptions.map(group => [group.id, group]));
+    return [...definition.advancement_rules].sort((left, right) => {
+      const leftSource = groupsById.get(left.source_group_id);
+      const rightSource = groupsById.get(right.source_group_id);
+      const leftTarget = groupsById.get(left.target_group_id);
+      const rightTarget = groupsById.get(right.target_group_id);
+      return (leftSource?.phaseOrder || Number.MAX_SAFE_INTEGER) - (rightSource?.phaseOrder || Number.MAX_SAFE_INTEGER)
+        || (leftSource?.groupOrder || Number.MAX_SAFE_INTEGER) - (rightSource?.groupOrder || Number.MAX_SAFE_INTEGER)
+        || left.source_rank - right.source_rank
+        || (leftTarget?.phaseOrder || Number.MAX_SAFE_INTEGER) - (rightTarget?.phaseOrder || Number.MAX_SAFE_INTEGER)
+        || (leftTarget?.groupOrder || Number.MAX_SAFE_INTEGER) - (rightTarget?.groupOrder || Number.MAX_SAFE_INTEGER)
+        || left.target_seed - right.target_seed
+        || left.id.localeCompare(right.id);
+    });
+  }, [definition.advancement_rules, groupOptions]);
 
   const replacePhase = (index: number, next: TournamentPhaseDefinition) => {
     const phases = definition.phases.map((item, itemIndex) => itemIndex === index ? next : item);
@@ -164,12 +183,14 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
         <button data-help-id="action-add-tournament-phase" type="button" disabled={disabled} onClick={() => onChange({ ...definition, phases: [...definition.phases, phase(`Phase ${definition.phases.length + 1}`, definition.phases.length + 1, 'single_elimination')] })} className="px-3 py-2 bg-blue-600 text-white rounded-md">Add phase</button>
         <div data-help-id="region-tournament-advancement-mappings" className="p-3 bg-white border rounded-md space-y-2">
           <h4 className="font-medium">Advancement mappings</h4>
-          {definition.advancement_rules.map((rule, ruleIndex) => <div key={rule.id} className="grid grid-cols-2 md:grid-cols-5 gap-2 items-end">
-            <label className="text-xs">Source group<select data-help-id="option-advancement-source-group" disabled={disabled} value={rule.source_group_id} onChange={(event) => onChange({ ...definition, advancement_rules: definition.advancement_rules.map((item, index) => index === ruleIndex ? { ...item, source_group_id: event.target.value } : item) })} className="block w-full border rounded p-1">{groupOptions.map(group => <option key={group.id} value={group.id}>{group.label}</option>)}</select></label>
-            <label className="text-xs">Source rank<input data-help-id="field-advancement-source-rank" disabled={disabled} type="number" min={1} value={rule.source_rank} onChange={(event) => onChange({ ...definition, advancement_rules: definition.advancement_rules.map((item, index) => index === ruleIndex ? { ...item, source_rank: Number(event.target.value) } : item) })} className="block w-full border rounded p-1" /></label>
-            <label className="text-xs">Target group<select data-help-id="option-advancement-target-group" disabled={disabled} value={rule.target_group_id} onChange={(event) => onChange({ ...definition, advancement_rules: definition.advancement_rules.map((item, index) => index === ruleIndex ? { ...item, target_group_id: event.target.value } : item) })} className="block w-full border rounded p-1">{groupOptions.filter(group => group.phaseOrder > (groupOptions.find(source => source.id === rule.source_group_id)?.phaseOrder || 0)).map(group => <option key={group.id} value={group.id}>{group.label}</option>)}</select></label>
-            <label className="text-xs">Target preclassification<input data-help-id="field-advancement-target-seed" disabled={disabled} type="number" min={1} value={rule.target_seed} onChange={(event) => onChange({ ...definition, advancement_rules: definition.advancement_rules.map((item, index) => index === ruleIndex ? { ...item, target_seed: Number(event.target.value) } : item) })} className="block w-full border rounded p-1" /></label>
-            <button data-help-id="action-remove-advancement-rule" type="button" disabled={disabled} onClick={() => onChange({ ...definition, advancement_rules: definition.advancement_rules.filter((_, index) => index !== ruleIndex) })} className="text-red-700 text-sm">Remove</button>
+          <p className="text-xs text-gray-600">Rules are ordered by source phase, source group, source position, target phase, target group, and target seed.</p>
+          {orderedRules.map((rule, ruleIndex) => <div key={rule.id} className="grid grid-cols-2 md:grid-cols-5 gap-2 items-end">
+            <div className="col-span-2 md:col-span-5 text-xs font-medium text-gray-700">{ruleIndex + 1}. {groupOptions.find(group => group.id === rule.source_group_id)?.label || 'Unknown source'} position {rule.source_rank} → {groupOptions.find(group => group.id === rule.target_group_id)?.label || 'Unknown target'} seed {rule.target_seed}</div>
+            <label className="text-xs">Source group<select data-help-id="option-advancement-source-group" disabled={disabled} value={rule.source_group_id} onChange={(event) => onChange({ ...definition, advancement_rules: definition.advancement_rules.map(item => item.id === rule.id ? { ...item, source_group_id: event.target.value } : item) })} className="block w-full border rounded p-1">{groupOptions.map(group => <option key={group.id} value={group.id}>{group.label}</option>)}</select></label>
+            <label className="text-xs">Source rank<input data-help-id="field-advancement-source-rank" disabled={disabled} type="number" min={1} value={rule.source_rank} onChange={(event) => onChange({ ...definition, advancement_rules: definition.advancement_rules.map(item => item.id === rule.id ? { ...item, source_rank: Number(event.target.value) } : item) })} className="block w-full border rounded p-1" /></label>
+            <label className="text-xs">Target group<select data-help-id="option-advancement-target-group" disabled={disabled} value={rule.target_group_id} onChange={(event) => onChange({ ...definition, advancement_rules: definition.advancement_rules.map(item => item.id === rule.id ? { ...item, target_group_id: event.target.value } : item) })} className="block w-full border rounded p-1">{groupOptions.filter(group => group.phaseOrder > (groupOptions.find(source => source.id === rule.source_group_id)?.phaseOrder || 0)).map(group => <option key={group.id} value={group.id}>{group.label}</option>)}</select></label>
+            <label className="text-xs">Target preclassification<input data-help-id="field-advancement-target-seed" disabled={disabled} type="number" min={1} value={rule.target_seed} onChange={(event) => onChange({ ...definition, advancement_rules: definition.advancement_rules.map(item => item.id === rule.id ? { ...item, target_seed: Number(event.target.value) } : item) })} className="block w-full border rounded p-1" /></label>
+            <button data-help-id="action-remove-advancement-rule" type="button" disabled={disabled} onClick={() => onChange({ ...definition, advancement_rules: definition.advancement_rules.filter(item => item.id !== rule.id) })} className="text-red-700 text-sm">Remove</button>
           </div>)}
           {definition.phases.length > 1 && <button data-help-id="action-add-advancement-rule" type="button" disabled={disabled || groupOptions.length < 2} onClick={() => {
             const source = groupOptions[0];
