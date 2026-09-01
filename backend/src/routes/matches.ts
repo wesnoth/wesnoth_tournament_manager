@@ -24,7 +24,7 @@ import {
   updatePlayerElo
 } from '../services/statisticsCalculator.js';
 import { validateAndCorrectFactions } from '../services/replayConfirmationService.js';
-import { recordPhaseGameResult } from '../tournament-engine/competitionProgression.js';
+import { phaseGameDisplayMetadata, recordPhaseGameResult } from '../tournament-engine/competitionProgression.js';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
 import { globalRecalculationMiddleware } from '../services/systemPauseService.js';
 import multer from 'multer';
@@ -1435,9 +1435,11 @@ router.post('/report-confidence-1-replay', authMiddleware, globalRecalculationMi
       [replay.tournament_id, userId]
     );
     const teamId = membership.rows?.[0]?.team_id || null;
-    const userEntryId = game.entry1_user_id === userId || game.entry1_team_id === teamId
+    const userEntryId = game.entry1_user_id === userId
+      || (teamId !== null && game.entry1_team_id !== null && game.entry1_team_id === teamId)
       ? game.entry1_id
-      : game.entry2_user_id === userId || game.entry2_team_id === teamId
+      : game.entry2_user_id === userId
+        || (teamId !== null && game.entry2_team_id !== null && game.entry2_team_id === teamId)
         ? game.entry2_id
         : null;
     if (!userEntryId) return res.status(403).json({ error: 'You are not a participant in this tournament game' });
@@ -1445,7 +1447,14 @@ router.post('/report-confidence-1-replay', authMiddleware, globalRecalculationMi
     const winnerEntryId = winner_choice === 'I won'
       ? userEntryId
       : userEntryId === game.entry1_id ? game.entry2_id : game.entry1_id;
-    const progression = await recordPhaseGameResult(replay.tournament_id, replay.tournament_game_id, winnerEntryId);
+    const progression = await recordPhaseGameResult(
+      replay.tournament_id,
+      replay.tournament_game_id,
+      winnerEntryId,
+      null,
+      undefined,
+      phaseGameDisplayMetadata(parseSummary)
+    );
     await query(
       `UPDATE replays SET parse_status = 'completed', need_integration = 0, updated_at = NOW() WHERE id = ?`,
       [replayId]

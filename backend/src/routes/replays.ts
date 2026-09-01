@@ -13,7 +13,7 @@ import { query } from '../config/database.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { createMatch } from '../services/matchCreationService.js';
 import { validateAndCorrectFactions } from '../services/replayConfirmationService.js';
-import { recordPhaseGameResult } from '../tournament-engine/competitionProgression.js';
+import { phaseGameDisplayMetadata, recordPhaseGameResult } from '../tournament-engine/competitionProgression.js';
 import { globalRecalculationMiddleware } from '../services/systemPauseService.js';
 
 const router = express.Router();
@@ -259,14 +259,25 @@ router.post('/:replayId/confirm-winner', authMiddleware, globalRecalculationMidd
       );
       const winnerParticipantRow = winnerParticipant.rows?.[0];
       const winnerEntryId = winnerParticipantRow?.id === game.entry1_participant_id
-        || winnerParticipantRow?.team_id === game.entry1_team_id
+        || (winnerParticipantRow?.team_id !== null
+          && game.entry1_team_id !== null
+          && winnerParticipantRow?.team_id === game.entry1_team_id)
         ? game.entry1_id
-        : winnerParticipantRow?.id === game.entry2_participant_id
-          || winnerParticipantRow?.team_id === game.entry2_team_id
+          : winnerParticipantRow?.id === game.entry2_participant_id
+          || (winnerParticipantRow?.team_id !== null
+            && game.entry2_team_id !== null
+            && winnerParticipantRow?.team_id === game.entry2_team_id)
           ? game.entry2_id
           : null;
       if (!winnerEntryId) return res.status(400).json({ error: 'Could not map winner to tournament entry' });
-      await recordPhaseGameResult(summary.linkedTournamentId, summary.linkedTournamentGameId, winnerEntryId, result.matchId);
+      await recordPhaseGameResult(
+        summary.linkedTournamentId,
+        summary.linkedTournamentGameId,
+        winnerEntryId,
+        result.matchId,
+        undefined,
+        phaseGameDisplayMetadata(summary)
+      );
     }
 
     // Keep the replay lifecycle consistent with automatic integration. The

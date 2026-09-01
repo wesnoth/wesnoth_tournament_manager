@@ -7,6 +7,50 @@ import {
 } from '../services/tournamentPhaseDiscordService.js';
 import { compileNextPhaseCompetition } from './competitionCompiler.js';
 
+export interface PhaseGameResultMetadata {
+  map: string | null;
+  winnerFaction: string | null;
+  loserFaction: string | null;
+  winnerSide: number | null;
+}
+
+/** Extract display metadata from the normalized replay summary for v2 games. */
+export function phaseGameDisplayMetadata(parseSummary: any): PhaseGameResultMetadata {
+  const victory = parseSummary?.replayVictory || {};
+  const winnerName = String(victory.winner_name || '').toLowerCase();
+  const loserName = String(victory.loser_name || '').toLowerCase();
+  const players = Array.isArray(parseSummary?.forumPlayers) ? parseSummary.forumPlayers : [];
+  const winner = players.find((player: any) => String(player?.user_name || '').toLowerCase() === winnerName);
+  const loser = players.find((player: any) => String(player?.user_name || '').toLowerCase() === loserName);
+  const resolvedFactions = parseSummary?.resolvedFactions || {};
+  const forumFactions = parseSummary?.forumFactions || {};
+  const factionFor = (player: any, fallback: string | null) => {
+    if (!player) return fallback;
+    return resolvedFactions[`side${player.side_number}`]
+      || forumFactions[`side${player.side_number}`]
+      || fallback;
+  };
+  const detectedTeams = Object.values(parseSummary?.detectedTeams || {}) as any[];
+  const winnerTeam = detectedTeams.find(team =>
+    Array.isArray(team?.members)
+      && team.members.some((member: string) => member.toLowerCase() === winnerName)
+  );
+  const loserTeam = winnerTeam
+    ? detectedTeams.find(team => team.team_id !== winnerTeam.team_id)
+    : null;
+  return {
+    map: parseSummary?.resolvedMap || parseSummary?.finalMap
+      || parseSummary?.selectedMapName || parseSummary?.forumMap || null,
+    winnerFaction: winnerTeam
+      ? winnerTeam.factions?.join(', ') || null
+      : factionFor(winner, victory.winner_faction || null),
+    loserFaction: loserTeam
+      ? loserTeam.factions?.join(', ') || null
+      : factionFor(loser, victory.loser_faction || null),
+    winnerSide: winnerTeam ? null : winner?.side_number || victory.winner_side || null,
+  };
+}
+
 /**
  * Recalculate materialized percentage tiebreakers from completed series and games.
  * Percentages use 0..100 storage. A player with no relevant games has zero; this
@@ -170,7 +214,8 @@ export async function recordPhaseGameResult(
   gameId: string,
   winnerEntryId: string,
   matchId?: string | null,
-  organizerAction?: 'admin_award' | 'forfeit'
+  organizerAction?: 'admin_award' | 'forfeit',
+  metadata?: PhaseGameResultMetadata | null
 ): Promise<{ seriesCompleted: boolean; phaseCompleted: boolean; tournamentCompleted: boolean }> {
   const connection = await pool.getConnection();
   let completedPhaseId: string | null = null;
@@ -195,6 +240,14 @@ export async function recordPhaseGameResult(
     const game = rows[0];
     if (game.status === 'completed') throw new Error('Tournament game result is already recorded');
     if (![game.entry1_id, game.entry2_id].includes(winnerEntryId)) throw new Error('Winner is not part of this game');
+    if (metadata) {
+      await connection.execute(
+        `UPDATE tournament_games
+         SET map = ?, winner_faction = ?, loser_faction = ?, winner_side = ?
+         WHERE id = ?`,
+        [metadata.map, metadata.winnerFaction, metadata.loserFaction, metadata.winnerSide, gameId]
+      );
+    }
     const loserEntryId = winnerEntryId === game.entry1_id ? game.entry2_id : game.entry1_id;
     await connection.execute(
       `UPDATE tournament_games
