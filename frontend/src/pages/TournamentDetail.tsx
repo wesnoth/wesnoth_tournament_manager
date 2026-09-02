@@ -1627,24 +1627,34 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
         <p><strong>{t('label_created')}:</strong> {formatDate(tournament.created_at)}</p>
         {tournament.started_at && <p><strong>{t('label_started')}:</strong> {formatDate(tournament.started_at)}</p>}
         {tournament.finished_at && <p><strong>{t('label_finished')}:</strong> {formatDate(tournament.finished_at)}</p>}
-        <div className="mt-4">
-          <strong>{t('label_description')}:</strong>
-          <div className="mt-2 rounded border border-gray-200 bg-gray-50 p-3">
-            <MarkdownPreview
-              markdown={tournament.description || ''}
-              emptyMessage={t('tournament.description_preview_empty', 'No description configured for this tournament.')}
-            />
+        <details className="mt-4" open>
+          <summary
+            data-help-id="action-toggle-tournament-description-rules"
+            className="cursor-pointer select-none font-semibold text-gray-800 marker:text-gray-500"
+          >
+            {t('label_description')} &amp; {t('tournament.rules_content', 'Tournament Rules')}
+          </summary>
+          <div className="mt-3 space-y-4">
+            <div>
+              <strong>{t('label_description')}:</strong>
+              <div className="mt-2 rounded border border-gray-200 bg-gray-50 p-3">
+                <MarkdownPreview
+                  markdown={tournament.description || ''}
+                  emptyMessage={t('tournament.description_preview_empty', 'No description configured for this tournament.')}
+                />
+              </div>
+            </div>
+            <div>
+              <strong>{t('tournament.rules_content', 'Tournament Rules')}:</strong>
+              <div className="mt-2 rounded border border-gray-200 bg-gray-50 p-3">
+                <MarkdownPreview
+                  markdown={tournament.rules_content || ''}
+                  emptyMessage={t('tournament.rules_preview_empty', 'No rules configured for this tournament.')}
+                />
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="mt-4">
-          <strong>{t('tournament.rules_content', 'Tournament Rules')}:</strong>
-          <div className="mt-2 rounded border border-gray-200 bg-gray-50 p-3">
-            <MarkdownPreview
-              markdown={tournament.rules_content || ''}
-              emptyMessage={t('tournament.rules_preview_empty', 'No rules configured for this tournament.')}
-            />
-          </div>
-        </div>
+        </details>
       </div>
 
       {/* Tournament Assets Section */}
