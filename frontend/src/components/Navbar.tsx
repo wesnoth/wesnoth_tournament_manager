@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../store/authStore';
-import { userService } from '../services/api';
 import { getHelpSlugFromPath } from '../utils/helpNavigation';
 
 /** Minimal notification shape required by the navbar dropdown. */
@@ -24,18 +23,14 @@ const Navbar: React.FC = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated, isAdmin, logout } = useAuthStore();
-  const [userNickname, setUserNickname] = useState('');
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const { isAuthenticated, isAdmin, user, logout } = useAuthStore();
   const [languageDropdownOpen, setLanguageDropdownOpen] = useState(false);
   const [notificationsDropdownOpen, setNotificationsDropdownOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [recentNotifications, setRecentNotifications] = useState<NavbarNotification[]>([]);
-  const userBtnRef = useRef<HTMLButtonElement>(null);
   const languageBtnRef = useRef<HTMLButtonElement>(null);
   const languageBtnMobileRef = useRef<HTMLButtonElement>(null);
   const notificationsBtnRef = useRef<HTMLButtonElement>(null);
-  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; right: number } | null>(null);
   const [languageDropdownPosition, setLanguageDropdownPosition] = useState<{ top: number; right: number } | null>(null);
   const [notificationsDropdownPosition, setNotificationsDropdownPosition] = useState<{ top: number; right: number } | null>(null);
 
@@ -60,16 +55,6 @@ const Navbar: React.FC = () => {
 
   useEffect(() => {
     if (isAuthenticated) {
-      const fetchUserProfile = async () => {
-        try {
-          const res = await userService.getProfile();
-          setUserNickname(res.data.nickname);
-        } catch (err) {
-          console.error('Error fetching profile:', err);
-        }
-      };
-      fetchUserProfile();
-
       // Load the persisted unread count for the navbar badge.
       const loadUnreadCount = async () => {
         try {
@@ -115,17 +100,6 @@ const Navbar: React.FC = () => {
     }
   }, [isAuthenticated]);
 
-  // Calculate dropdown position when it opens
-  useEffect(() => {
-    if (dropdownOpen && userBtnRef.current) {
-      const rect = userBtnRef.current.getBoundingClientRect();
-      setDropdownPosition({
-        top: rect.bottom + window.scrollY,
-        right: window.innerWidth - rect.right,
-      });
-    }
-  }, [dropdownOpen]);
-
   // Calculate language dropdown position when it opens
   useEffect(() => {
     if (languageDropdownOpen) {
@@ -160,18 +134,17 @@ const Navbar: React.FC = () => {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
-      if (!target.closest('.user-menu') && !target.closest('.language-dropdown') && !target.closest('.notifications-menu')) {
-        setDropdownOpen(false);
+      if (!target.closest('.language-dropdown') && !target.closest('.notifications-menu')) {
         setLanguageDropdownOpen(false);
         setNotificationsDropdownOpen(false);
       }
     };
 
-    if (dropdownOpen || languageDropdownOpen || notificationsDropdownOpen) {
+    if (languageDropdownOpen || notificationsDropdownOpen) {
       document.addEventListener('click', handleClickOutside);
       return () => document.removeEventListener('click', handleClickOutside);
     }
-  }, [dropdownOpen, languageDropdownOpen, notificationsDropdownOpen]);
+  }, [languageDropdownOpen, notificationsDropdownOpen]);
 
   const changeLanguage = (lang: string) => {
     i18n.changeLanguage(lang);
@@ -181,13 +154,7 @@ const Navbar: React.FC = () => {
 
   const handleLogout = () => {
     logout();
-    setDropdownOpen(false);
     navigate('/');
-  };
-
-  const handleNavigateAndClose = (path: string) => {
-    setDropdownOpen(false);
-    navigate(path);
   };
 
   return (
@@ -377,39 +344,26 @@ const Navbar: React.FC = () => {
 
           {/* User Menu */}
           {isAuthenticated && (
-            <div className="user-menu relative self-center z-[2000] flex-shrink-0">
-              <button 
-                ref={userBtnRef}
-                className="bg-secondary text-white px-3 py-2 rounded font-semibold hover:bg-blue-700 transition-colors max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm flex-shrink-0 whitespace-nowrap"
-                onClick={() => setDropdownOpen(!dropdownOpen)}
-              >
-                {userNickname} ▼
-              </button>
-              {dropdownOpen && dropdownPosition && createPortal(
-                <div 
-                  className="bg-white text-gray-800 w-48 rounded shadow-md z-[9999] overflow-hidden flex flex-col min-w-[180px]"
-                  style={{
-                    position: 'fixed',
-                    top: `${dropdownPosition.top}px`,
-                    right: `${dropdownPosition.right}px`,
-                    left: 'auto',
-                  }}
+            <div className="relative self-center z-[2000] flex flex-shrink-0 items-center gap-2">
+              <div>
+                <button
+                  data-help-id="action-open-user-menu"
+                  type="button"
+                  className="bg-secondary text-white px-3 py-2 rounded font-semibold hover:bg-blue-700 transition-colors max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm flex-shrink-0 whitespace-nowrap"
+                  onClick={() => navigate('/user')}
                 >
-                  <button 
-                    className="block w-full text-left px-4 py-3 hover:bg-gray-100 transition-colors text-sm"
-                    onClick={() => handleNavigateAndClose('/user')}
-                  >
-                    {t('navbar_profile') || 'Profile'}
-                  </button>
-                  <button 
-                    className="block w-full text-left px-4 py-3 hover:bg-red-50 transition-colors text-sm border-t border-gray-200 text-danger font-semibold"
-                    onClick={handleLogout}
-                  >
-                    {t('navbar_logout') || 'Logout'}
-                  </button>
-                </div>,
-                document.body
-              )}
+                  {user?.nickname || getTranslation('navbar_user_menu', 'User Menu')}
+                </button>
+              </div>
+              <button
+                data-help-id="action-logout"
+                type="button"
+                className="bg-red-600 text-white px-3 py-2 rounded font-semibold hover:bg-red-700 transition-colors max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm flex-shrink-0 whitespace-nowrap"
+                onClick={handleLogout}
+                title={t('navbar_logout') || 'Logout'}
+              >
+                {t('navbar_logout') || 'Logout'}
+              </button>
             </div>
           )}
 
