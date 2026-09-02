@@ -90,11 +90,18 @@ router.get('/pending-confirmation', authMiddleware, async (req: AuthRequest, res
 router.post('/:replayId/confirm-winner', authMiddleware, globalRecalculationMiddleware, async (req: AuthRequest, res) => {
   try {
     const replayId = req.params.replayId;
-    const { iWon } = req.body;
+    const { iWon, comments } = req.body;
+    const rating = req.body.rating === undefined || req.body.rating === null ? null : Number(req.body.rating);
     const userId = req.userId;
 
     if (typeof iWon !== 'boolean') {
       return res.status(400).json({ error: 'Missing required field: iWon (boolean)' });
+    }
+    if (comments !== undefined && comments !== null && (typeof comments !== 'string' || comments.length > 500)) {
+      return res.status(400).json({ error: 'comments must not exceed 500 characters' });
+    }
+    if (rating !== null && (!Number.isInteger(rating) || rating < 1 || rating > 5)) {
+      return res.status(400).json({ error: 'rating must be an integer between 1 and 5' });
     }
 
     // Fetch the replay
@@ -276,7 +283,12 @@ router.post('/:replayId/confirm-winner', authMiddleware, globalRecalculationMidd
         winnerEntryId,
         result.matchId,
         undefined,
-        phaseGameDisplayMetadata(summary)
+        phaseGameDisplayMetadata(summary),
+        {
+          entryId: iWon ? winnerEntryId : (winnerEntryId === game.entry1_id ? game.entry2_id : game.entry1_id),
+          comments: comments || null,
+          rating,
+        }
       );
     }
 

@@ -14,6 +14,13 @@ export interface PhaseGameResultMetadata {
   winnerSide: number | null;
 }
 
+export interface PhaseGameConfirmation {
+  /** Entry whose participant submitted the report. */
+  entryId: string;
+  comments: string | null;
+  rating: number | null;
+}
+
 /** Extract display metadata from the normalized replay summary for v2 games. */
 export function phaseGameDisplayMetadata(parseSummary: any): PhaseGameResultMetadata {
   const victory = parseSummary?.replayVictory || {};
@@ -215,7 +222,8 @@ export async function recordPhaseGameResult(
   winnerEntryId: string,
   matchId?: string | null,
   organizerAction?: 'admin_award' | 'forfeit',
-  metadata?: PhaseGameResultMetadata | null
+  metadata?: PhaseGameResultMetadata | null,
+  confirmation?: PhaseGameConfirmation | null
 ): Promise<{ seriesCompleted: boolean; phaseCompleted: boolean; tournamentCompleted: boolean }> {
   const connection = await pool.getConnection();
   let completedPhaseId: string | null = null;
@@ -256,6 +264,25 @@ export async function recordPhaseGameResult(
        WHERE id = ?`,
       [winnerEntryId, loserEntryId, matchId || null, organizerAction || null, gameId]
     );
+    if (confirmation) {
+      // The confidence-one form is submitted by either participant. Preserve
+      // the author's feedback on that participant's side of the game rather
+      // than treating every report as the winner's report.
+      const confirmationColumn = confirmation.entryId === winnerEntryId
+        ? 'winner'
+        : confirmation.entryId === loserEntryId
+          ? 'loser'
+          : null;
+      if (confirmationColumn) {
+        await connection.execute(
+          `UPDATE tournament_games
+           SET ${confirmationColumn}_comments = ?, ${confirmationColumn}_rating = ?,
+               confirmation_status = 'reported'
+           WHERE id = ?`,
+          [confirmation.comments || null, confirmation.rating, gameId]
+        );
+      }
+    }
     const winColumn = winnerEntryId === game.entry1_id ? 'entry1_wins' : 'entry2_wins';
     if (organizerAction) {
       // An administrative award resolves the series without fabricating the
