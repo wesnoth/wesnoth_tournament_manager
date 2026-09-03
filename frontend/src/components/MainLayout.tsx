@@ -3,12 +3,13 @@ import UserProfileNav from './UserProfileNav';
 
 interface MainLayoutProps {
   children: React.ReactNode;
+  showUserProfileNav?: boolean;
 }
 
-const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
+const MainLayout: React.FC<MainLayoutProps> = ({ children, showUserProfileNav = true }) => {
   return (
     <div className="min-h-screen flex flex-col">
-      <UserProfileNav />
+      {showUserProfileNav && <UserProfileNav />}
       <main className="flex-1 overflow-auto">
         {children}
       </main>

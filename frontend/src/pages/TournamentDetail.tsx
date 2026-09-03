@@ -1580,12 +1580,12 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
   };
 
   if (loading) {
-    return <MainLayout><div className="w-full min-h-screen px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200"><p>{t('loading')}</p></div></MainLayout>;
+    return <MainLayout showUserProfileNav={false}><div className="w-full min-h-screen px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200"><p>{t('loading')}</p></div></MainLayout>;
   }
 
   if (!tournament) {
     return (
-      <MainLayout><div className="w-full min-h-screen px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200">
+      <MainLayout showUserProfileNav={false}><div className="w-full min-h-screen px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200">
         <p>{error || t('tournament_title')}</p>
         <button data-help-id="action-back-to-tournaments" onClick={() => navigate('/tournaments')}>{t('tournaments.back_to_tournaments')}</button>
       </div></MainLayout>
@@ -1596,7 +1596,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
   const phaseDefinition = editData.format_definition;
 
   return (
-    <MainLayout><div className="w-full min-h-screen px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200">
+    <MainLayout showUserProfileNav={false}><div className="w-full min-h-screen px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200">
       <div className="flex justify-between items-center mb-8 pb-4 border-b-2 border-gray-300">
         <button data-help-id="action-back-to-tournaments" onClick={handleBackButton} className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors">← {t('tournaments.back_to_tournaments')}</button>
         <div className="flex flex-col gap-2">
