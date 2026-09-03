@@ -210,12 +210,29 @@ function getDefaultTournamentTab(status: string, usesPhaseEngine: boolean): Tour
   return 'participants';
 }
 
+const tournamentDescriptionRulesStateKey = (tournamentId: string) =>
+  `tournament-detail:${tournamentId}:description-rules-open`;
+
+function readDescriptionRulesState(tournamentId?: string): boolean | null {
+  if (!tournamentId) return null;
+
+  try {
+    const storedValue = sessionStorage.getItem(tournamentDescriptionRulesStateKey(tournamentId));
+    return storedValue === null ? null : storedValue === 'true';
+  } catch {
+    // Storage can be unavailable in restricted browser contexts; the UI still works in memory.
+    return null;
+  }
+}
+
 interface TournamentMatch {
   id: string;
   tournament_id: string;
   round_id: string;
   player1_id: string;
   player2_id: string;
+  // Legacy match rows may be grouped into a best-of series.
+  series_id?: string | null;
   winner_id: string | null;
   match_id: string | null;
   match_status: 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'unconfirmed';
@@ -295,6 +312,10 @@ const TournamentDetail: React.FC = () => {
   const [competitionMatchFilter, setCompetitionMatchFilter] = useState<'all' | 'pending' | 'completed'>('all');
   const [competitionShowOnlyMine, setCompetitionShowOnlyMine] = useState(false);
   const [competitionShowPhasesGroups, setCompetitionShowPhasesGroups] = useState(true);
+  const [descriptionRulesOpen, setDescriptionRulesOpen] = useState<boolean>(() =>
+    readDescriptionRulesState(id) ?? true
+  );
+  const descriptionRulesStateTournamentId = useRef(id);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [tabRefreshKey, setTabRefreshKey] = useState(0);
   const [userParticipationStatus, setUserParticipationStatus] = useState<string | null>(null);
@@ -360,6 +381,27 @@ const TournamentDetail: React.FC = () => {
 
   // Get the origin page from location state
   const originPage = (location.state as any)?.from || 'tournaments';
+
+  useEffect(() => {
+    if (!id) return;
+
+    // Avoid writing the previous tournament's in-memory state under a new id
+    // when React reuses this page component for another tournament route.
+    if (descriptionRulesStateTournamentId.current !== id) {
+      descriptionRulesStateTournamentId.current = id;
+      setDescriptionRulesOpen(readDescriptionRulesState(id) ?? true);
+      return;
+    }
+
+    try {
+      sessionStorage.setItem(
+        tournamentDescriptionRulesStateKey(id),
+        String(descriptionRulesOpen)
+      );
+    } catch {
+      // Storage failures should not prevent the user from toggling the section.
+    }
+  }, [descriptionRulesOpen, id]);
 
   useEffect(() => {
     if (id) {
@@ -1627,7 +1669,11 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
         <p><strong>{t('label_created')}:</strong> {formatDate(tournament.created_at)}</p>
         {tournament.started_at && <p><strong>{t('label_started')}:</strong> {formatDate(tournament.started_at)}</p>}
         {tournament.finished_at && <p><strong>{t('label_finished')}:</strong> {formatDate(tournament.finished_at)}</p>}
-        <details className="mt-4" open>
+        <details
+          className="mt-4"
+          open={descriptionRulesOpen}
+          onToggle={(event) => setDescriptionRulesOpen(event.currentTarget.open)}
+        >
           <summary
             data-help-id="action-toggle-tournament-description-rules"
             className="cursor-pointer select-none font-semibold text-gray-800 marker:text-gray-500"
