@@ -233,6 +233,30 @@ router.get('/tournaments/:id', async (req, res) => {
   }
 });
 
+// Return the immutable rules snapshots for public tournament history viewing.
+router.get('/tournaments/:id/rules-history', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await query(
+      `SELECT versions.version_number,
+              versions.rules_content,
+              versions.changed_at,
+              versions.changed_by AS changed_by_id,
+              users.nickname AS changed_by_nickname
+       FROM tournament_rule_versions versions
+       LEFT JOIN users_extension users ON users.id = versions.changed_by
+       WHERE versions.tournament_id = ?
+       ORDER BY versions.version_number DESC`,
+      [id]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching tournament rules history:', error);
+    res.status(500).json({ error: 'Failed to fetch tournament rules history' });
+  }
+});
+
 // Get tournament participants (public endpoint)
 router.get('/tournaments/:id/participants', async (req, res) => {
   try {
