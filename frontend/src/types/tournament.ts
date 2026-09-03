@@ -58,6 +58,14 @@ export interface TournamentFormData {
   format_definition?: TournamentFormatDefinition;
 }
 
+export interface TournamentRuleVersion {
+  version_number: number;
+  rules_content: string | null;
+  changed_at: string;
+  changed_by_id: string | null;
+  changed_by_nickname: string | null;
+}
+
 export interface TournamentCreatePayload extends TournamentFormData {
   unranked_factions?: string[];
   unranked_maps?: string[];

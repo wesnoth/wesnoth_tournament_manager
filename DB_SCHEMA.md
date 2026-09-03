@@ -28,6 +28,7 @@ context.
 | `tournament_phase_standings` | Materialized group standings | (`group_id`,`entry_id`) | `points`, `omp`, `gwp`, `ogp`, `rank_position` |
 | `tournament_organizers` | Co-organizers per tournament | (`tournament_id`,`user_id`) | `tournament_id`, `user_id`, `created_by` |
 | `tournament_rule_templates` | Reusable markdown rules templates | `id` | `title`, `content_markdown`, `is_active` |
+| `tournament_rule_versions` | Immutable tournament rules history | `id` | `tournament_id`, `version_number`, `rules_content`, `changed_by`, `changed_at` |
 | `tournament_participants` | Players in tournaments | `id` | `user_id`, `team_id`, `status` |
 | `tournament_teams` | Team records (2v2) | `id` | `name`, `tournament_id`, `status` |
 | `match_schedule_proposals` | Series-level tournament and P2P schedule proposals | `id` | `tournament_series_id`, `proposed_by_user_id`, `challenge_mode`, `challenged_user_id`, `status` |

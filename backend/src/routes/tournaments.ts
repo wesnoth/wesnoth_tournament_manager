@@ -468,6 +468,12 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
           0
         ]
       );
+      await creationConnection.execute(
+        `INSERT INTO tournament_rule_versions
+           (id, tournament_id, version_number, rules_content, changed_by, changed_at)
+         VALUES (?, ?, 1, ?, ?, CURRENT_TIMESTAMP)`,
+        [randomUUID(), tournamentId, resolvedRulesContent, req.userId]
+      );
       await creationConnection.commit();
     } catch (error) {
       await creationConnection.rollback();
@@ -836,11 +842,11 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
       });
     }
 
-    // Verify the user is the tournament creator
+    // Verify the user is an organizer for the tournament.
     const tournamentResult = await query(
       `SELECT creator_id, status, name, discord_thread_id, tournament_type, tournament_mode, max_participants,
               round_duration_days, auto_advance_round, general_rounds, final_rounds,
-              general_rounds_format, final_rounds_format, scheduled_start_at
+              general_rounds_format, final_rounds_format, scheduled_start_at, rules_content
        FROM tournaments WHERE id = ?`,
       [id]
     );
@@ -856,6 +862,13 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
 
     const currentTournament = tournamentResult.rows[0];
     const currentStatus = currentTournament.status;
+    const completedStatuses = new Set(['finished', 'completed', 'complete']);
+    if (rules_content !== undefined && completedStatuses.has(currentStatus)) {
+      return res.status(409).json({ error: 'Tournament rules cannot be changed after the tournament is completed' });
+    }
+    if (rules_content !== undefined && typeof rules_content !== 'string') {
+      return res.status(400).json({ error: 'Tournament rules must be a string' });
+    }
     const effectiveTournamentType = tournament_type ?? currentTournament.tournament_type;
     const effectiveAutoAdvanceRound = effectiveTournamentType === 'league'
       ? false
@@ -952,11 +965,18 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
 
     if (rules_content !== undefined) {
       updates.push(`rules_content = ?`);
-      values.push(rules_content);
+      values.push(rules_content.trim());
     } else if (autoCopiedRulesContent !== null) {
       updates.push(`rules_content = ?`);
       values.push(autoCopiedRulesContent);
     }
+
+    const nextRulesContent = rules_content !== undefined
+      ? rules_content.trim()
+      : autoCopiedRulesContent;
+    const rulesContentChanged = nextRulesContent !== null &&
+      nextRulesContent !== undefined &&
+      nextRulesContent !== (currentTournament.rules_content ?? null);
 
     if (max_participants !== undefined) {
       updates.push(`max_participants = ?`);
@@ -1011,7 +1031,36 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
       WHERE id = ?
     `;
 
-    await query(updateQuery, values);
+    const updateConnection = await pool.getConnection();
+    try {
+      await updateConnection.beginTransaction();
+      // Lock the tournament row so concurrent rule edits receive consecutive
+      // version numbers and cannot create duplicate history entries.
+      await updateConnection.execute('SELECT id FROM tournaments WHERE id = ? FOR UPDATE', [id]);
+      await updateConnection.execute(updateQuery, values);
+
+      if (rulesContentChanged) {
+        const [versionRows] = await updateConnection.execute(
+          `SELECT COALESCE(MAX(version_number), 0) + 1 AS next_version
+           FROM tournament_rule_versions
+           WHERE tournament_id = ?`,
+          [id]
+        );
+        const nextVersion = Number((versionRows as any[])[0]?.next_version || 1);
+        await updateConnection.execute(
+          `INSERT INTO tournament_rule_versions
+             (id, tournament_id, version_number, rules_content, changed_by, changed_at)
+           VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+          [randomUUID(), id, nextVersion, nextRulesContent, req.userId]
+        );
+      }
+      await updateConnection.commit();
+    } catch (transactionError) {
+      await updateConnection.rollback();
+      throw transactionError;
+    } finally {
+      updateConnection.release();
+    }
     if (format_definition !== undefined) {
       await saveTournamentFormat(id, format_definition as TournamentFormatDefinition);
     }

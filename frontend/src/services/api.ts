@@ -203,6 +203,7 @@ export const tournamentService = {
   removeTournamentOrganizer: (id: string, organizerUserId: string) =>
     api.delete(`/tournaments/${id}/organizers/${organizerUserId}`),
   updateTournament: (id: string, data: TournamentUpdatePayload) => api.put(`/tournaments/${id}`, data),
+  getTournamentRulesHistory: (id: string) => api.get(`/public/tournaments/${id}/rules-history`),
   updateTournamentAssets: (id: string, factionIds: string[], mapIds: string[]) =>
     api.put(`/tournaments/${id}/assets`, { faction_ids: factionIds, map_ids: mapIds }),
   deleteTournament: (id: string) => api.delete(`/tournaments/${id}`),

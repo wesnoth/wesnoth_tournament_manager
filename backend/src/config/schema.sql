@@ -929,6 +929,29 @@ CREATE TABLE `tournaments` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `tournament_rule_versions`
+--
+
+DROP TABLE IF EXISTS `tournament_rule_versions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tournament_rule_versions` (
+  `id` char(36) NOT NULL,
+  `tournament_id` char(36) NOT NULL,
+  `version_number` int(10) unsigned NOT NULL,
+  `rules_content` longtext DEFAULT NULL,
+  `changed_by` char(36) DEFAULT NULL,
+  `changed_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_tournament_rule_versions_version` (`tournament_id`,`version_number`),
+  KEY `idx_tournament_rule_versions_tournament` (`tournament_id`,`version_number`),
+  KEY `idx_tournament_rule_versions_changed_by` (`changed_by`),
+  CONSTRAINT `fk_tournament_rule_versions_tournament` FOREIGN KEY (`tournament_id`) REFERENCES `tournaments` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_tournament_rule_versions_changed_by` FOREIGN KEY (`changed_by`) REFERENCES `users_extension` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `user_notifications`
 --
 
