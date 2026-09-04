@@ -13,7 +13,7 @@ import {
   updateP2PProposal,
 } from '../services/p2pSchedulingService.js';
 import { getSchedulingConflictsForUsers } from '../services/schedulingConflictService.js';
-import { buildNotificationMessage, formatTimeRangesForDiscord, groupSlotsIntoRanges } from '../utils/slotGrouping.js';
+import { buildNotificationMessage, formatTimeRangesForDiscordByTimezone, groupSlotsIntoRanges } from '../utils/slotGrouping.js';
 import { sendUserActionRateLimitError } from '../utils/userActionRateLimitResponse.js';
 import { cancelWaiting, getWaitingForUser, listWaitingPlayers, publishWaiting } from '../services/p2pWaitingLobbyService.js';
 
@@ -60,9 +60,9 @@ const sendChallengeDiscord = async (
  * @param userId Application user ID.
  * @returns The user's nickname, or `Player` when the user cannot be found.
  */
-const getUserSummary = async (userId: string): Promise<{ nickname: string }> => {
+const getUserSummary = async (userId: string): Promise<{ nickname: string; timezone: string }> => {
   const result = await query(
-    `SELECT COALESCE(nickname, id) AS nickname
+    `SELECT COALESCE(nickname, id) AS nickname, COALESCE(timezone, 'UTC') AS timezone
      FROM users_extension
      WHERE id = ?
      LIMIT 1`,
@@ -70,11 +70,12 @@ const getUserSummary = async (userId: string): Promise<{ nickname: string }> => 
   );
 
   if (!result.rows || result.rows.length === 0) {
-    return { nickname: 'Player' };
+    return { nickname: 'Player', timezone: 'UTC' };
   }
 
   return {
     nickname: result.rows[0].nickname,
+    timezone: result.rows[0].timezone || 'UTC',
   };
 };
 
@@ -193,7 +194,6 @@ router.post('/proposals', authMiddleware, async (req: AuthRequest, res: Response
     const proposer = await getUserSummary(proposedByUserId);
     const challenged = await getUserSummary(challenged_user_id);
     const ranges = groupSlotsIntoRanges(slot_datetimes);
-    const formattedRanges = formatTimeRangesForDiscord(ranges);
     const message = buildNotificationMessage('proposal', proposer.nickname, ranges, notes);
 
     await storeNotificationForUsers(
@@ -208,7 +208,10 @@ router.post('/proposals', authMiddleware, async (req: AuthRequest, res: Response
     await sendChallengeDiscord(proposalId, 'challenge_proposal', '⚔️ New P2P Challenge Proposal', 0xffa500, [
       { name: 'From', value: proposer.nickname, inline: true },
       { name: 'To', value: challenged.nickname, inline: true },
-      { name: 'Slots (UTC)', value: formattedRanges || 'No slots', inline: false },
+      { name: 'Slots (each player timezone)', value: formatTimeRangesForDiscordByTimezone(ranges, [
+        { label: proposer.nickname, timezone: proposer.timezone },
+        { label: challenged.nickname, timezone: challenged.timezone },
+      ]) || 'No slots', inline: false },
       ...(notes ? [{ name: 'Notes', value: notes, inline: false }] : []),
     ]);
 
@@ -280,7 +283,10 @@ router.post('/proposals/:proposalId/confirm-slots', authMiddleware, async (req: 
       result.status === 'confirmed' ? 0x2ecc71 : 0xff0000,
       [
         ...(ranges.length > 0
-          ? [{ name: 'Confirmed Slots (UTC)', value: formatTimeRangesForDiscord(ranges), inline: false }]
+          ? [{ name: 'Confirmed Slots (each player timezone)', value: formatTimeRangesForDiscordByTimezone(ranges, [
+              { label: confirmer.nickname, timezone: confirmer.timezone },
+              { label: proposer.nickname, timezone: proposer.timezone },
+            ]), inline: false }]
           : []),
       ]
     );
@@ -318,6 +324,7 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
 
     const recipientId = newProposal.challenged_user_id;
     const actor = await getUserSummary(userId);
+    const challenged = await getUserSummary(recipientId);
     const ranges = groupSlotsIntoRanges(slot_datetimes);
     const message = buildNotificationMessage('counter', actor.nickname, ranges, notes);
 
@@ -332,7 +339,10 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
 
     await sendChallengeDiscord(result.proposalId, 'challenge_counter_proposal', '🔄 P2P Challenge Counter Proposal', 0x3498db, [
       { name: 'Action by', value: actor.nickname, inline: false },
-      { name: 'Slots (UTC)', value: formatTimeRangesForDiscord(ranges), inline: false },
+      { name: 'Slots (each player timezone)', value: formatTimeRangesForDiscordByTimezone(ranges, [
+        { label: actor.nickname, timezone: actor.timezone },
+        { label: challenged.nickname, timezone: challenged.timezone },
+      ]), inline: false },
       ...(notes ? [{ name: 'Notes', value: notes, inline: false }] : []),
     ]);
 
@@ -388,7 +398,10 @@ router.post('/proposals/:proposalId/cancel', authMiddleware, async (req: AuthReq
 
     await sendChallengeDiscord(proposalId, 'challenge_cancelled', discordTitle, 0xff0000, [
       ...(ranges.length > 0
-        ? [{ name: 'Cancelled Slots (UTC)', value: formatTimeRangesForDiscord(ranges), inline: false }]
+        ? [{ name: 'Cancelled Slots (each player timezone)', value: formatTimeRangesForDiscordByTimezone(ranges, [
+            { label: actor.nickname, timezone: actor.timezone },
+            { label: target.nickname, timezone: target.timezone },
+          ]), inline: false }]
         : []),
     ]);
 
@@ -451,8 +464,14 @@ router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, re
       discordTitle,
       0xffc107,
       [
-        { name: 'Previous Slots (UTC)', value: formatTimeRangesForDiscord(oldRanges), inline: false },
-        { name: 'New Slots (UTC)', value: formatTimeRangesForDiscord(newRanges), inline: false },
+        { name: 'Previous Slots (each player timezone)', value: formatTimeRangesForDiscordByTimezone(oldRanges, [
+          { label: updater.nickname, timezone: updater.timezone },
+          { label: challenged.nickname, timezone: challenged.timezone },
+        ]), inline: false },
+        { name: 'New Slots (each player timezone)', value: formatTimeRangesForDiscordByTimezone(newRanges, [
+          { label: updater.nickname, timezone: updater.timezone },
+          { label: challenged.nickname, timezone: challenged.timezone },
+        ]), inline: false },
         ...(notes ? [{ name: 'Notes', value: notes, inline: false }] : []),
       ]
     );

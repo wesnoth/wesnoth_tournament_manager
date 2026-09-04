@@ -9,6 +9,11 @@ export interface TimeRange {
   hours: string; // Formatted as "HH:MM-HH:MM"
 }
 
+export interface DiscordTimezoneEntry {
+  label: string;
+  timezone: string;
+}
+
 /**
  * Group contiguous 30-minute slots into time ranges
  * Handles slot datetimes and merges adjacent slots into continuous ranges
@@ -63,26 +68,49 @@ export function groupSlotsIntoRanges(slotDatetimes: string[]): TimeRange[] {
 export function formatTimeRangesForDiscord(ranges: TimeRange[]): string {
   if (ranges.length === 0) return 'No time slots';
 
-  const dateGrouped = new Map<string, TimeRange[]>();
-  
-  // Group by date (YYYY-MM-DD)
-  for (const range of ranges) {
-    const dateKey = range.start.toISOString().split('T')[0];
-    if (!dateGrouped.has(dateKey)) {
-      dateGrouped.set(dateKey, []);
-    }
-    dateGrouped.get(dateKey)!.push(range);
-  }
+  return formatTimeRangesForDiscordInTimezone(ranges, 'UTC');
+}
 
-  // Format each date group with bullets
-  const formatted: string[] = [];
-  for (const [dateStr, dateRanges] of dateGrouped.entries()) {
-    for (const range of dateRanges) {
-      formatted.push(`• ${dateStr} ${range.hours} UTC`);
-    }
-  }
+/**
+ * Format schedule ranges in one user's timezone.
+ * The stored slots are instants in UTC; formatting them from Date values keeps
+ * both the calendar day and the clock time correct when a timezone crosses
+ * midnight or daylight-saving boundaries.
+ */
+export function formatTimeRangesForDiscordInTimezone(ranges: TimeRange[], timezone: string): string {
+  if (ranges.length === 0) return 'No time slots';
 
-  return formatted.join('\n');
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  });
+  const formatParts = (date: Date): Record<string, string> => Object.fromEntries(
+    formatter.formatToParts(date).map((part) => [part.type, part.value])
+  );
+
+  return ranges.map((range) => {
+    const start = formatParts(range.start);
+    const end = formatParts(range.end);
+    const date = `${start.year}-${start.month}-${start.day}`;
+    const hours = `${start.hour}:${start.minute}-${end.hour}:${end.minute}`;
+    return `• ${date} ${hours} ${timezone}`;
+  }).join('\n');
+}
+
+/** Render one copy of the schedule for every participant's configured timezone. */
+export function formatTimeRangesForDiscordByTimezone(
+  ranges: TimeRange[],
+  entries: DiscordTimezoneEntry[]
+): string {
+  const timezoneEntries = entries.length > 0 ? entries : [{ label: 'UTC', timezone: 'UTC' }];
+  return timezoneEntries
+    .map(({ label, timezone }) => `**${label} (${timezone})**\n${formatTimeRangesForDiscordInTimezone(ranges, timezone || 'UTC')}`)
+    .join('\n\n');
 }
 
 /**

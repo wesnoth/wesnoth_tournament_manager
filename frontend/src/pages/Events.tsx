@@ -34,9 +34,21 @@ const getDateLocale = (language: string): string => {
     || 'en-US';
 };
 
-/** Format an event timestamp in the viewer's IANA timezone and language. */
-const formatEventDateTime = (datetime: string, timezone: string, locale: string): string =>
-  new Date(datetime).toLocaleString(locale, { timeZone: timezone });
+/** Format event timestamps with an unambiguous year-first date in the viewer's timezone. */
+const formatEventDateTime = (datetime: string, timezone: string): string => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(datetime));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+
+  return `${values.year}-${values.month}-${values.day} ${values.hour}:${values.minute}`;
+};
 
 /** Return the calendar date key for an event in the viewer's timezone. */
 const getEventDateKey = (datetime: string, timezone: string): string => {
@@ -477,7 +489,7 @@ const Events: React.FC = () => {
                       <td className="px-4 py-3">{event.title}</td>
                       <td className="px-4 py-3">{event.players.join(' vs ')}</td>
                       <td className="px-4 py-3">
-                        {formatEventDateTime(event.datetime, userTimezone, dateLocale)}
+                        {formatEventDateTime(event.datetime, userTimezone)}
                         {event.type === 'p2p' && event.raw?.slots && (
                           renderScheduleSlots(event.raw, userTimezone)
                         )}
@@ -555,7 +567,7 @@ const Events: React.FC = () => {
                       <h3 className="font-semibold text-gray-800 mt-1">{event.title}</h3>
                       <p className="text-sm text-gray-700 mt-1">{event.players.join(' vs ')}</p>
                       <p className="text-sm text-gray-600 mt-1">
-                        {formatEventDateTime(event.datetime, userTimezone, dateLocale)}
+                        {formatEventDateTime(event.datetime, userTimezone)}
                       </p>
                      {event.type === 'p2p' && event.raw?.slots && (
                        renderScheduleSlots(event.raw, userTimezone)

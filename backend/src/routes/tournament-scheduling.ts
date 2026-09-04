@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { query } from '../config/database.js';
 import { authMiddleware, AuthRequest, optionalAuthMiddleware } from '../middleware/auth.js';
 import { sendDiscordNotification, storeNotificationForUsers } from '../services/discordNotificationService.js';
-import { groupSlotsIntoRanges, formatTimeRangesForDiscord, buildNotificationMessage } from '../utils/slotGrouping.js';
+import { groupSlotsIntoRanges, formatTimeRangesForDiscord, formatTimeRangesForDiscordByTimezone, buildNotificationMessage } from '../utils/slotGrouping.js';
 import {
   createSeriesProposal,
   getSeriesProposal,
@@ -78,7 +78,7 @@ const notifySeriesProposal = async (
     `SELECT tournaments.tournament_mode, tournaments.name AS tournament_name,
             entries.entry_type, entries.participant_id, entries.team_id,
             tp.user_id, tp.team_id AS participant_team_id,
-            COALESCE(ue.nickname, ue.id) AS display_name, ue.discord_id
+            COALESCE(ue.nickname, ue.id) AS display_name, ue.discord_id, ue.timezone
      FROM tournament_series_slots slots
      JOIN tournament_entries entries ON entries.id = slots.resolved_entry_id
      JOIN tournament_phase_rounds rounds ON rounds.id = (SELECT round_id FROM tournament_series WHERE id = ?)
@@ -130,7 +130,14 @@ const notifySeriesProposal = async (
   }
 
   const ranges = groupSlotsIntoRanges(slotDatetimes);
-  const formattedRanges = formatTimeRangesForDiscord(ranges);
+  const formattedRanges = formatTimeRangesForDiscordByTimezone(ranges, [
+    ...new Map(
+      rows.map((row: any) => [row.user_id, {
+        label: row.display_name || 'Player',
+        timezone: row.timezone || 'UTC',
+      }])
+    ).values(),
+  ]);
   const notificationMessage = buildNotificationMessage('proposal', proposerName, ranges, notes);
   const actorUserName = proposerRow?.display_name || proposerName;
 
@@ -171,7 +178,7 @@ const notifySeriesParticipants = async (
 ): Promise<void> => {
   const context = await query(
     `SELECT phases.tournament_id, tournaments.name AS tournament_name,
-            tp.user_id, COALESCE(ue.nickname, ue.id) AS display_name, ue.discord_id
+            tp.user_id, COALESCE(ue.nickname, ue.id) AS display_name, ue.discord_id, ue.timezone
      FROM tournament_series_slots slots
      JOIN tournament_series series ON series.id = slots.series_id
      JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
@@ -199,7 +206,14 @@ const notifySeriesParticipants = async (
     [proposalId]
   );
   const ranges = groupSlotsIntoRanges((slots.rows || []).map((slot: any) => slot.slot_datetime));
-  const formattedRanges = formatTimeRangesForDiscord(ranges);
+  const formattedRanges = formatTimeRangesForDiscordByTimezone(ranges, [
+    ...new Map(
+      rows.map((row: any) => [row.user_id, {
+        label: row.display_name || 'Player',
+        timezone: row.timezone || 'UTC',
+      }])
+    ).values(),
+  ]);
   const actorName = actor?.display_name || 'Player';
   const recipientName = recipients[0]?.display_name || 'Opponent';
   const discordIds = recipients.map((row: any) => row.discord_id).filter(Boolean);
@@ -264,7 +278,7 @@ const notifySeriesRejection = async (
   const proposal = result.rows[0];
   const usersResult = await query(
     `SELECT tp.user_id, tp.team_id,
-            COALESCE(ue.nickname, ue.id) AS display_name, ue.discord_id
+            COALESCE(ue.nickname, ue.id) AS display_name, ue.discord_id, ue.timezone
      FROM tournament_series_slots slots
      JOIN tournament_entries entries ON entries.id = slots.resolved_entry_id
      JOIN tournament_participants tp
@@ -283,7 +297,14 @@ const notifySeriesRejection = async (
     [proposalId]
   );
   const ranges = groupSlotsIntoRanges((slotsResult.rows || []).map((slot: any) => slot.slot_datetime));
-  const formattedRanges = formatTimeRangesForDiscord(ranges);
+  const formattedRanges = formatTimeRangesForDiscordByTimezone(ranges, [
+    ...new Map(
+      users.map((user: any) => [user.user_id, {
+        label: user.display_name || 'Player',
+        timezone: user.timezone || 'UTC',
+      }])
+    ).values(),
+  ]);
   const rejectingName = rejectingUser?.display_name || 'Player';
   const proposerName = proposerUsers[0].display_name || 'Player';
   const proposerDiscordIds = proposerUsers

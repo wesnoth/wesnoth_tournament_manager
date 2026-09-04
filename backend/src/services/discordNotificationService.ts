@@ -31,7 +31,7 @@ interface DiscordScheduleNotificationData {
   toTeamMembers?: string[];
   /** Discord user IDs that should receive a direct mention. */
   discordIds?: string[];
-  /** Current formatted UTC time ranges produced by slotGrouping utilities. */
+  /** Formatted time ranges rendered once for each participant's timezone. */
   proposedTimeRanges?: string;
   /** Optional user-authored message attached to the proposal. */
   messageExtra?: string;
@@ -112,7 +112,7 @@ function buildScheduleProposalEmbed(
   appendActorAndTargetFields(fields, data);
 
   if (data.proposedTimeRanges) {
-    fields.push({ name: '📅 Proposed Time Slots (UTC)', value: data.proposedTimeRanges, inline: false });
+    fields.push({ name: '📅 Proposed Time Slots (participant timezones)', value: data.proposedTimeRanges, inline: false });
   }
 
   if (data.messageExtra) {
@@ -148,7 +148,7 @@ function buildScheduleConfirmationEmbed(
   appendActorAndTargetFields(fields, data);
 
   if (data.proposedTimeRanges) {
-    fields.push({ name: '📅 Confirmed Time Slot (UTC)', value: data.proposedTimeRanges, inline: false });
+    fields.push({ name: '📅 Confirmed Time Slot (participant timezones)', value: data.proposedTimeRanges, inline: false });
   }
 
   return {
@@ -177,7 +177,7 @@ function buildScheduleChangedEmbed(
   appendActorAndTargetFields(fields, data);
 
   if (data.proposedTimeRanges) {
-    fields.push({ name: '📅 New Proposed Time Slots (UTC)', value: data.proposedTimeRanges, inline: false });
+    fields.push({ name: '📅 New Proposed Time Slots (participant timezones)', value: data.proposedTimeRanges, inline: false });
   }
 
   return {
@@ -207,7 +207,7 @@ function buildScheduleCancelledEmbed(
   appendActorAndTargetFields(fields, data);
 
   if (data.proposedTimeRanges) {
-    fields.push({ name: '📅 Cancelled Proposal Time Slots (UTC)', value: data.proposedTimeRanges, inline: false });
+    fields.push({ name: '📅 Cancelled Proposal Time Slots (participant timezones)', value: data.proposedTimeRanges, inline: false });
   }
 
   return {
@@ -236,7 +236,7 @@ function buildScheduleRejectionEmbed(
   appendActorAndTargetFields(fields, data);
 
   if (data.proposedTimeRanges) {
-    fields.push({ name: '📅 Rejected Proposal Time Slots (UTC)', value: data.proposedTimeRanges, inline: false });
+    fields.push({ name: '📅 Rejected Proposal Time Slots (participant timezones)', value: data.proposedTimeRanges, inline: false });
   }
 
   return {
