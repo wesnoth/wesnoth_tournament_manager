@@ -4,12 +4,13 @@ export interface SchedulingConflict {
   slot_datetime: Date | string;
   source: 'p2p' | 'tournament';
   proposal_id: string;
+  status: 'pending' | 'confirmed';
 }
 
 /**
- * Find slots reserved by active P2P or tournament proposals involving any of
- * the supplied players. An optional proposal ID excludes the record currently
- * being edited or answered.
+ * Find slots used by active P2P or tournament proposals involving any of the
+ * supplied players. Pending slots are returned for visual feedback, while only
+ * confirmed slots are treated as hard reservations by assertSlotsAreAvailable.
  */
 export const getSchedulingConflictsForUsers = async (
   userIds: string[],
@@ -27,7 +28,7 @@ export const getSchedulingConflictsForUsers = async (
   ];
 
   const result = await query(
-    `SELECT DISTINCT s.slot_datetime, p.challenge_mode AS source, p.id AS proposal_id
+    `SELECT DISTINCT s.slot_datetime, p.challenge_mode AS source, p.id AS proposal_id, s.status
      FROM match_schedule_proposals p
      JOIN match_schedule_slots s ON s.proposal_id = p.id
      WHERE p.status IN ('pending', 'confirmed', 'active')
@@ -53,7 +54,8 @@ export const assertSlotsAreAvailable = async (
   slotDatetimes: string[],
   excludedProposalId?: string
 ): Promise<void> => {
-  const conflicts = await getSchedulingConflictsForUsers(userIds, excludedProposalId);
+  const conflicts = (await getSchedulingConflictsForUsers(userIds, excludedProposalId))
+    .filter((conflict) => conflict.status === 'confirmed');
   const occupiedTimes = new Set(
     conflicts.map((conflict) => new Date(conflict.slot_datetime).getTime())
   );

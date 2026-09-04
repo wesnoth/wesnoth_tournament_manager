@@ -99,6 +99,7 @@ export default function ScheduleProposalModal({
   const [error, setError] = useState('');
   const [participants, setParticipants] = useState<Participant[]>(initialParticipants || []);
   const [reservedSlots, setReservedSlots] = useState<Record<string, 'p2p' | 'tournament'>>({});
+  const [pendingSlots, setPendingSlots] = useState<Record<string, 'p2p' | 'tournament'>>({});
   const [viewingTimezone, setViewingTimezone] = useState(initialViewingTimezone || 'UTC');
   const [proposal, setProposal] = useState<ProposalData | null>(initialProposal || null);
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
@@ -140,10 +141,12 @@ export default function ScheduleProposalModal({
     
     if (initialProposal) {
       setProposal(initialProposal);
+      setNotes(initialProposal.notes || '');
     } else {
       // Clear proposal data when opening modal for new schedule (no existing proposal)
       setProposal(null);
       setSelectedSlots(new Set());
+      setNotes('');
     }
   }, [isOpen, initialParticipants, initialProposal, initialViewingTimezone, initialDisplayDateStart, initialScrollToHour]);
 
@@ -157,15 +160,24 @@ export default function ScheduleProposalModal({
       .getOccupiedSlots(participants.map((participant) => participant.id), proposal?.id)
       .then((response) => {
         if (cancelled) return;
-        const next: Record<string, 'p2p' | 'tournament'> = {};
+        const nextReserved: Record<string, 'p2p' | 'tournament'> = {};
+        const nextPending: Record<string, 'p2p' | 'tournament'> = {};
         for (const conflict of response.conflicts || []) {
-          next[new Date(conflict.slot_datetime).toISOString()] = conflict.source;
+          const slotKey = new Date(conflict.slot_datetime).toISOString();
+          if (conflict.status === 'confirmed') nextReserved[slotKey] = conflict.source;
+          else nextPending[slotKey] = conflict.source;
         }
-        setReservedSlots(next);
+        setReservedSlots(nextReserved);
+        setPendingSlots(nextPending);
+        setSelectedSlots((previous) => new Set([...previous].filter((slot) => !nextReserved[slot])));
+        setConfirmedSlotIds((previous) => new Set([...previous].filter((slot) => !nextReserved[slot])));
       })
       .catch((error) => {
         console.error('Error loading occupied scheduling slots:', error);
-        if (!cancelled) setReservedSlots({});
+        if (!cancelled) {
+          setReservedSlots({});
+          setPendingSlots({});
+        }
       });
 
     return () => {
@@ -249,28 +261,28 @@ export default function ScheduleProposalModal({
 
       const slotArray = Array.from(selectedSlots);
       const response = mode === 'edit_proposal'
-        ? await tournamentSchedulingService.modifyProposal(proposal!.id, slotArray, notes || undefined)
+        ? await tournamentSchedulingService.modifyProposal(proposal!.id, slotArray, notes)
         : mode === 'counter'
-        ? await tournamentSchedulingService.counterPropose(proposal!.id, slotArray, notes || undefined)
+        ? await tournamentSchedulingService.counterPropose(proposal!.id, slotArray, notes)
         : isSeries
         ? await tournamentSchedulingService.proposeSeriesSlots(
             tournamentId,
             targetId!,
             slotArray,
-            notes || undefined
+            notes
           )
         : isRoundMatch
         ? await tournamentSchedulingService.proposeRoundMatchSlots(
             tournamentId,
             targetId!,
             slotArray,
-            notes || undefined
+            notes
           )
         : await tournamentSchedulingService.proposeMatchSlots(
             tournamentId,
             targetId!,
             slotArray,
-            notes || undefined
+            notes
           );
 
       if (response.success) {
@@ -327,6 +339,12 @@ export default function ScheduleProposalModal({
       }
     } catch (err) {
       console.error('Error confirming slots:', err);
+      if ((err as any).response?.status === 409) {
+        // Another proposal was confirmed while this modal was open. Refresh
+        // the tournament state so the user must review and confirm again.
+        onSuccess?.();
+        return;
+      }
       setError('Failed to confirm slots');
     } finally {
       setLoading(false);
@@ -512,6 +530,7 @@ export default function ScheduleProposalModal({
                   proposedSlots={proposedSlotDatetimes}
                   confirmedSlots={confirmedSlotsMap}
                   reservedSlots={reservedSlots}
+                  pendingSlots={pendingSlots}
                   viewingTimezone={viewingTimezone}
                   scrollToHour={scrollToHour}
                   confirmMode={mode === 'confirm'}

@@ -5,8 +5,18 @@ export interface GroupedTimeRange {
 }
 
 /** Group adjacent 30-minute UTC slots into ranges for the scheduling grid. */
-export const groupSlotsIntoRanges = (slotDatetimes: string[]): GroupedTimeRange[] => {
+export const groupSlotsIntoRanges = (slotDatetimes: string[], timezone?: string): GroupedTimeRange[] => {
   if (slotDatetimes.length === 0) return [];
+
+  const formatHours = (start: Date, end: Date): string => {
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+      ...(timezone ? { timeZone: timezone } : {}),
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    });
+    return `${formatter.format(start)}-${formatter.format(end)}`;
+  };
 
   const sorted = slotDatetimes
     .map(dt => new Date(dt))
@@ -26,7 +36,7 @@ export const groupSlotsIntoRanges = (slotDatetimes: string[]): GroupedTimeRange[
     } else {
       const endTime = new Date(currentEnd);
       endTime.setMinutes(endTime.getMinutes() + 30);
-      const hours = `${String(currentStart.getHours()).padStart(2, '0')}:${String(currentStart.getMinutes()).padStart(2, '0')}-${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}`;
+      const hours = formatHours(currentStart, endTime);
       ranges.push({ start: currentStart, end: endTime, hours });
       currentStart = current;
       currentEnd = current;
@@ -35,7 +45,7 @@ export const groupSlotsIntoRanges = (slotDatetimes: string[]): GroupedTimeRange[
 
   const endTime = new Date(currentEnd);
   endTime.setMinutes(endTime.getMinutes() + 30);
-  const hours = `${String(currentStart.getHours()).padStart(2, '0')}:${String(currentStart.getMinutes()).padStart(2, '0')}-${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}`;
+  const hours = formatHours(currentStart, endTime);
   ranges.push({ start: currentStart, end: endTime, hours });
 
   return ranges;

@@ -11,12 +11,12 @@ export const p2pChallengesService = {
   proposeChallenge: async (
     challengedUserId: string,
     slotDatetimes: string[],
-    notes?: string
+    notes?: string | null
   ) => {
     const response = await api.post('/challenges/proposals', {
       challenged_user_id: challengedUserId,
       slot_datetimes: slotDatetimes,
-      ...(notes && { notes }),
+      notes: notes ?? null,
       visibility: 'public',
     });
     return response.data;
@@ -38,11 +38,11 @@ export const p2pChallengesService = {
   counterPropose: async (
     proposalId: string,
     slotDatetimes: string[],
-    notes?: string
+    notes?: string | null
   ) => {
     const response = await api.post(`/challenges/proposals/${proposalId}/counter-propose`, {
       slot_datetimes: slotDatetimes,
-      ...(notes && { notes }),
+      notes: notes ?? null,
       visibility: 'public',
     });
     return response.data;
@@ -62,12 +62,12 @@ export const p2pChallengesService = {
   updateProposal: async (
     proposalId: string,
     slotDatetimes: string[],
-    notes?: string
+    notes?: string | null
   ) => {
     const response = await api.put(`/challenges/proposals/${proposalId}`, {
       slot_datetimes: slotDatetimes,
       // Send null when the field is cleared so the backend removes old notes.
-      notes: notes || null,
+      notes: notes ?? null,
     });
     return response.data;
   },

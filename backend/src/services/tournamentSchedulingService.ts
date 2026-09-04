@@ -521,6 +521,21 @@ export const confirmPartialSlots = async (
   for (const slotId of confirmedSlotIds) {
     if (!slots.some((slot: any) => slot.id === slotId)) throw new Error('Slot is not part of this proposal');
   }
+  const selectedSlots = slots.filter((slot: any) => slotIds.has(slot.id) && slot.status === 'pending');
+  const participantsResult = await query(
+    `SELECT DISTINCT participants.user_id
+     FROM tournament_series_slots series_slots
+     JOIN tournament_entries entries ON entries.id = series_slots.resolved_entry_id
+     JOIN tournament_participants participants
+       ON participants.id = entries.participant_id OR participants.team_id = entries.team_id
+     WHERE series_slots.series_id = ? AND participants.participation_status = 'accepted'`,
+    [proposal.tournament_series_id]
+  );
+  await assertSlotsAreAvailable(
+    (participantsResult.rows || []).map((participant: any) => participant.user_id),
+    selectedSlots.map((slot: any) => new Date(slot.slot_datetime).toISOString()),
+    proposalId
+  );
   for (const slot of slots) {
     if (slot.status === 'pending') {
       await query('UPDATE match_schedule_slots SET status = ? WHERE id = ?', [slotIds.has(slot.id) ? 'confirmed' : 'rejected', slot.id]);
@@ -614,7 +629,7 @@ export const rejectProposal = async (proposalId: string, userId: string, notes?:
   if (proposal.proposed_by_user_id === userId) throw new Error('Proposer cannot reject their own proposal');
   if (!['pending', 'active'].includes(proposal.status)) throw new Error('Proposal is no longer active');
   await query(
-    `UPDATE match_schedule_proposals SET status = 'rejected', notes = COALESCE(?, notes), updated_at = NOW()
+    `UPDATE match_schedule_proposals SET status = 'rejected', notes = ?, updated_at = NOW()
      WHERE id = ?`,
     [notes || null, proposalId]
   );

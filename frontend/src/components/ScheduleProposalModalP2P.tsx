@@ -46,8 +46,15 @@ interface ProposalData {
   confirmations: Array<{ user_id: string; confirmed_at: string }>;
 }
 
+/** Return only the slots that represent the proposal's current schedule. */
+const getVisibleProposalSlots = (proposal: ProposalData | null) => {
+  if (!proposal?.slots) return [];
+  const visibleStatus = proposal.status === 'confirmed' ? 'confirmed' : 'pending';
+  return proposal.slots.filter((slot) => slot.status === visibleStatus);
+};
+
 /** Defer range grouping so large slot selections do not block grid interaction. */
-const useAsyncGroupedRanges = (slotDatetimes: string[]): GroupedTimeRange[] => {
+const useAsyncGroupedRanges = (slotDatetimes: string[], timezone: string): GroupedTimeRange[] => {
   const deferredSlotDatetimes = useDeferredValue(slotDatetimes);
   const [ranges, setRanges] = useState<GroupedTimeRange[]>([]);
 
@@ -56,7 +63,7 @@ const useAsyncGroupedRanges = (slotDatetimes: string[]): GroupedTimeRange[] => {
 
     const compute = () => {
       if (cancelled) return;
-      setRanges(groupSlotsIntoRanges(deferredSlotDatetimes));
+      setRanges(groupSlotsIntoRanges(deferredSlotDatetimes, timezone));
     };
 
     const win = window as Window & {
@@ -79,7 +86,7 @@ const useAsyncGroupedRanges = (slotDatetimes: string[]): GroupedTimeRange[] => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [deferredSlotDatetimes]);
+  }, [deferredSlotDatetimes, timezone]);
 
   return ranges;
 };
@@ -104,6 +111,7 @@ export default function ScheduleProposalModalP2P({
   const [error, setError] = useState('');
   const [participants, setParticipants] = useState<Participant[]>(initialParticipants || []);
   const [reservedSlots, setReservedSlots] = useState<Record<string, 'p2p' | 'tournament'>>({});
+  const [pendingSlots, setPendingSlots] = useState<Record<string, 'p2p' | 'tournament'>>({});
   const [viewingTimezone, setViewingTimezone] = useState(initialViewingTimezone || 'UTC');
   const [proposal, setProposal] = useState<ProposalData | null>(initialProposal || null);
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
@@ -162,19 +170,26 @@ export default function ScheduleProposalModalP2P({
       .getOccupiedSlots(participants.map((participant) => participant.id), proposal?.id)
       .then((response) => {
         if (cancelled) return;
-        const next: Record<string, 'p2p' | 'tournament'> = {};
+        const nextReserved: Record<string, 'p2p' | 'tournament'> = {};
+        const nextPending: Record<string, 'p2p' | 'tournament'> = {};
         for (const conflict of response.conflicts || []) {
-          next[new Date(conflict.slot_datetime).toISOString()] = conflict.source;
+          const slotKey = new Date(conflict.slot_datetime).toISOString();
+          if (conflict.status === 'confirmed') nextReserved[slotKey] = conflict.source;
+          else nextPending[slotKey] = conflict.source;
         }
-        setReservedSlots(next);
-        // A suggested slot may already be occupied by another proposal. Drop
-        // that suggestion once conflicts arrive so the proposer can submit a
-        // different free slot instead of being left with an invalid selection.
-        setSelectedSlots((previous) => new Set([...previous].filter((slot) => !next[slot])));
+        setPendingSlots(nextPending);
+        setReservedSlots(nextReserved);
+        // A suggested slot may already be confirmed by another proposal. Drop
+        // only those suggestions; pending proposals remain selectable.
+        setSelectedSlots((previous) => new Set([...previous].filter((slot) => !nextReserved[slot])));
+        setConfirmedSlotIds((previous) => new Set([...previous].filter((slot) => !nextReserved[slot])));
       })
       .catch((error) => {
         console.error('Error loading occupied scheduling slots:', error);
-        if (!cancelled) setReservedSlots({});
+        if (!cancelled) {
+          setReservedSlots({});
+          setPendingSlots({});
+        }
       });
 
     return () => {
@@ -193,7 +208,7 @@ export default function ScheduleProposalModalP2P({
         setMode('edit_proposal');
         // Pre-fill with current slots so proposer can modify them
         if (proposal.slots) {
-          const proposedSlotDatetimes = proposal.slots.map(s => s.slot_datetime);
+          const proposedSlotDatetimes = getVisibleProposalSlots(proposal).map(s => s.slot_datetime);
           setSelectedSlots(new Set(proposedSlotDatetimes));
         } else {
           setSelectedSlots(new Set());
@@ -207,7 +222,7 @@ export default function ScheduleProposalModalP2P({
         setMode('confirm');
         // Pre-select proposed slots for opponent to confirm or modify
         if (proposal.slots) {
-          const proposedSlotDatetimes = proposal.slots.map(s => s.slot_datetime);
+          const proposedSlotDatetimes = getVisibleProposalSlots(proposal).map(s => s.slot_datetime);
           // Initialize confirmedSlotIds with all proposed slots (all checked by default)
           setConfirmedSlotIds(new Set(proposedSlotDatetimes));
           setHasStartedConfirmationSelection(false);
@@ -287,7 +302,7 @@ export default function ScheduleProposalModalP2P({
         const response = await p2pChallengesService.counterPropose(
           proposal.id,
           slotArray,
-          notes || undefined
+          notes
         );
         if (response.success || response.proposalId) {
           onSuccess?.();
@@ -302,7 +317,7 @@ export default function ScheduleProposalModalP2P({
         const response = await p2pChallengesService.updateProposal(
           proposal.id,
           slotArray,
-          notes || undefined
+          notes
         );
         if (response.success) {
           onSuccess?.();
@@ -313,7 +328,7 @@ export default function ScheduleProposalModalP2P({
         const response = await p2pChallengesService.proposeChallenge(
           opponentId,
           slotArray,
-          notes || undefined
+          notes
         );
 
         if (response.success || response.proposalId) {
@@ -363,6 +378,12 @@ export default function ScheduleProposalModalP2P({
       }
     } catch (err) {
       console.error('Error confirming slots:', err);
+      if ((err as any).response?.status === 409) {
+        // Another proposal was confirmed while this modal was open. Refresh
+        // the surrounding data so the user must review and confirm again.
+        onSuccess?.();
+        return;
+      }
       setError('Failed to confirm slots');
     } finally {
       setLoading(false);
@@ -403,15 +424,16 @@ export default function ScheduleProposalModalP2P({
     () => (mode === 'confirm' ? Array.from(confirmedSlotIds) : Array.from(selectedSlots)),
     [mode, confirmedSlotIds, selectedSlots]
   );
-  const selectedRanges = useAsyncGroupedRanges(selectedRangeDatetimes);
+  const selectedRanges = useAsyncGroupedRanges(selectedRangeDatetimes, viewingTimezone);
+  const visibleProposalSlots = useMemo(() => getVisibleProposalSlots(proposal), [proposal]);
   const proposalRanges = useMemo(
-    () => (proposal?.slots?.length ? groupSlotsIntoRanges(proposal.slots.map(s => s.slot_datetime)) : []),
-    [proposal]
+    () => (visibleProposalSlots.length ? groupSlotsIntoRanges(visibleProposalSlots.map(s => s.slot_datetime), viewingTimezone) : []),
+    [visibleProposalSlots, viewingTimezone]
   );
   const proposalStatusesByRange = useMemo(
     () =>
       proposalRanges.map((range) =>
-        (proposal?.slots || [])
+        visibleProposalSlots
           .filter(s => {
             const slotDate = new Date(s.slot_datetime);
             return slotDate >= range.start && slotDate < range.end;
@@ -419,7 +441,7 @@ export default function ScheduleProposalModalP2P({
           .map(s => s.status)
           .join(', ')
       ),
-    [proposal, proposalRanges]
+    [visibleProposalSlots, proposalRanges]
   );
 
   // Keep these hooks before the closed-state return so the hook order remains
@@ -431,8 +453,8 @@ export default function ScheduleProposalModalP2P({
   }, [displayDateStart]);
 
   const proposedSlotDatetimes = useMemo(
-    () => proposal?.slots?.map((slot) => slot.slot_datetime) || [],
-    [proposal]
+    () => visibleProposalSlots.map((slot) => slot.slot_datetime),
+    [visibleProposalSlots]
   );
   const confirmedSlotsMap = useMemo<Record<string, string[]>>(() => ({}), []);
   const minimumDate = new Intl.DateTimeFormat('en-CA', {
@@ -509,6 +531,7 @@ export default function ScheduleProposalModalP2P({
                   proposedSlots={mode === 'edit_proposal' && !hasStartedEditSelection ? proposedSlotDatetimes : []}
                   confirmedSlots={confirmedSlotsMap}
                   reservedSlots={reservedSlots}
+                  pendingSlots={pendingSlots}
                   viewingTimezone={viewingTimezone}
                   scrollToHour={scrollToHour}
                   confirmMode={mode === 'confirm'}
@@ -529,10 +552,10 @@ export default function ScheduleProposalModalP2P({
                     {selectedRanges.map((range, idx) => (
                       <div key={idx} className={`text-sm p-2 bg-white rounded border ${mode === 'confirm' ? 'text-green-800 border-green-100' : 'text-blue-800 border-blue-100'}`}>
                         <div className="font-semibold">
-                          {range.start.toLocaleDateString(i18n.language || 'en-US')} - {range.hours}
+                          {range.start.toLocaleDateString(i18n.language || 'en-US', { timeZone: viewingTimezone })} - {range.hours}
                         </div>
                         <div className="text-xs text-gray-600">
-                          UTC: {range.start.toISOString()} to {range.end.toISOString()}
+                          {viewingTimezone}
                         </div>
                       </div>
                     ))}
@@ -545,21 +568,21 @@ export default function ScheduleProposalModalP2P({
                 <div className="p-3 bg-yellow-50 border border-yellow-200 rounded">
                   <p className="text-sm font-semibold text-yellow-900">Active Proposal</p>
                   <p className="text-xs text-yellow-800 mt-1">
-                    Proposed {new Date(proposal.proposed_at).toLocaleString()}
+                    Proposed {new Date(proposal.proposed_at).toLocaleString(i18n.language || 'en-US', { timeZone: viewingTimezone })}
                   </p>
                   {proposal.notes && (
                     <p className="text-xs text-yellow-800 mt-2 italic">
                       Notes: {proposal.notes}
                     </p>
                   )}
-                  {proposal.slots && proposal.slots.length > 0 && (
+                  {visibleProposalSlots.length > 0 && (
                     <div className="mt-3">
                       <p className="text-xs font-semibold text-yellow-900 mb-2">Proposed Slots:</p>
                       <div className="space-y-1">
                         {proposalRanges.map((range, idx) => (
                           <div key={idx} className="text-xs text-yellow-800 bg-white rounded px-2 py-1 border border-yellow-100">
                             <div className="font-semibold">
-                              {range.start.toLocaleDateString(i18n.language || 'en-US')} - {range.hours}
+                              {range.start.toLocaleDateString(i18n.language || 'en-US', { timeZone: viewingTimezone })} - {range.hours}
                             </div>
                             <div className="text-xs text-gray-600">
                               ({proposalStatusesByRange[idx]})
