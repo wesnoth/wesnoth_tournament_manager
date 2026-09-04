@@ -327,6 +327,7 @@ const TournamentDetail: React.FC = () => {
   const [rulesEditMode, setRulesEditMode] = useState(false);
   const [rulesDraft, setRulesDraft] = useState('');
   const [rulesSaving, setRulesSaving] = useState(false);
+  const rulesEditorRef = useRef<HTMLTextAreaElement>(null);
   const [confirmMatchData, setConfirmMatchData] = useState<any>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [matchDetailsModal, setMatchDetailsModal] = useState<{ isOpen: boolean; match: TournamentMatch | null }>({ isOpen: false, match: null });
@@ -1062,6 +1063,14 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
     }
   };
 
+  useEffect(() => {
+    if (!rulesEditMode || !rulesEditorRef.current) return;
+
+    // Move the editor into view after it mounts so the organizer can start typing immediately.
+    rulesEditorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    rulesEditorRef.current.focus({ preventScroll: true });
+  }, [rulesEditMode]);
+
   const handleAcceptParticipant = async (participantId: string) => {
     try {
       await tournamentService.acceptParticipant(id!, participantId);
@@ -1726,7 +1735,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
             <div>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <strong>{t('tournament.rules_content', 'Tournament Rules')}:</strong>
-                <label className="flex items-center gap-2 text-sm text-gray-700">
+                <div className="flex items-center gap-2 text-sm text-gray-700">
                   <span>{t('tournament.rules_history', 'Rules history')}</span>
                   <select
                     data-help-id="option-tournament-rules-history"
@@ -1744,7 +1753,21 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                       </option>
                     ))}
                   </select>
-                </label>
+                  {isOrganizer && !isTournamentCompleted && !rulesEditMode && (
+                    <button
+                      data-help-id="action-edit-tournament-rules"
+                      type="button"
+                      onClick={() => {
+                        setRulesDraft(tournament.rules_content || tournament.description || '');
+                        setSelectedRulesVersion(null);
+                        setRulesEditMode(true);
+                      }}
+                      className="rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      {t('tournament.edit_rules', 'Edit Rules')}
+                    </button>
+                  )}
+                </div>
               </div>
               {selectedRules && (
                 <p className="mt-1 text-xs text-gray-500">
@@ -1763,6 +1786,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                       </span>
                       <textarea
                         data-help-id="field-tournament-rules-live-edit"
+                        ref={rulesEditorRef}
                         value={rulesDraft}
                         onChange={(event) => setRulesDraft(event.target.value)}
                         rows={12}
@@ -1969,19 +1993,6 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
         {/* Organizer Controls - Right side */}
         {isOrganizer && !editMode && (
           <div className="flex flex-wrap gap-3">
-            {!isTournamentCompleted && (
-              <button
-                data-help-id="action-edit-tournament-rules"
-                onClick={() => {
-                  setRulesDraft(tournament.rules_content || tournament.description || '');
-                  setSelectedRulesVersion(null);
-                  setRulesEditMode(true);
-                }}
-                className="px-6 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 transition-colors"
-              >
-                {t('tournament.edit_rules', 'Edit Rules')}
-              </button>
-            )}
             {!['prepared', 'in_progress', 'finished', 'completed', 'complete'].includes(tournament.status) && (
               <button 
                 data-help-id="action-edit-tournament"
