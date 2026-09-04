@@ -50,6 +50,18 @@ const formatEventDateTime = (datetime: string, timezone: string): string => {
   return `${values.year}-${values.month}-${values.day} ${values.hour}:${values.minute}`;
 };
 
+/** Format only the date when the event renders its time range separately. */
+const formatEventDate = (datetime: string, timezone: string): string => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(datetime));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+};
+
 /** Return the calendar date key for an event in the viewer's timezone. */
 const getEventDateKey = (datetime: string, timezone: string): string => {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -245,11 +257,26 @@ const Events: React.FC = () => {
       return null;
     }
 
-    const slots = proposal.slots;
+    // Only show the schedule represented by the proposal's current state.
+    // Rejected alternatives must not remain visible after a partial answer.
+    const visibleStatuses = proposal.status === 'confirmed'
+      ? new Set(['confirmed'])
+      : proposal.status === 'pending'
+        ? new Set(['pending'])
+        : new Set(['pending', 'confirmed']);
+    const slots = proposal.slots.filter((slot: any) => {
+      const timestamp = new Date(slot.slot_datetime).getTime();
+      return Number.isFinite(timestamp) && visibleStatuses.has(slot.status);
+    });
+    if (slots.length === 0) return null;
 
-    // Sort and group confirmed slots into ranges
+    // Sort and group contiguous half-hour slots into readable ranges.
     const sortedSlots = slots
-      .map((s: any) => ({ ...s, dateObj: new Date(s.slot_datetime) }))
+      .map((s: any) => ({
+        ...s,
+        dateObj: new Date(s.slot_datetime),
+        durationMinutes: Number(s.slot_duration_minutes) || 30,
+      }))
       .sort((a: any, b: any) => a.dateObj.getTime() - b.dateObj.getTime());
 
     // Group contiguous slots (30-min intervals)
@@ -260,21 +287,29 @@ const Events: React.FC = () => {
 
       for (let i = 1; i < sortedSlots.length; i++) {
         const current = sortedSlots[i].dateObj;
-        const prevEnd = new Date(currentEnd.getTime() + 30 * 60 * 1000); // Add 30 min
+        const previousSlot = sortedSlots[i - 1];
+        const prevEnd = new Date(
+          previousSlot.dateObj.getTime() + previousSlot.durationMinutes * 60 * 1000
+        );
 
         if (current.getTime() === prevEnd.getTime()) {
           // Contiguous - extend current range
           currentEnd = current;
         } else {
           // Gap found - save range and start new one
-          const endTime = new Date(currentEnd.getTime() + 30 * 60 * 1000);
+          const endTime = new Date(
+            previousSlot.dateObj.getTime() + previousSlot.durationMinutes * 60 * 1000
+          );
           ranges.push({ start: currentStart, end: endTime });
           currentStart = current;
           currentEnd = current;
         }
       }
       // Add last range
-      const endTime = new Date(currentEnd.getTime() + 30 * 60 * 1000);
+      const lastSlot = sortedSlots[sortedSlots.length - 1];
+      const endTime = new Date(
+        lastSlot.dateObj.getTime() + lastSlot.durationMinutes * 60 * 1000
+      );
       ranges.push({ start: currentStart, end: endTime });
     }
 
@@ -489,7 +524,9 @@ const Events: React.FC = () => {
                       <td className="px-4 py-3">{event.title}</td>
                       <td className="px-4 py-3">{event.players.join(' vs ')}</td>
                       <td className="px-4 py-3">
-                        {formatEventDateTime(event.datetime, userTimezone)}
+                        {event.type === 'p2p'
+                          ? formatEventDate(event.datetime, userTimezone)
+                          : formatEventDateTime(event.datetime, userTimezone)}
                         {event.type === 'p2p' && event.raw?.slots && (
                           renderScheduleSlots(event.raw, userTimezone)
                         )}
@@ -567,7 +604,9 @@ const Events: React.FC = () => {
                       <h3 className="font-semibold text-gray-800 mt-1">{event.title}</h3>
                       <p className="text-sm text-gray-700 mt-1">{event.players.join(' vs ')}</p>
                       <p className="text-sm text-gray-600 mt-1">
-                        {formatEventDateTime(event.datetime, userTimezone)}
+                        {event.type === 'p2p'
+                          ? formatEventDate(event.datetime, userTimezone)
+                          : formatEventDateTime(event.datetime, userTimezone)}
                       </p>
                      {event.type === 'p2p' && event.raw?.slots && (
                        renderScheduleSlots(event.raw, userTimezone)

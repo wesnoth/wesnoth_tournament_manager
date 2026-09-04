@@ -204,7 +204,13 @@ export const listP2PProposalsForUser = async (
      FROM match_schedule_proposals p
      LEFT JOIN users_extension proposer ON proposer.id = p.proposed_by_user_id COLLATE utf8mb4_general_ci
      LEFT JOIN users_extension challenged ON challenged.id = p.challenged_user_id COLLATE utf8mb4_general_ci
-     LEFT JOIN match_schedule_slots s ON s.proposal_id = p.id
+     LEFT JOIN match_schedule_slots s
+       ON s.proposal_id = p.id
+      AND (
+        (p.status = 'pending' AND s.status = 'pending')
+        OR (p.status = 'confirmed' AND s.status = 'confirmed')
+        OR (p.status NOT IN ('pending', 'confirmed') AND s.status IN ('pending', 'confirmed'))
+      )
      WHERE p.challenge_mode = 'p2p'
        AND ${whereClause}
      GROUP BY p.id, p.proposed_by_user_id, p.challenged_user_id, p.proposed_at, p.status, p.notes, p.visibility,
@@ -213,7 +219,38 @@ export const listP2PProposalsForUser = async (
     params
   );
 
-  return result.rows || [];
+  const proposals = result.rows || [];
+  if (proposals.length === 0) return proposals;
+
+  // Keep slot status and duration available to the Events page. Fetching the
+  // rows separately avoids relying on JSON aggregation features that are not
+  // consistent across the MariaDB versions supported by the application.
+  const proposalIds = proposals.map((proposal: any) => proposal.id);
+  const proposalPlaceholders = proposalIds.map(() => '?').join(', ');
+  const slotsResult = await query(
+    `SELECT s.id, s.proposal_id, s.slot_datetime, s.slot_duration_minutes, s.status
+     FROM match_schedule_slots s
+     JOIN match_schedule_proposals p ON p.id = s.proposal_id
+     WHERE s.proposal_id IN (${proposalPlaceholders})
+       AND (
+         (p.status = 'pending' AND s.status = 'pending')
+         OR (p.status = 'confirmed' AND s.status = 'confirmed')
+         OR (p.status NOT IN ('pending', 'confirmed') AND s.status IN ('pending', 'confirmed'))
+       )
+     ORDER BY s.proposal_id, s.slot_datetime ASC`,
+    proposalIds
+  );
+  const slotsByProposal = new Map<string, P2PSlotRow[]>();
+  for (const row of slotsResult.rows || []) {
+    const slots = slotsByProposal.get(row.proposal_id) || [];
+    slots.push(row as P2PSlotRow);
+    slotsByProposal.set(row.proposal_id, slots);
+  }
+
+  return proposals.map((proposal: any) => ({
+    ...proposal,
+    slots: slotsByProposal.get(proposal.id) || [],
+  }));
 };
 
 /**

@@ -46,8 +46,15 @@ interface ProposalData {
   confirmations: Array<{ user_id: string; confirmed_at: string }>;
 }
 
+/** Return only the slots that represent the proposal's current schedule. */
+const getVisibleProposalSlots = (proposal: ProposalData | null) => {
+  if (!proposal?.slots) return [];
+  const visibleStatus = proposal.status === 'confirmed' ? 'confirmed' : 'pending';
+  return proposal.slots.filter((slot) => slot.status === visibleStatus);
+};
+
 /** Defer range grouping so large slot selections do not block grid interaction. */
-const useAsyncGroupedRanges = (slotDatetimes: string[]): GroupedTimeRange[] => {
+const useAsyncGroupedRanges = (slotDatetimes: string[], timezone: string): GroupedTimeRange[] => {
   const deferredSlotDatetimes = useDeferredValue(slotDatetimes);
   const [ranges, setRanges] = useState<GroupedTimeRange[]>([]);
 
@@ -56,7 +63,7 @@ const useAsyncGroupedRanges = (slotDatetimes: string[]): GroupedTimeRange[] => {
 
     const compute = () => {
       if (cancelled) return;
-      setRanges(groupSlotsIntoRanges(deferredSlotDatetimes));
+      setRanges(groupSlotsIntoRanges(deferredSlotDatetimes, timezone));
     };
 
     const win = window as Window & {
@@ -79,7 +86,7 @@ const useAsyncGroupedRanges = (slotDatetimes: string[]): GroupedTimeRange[] => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [deferredSlotDatetimes]);
+  }, [deferredSlotDatetimes, timezone]);
 
   return ranges;
 };
@@ -201,7 +208,7 @@ export default function ScheduleProposalModalP2P({
         setMode('edit_proposal');
         // Pre-fill with current slots so proposer can modify them
         if (proposal.slots) {
-          const proposedSlotDatetimes = proposal.slots.map(s => s.slot_datetime);
+          const proposedSlotDatetimes = getVisibleProposalSlots(proposal).map(s => s.slot_datetime);
           setSelectedSlots(new Set(proposedSlotDatetimes));
         } else {
           setSelectedSlots(new Set());
@@ -215,7 +222,7 @@ export default function ScheduleProposalModalP2P({
         setMode('confirm');
         // Pre-select proposed slots for opponent to confirm or modify
         if (proposal.slots) {
-          const proposedSlotDatetimes = proposal.slots.map(s => s.slot_datetime);
+          const proposedSlotDatetimes = getVisibleProposalSlots(proposal).map(s => s.slot_datetime);
           // Initialize confirmedSlotIds with all proposed slots (all checked by default)
           setConfirmedSlotIds(new Set(proposedSlotDatetimes));
           setHasStartedConfirmationSelection(false);
@@ -417,15 +424,16 @@ export default function ScheduleProposalModalP2P({
     () => (mode === 'confirm' ? Array.from(confirmedSlotIds) : Array.from(selectedSlots)),
     [mode, confirmedSlotIds, selectedSlots]
   );
-  const selectedRanges = useAsyncGroupedRanges(selectedRangeDatetimes);
+  const selectedRanges = useAsyncGroupedRanges(selectedRangeDatetimes, viewingTimezone);
+  const visibleProposalSlots = useMemo(() => getVisibleProposalSlots(proposal), [proposal]);
   const proposalRanges = useMemo(
-    () => (proposal?.slots?.length ? groupSlotsIntoRanges(proposal.slots.map(s => s.slot_datetime)) : []),
-    [proposal]
+    () => (visibleProposalSlots.length ? groupSlotsIntoRanges(visibleProposalSlots.map(s => s.slot_datetime), viewingTimezone) : []),
+    [visibleProposalSlots, viewingTimezone]
   );
   const proposalStatusesByRange = useMemo(
     () =>
       proposalRanges.map((range) =>
-        (proposal?.slots || [])
+        visibleProposalSlots
           .filter(s => {
             const slotDate = new Date(s.slot_datetime);
             return slotDate >= range.start && slotDate < range.end;
@@ -433,7 +441,7 @@ export default function ScheduleProposalModalP2P({
           .map(s => s.status)
           .join(', ')
       ),
-    [proposal, proposalRanges]
+    [visibleProposalSlots, proposalRanges]
   );
 
   // Keep these hooks before the closed-state return so the hook order remains
@@ -445,8 +453,8 @@ export default function ScheduleProposalModalP2P({
   }, [displayDateStart]);
 
   const proposedSlotDatetimes = useMemo(
-    () => proposal?.slots?.map((slot) => slot.slot_datetime) || [],
-    [proposal]
+    () => visibleProposalSlots.map((slot) => slot.slot_datetime),
+    [visibleProposalSlots]
   );
   const confirmedSlotsMap = useMemo<Record<string, string[]>>(() => ({}), []);
   const minimumDate = new Intl.DateTimeFormat('en-CA', {
@@ -544,10 +552,10 @@ export default function ScheduleProposalModalP2P({
                     {selectedRanges.map((range, idx) => (
                       <div key={idx} className={`text-sm p-2 bg-white rounded border ${mode === 'confirm' ? 'text-green-800 border-green-100' : 'text-blue-800 border-blue-100'}`}>
                         <div className="font-semibold">
-                          {range.start.toLocaleDateString(i18n.language || 'en-US')} - {range.hours}
+                          {range.start.toLocaleDateString(i18n.language || 'en-US', { timeZone: viewingTimezone })} - {range.hours}
                         </div>
                         <div className="text-xs text-gray-600">
-                          UTC: {range.start.toISOString()} to {range.end.toISOString()}
+                          {viewingTimezone}
                         </div>
                       </div>
                     ))}
@@ -560,21 +568,21 @@ export default function ScheduleProposalModalP2P({
                 <div className="p-3 bg-yellow-50 border border-yellow-200 rounded">
                   <p className="text-sm font-semibold text-yellow-900">Active Proposal</p>
                   <p className="text-xs text-yellow-800 mt-1">
-                    Proposed {new Date(proposal.proposed_at).toLocaleString()}
+                    Proposed {new Date(proposal.proposed_at).toLocaleString(i18n.language || 'en-US', { timeZone: viewingTimezone })}
                   </p>
                   {proposal.notes && (
                     <p className="text-xs text-yellow-800 mt-2 italic">
                       Notes: {proposal.notes}
                     </p>
                   )}
-                  {proposal.slots && proposal.slots.length > 0 && (
+                  {visibleProposalSlots.length > 0 && (
                     <div className="mt-3">
                       <p className="text-xs font-semibold text-yellow-900 mb-2">Proposed Slots:</p>
                       <div className="space-y-1">
                         {proposalRanges.map((range, idx) => (
                           <div key={idx} className="text-xs text-yellow-800 bg-white rounded px-2 py-1 border border-yellow-100">
                             <div className="font-semibold">
-                              {range.start.toLocaleDateString(i18n.language || 'en-US')} - {range.hours}
+                              {range.start.toLocaleDateString(i18n.language || 'en-US', { timeZone: viewingTimezone })} - {range.hours}
                             </div>
                             <div className="text-xs text-gray-600">
                               ({proposalStatusesByRange[idx]})
