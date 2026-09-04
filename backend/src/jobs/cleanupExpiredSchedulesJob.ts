@@ -5,9 +5,10 @@ interface ExpiredProposalRow {
 }
 
 /**
- * Remove expired phase-series and P2P proposals together with their slots and
- * confirmations. The retention window uses `expires_at`, falling back to the
- * latest slot when a proposal has no explicit expiration timestamp.
+ * Mark stale pending proposals as expired, then remove old proposals together
+ * with their slots and confirmations. A proposal with no pending future slot
+ * is no longer actionable even when a legacy or incorrectly extended
+ * `expires_at` still lies in the future.
  */
 export async function cleanupExpiredSchedules(): Promise<void> {
   const cleanupDays = parseInt(process.env.EXPIRED_SCHEDULE_CLEANUP_DAYS || '3', 10);
@@ -15,13 +16,32 @@ export async function cleanupExpiredSchedules(): Promise<void> {
   try {
     console.log(`⏰ [SCHEDULES] Starting cleanup of expired schedules (threshold: ${cleanupDays} days)...`);
 
+    await query(
+      `UPDATE match_schedule_proposals p
+       SET status = 'expired',
+           cancelled_at = COALESCE(cancelled_at, UTC_TIMESTAMP())
+       WHERE p.status IN ('pending', 'active')
+         AND (
+           (p.expires_at IS NOT NULL AND p.expires_at <= UTC_TIMESTAMP())
+           OR NOT EXISTS (
+             SELECT 1
+             FROM match_schedule_slots s
+             WHERE s.proposal_id = p.id
+               AND s.status = 'pending'
+               AND s.slot_datetime > UTC_TIMESTAMP()
+           )
+         )`,
+      []
+    );
+
     const expiredResult = await query(
       `SELECT p.id
        FROM match_schedule_proposals p
        LEFT JOIN match_schedule_slots s ON s.proposal_id = p.id
-       GROUP BY p.id, p.expires_at
-       HAVING COALESCE(p.expires_at, MAX(s.slot_datetime)) < DATE_SUB(NOW(), INTERVAL ? DAY)
-       ORDER BY COALESCE(p.expires_at, MAX(s.slot_datetime)) ASC`,
+       GROUP BY p.id, p.expires_at, p.cancelled_at
+       HAVING COALESCE(p.cancelled_at, p.expires_at, MAX(s.slot_datetime))
+              < DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? DAY)
+       ORDER BY COALESCE(p.cancelled_at, p.expires_at, MAX(s.slot_datetime)) ASC`,
       [cleanupDays]
     );
 

@@ -6,6 +6,9 @@ import {
   consumeUserActionRateLimit,
   releaseUserActionRateLimit,
 } from './userActionRateLimitService.js';
+
+const P2P_PROPOSAL_RESPONSE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 interface P2PProposalRow {
   id: string;
   proposed_by_user_id: string;
@@ -82,7 +85,10 @@ export const createP2PProposal = async (
   const proposalId = uuidv4();
   const now = new Date();
   const maxSlotDatetime = new Date(Math.max(...slotDatetimes.map(dt => new Date(dt).getTime())));
-  const expiresAt = new Date(maxSlotDatetime.getTime() + 7 * 24 * 60 * 60 * 1000);
+  // Keep proposals actionable for one day after the latest offered slot. This
+  // bounds stale pending challenges without tying their lifetime to the
+  // recipient's short-lived waiting-lobby announcement.
+  const expiresAt = new Date(maxSlotDatetime.getTime() + P2P_PROPOSAL_RESPONSE_WINDOW_MS);
 
   const rateLimitEventId = rateLimitAlreadyConsumed
     ? null
@@ -226,7 +232,7 @@ export const confirmP2PProposalSlots = async (
   confirmedSlotIds: string[]
 ) => {
   const proposalResult = await query(
-    `SELECT id, proposed_by_user_id, challenged_user_id, status
+    `SELECT id, proposed_by_user_id, challenged_user_id, status, expires_at
      FROM match_schedule_proposals
      WHERE id = ? AND challenge_mode = 'p2p'`,
     [proposalId]
@@ -239,6 +245,11 @@ export const confirmP2PProposalSlots = async (
   const proposal = proposalResult.rows[0];
   if (proposal.challenged_user_id !== userId) {
     throw new Error('Only challenged user can confirm or reject this proposal');
+  }
+
+  if (proposal.status !== 'pending' ||
+      (proposal.expires_at && new Date(proposal.expires_at).getTime() <= Date.now())) {
+    throw new Error('This challenge proposal is no longer active');
   }
 
   if (!Array.isArray(confirmedSlotIds)) {
@@ -445,12 +456,14 @@ export const updateP2PProposal = async (
     [uuidv4(), proposalId, userId]
   );
 
+  const maxSlotDatetime = new Date(Math.max(...slotDatetimes.map(dt => new Date(dt).getTime())));
+  const expiresAt = new Date(maxSlotDatetime.getTime() + P2P_PROPOSAL_RESPONSE_WINDOW_MS);
   await query(
     `UPDATE match_schedule_proposals
      SET notes = CASE WHEN ? IS NULL THEN notes ELSE ? END,
-         status = 'pending', proposed_at = NOW(), cancelled_at = NULL
+         status = 'pending', proposed_at = NOW(), expires_at = ?, cancelled_at = NULL
      WHERE id = ?`,
-    [notes === undefined ? null : notes, notes === undefined ? null : notes, proposalId]
+    [notes === undefined ? null : notes, notes === undefined ? null : notes, expiresAt, proposalId]
   );
 
   return {

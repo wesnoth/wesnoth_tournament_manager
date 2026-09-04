@@ -41,6 +41,13 @@ export const listWaitingPlayers = async () => {
       AND p.challenge_mode = 'p2p'
       AND p.status = 'pending'
       AND (p.expires_at IS NULL OR p.expires_at > UTC_TIMESTAMP())
+      AND EXISTS (
+         SELECT 1
+         FROM match_schedule_slots active_slot
+         WHERE active_slot.proposal_id = p.id
+           AND active_slot.status = 'pending'
+           AND active_slot.slot_datetime > UTC_TIMESTAMP()
+       )
      LEFT JOIN users_extension proposer
        ON proposer.id COLLATE utf8mb4_general_ci = p.proposed_by_user_id COLLATE utf8mb4_general_ci
      WHERE w.available_until > UTC_TIMESTAMP() AND u.is_active = 1 AND u.is_blocked = 0
@@ -65,6 +72,8 @@ export const listWaitingPlayers = async () => {
        AND p.challenge_mode = 'p2p'
        AND p.status = 'pending'
        AND (p.expires_at IS NULL OR p.expires_at > UTC_TIMESTAMP())
+       AND s.status = 'pending'
+       AND s.slot_datetime > UTC_TIMESTAMP()
      ORDER BY proposer.nickname ASC, s.slot_datetime ASC`, userIds
   );
   const detailsByUser = new Map<string, Array<{ nickname: string; slots: string[] }>>();

@@ -311,7 +311,7 @@ CREATE TABLE `match_schedule_proposals` (
   `proposed_by_user_id` char(36) NOT NULL COMMENT 'User who made the proposal',
   `proposed_at` datetime NOT NULL,
   `status` varchar(20) NOT NULL DEFAULT 'active' COMMENT 'pending | confirmed | rejected | cancelled | expired | active | superseded (legacy) | resolved',
-  `expires_at` datetime DEFAULT NULL COMMENT 'Calculated when proposal created: max(slot_datetime) + 7 days. Used to auto-expire stale proposals',
+  `expires_at` datetime DEFAULT NULL COMMENT 'Calculated when proposal created: max(slot_datetime) + 24 hours. Used to auto-expire stale proposals',
   `cancelled_at` datetime DEFAULT NULL COMMENT 'Timestamp when proposal was cancelled or expired. After 7 days in cancelled state, proposal is purged',
   `challenge_mode` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'tournament' COMMENT 'Proposal context: tournament | p2p',
   `challenged_user_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'Target user for P2P challenges. NULL for tournament proposals',
