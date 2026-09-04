@@ -104,6 +104,7 @@ export default function ScheduleProposalModalP2P({
   const [error, setError] = useState('');
   const [participants, setParticipants] = useState<Participant[]>(initialParticipants || []);
   const [reservedSlots, setReservedSlots] = useState<Record<string, 'p2p' | 'tournament'>>({});
+  const [pendingSlots, setPendingSlots] = useState<Record<string, 'p2p' | 'tournament'>>({});
   const [viewingTimezone, setViewingTimezone] = useState(initialViewingTimezone || 'UTC');
   const [proposal, setProposal] = useState<ProposalData | null>(initialProposal || null);
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
@@ -162,19 +163,26 @@ export default function ScheduleProposalModalP2P({
       .getOccupiedSlots(participants.map((participant) => participant.id), proposal?.id)
       .then((response) => {
         if (cancelled) return;
-        const next: Record<string, 'p2p' | 'tournament'> = {};
+        const nextReserved: Record<string, 'p2p' | 'tournament'> = {};
+        const nextPending: Record<string, 'p2p' | 'tournament'> = {};
         for (const conflict of response.conflicts || []) {
-          next[new Date(conflict.slot_datetime).toISOString()] = conflict.source;
+          const slotKey = new Date(conflict.slot_datetime).toISOString();
+          if (conflict.status === 'confirmed') nextReserved[slotKey] = conflict.source;
+          else nextPending[slotKey] = conflict.source;
         }
-        setReservedSlots(next);
-        // A suggested slot may already be occupied by another proposal. Drop
-        // that suggestion once conflicts arrive so the proposer can submit a
-        // different free slot instead of being left with an invalid selection.
-        setSelectedSlots((previous) => new Set([...previous].filter((slot) => !next[slot])));
+        setPendingSlots(nextPending);
+        setReservedSlots(nextReserved);
+        // A suggested slot may already be confirmed by another proposal. Drop
+        // only those suggestions; pending proposals remain selectable.
+        setSelectedSlots((previous) => new Set([...previous].filter((slot) => !nextReserved[slot])));
+        setConfirmedSlotIds((previous) => new Set([...previous].filter((slot) => !nextReserved[slot])));
       })
       .catch((error) => {
         console.error('Error loading occupied scheduling slots:', error);
-        if (!cancelled) setReservedSlots({});
+        if (!cancelled) {
+          setReservedSlots({});
+          setPendingSlots({});
+        }
       });
 
     return () => {
@@ -287,7 +295,7 @@ export default function ScheduleProposalModalP2P({
         const response = await p2pChallengesService.counterPropose(
           proposal.id,
           slotArray,
-          notes || undefined
+          notes
         );
         if (response.success || response.proposalId) {
           onSuccess?.();
@@ -302,7 +310,7 @@ export default function ScheduleProposalModalP2P({
         const response = await p2pChallengesService.updateProposal(
           proposal.id,
           slotArray,
-          notes || undefined
+          notes
         );
         if (response.success) {
           onSuccess?.();
@@ -313,7 +321,7 @@ export default function ScheduleProposalModalP2P({
         const response = await p2pChallengesService.proposeChallenge(
           opponentId,
           slotArray,
-          notes || undefined
+          notes
         );
 
         if (response.success || response.proposalId) {
@@ -363,6 +371,12 @@ export default function ScheduleProposalModalP2P({
       }
     } catch (err) {
       console.error('Error confirming slots:', err);
+      if ((err as any).response?.status === 409) {
+        // Another proposal was confirmed while this modal was open. Refresh
+        // the surrounding data so the user must review and confirm again.
+        onSuccess?.();
+        return;
+      }
       setError('Failed to confirm slots');
     } finally {
       setLoading(false);
@@ -509,6 +523,7 @@ export default function ScheduleProposalModalP2P({
                   proposedSlots={mode === 'edit_proposal' && !hasStartedEditSelection ? proposedSlotDatetimes : []}
                   confirmedSlots={confirmedSlotsMap}
                   reservedSlots={reservedSlots}
+                  pendingSlots={pendingSlots}
                   viewingTimezone={viewingTimezone}
                   scrollToHour={scrollToHour}
                   confirmMode={mode === 'confirm'}

@@ -255,7 +255,7 @@ export const confirmP2PProposalSlots = async (
   }
 
   const slotsResult = await query(
-    `SELECT id, status FROM match_schedule_slots WHERE proposal_id = ? ORDER BY slot_datetime ASC`,
+    `SELECT id, slot_datetime, status FROM match_schedule_slots WHERE proposal_id = ? ORDER BY slot_datetime ASC`,
     [proposalId]
   );
 
@@ -272,6 +272,13 @@ export const confirmP2PProposalSlots = async (
   }
 
   const confirmedSet = new Set(confirmedSlotIds);
+  const selectedSlots = slots.filter((slot) => confirmedSet.has(slot.id) && slot.status === 'pending');
+  await assertSlotsAreAvailable(
+    [proposal.proposed_by_user_id, proposal.challenged_user_id],
+    selectedSlots.map((slot) => new Date(slot.slot_datetime).toISOString()),
+    proposalId
+  );
+
   for (const slot of slots) {
     if (slot.status === 'pending') {
       const nextStatus = confirmedSet.has(slot.id) ? 'confirmed' : 'rejected';
@@ -447,10 +454,9 @@ export const updateP2PProposal = async (
 
   await query(
     `UPDATE match_schedule_proposals
-     SET notes = CASE WHEN ? IS NULL THEN notes ELSE ? END,
-         status = 'pending', proposed_at = NOW(), cancelled_at = NULL
+     SET notes = ?, status = 'pending', proposed_at = NOW(), cancelled_at = NULL
      WHERE id = ?`,
-    [notes === undefined ? null : notes, notes === undefined ? null : notes, proposalId]
+    [notes ?? null, proposalId]
   );
 
   return {

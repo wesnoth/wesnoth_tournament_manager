@@ -202,10 +202,18 @@ const notifySeriesParticipants = async (
   if (!tournamentId) return;
   const slots = await query(
     `SELECT slot_datetime FROM match_schedule_slots
-     WHERE proposal_id = ? ORDER BY slot_datetime`,
+     WHERE proposal_id = ? ${action === 'schedule_confirmed' ? "AND status = 'confirmed'" : ''}
+     ORDER BY slot_datetime`,
     [proposalId]
   );
   const ranges = groupSlotsIntoRanges((slots.rows || []).map((slot: any) => slot.slot_datetime));
+  const proposalDetails = await query(
+    'SELECT notes FROM match_schedule_proposals WHERE id = ?',
+    [proposalId]
+  );
+  const notificationNotes = notes !== undefined
+    ? notes
+    : proposalDetails.rows?.[0]?.notes || undefined;
   const formattedRanges = formatTimeRangesForDiscordByTimezone(ranges, [
     ...new Map(
       rows.map((row: any) => [row.user_id, {
@@ -238,7 +246,7 @@ const notifySeriesParticipants = async (
     toUserName: recipientName,
     discordIds,
     proposedTimeRanges: formattedRanges,
-    messageExtra: notes || undefined,
+    messageExtra: notificationNotes || undefined,
     proposalId,
     seriesId,
   }).catch(error => console.error(`⚠️ [SCHEDULING][DISCORD] Failed action=${action} tournamentId=${tournamentId} seriesId=${seriesId} proposalId=${proposalId}:`, error));
@@ -248,8 +256,8 @@ const notifySeriesParticipants = async (
     tournamentId,
     action,
     `${titleByAction[action]} - ${actor?.tournament_name || 'Tournament'}`,
-    `${messageByAction[action]}${notes ? ` ${notes}` : ''}`,
-    notes || null,
+    `${messageByAction[action]}${notificationNotes ? ` ${notificationNotes}` : ''}`,
+    notificationNotes || null,
     seriesId
   ).catch(error => console.error(`⚠️ [SCHEDULING][NOTIFICATIONS] Failed action=${action} tournamentId=${tournamentId} seriesId=${seriesId} proposalId=${proposalId}:`, error));
 };
@@ -449,7 +457,8 @@ router.post('/tournament/:tournamentId/series/:seriesId/confirm-slots', authMidd
     await notifySeriesParticipants(seriesId, proposal_id, req.userId, 'schedule_confirmed');
     return res.json({ success: true, fullyConfirmed: result.fullyConfirmed, confirmedSlots: result.confirmedSlots });
   } catch (error) {
-    return res.status(400).json({ error: (error as Error).message || 'Failed to confirm slots' });
+    const message = (error as Error).message || 'Failed to confirm slots';
+    return res.status(message.includes('already reserved') ? 409 : 400).json({ error: message });
   }
 });
 

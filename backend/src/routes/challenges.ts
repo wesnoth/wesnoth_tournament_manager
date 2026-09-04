@@ -294,7 +294,8 @@ router.post('/proposals/:proposalId/confirm-slots', authMiddleware, async (req: 
     return res.json(result);
   } catch (error) {
     console.error('❌ [CHALLENGES] Error confirming proposal:', error);
-    return res.status(400).json({ error: (error as Error).message || 'Failed to confirm challenge proposal' });
+    const message = (error as Error).message || 'Failed to confirm challenge proposal';
+    return res.status(message.includes('already reserved') ? 409 : 400).json({ error: message });
   }
 });
 

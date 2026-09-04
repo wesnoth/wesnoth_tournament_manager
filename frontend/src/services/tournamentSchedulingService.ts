@@ -2,10 +2,10 @@ import { api } from './api';
 
 export const tournamentSchedulingService = {
   /** Create a multi-slot proposal for a phase-engine series. */
-  proposeSeriesSlots: async (tournamentId: string, seriesId: string, slotDatetimes: string[], notes?: string) => {
+  proposeSeriesSlots: async (tournamentId: string, seriesId: string, slotDatetimes: string[], notes?: string | null) => {
     const response = await api.post(
       `/tournament-scheduling/tournament/${tournamentId}/series/${seriesId}/propose-slots`,
-      { slot_datetimes: slotDatetimes, ...(notes && { notes }) }
+      { slot_datetimes: slotDatetimes, notes: notes ?? null }
     );
     return response.data;
   },
@@ -32,25 +32,25 @@ export const tournamentSchedulingService = {
     return response.data;
   },
 
-  modifyProposal: async (proposalId: string, slotDatetimes: string[], notes?: string) => {
+  modifyProposal: async (proposalId: string, slotDatetimes: string[], notes?: string | null) => {
     const response = await api.put(`/tournament-scheduling/proposals/${proposalId}`, {
       slotDatetimes,
-      ...(notes && { notes }),
+      notes: notes ?? null,
     });
     return response.data;
   },
 
-  counterPropose: async (proposalId: string, slotDatetimes: string[], notes?: string) => {
+  counterPropose: async (proposalId: string, slotDatetimes: string[], notes?: string | null) => {
     const response = await api.post(`/tournament-scheduling/proposals/${proposalId}/counter-propose`, {
       slotDatetimes,
-      ...(notes && { notes }),
+      notes: notes ?? null,
     });
     return response.data;
   },
 
-  rejectProposal: async (proposalId: string, notes?: string) => {
+  rejectProposal: async (proposalId: string, notes?: string | null) => {
     const response = await api.post(`/tournament-scheduling/proposals/${proposalId}/reject`, {
-      ...(notes && { notes }),
+      notes: notes ?? null,
     });
     return response.data;
   },
@@ -69,13 +69,13 @@ export const tournamentSchedulingService = {
     tournamentId: string,
     roundMatchId: string,
     slotDatetimes: string[],
-    notes?: string
+    notes?: string | null
   ) => {
     const response = await api.post(
       `/tournament-scheduling/tournament/${tournamentId}/round-match/${roundMatchId}/propose-slots`,
       {
         slot_datetimes: slotDatetimes,
-        ...(notes && { notes })
+        notes: notes ?? null
       }
     );
     return response.data;
@@ -88,13 +88,13 @@ export const tournamentSchedulingService = {
     tournamentId: string,
     matchId: string,
     slotDatetimes: string[],
-    notes?: string
+    notes?: string | null
   ) => {
     const response = await api.post(
       `/tournament-scheduling/tournament/${tournamentId}/match/${matchId}/propose-slots`,
       {
         slot_datetimes: slotDatetimes,
-        ...(notes && { notes })
+        notes: notes ?? null
       }
     );
     return response.data;

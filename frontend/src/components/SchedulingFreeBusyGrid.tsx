@@ -41,6 +41,7 @@ interface SchedulingFreeBusyGridProps {
   proposedSlots?: string[];
   confirmedSlots?: Record<string, string[]>;
   reservedSlots?: Record<string, 'p2p' | 'tournament'>;
+  pendingSlots?: Record<string, 'p2p' | 'tournament'>;
   viewingTimezone?: string;
   scrollToHour?: number | null;
   confirmMode?: boolean;
@@ -207,6 +208,7 @@ function SchedulingFreeBusyGrid({
   proposedSlots = [],
   confirmedSlots = {},
   reservedSlots = {},
+  pendingSlots = {},
   viewingTimezone = 'UTC',
   scrollToHour = null,
   confirmMode = false
@@ -247,6 +249,7 @@ function SchedulingFreeBusyGrid({
     return set;
   }, [confirmedSlots]);
   const reservedSlotsMap = useMemo(() => new Map(Object.entries(reservedSlots)), [reservedSlots]);
+  const pendingSlotsMap = useMemo(() => new Map(Object.entries(pendingSlots)), [pendingSlots]);
 
   const slotsByDate = useMemo(() => {
     const grouped: Record<string, GridSlot[]> = {};
@@ -461,12 +464,12 @@ function SchedulingFreeBusyGrid({
       return;
     }
 
-    // Reserved slots remain visible but cannot be selected. The current
-    // proposal is represented by proposedSlots and remains selectable.
+    // Confirmed slots remain visible but cannot be selected. Pending slots are
+    // advisory only and remain selectable for another proposal.
     // A preselected slot can become reserved while conflicts load. It must
     // remain clickable for deselection, even though a new reserved slot cannot
     // be selected.
-    if (reservedSlotsMap.has(key) && !proposedSlotsSet.has(key) && !selectedSlots.has(key)) {
+    if (reservedSlotsMap.has(key) && !selectedSlots.has(key)) {
       return;
     }
 
@@ -672,7 +675,9 @@ function SchedulingFreeBusyGrid({
                   const isConfirmed = confirmedSlotsSet.has(slotKey);
                   const isSelected = selectedSlots.has(slotKey);
                   const reservationSource = reservedSlotsMap.get(slotKey);
-                  const isReserved = Boolean(reservationSource) && !isProposed;
+                  const pendingSource = pendingSlotsMap.get(slotKey);
+                  const isReserved = Boolean(reservationSource);
+                  const isPending = Boolean(pendingSource);
                   const isPast = new Date(slotKey).getTime() <= Date.now();
 
                   let bgColor = dayColor;
@@ -681,6 +686,9 @@ function SchedulingFreeBusyGrid({
                   if (isPast) {
                     bgColor = 'bg-gray-200';
                     borderColor = 'border-gray-400';
+                  } else if (isReserved) {
+                    bgColor = reservationSource === 'tournament' ? 'bg-purple-200' : 'bg-orange-200';
+                    borderColor = reservationSource === 'tournament' ? 'border-purple-400' : 'border-orange-400';
                   } else if (confirmMode && isProposed) {
                     if (isSelected) {
                       bgColor = 'bg-green-500';
@@ -695,9 +703,9 @@ function SchedulingFreeBusyGrid({
                   } else if (isProposed) {
                     bgColor = 'bg-blue-200';
                     borderColor = 'border-blue-400';
-                  } else if (isReserved) {
-                    bgColor = reservationSource === 'tournament' ? 'bg-purple-200' : 'bg-orange-200';
-                    borderColor = reservationSource === 'tournament' ? 'border-purple-400' : 'border-orange-400';
+                  } else if (isPending && !isSelected) {
+                    bgColor = pendingSource === 'tournament' ? 'bg-purple-100' : 'bg-orange-100';
+                    borderColor = pendingSource === 'tournament' ? 'border-purple-300' : 'border-orange-300';
                   } else if (isSelected) {
                     bgColor = 'bg-yellow-100';
                     borderColor = 'border-yellow-400';
@@ -714,7 +722,7 @@ function SchedulingFreeBusyGrid({
                       data-help-id="option-schedule-slot"
                       key={`${participant.id}-${dateKey}-${slotKey}`}
                       className={`border ${borderColor} p-0.5 h-8 cursor-${readOnly || isReserved || isPast ? 'default' : 'pointer'} ${bgColor} ${
-                        !readOnly && !isProposed && !isReserved && !isPast ? 'hover:opacity-75 touch-manipulation' : ''
+                        !readOnly && !isReserved && !isPast ? 'hover:opacity-75 touch-manipulation' : ''
                       }`}
                       style={{ minWidth: `${SLOT_COLUMN_WIDTH}px`, width: `${SLOT_COLUMN_WIDTH}px` }}
                       onTouchStart={(event) => handleSlotTouchStart(event, slot)}
@@ -724,7 +732,7 @@ function SchedulingFreeBusyGrid({
                         touchGestureRef.current = null;
                       }}
                       onClick={() => handleSlotToggleAction(slot, 'click')}
-                      title={`${participant.nickname} - ${slot.dateStr} ${slot.timeStr}${isPast ? ' (past slot)' : ''}${isReserved ? ` (${reservationSource} slot already reserved)` : ''}`}
+                      title={`${participant.nickname} - ${slot.dateStr} ${slot.timeStr}${isPast ? ' (past slot)' : ''}${isReserved ? ` (${reservationSource} slot already reserved)` : ''}${isPending ? ` (${pendingSource} proposal)` : ''}`}
                     >
                       {isConfirmed && (
                         <div className="w-full h-full flex items-center justify-center text-green-700 font-bold">
