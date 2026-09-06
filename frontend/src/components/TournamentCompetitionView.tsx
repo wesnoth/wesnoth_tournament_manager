@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../services/api';
 import { useAuthStore } from '../store/authStore';
@@ -101,7 +101,12 @@ const TournamentCompetitionView: React.FC<Props> = ({
   const [savingStreamGameId, setSavingStreamGameId] = useState<string | null>(null);
   const [editingStreamId, setEditingStreamId] = useState<string | null>(null);
   const [editingStreamUrl, setEditingStreamUrl] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [inputFilters, setInputFilters] = useState({ player: '', map: '', faction: '' });
+  const [appliedFilters, setAppliedFilters] = useState({ player: '', map: '', faction: '' });
   const { user, isAdmin, isTournamentModerator, isStreamer } = useAuthStore();
+
+  const pageSize = 20;
 
   const streamLinksFor = (game: any): any[] => {
     if (Array.isArray(game.stream_links)) return game.stream_links;
@@ -191,6 +196,103 @@ const TournamentCompetitionView: React.FC<Props> = ({
     };
     load();
   }, [tournamentId, reloadKey, refreshKey]);
+
+  const applyFilters = () => {
+    setAppliedFilters(inputFilters);
+    setCurrentPage(1);
+  };
+
+  const handleFilterInputChange = (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = event.target;
+    const nextFilters = { ...inputFilters, [name]: value };
+    setInputFilters(nextFilters);
+    if (event.target.tagName === 'SELECT') {
+      setAppliedFilters(nextFilters);
+      setCurrentPage(1);
+    }
+  };
+
+  const handleFilterKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      applyFilters();
+    }
+  };
+
+  const resetFilters = () => {
+    const emptyFilters = { player: '', map: '', faction: '' };
+    setInputFilters(emptyFilters);
+    setAppliedFilters(emptyFilters);
+    setCurrentPage(1);
+  };
+
+  const filteredGames = useMemo(() => {
+    const playerFilter = appliedFilters.player.trim().toLowerCase();
+    const mapFilter = appliedFilters.map.trim().toLowerCase();
+    const factionFilter = appliedFilters.faction.trim().toLowerCase();
+
+    return games.filter(game => {
+      const hasPendingReplay = Boolean(game.pending_replay_id);
+      let pendingSummary: any = null;
+      try {
+        pendingSummary = typeof game.pending_replay_summary === 'string'
+          ? JSON.parse(game.pending_replay_summary)
+          : game.pending_replay_summary;
+      } catch {
+        pendingSummary = null;
+      }
+      const isCompleted = game.status === 'completed' || hasPendingReplay;
+      const isMine = Boolean(currentUserId && (
+        currentUserId === game.entry1_user_id || currentUserId === game.entry2_user_id
+        || participantTeamIds.includes(game.entry1_team_id) || participantTeamIds.includes(game.entry2_team_id)
+      ));
+      const matchesExternalFilters = matchFilter === 'all'
+        || (matchFilter === 'completed' ? isCompleted : !isCompleted);
+      if (!matchesExternalFilters || (showOnlyMine && !isMine) || game.organizer_action) return false;
+
+      const players = [game.entry1_name, game.entry2_name, ...(game.entry1_members || []), ...(game.entry2_members || [])]
+        .filter(Boolean).join(' ').toLowerCase();
+      const map = String(
+        game.map || pendingSummary?.finalMap || pendingSummary?.forumMap || pendingSummary?.resolvedMap || ''
+      ).toLowerCase();
+      const factions = [
+        game.winner_faction,
+        game.loser_faction,
+        ...Object.values(pendingSummary?.forumFactions || {}),
+      ].filter(Boolean).join(' ').toLowerCase();
+      return (!playerFilter || players.includes(playerFilter))
+        && (!mapFilter || map.includes(mapFilter))
+        && (!factionFilter || factions.includes(factionFilter));
+    }).sort((first, second) => {
+      const firstPending = Number(Boolean(first.pending_replay_id));
+      const secondPending = Number(Boolean(second.pending_replay_id));
+      return secondPending - firstPending || String(first.game_id).localeCompare(String(second.game_id));
+    });
+  }, [appliedFilters, currentUserId, games, matchFilter, participantTeamIds, showOnlyMine]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredGames.length / pageSize));
+  const paginatedGames = filteredGames.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const renderPagination = () => totalPages > 1 && (
+    <div className="flex flex-wrap items-center justify-center gap-4 py-2">
+      <button data-help-id="action-tournament-competition-first-page" className="rounded bg-blue-500 px-4 py-2 text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-gray-400" onClick={() => handlePageChange(1)} disabled={currentPage === 1}>{t('pagination_first')}</button>
+      <button data-help-id="action-tournament-competition-previous-page" className="rounded bg-blue-500 px-4 py-2 text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-gray-400" onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1}>{t('pagination_prev')}</button>
+      <span className="font-semibold text-gray-700">{t('pagination_page_info', { page: currentPage, totalPages })}</span>
+      <button data-help-id="action-tournament-competition-next-page" className="rounded bg-blue-500 px-4 py-2 text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-gray-400" onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages}>{t('pagination_next')}</button>
+      <button data-help-id="action-tournament-competition-last-page" className="rounded bg-blue-500 px-4 py-2 text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-gray-400" onClick={() => handlePageChange(totalPages)} disabled={currentPage === totalPages}>{t('pagination_last')}</button>
+    </div>
+  );
 
   // Proposal reads are public for tournament games, so spectators can see the
   // same proposed/confirmed ranges while only participants receive the modal.
@@ -358,11 +460,33 @@ const TournamentCompetitionView: React.FC<Props> = ({
       </div>
     </section>}
     {games.length > 0 && <section data-help-id="region-tournament-phase-games" className="space-y-7 rounded-lg border bg-white p-4">
+      <div data-help-id="region-tournament-competition-filters" className="rounded-lg bg-gray-100 p-4">
+        <div className="flex flex-wrap items-end gap-4">
+          <label className="min-w-[200px] flex-1 text-sm font-semibold text-gray-700">
+            {t('filter_player')}
+            <input data-help-id="field-tournament-competition-player" type="text" name="player" value={inputFilters.player} onChange={handleFilterInputChange} onKeyDown={handleFilterKeyDown} placeholder={t('filter_by_player')} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 font-normal focus:border-green-500 focus:outline-none" />
+          </label>
+          <label className="min-w-[200px] flex-1 text-sm font-semibold text-gray-700">
+            {t('filter_map')}
+            <input data-help-id="field-tournament-competition-map" type="text" name="map" value={inputFilters.map} onChange={handleFilterInputChange} onKeyDown={handleFilterKeyDown} placeholder={t('filter_by_map')} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 font-normal focus:border-green-500 focus:outline-none" />
+          </label>
+          <label className="min-w-[170px] text-sm font-semibold text-gray-700">
+            {t('filter_faction') || 'Faction'}
+            <input data-help-id="field-tournament-competition-faction" type="text" name="faction" value={inputFilters.faction} onChange={handleFilterInputChange} onKeyDown={handleFilterKeyDown} placeholder={t('filter_faction') || 'Faction'} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 font-normal focus:border-green-500 focus:outline-none" />
+          </label>
+          <button data-help-id="action-reset-tournament-competition-filters" type="button" onClick={resetFilters} className="rounded bg-red-500 px-4 py-2 text-white transition-colors hover:bg-red-600">{t('reset_filters')}</button>
+          <button data-help-id="action-refresh-tournament-competition" type="button" onClick={applyFilters} className="rounded bg-gray-200 px-4 py-2 font-semibold text-gray-700 transition-colors hover:bg-gray-300" title={t('refresh') || 'Refresh'}>↻</button>
+        </div>
+      </div>
+      <div className="text-sm text-gray-600">
+        {t('showing_count_matches', { count: paginatedGames.length, total: filteredGames.length, page: currentPage, totalPages })}
+      </div>
+      {renderPagination()}
       {[
         { status: 'pending', title: 'Scheduled Matches' },
         { status: 'completed', title: 'Completed Matches' },
       ].map(section => {
-        const sectionGames = games.filter(game => {
+        const sectionGames = paginatedGames.filter(game => {
           const hasPendingReplay = Boolean(game.pending_replay_id);
           // A confidence-one replay represents a completed game even when
           // the underlying game row has not been finalized yet.
@@ -672,6 +796,8 @@ const TournamentCompetitionView: React.FC<Props> = ({
           </table></div>
         </div>;
       })}
+      {filteredGames.length === 0 && <p className="text-sm text-gray-600">No matches match the selected filters.</p>}
+      {renderPagination()}
     </section>}
     {selectedReplay && <ReplayConfirmationModal
       isOpen={Boolean(selectedReplay)}
