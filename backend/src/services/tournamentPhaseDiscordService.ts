@@ -115,51 +115,51 @@ async function publishPhaseStarted(tournamentId: string, phaseId: string): Promi
   ));
 }
 
-/** Publish one group's standings after a phase-engine round becomes complete. */
-async function publishRoundStandings(tournamentId: string, roundId: string): Promise<void> {
+/** Publish stored group standings; manual delivery reports failure to the caller. */
+export async function publishGroupStandings(tournamentId: string, groupId: string, completedRound?: number): Promise<boolean> {
   const context = await query(
     `SELECT tournaments.discord_thread_id, phases.name AS phase_name, phases.phase_order,
-            groups.name AS group_name, rounds.round_number
-     FROM tournament_phase_rounds rounds
-     JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+            groups.name AS group_name
+     FROM tournament_phase_groups groups
      JOIN tournament_phases phases ON phases.id = groups.phase_id
      JOIN tournaments ON tournaments.id = phases.tournament_id
-     WHERE rounds.id = ? AND tournaments.id = ?`,
-    [roundId, tournamentId]
+     WHERE groups.id = ? AND tournaments.id = ?`,
+    [groupId, tournamentId]
   );
   const round = context.rows[0];
-  if (!round?.discord_thread_id) return;
+  if (!round?.discord_thread_id) return false;
 
   const standings = await query(
     `SELECT standings.rank_position, standings.points, standings.wins, standings.losses,
             standings.omp, standings.gwp, standings.ogp,
             ${entryNameSql('entries', 'participants', 'users', 'teams')} AS entry_name
      FROM tournament_phase_standings standings
-     JOIN tournament_phase_rounds rounds ON rounds.group_id = standings.group_id
      JOIN tournament_entries entries ON entries.id = standings.entry_id
      LEFT JOIN tournament_participants participants ON participants.id = entries.participant_id
      LEFT JOIN users_extension users ON users.id = participants.user_id
      LEFT JOIN tournament_teams teams ON teams.id = entries.team_id
-     WHERE rounds.id = ?
+     WHERE standings.group_id = ?
      ORDER BY standings.rank_position, entries.initial_seed`,
-    [roundId]
+    [groupId]
   );
   const table = standings.rows.slice(0, 15).map((standing: any) =>
     `**${standing.rank_position}.** ${neutralizeMentions(standing.entry_name)} — ${Number(standing.points)} pts (${standing.wins}W-${standing.losses}L) · OMP ${Number(standing.omp).toFixed(2)} · GWP ${Number(standing.gwp).toFixed(2)} · OGP ${Number(standing.ogp).toFixed(2)}`
   ).join('\n');
 
-  await deliver(`round ${roundId} standings`, () => discordService.publishDiscordMessage(
+  return discordService.publishDiscordMessage(
     round.discord_thread_id,
     {
       embeds: [{
-        title: `✅ ${neutralizeMentions(round.phase_name)} · ${neutralizeMentions(round.group_name)} · Round ${round.round_number}`,
+        title: completedRound == null
+          ? `📊 ${neutralizeMentions(round.phase_name)} · ${neutralizeMentions(round.group_name)} · Current standings`
+          : `✅ ${neutralizeMentions(round.phase_name)} · ${neutralizeMentions(round.group_name)} · Round ${completedRound}`,
         description: truncate(table || 'No standings available.', 4000),
         color: 0x27ae60,
-        footer: { text: `Standings after round ${round.round_number}` },
+        footer: { text: completedRound == null ? 'Current group standings · Organizer notification' : `Standings after round ${completedRound}` },
         timestamp: new Date().toISOString(),
       }],
     }
-  ));
+  );
 }
 
 /** Publish finalized standings for every group when a phase closes. */
@@ -283,7 +283,17 @@ export async function notifyPhaseStarted(tournamentId: string, phaseId: string):
 }
 
 export async function notifyRoundStandings(tournamentId: string, roundId: string): Promise<void> {
-  await runBestEffort(`round ${roundId} standings notification`, () => publishRoundStandings(tournamentId, roundId));
+  await runBestEffort(`round ${roundId} standings notification`, async () => {
+    const result = await query(
+      `SELECT r.group_id, r.round_number FROM tournament_phase_rounds r
+       JOIN tournament_phase_groups g ON g.id = r.group_id
+       JOIN tournament_phases p ON p.id = g.phase_id
+       WHERE r.id = ? AND p.tournament_id = ?`, [roundId, tournamentId]
+    );
+    const round = result.rows[0];
+    if (round) await deliver(`round ${roundId} standings`, () =>
+      publishGroupStandings(tournamentId, round.group_id, round.round_number));
+  });
 }
 
 export async function notifyPhaseCompleted(tournamentId: string, phaseId: string): Promise<void> {

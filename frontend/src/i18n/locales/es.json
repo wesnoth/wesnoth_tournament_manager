@@ -896,6 +896,8 @@
     "btn_close_registration": "Cerrar Inscripciones",
     "btn_prepare": "Preparar Torneo",
     "btn_start": "Iniciar Torneo",
+    "group_results_notified": "Resultados del grupo enviados a Discord.",
+    "group_action_failed": "No se pudo realizar la acción del grupo.",
     "btn_recalculate_tiebreakers": "Recalcular Desempates",
     "btn_recalculate_tiebreakers_tooltip": "Recalcular OMP, GWP, OGP para todos los participantes",
     "tiebreakers_recalculated": "Desempates recalculados exitosamente",

@@ -881,6 +881,8 @@
     "btn_close_registration": "Закрыть регистрацию",
     "btn_prepare": "Подготовить турнир",
     "btn_start": "Начать турнир",
+    "group_results_notified": "Результаты группы отправлены в Discord.",
+    "group_action_failed": "Не удалось выполнить действие для группы.",
     "btn_recalculate_tiebreakers": "Пересчитать тайбрейки",
     "btn_recalculate_tiebreakers_tooltip": "Пересчитать OMP, GWP, OGP для всех участников",
     "tiebreakers_recalculated": "Тайбрейки успешно пересчитаны",

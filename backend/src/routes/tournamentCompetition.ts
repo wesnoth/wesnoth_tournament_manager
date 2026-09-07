@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { publishGroupStandings } from '../services/tournamentPhaseDiscordService.js';
 import { v4 as uuidv4 } from 'uuid';
 import { authMiddleware, streamerMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { isTournamentOrganizer } from '../services/tournamentAuthorizationService.js';
@@ -7,7 +8,7 @@ import { validateTournamentFormat } from '../tournament-engine/formatValidator.j
 import { getTournamentFormat, saveTournamentFormat } from '../tournament-engine/formatService.js';
 import type { TournamentFormatDefinition } from '../tournament-engine/types.js';
 import { query } from '../config/database.js';
-import { recordPhaseGameResult } from '../tournament-engine/competitionProgression.js';
+import { recordPhaseGameResult, recalculateGroupStandings } from '../tournament-engine/competitionProgression.js';
 import {
   compileNextPhaseCompetition,
   preparePhaseCompetition,
@@ -260,6 +261,40 @@ router.post('/:id/phases/:phaseId/advance', authMiddleware, async (req: AuthRequ
   } catch (error: any) {
     console.error('Compile tournament advancement error:', error);
     return res.status(409).json({ error: error.message || 'Failed to compile advancement' });
+  }
+});
+
+/** Group actions never advance competition or modify another group's standings. */
+router.post('/:id/groups/:groupId/recalculate-tiebreakers', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    if (!(await isTournamentOrganizer(req.params.id, req.userId!))) {
+      return res.status(403).json({ error: 'Only tournament organizers can recalculate standings' });
+    }
+    await recalculateGroupStandings(req.params.id, req.params.groupId);
+    return res.json({ recalculated: true });
+  } catch (error: any) {
+    return res.status(409).json({ error: error.message || 'Failed to recalculate standings' });
+  }
+});
+
+router.post('/:id/groups/:groupId/notify-results', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    if (!(await isTournamentOrganizer(req.params.id, req.userId!))) {
+      return res.status(403).json({ error: 'Only tournament organizers can notify results' });
+    }
+    const group = await query(
+      `SELECT g.id FROM tournament_phase_groups g JOIN tournament_phases p ON p.id = g.phase_id
+       WHERE g.id = ? AND p.tournament_id = ? AND g.status IN ('in_progress', 'completed')
+         AND p.format IN ('swiss', 'round_robin')`,
+      [req.params.groupId, req.params.id]
+    );
+    if (!group.rows.length) return res.status(409).json({ error: 'Group results are not available' });
+    const delivered = await publishGroupStandings(req.params.id, req.params.groupId);
+    if (!delivered) return res.status(502).json({ error: 'Discord notification could not be delivered; check the tournament Discord thread' });
+    return res.json({ notified: true });
+  } catch (error) {
+    console.error('Notify group results error:', error);
+    return res.status(502).json({ error: 'Failed to send group results to Discord' });
   }
 });
 
@@ -811,7 +846,7 @@ router.get('/:id/overall-standings', async (req, res) => {
 
 router.get('/:id/phases/:phaseId/standings', async (req, res) => {
   const result = await query(
-    `SELECT s.*, g.name AS group_name, e.entry_type,
+    `SELECT s.*, g.name AS group_name, g.status AS group_status, e.entry_type,
             u.id AS entry_user_id,
             CASE WHEN tt.id IS NULL THEN JSON_ARRAY() ELSE COALESCE((
               SELECT JSON_ARRAYAGG(JSON_OBJECT('user_id', member_user.id, 'nickname', member_user.nickname))

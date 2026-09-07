@@ -16,6 +16,7 @@
     "start:migration": "NODE_ENV=migration node dist/server.js",
     "start:test": "NODE_ENV=test node dist/server.js",
     "migrate": "node scripts/migrate.js",
+    "test:group-progression": "node scripts/test-group-progression.cjs",
     "test:tournament-engine": "node dist/tournament-engine/tournamentEngine.selftest.js"
   },
   "dependencies": {

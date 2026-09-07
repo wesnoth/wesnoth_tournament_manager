@@ -906,6 +906,8 @@
     "btn_close_registration": "Close Registration",
     "btn_prepare": "Prepare Tournament",
     "btn_start": "Start Tournament",
+    "group_results_notified": "Group results sent to Discord.",
+    "group_action_failed": "Failed to perform group action.",
     "btn_recalculate_tiebreakers": "Recalculate Tiebreakers",
     "btn_recalculate_tiebreakers_tooltip": "Recalculate OMP, GWP, OGP for all participants",
     "tiebreakers_recalculated": "Tiebreakers recalculated successfully",

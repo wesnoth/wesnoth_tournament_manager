@@ -92,6 +92,8 @@ const TournamentCompetitionView: React.FC<Props> = ({
   const [games, setGames] = useState<any[]>([]);
   const [administrativeDecisions, setAdministrativeDecisions] = useState<any[]>([]);
   const [error, setError] = useState('');
+  const [groupAction, setGroupAction] = useState<string | null>(null);
+  const [groupFeedback, setGroupFeedback] = useState<{ id: string; text: string; failed: boolean } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedReplay, setSelectedReplay] = useState<any | null>(null);
   const [selectedGameConfirmation, setSelectedGameConfirmation] = useState<{ game: any; action: 'report' | 'respond' } | null>(null);
@@ -315,6 +317,22 @@ const TournamentCompetitionView: React.FC<Props> = ({
     return () => { cancelled = true; };
   }, [games, tournamentId]);
 
+  const runGroupAction = async (groupId: string, action: 'recalculate-tiebreakers' | 'notify-results') => {
+    setGroupAction(groupId);
+    setGroupFeedback(null);
+    try {
+      await api.post(`/tournaments/${tournamentId}/groups/${groupId}/${action}`);
+      setGroupFeedback({ id: groupId, failed: false, text: action === 'recalculate-tiebreakers'
+        ? t('tournaments.tiebreakers_recalculated')
+        : t('tournaments.group_results_notified') });
+      if (action === 'recalculate-tiebreakers') setReloadKey(value => value + 1);
+    } catch (actionError: any) {
+      setGroupFeedback({ id: groupId, failed: true, text: actionError.response?.data?.error || t('tournaments.group_action_failed') });
+    } finally {
+      setGroupAction(null);
+    }
+  };
+
   if (error) return <p className="text-red-600">{error}</p>;
   return <div data-help-id="region-tournament-competition" className="space-y-6">
     {showPhasesGroups && phases.map(phase => {
@@ -323,8 +341,9 @@ const TournamentCompetitionView: React.FC<Props> = ({
         const groups = Array.from(new Map(rows.map((row: any) => [row.group_id, {
           id: row.group_id,
           name: row.group_name,
+          status: row.group_status,
           rows: rows.filter((candidate: any) => candidate.group_id === row.group_id),
-        }])).values()) as Array<{ id: string; name: string; rows: any[] }>;
+        }])).values()) as Array<{ id: string; name: string; status: string; rows: any[] }>;
         return <section key={phase.phase_id} className="border rounded-lg p-4 bg-white">
           <div className="flex justify-between items-center mb-3"><h3 className="font-semibold text-lg">{phase.phase_name}</h3>
             {canManage && phase.phase_status === 'ready' && <button data-help-id="action-start-tournament-phase" type="button" onClick={async () => {
@@ -333,7 +352,21 @@ const TournamentCompetitionView: React.FC<Props> = ({
           </div>
           {groups.length === 0 ? <p className="text-sm text-gray-600">No group standings are available yet.</p> : <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
             {groups.map(group => <article key={group.id} data-help-id="region-tournament-standings-group" className="overflow-hidden rounded-lg border border-blue-200 bg-blue-50 shadow-sm">
-              <h4 className="border-b border-blue-200 bg-blue-100 px-4 py-3 font-semibold text-blue-900">{group.name}</h4>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-200 bg-blue-100 px-4 py-3">
+                <h4 className="font-semibold text-blue-900">{group.name}</h4>
+                {canManage && ['in_progress', 'completed'].includes(group.status) && <div className="flex flex-wrap gap-2">
+                  {group.status === 'in_progress' && phase.phase_status === 'in_progress' && <button
+                    type="button" data-help-id="action-recalculate-group-tiebreakers" disabled={groupAction !== null}
+                    onClick={() => void runGroupAction(group.id, 'recalculate-tiebreakers')}
+                    className="rounded bg-yellow-500 px-3 py-1 text-sm font-semibold text-black disabled:opacity-50"
+                  >{t('tournaments.btn_recalculate_tiebreakers')}</button>}
+                  <button type="button" data-help-id="action-notify-group-results" disabled={groupAction !== null}
+                    onClick={() => void runGroupAction(group.id, 'notify-results')}
+                    className="rounded bg-blue-600 px-3 py-1 text-sm font-semibold text-white disabled:opacity-50"
+                  >{t('tournaments.btn_notify_results')}</button>
+                </div>}
+              </div>
+              {groupFeedback?.id === group.id && <p role="status" className={`px-4 py-2 text-sm ${groupFeedback.failed ? 'text-red-700' : 'text-green-700'}`}>{groupFeedback.text}</p>}
               <div className="overflow-x-auto"><table className="w-full bg-white text-sm">
                 <thead><tr className="bg-gray-100"><th className="p-2 text-left">Pos.</th><th className="p-2 text-left">Entry</th><th className="p-2">Played</th><th className="p-2">W</th><th className="p-2">L</th><th className="p-2">Points</th><th className="p-2">OMP</th><th className="p-2">GWP</th><th className="p-2">OGP</th></tr></thead>
                 <tbody>{group.rows.map((row: any) => <tr key={row.entry_id} className="border-t"><td className="p-2">{row.rank_position || '—'}</td><td className="p-2 font-medium"><TournamentEntryName name={row.entry_name} userId={row.entry_user_id} members={row.entry_members} /></td><td className="p-2 text-center">{row.matches_played}</td><td className="p-2 text-center">{row.wins}</td><td className="p-2 text-center">{row.losses}</td><td className="p-2 text-center font-semibold">{row.points}</td><td className="p-2 text-center">{row.omp}</td><td className="p-2 text-center">{row.gwp}</td><td className="p-2 text-center">{row.ogp}</td></tr>)}</tbody>

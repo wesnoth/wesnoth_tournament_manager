@@ -232,6 +232,8 @@ export async function recordPhaseGameResult(
   let seriesCompleted = false;
   try {
     await connection.beginTransaction();
+    // Serialize result recording and manual recalculation before reading standings.
+    await connection.execute(`SELECT id FROM tournaments WHERE id = ? FOR UPDATE`, [tournamentId]);
     const [rows] = await connection.execute<any[]>(
       `SELECT games.*, series.id AS series_id, series.wins_required, series.entry1_wins, series.entry2_wins,
               rounds.id AS round_id, rounds.round_number, groups.id AS group_id,
@@ -364,7 +366,7 @@ export async function recordPhaseGameResult(
         await recalculateTiebreakers(connection, game.group_id);
         await rankGroup(connection, game.group_id, false);
         const [nextRounds] = await connection.execute<any[]>(
-          `SELECT id, best_of FROM tournament_phase_rounds WHERE group_id = ? AND round_number = ?`,
+          `SELECT id, best_of FROM tournament_phase_rounds WHERE group_id = ? AND round_number = ? AND status = 'pending'`,
           [game.group_id, Number(game.round_number) + 1]
         );
         if (nextRounds.length) {
@@ -372,24 +374,25 @@ export async function recordPhaseGameResult(
             await createSwissRoundPairings(connection, nextRounds[0].id, nextRounds[0].best_of, game.group_id);
           }
           // Elimination games are compiled in advance and Swiss games are
-          // paired only after the preceding standings are final. In both cases
-          // the next round must become active here; otherwise test simulation
-          // and real replay matching correctly hide its pending games forever.
+          // paired only after the preceding standings are final. Activate only
+          // pending rounds: open leagues may have already finished the next
+          // round, and its status and start time must remain unchanged.
           await connection.execute(
             `UPDATE tournament_phase_rounds
              SET status = 'in_progress', starts_at = CURRENT_TIMESTAMP
-             WHERE id = ?`,
+             WHERE id = ? AND status = 'pending'`,
             [nextRounds[0].id]
           );
-        } else {
-          const [groupRemaining] = await connection.execute<any[]>(
-            `SELECT COUNT(*) AS count FROM tournament_phase_rounds WHERE group_id = ? AND status NOT IN ('completed', 'cancelled')`,
-            [game.group_id]
-          );
-          if (Number(groupRemaining[0].count) === 0) {
-            await rankGroup(connection, game.group_id, true);
-            await connection.execute(`UPDATE tournament_phase_groups SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?`, [game.group_id]);
-          }
+        }
+        // Open league rounds can finish in any order. Check all rounds after
+        // every completion, even when a higher numbered round exists.
+        const [groupRemaining] = await connection.execute<any[]>(
+          `SELECT COUNT(*) AS count FROM tournament_phase_rounds WHERE group_id = ? AND status NOT IN ('completed', 'cancelled')`,
+          [game.group_id]
+        );
+        if (Number(groupRemaining[0].count) === 0) {
+          await rankGroup(connection, game.group_id, true);
+          await connection.execute(`UPDATE tournament_phase_groups SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?`, [game.group_id]);
         }
         const [phaseRemaining] = await connection.execute<any[]>(
           `SELECT COUNT(*) AS count FROM tournament_phase_groups WHERE phase_id = ? AND status NOT IN ('completed', 'cancelled')`,
@@ -446,4 +449,37 @@ export async function recordPhaseGameResult(
     }
   }
   return { seriesCompleted, phaseCompleted: completedPhaseId !== null, tournamentCompleted };
+}
+
+/**
+ * Refresh the current group's phase-local percentages and ordering without
+ * progressing rounds or sending notifications. Completed groups are immutable
+ * because their ranks may already have selected entries for another phase.
+ */
+export async function recalculateGroupStandings(tournamentId: string, groupId: string): Promise<void> {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.execute(`SELECT id FROM tournaments WHERE id = ? FOR UPDATE`, [tournamentId]);
+    const [groups] = await connection.execute<any[]>(
+      `SELECT g.status, p.status AS phase_status, p.format
+       FROM tournament_phase_groups g JOIN tournament_phases p ON p.id = g.phase_id
+       WHERE g.id = ? AND p.tournament_id = ? FOR UPDATE`,
+      [groupId, tournamentId]
+    );
+    const group = groups[0];
+    if (!group) throw new Error('Group not found');
+    if (group.status !== 'in_progress' || group.phase_status !== 'in_progress'
+      || !['swiss', 'round_robin'].includes(group.format)) {
+      throw new Error('Only active Swiss or league groups can be recalculated');
+    }
+    await recalculateTiebreakers(connection, groupId);
+    await rankGroup(connection, groupId, false);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
