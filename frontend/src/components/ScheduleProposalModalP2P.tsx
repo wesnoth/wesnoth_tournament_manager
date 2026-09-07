@@ -378,13 +378,9 @@ export default function ScheduleProposalModalP2P({
       }
     } catch (err) {
       console.error('Error confirming slots:', err);
-      if ((err as any).response?.status === 409) {
-        // Another proposal was confirmed while this modal was open. Refresh
-        // the surrounding data so the user must review and confirm again.
-        onSuccess?.();
-        return;
-      }
-      setError('Failed to confirm slots');
+      // Keep the modal open: the success callback may unmount it and hide the
+      // reservation conflict, including the affected slots returned by the API.
+      setError((err as any).response?.data?.error || 'Failed to confirm slots. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -483,7 +479,7 @@ export default function ScheduleProposalModalP2P({
             </button>
           </div>
           {error && (
-            <div className="mt-4 p-3 bg-red-100 border border-red-300 rounded text-red-700 text-sm">
+            <div role="alert" className="mt-4 p-3 bg-red-100 border border-red-300 rounded text-red-700 text-sm">
               {error}
             </div>
           )}

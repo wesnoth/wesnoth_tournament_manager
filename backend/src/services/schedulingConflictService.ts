@@ -65,6 +65,13 @@ export const assertSlotsAreAvailable = async (
   );
 
   if (conflictingSlots.length > 0) {
-    throw new Error('One or more selected slots are already reserved by an active proposal');
+    // Include explicit UTC times because this message is also displayed by clients
+    // whose local timezone may differ from the server's timezone.
+    const slotLabels = [...new Set(conflictingSlots.map((slot) =>
+      new Date(slot).toISOString().slice(0, 16).replace('T', ' ') + ' UTC'
+    ))];
+    const subject = slotLabels.length === 1 ? 'The slot' : 'The slots';
+    const verb = slotLabels.length === 1 ? 'is' : 'are';
+    throw new Error(`${subject} ${slotLabels.join(', ')} ${verb} already reserved by another confirmed schedule. Please select different slots.`);
   }
 };

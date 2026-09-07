@@ -512,7 +512,7 @@ export const confirmPartialSlots = async (
   );
   if (existing.rows?.length) throw new Error('User has already confirmed this proposal');
   const slotsResult = await query(
-    'SELECT id, status FROM match_schedule_slots WHERE proposal_id = ? ORDER BY slot_datetime ASC',
+    'SELECT id, slot_datetime, status FROM match_schedule_slots WHERE proposal_id = ? ORDER BY slot_datetime ASC',
     [proposalId]
   );
   const slots = slotsResult.rows || [];
