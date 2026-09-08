@@ -43,6 +43,44 @@ code {
     monospace;
 }
 
+/*
+ * Every rendered Markdown surface uses the prose wrapper. Keeping table
+ * presentation here makes wiki articles, editor previews, tournament rules,
+ * and news render the same GFM table without affecting application data grids.
+ * The wrapper owns horizontal overflow so narrow screens preserve readable
+ * columns instead of squeezing cell content together.
+ */
+.prose {
+  overflow-x: auto;
+}
+
+.prose table {
+  width: 100%;
+  min-width: 36rem;
+  margin: 1rem 0;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.prose th,
+.prose td {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  text-align: left;
+  vertical-align: top;
+}
+
+.prose th {
+  background-color: #f3f4f6;
+  color: #1f2937;
+  font-weight: 600;
+}
+
+.prose tbody tr:nth-child(even) {
+  background-color: #f9fafb;
+}
+
 /* Mobile Navigation Improvements */
 @media (max-width: 768px) {
   /* Scrollbar styling for mobile navbars */

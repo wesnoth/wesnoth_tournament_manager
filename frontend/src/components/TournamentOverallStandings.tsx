@@ -71,7 +71,7 @@ const TournamentOverallStandings: React.FC<Props> = ({ tournamentId, refreshKey 
   if (error) return <p className="text-red-700">{error}</p>;
 
   return <section data-help-id="region-tournament-overall-standings" className="rounded-lg bg-white p-6 shadow-lg">
-    <div className="mb-5">
+    <div data-help-id="region-tournament-overall-standings-summary" className="mb-5">
       <h2 className="text-2xl font-bold text-gray-800">Tournament Standings</h2>
       <p className="mt-1 text-sm text-gray-600">Overall classification by furthest phase reached, group tiebreakers, and elimination series and game records.</p>
     </div>
@@ -84,7 +84,7 @@ const TournamentOverallStandings: React.FC<Props> = ({ tournamentId, refreshKey 
           <th className="px-4 py-3 text-left font-semibold text-gray-700">Result</th>
           <th className="px-4 py-3 text-left font-semibold text-gray-700">Tournament journey</th>
         </tr></thead>
-        <tbody>{standings.map(standing => <tr key={standing.entry_id} className={`border-b ${standing.status === 'champion' ? 'bg-yellow-50' : standing.status === 'runner_up' ? 'bg-slate-50' : 'hover:bg-gray-50'}`}>
+        <tbody>{standings.map(standing => <tr data-help-id="region-tournament-overall-standing" key={standing.entry_id} className={`border-b ${standing.status === 'champion' ? 'bg-yellow-50' : standing.status === 'runner_up' ? 'bg-slate-50' : 'hover:bg-gray-50'}`}>
           <td className="px-4 py-3 text-xl font-bold text-gray-800">{standing.placement}</td>
           <td className="px-4 py-3 font-semibold text-gray-900"><TournamentEntryName name={standing.entry_name} userId={standing.entry_user_id} members={standing.entry_members} /></td>
           <td className="px-4 py-3"><span className={`inline-block rounded-full border px-3 py-1 text-xs font-semibold ${statusStyle[standing.status]}`}>{standing.status === 'runner_up' ? 'Runner-up' : standing.status.charAt(0).toUpperCase() + standing.status.slice(1)}</span></td>
