@@ -60,9 +60,11 @@ const HelpPage: React.FC = () => {
             <p className="text-gray-600">{t('common.help_description')}</p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            <aside className="lg:col-span-1">
-              <div className="sticky top-20 bg-white rounded-lg border border-gray-200 shadow-sm">
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-4">
+            {/* Grid children default to min-width: auto, which lets a long
+                article title widen the sidebar beyond its assigned column. */}
+            <aside className="min-w-0 lg:col-span-1">
+              <div data-help-id="region-help-article-list" className="sticky top-20 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
                 <div className="p-4 border-b border-gray-200">
                   <h2 className="text-lg font-semibold text-gray-900">{t('common.articles')}</h2>
                 </div>
@@ -76,20 +78,21 @@ const HelpPage: React.FC = () => {
                 ) : articles.length === 0 ? (
                   <div className="p-4 text-gray-500 text-sm">{t('common.no_articles')}</div>
                 ) : (
-                  <nav className="p-4 space-y-1">
+                  <nav className="min-w-0 space-y-1 p-4">
                     {articles.map((article) => (
                       <a
+                        data-help-id="action-open-help-article"
                         key={`${article.slug}-${article.language}`}
                         href={`/help/${encodeURIComponent(article.slug)}`}
-                        className={`block px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        className={`flex min-w-0 items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                           displaySlug === article.slug
                             ? 'bg-primary text-white'
                             : 'text-gray-700 hover:bg-gray-100'
                         }`}
                         title={`${article.title} (${article.language.toUpperCase()})`}
                       >
-                        <span className="truncate">{article.title}</span>
-                        <span className="text-xs opacity-75 ml-1">({article.language})</span>
+                        <span className="min-w-0 flex-1 truncate">{article.title}</span>
+                        <span className="ml-1 flex-shrink-0 text-xs opacity-75">({article.language})</span>
                       </a>
                     ))}
                   </nav>
@@ -97,7 +100,7 @@ const HelpPage: React.FC = () => {
               </div>
             </aside>
 
-            <main className="lg:col-span-3">
+            <main className="min-w-0 lg:col-span-3">
               {viewerLoading && !displaySlug ? (
                 <div className="flex justify-center items-center py-20">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
