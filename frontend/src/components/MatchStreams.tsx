@@ -48,7 +48,7 @@ const MatchStreams: React.FC<MatchStreamsProps> = ({ match, compact = false }) =
       </span>)}
     </div>}
     {isStreamer && <form className="flex flex-wrap items-center gap-1" onSubmit={add}>
-      <input data-help-id="field-match-stream-url" type="url" value={url} onChange={event => setUrl(event.target.value)} placeholder={t('stream.url_placeholder')} maxLength={2048} className="min-w-[180px] flex-1 rounded border border-gray-300 px-2 py-1 text-xs" />
+      <input data-help-id="field-match-stream-url" type="url" value={url} onChange={event => setUrl(event.target.value)} placeholder={t('stream.url_placeholder')} maxLength={2048} className="min-w-0 flex-1 basis-40 rounded border border-gray-300 px-2 py-1 text-xs" />
       <button data-help-id="action-add-match-stream" type="submit" disabled={saving || !url.trim()} className="rounded bg-purple-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-50">{saving ? t('stream.saving') : t('stream.add')}</button>
     </form>}
   </div>;

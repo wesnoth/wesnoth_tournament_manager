@@ -540,7 +540,14 @@ const TournamentCompetitionView: React.FC<Props> = ({
         const completed = section.status === 'completed';
         return <div key={section.status}>
           <h3 className="mb-4 border-b-2 border-blue-500 pb-3 text-2xl font-bold text-gray-800">{section.title}</h3>
-          <div className="overflow-x-auto"><table data-help-id="region-tournament-scheduled-games-table" className="w-full text-sm">
+          <div className="overflow-x-auto"><table data-help-id="region-tournament-scheduled-games-table" className="w-full table-fixed text-sm">
+            <colgroup>
+              <col className="w-[18%]" />
+              <col className="w-[25%]" />
+              <col className="w-[25%]" />
+              <col className="w-[14%]" />
+              <col className="w-[18%]" />
+            </colgroup>
             <thead className="bg-gray-200"><tr>
               <th className="px-4 py-3 text-left font-semibold text-gray-700">Phase / Round</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-700">{completed ? 'Winner' : 'Player 1'}</th>
@@ -645,30 +652,30 @@ const TournamentCompetitionView: React.FC<Props> = ({
                 setReplayChoice(choice);
               };
               return <tr data-help-id="region-tournament-game-row" id={`series-${game.series_id}`} key={game.game_id} className={`border-b border-gray-200 ${highlightedSeriesId === game.series_id ? 'bg-yellow-200 ring-2 ring-yellow-400' : pendingReplay ? 'bg-yellow-50 hover:bg-yellow-100' : 'hover:bg-gray-50'}`}>
-                <td className="px-4 py-3 text-gray-700">
+                <td className="px-4 py-3 align-top text-gray-700">
                   <div className="font-medium">{game.phase_name}</div>
                   <div className="text-xs text-gray-500">{game.group_name} · Round {game.round_number} · Game {game.game_number} · Bo{game.best_of}</div>
                 </td>
-                <td className={`px-4 py-3 font-semibold ${completed ? 'text-green-700' : 'text-gray-800'}`}>
+                <td className={`px-4 py-3 align-top font-semibold ${completed ? 'text-green-700' : 'text-gray-800'}`}>
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="min-w-0 flex-1"><TournamentEntryName name={winnerName} userId={winnerUserId} members={displayedWinnerIsEntry1 ? game.entry1_members : game.entry2_members} /></div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="min-w-0 flex-1 break-words"><TournamentEntryName name={winnerName} userId={winnerUserId} members={displayedWinnerIsEntry1 ? game.entry1_members : game.entry2_members} /></div>
                       <StarDisplay rating={game.loser_rating} size="sm" />
                     </div>
                   {completed && game.winner_comments && <div className="text-xs font-normal italic text-gray-500 whitespace-normal break-words">{game.winner_comments}</div>}
                   </div>
                 </td>
-                <td className={`px-4 py-3 font-semibold ${completed ? 'text-red-700' : 'text-gray-800'}`}>
+                <td className={`px-4 py-3 align-top font-semibold ${completed ? 'text-red-700' : 'text-gray-800'}`}>
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="min-w-0 flex-1"><TournamentEntryName name={loserName} userId={loserUserId} members={displayedWinnerIsEntry1 ? game.entry2_members : game.entry1_members} /></div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="min-w-0 flex-1 break-words"><TournamentEntryName name={loserName} userId={loserUserId} members={displayedWinnerIsEntry1 ? game.entry2_members : game.entry1_members} /></div>
                       <StarDisplay rating={game.winner_rating} size="sm" />
                     </div>
                   {completed && game.loser_comments && <div className="text-xs font-normal italic text-gray-500 whitespace-normal break-words">{game.loser_comments}</div>}
                   </div>
                 </td>
-                <td className="px-4 py-3 text-gray-700">
-                  <div>{pendingSummary?.finalMap || pendingSummary?.resolvedMap || pendingSummary?.selectedMapName || pendingSummary?.forumMap || game.map || '—'}</div>
+                <td className="px-4 py-3 align-top text-gray-700">
+                  <div className="break-words">{pendingSummary?.finalMap || pendingSummary?.resolvedMap || pendingSummary?.selectedMapName || pendingSummary?.forumMap || game.map || '—'}</div>
                   {(completed || pendingReplay) && <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
                     {pendingReplay && pendingFactionLabels.length > 0
                       ? pendingFactionLabels.map((label: string, index: number) => <span key={index} className="rounded bg-blue-100 px-1.5 py-0.5 font-semibold text-blue-700">{label}</span>)
@@ -681,13 +688,13 @@ const TournamentCompetitionView: React.FC<Props> = ({
                       </>}
                   </div>}
                 </td>
-                <td data-help-id="region-game-stream-links" className="px-4 py-3 text-gray-700">
+                <td data-help-id="region-game-stream-links" className="px-4 py-3 align-top text-gray-700">
                   {streamLinksFor(game).length > 0 && <div className="mb-2 flex flex-wrap items-center gap-1 border-b border-gray-100 pb-2">
                     <span className="text-xs font-semibold text-purple-700">{t('stream.label')}:</span>
                     {streamLinksFor(game).map((stream: any) => {
                       const canEditStream = isStreamer && currentUserId === stream.streamer_user_id;
                       const canDeleteStream = canEditStream || isAdmin || isTournamentModerator || canManage;
-                      return <div key={stream.id} className="flex items-center gap-1">
+                      return <div key={stream.id} className="flex flex-wrap items-center gap-1">
                         {editingStreamId === stream.id ? <>
                           <input
                             data-help-id="field-edit-game-stream-url"
@@ -695,7 +702,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
                             value={editingStreamUrl}
                             onChange={(event) => setEditingStreamUrl(event.target.value)}
                             maxLength={2048}
-                            className="w-64 rounded border border-gray-300 px-2 py-1 text-xs"
+                            className="min-w-0 flex-1 basis-40 rounded border border-gray-300 px-2 py-1 text-xs"
                           />
                           <button
                             data-help-id="action-save-game-stream"
@@ -741,7 +748,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
                       value={streamUrls[game.game_id] || ''}
                       onChange={(event) => setStreamUrls(current => ({ ...current, [game.game_id]: event.target.value }))}
                       placeholder={t('stream.url_placeholder')}
-                      className="min-w-[220px] flex-1 rounded border border-gray-300 px-2 py-1 text-xs"
+                      className="min-w-0 flex-1 basis-40 rounded border border-gray-300 px-2 py-1 text-xs"
                       maxLength={2048}
                     />
                     <button

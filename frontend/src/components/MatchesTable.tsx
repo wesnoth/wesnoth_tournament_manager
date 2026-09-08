@@ -146,7 +146,14 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
   if (matches.length === 0) {
     return (
       <div className="w-full overflow-x-auto">
-        <table className="w-full border-collapse bg-white">
+        <table className="w-full table-fixed border-collapse bg-white">
+          <colgroup>
+            <col className="w-[7%]" />
+            <col className="w-[30%]" />
+            <col className="w-[30%]" />
+            <col className="w-[15%]" />
+            <col className="w-[18%]" />
+          </colgroup>
           <thead className="bg-gray-100 border-b-2 border-gray-300">
             <tr>
               <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('date')}>{t('label_date')}</th>
@@ -168,7 +175,14 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
 
   return (
     <div className="w-full overflow-x-auto">
-      <table className="w-full border-collapse bg-white">
+      <table className="w-full table-fixed border-collapse bg-white">
+        <colgroup>
+          <col className="w-[7%]" />
+          <col className="w-[30%]" />
+          <col className="w-[30%]" />
+          <col className="w-[15%]" />
+          <col className="w-[18%]" />
+        </colgroup>
         <thead className="bg-gray-100 border-b-2 border-gray-300">
           <tr>
             <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('date')}>
@@ -217,12 +231,12 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
 
               return (
                 <tr key={match.id} className={`border-b ${rowBorderColor} ${rowHoverColor} ${rowBgColor}`}>
-                  <td className="px-4 py-3 text-sm text-gray-700">{date}</td>
+                  <td className="px-4 py-3 align-top text-sm text-gray-700">{date}</td>
 
-                  <td className="px-4 py-3 text-sm">
+                  <td className="px-4 py-3 align-top text-sm">
                     <div className="space-y-2">
-                      <div className="flex gap-2 items-center">
-                        <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="min-w-0 flex-1 break-words">
                           <span className={`font-semibold ${isDueReplay ? 'text-red-800' : 'text-yellow-800'}`}>{player1Name}</span>
                         </div>
                         <span className={`inline-block px-2 py-1 ${isDueReplay ? 'bg-red-200 text-red-700' : 'bg-yellow-100 text-yellow-700'} text-xs rounded font-semibold`}>{faction1}</span>
@@ -231,10 +245,10 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                     </div>
                   </td>
 
-                  <td className="px-4 py-3 text-sm">
+                  <td className="px-4 py-3 align-top text-sm">
                     <div className="space-y-2">
-                      <div className="flex gap-2 items-center">
-                        <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="min-w-0 flex-1 break-words">
                           <span className={`font-semibold ${isDueReplay ? 'text-red-800' : 'text-yellow-800'}`}>{player2Name}</span>
                         </div>
                         <span className={`inline-block px-2 py-1 ${isDueReplay ? 'bg-red-200 text-red-700' : 'bg-yellow-100 text-yellow-700'} text-xs rounded font-semibold`}>{faction2}</span>
@@ -243,8 +257,8 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                     </div>
                   </td>
 
-                  <td className="px-4 py-3 text-sm">
-                    <div className={`font-semibold ${isDueReplay ? 'text-red-900' : 'text-yellow-900'}`}>{map}</div>
+                  <td className="px-4 py-3 align-top text-sm">
+                    <div className={`break-words font-semibold ${isDueReplay ? 'text-red-900' : 'text-yellow-900'}`}>{map}</div>
                     {(match.replay_filename || match.game_name) && (
                       <div className={`text-xs ${isDueReplay ? 'text-red-700 bg-red-100' : 'text-yellow-700 bg-yellow-100'} mt-1 font-mono px-2 py-1 rounded truncate max-w-[200px]`} title={match.replay_filename || match.game_name}>
                         📄 {match.replay_filename || match.game_name}
@@ -252,7 +266,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                     )}
                   </td>
 
-                  <td className="px-4 py-3 text-sm">
+                  <td className="px-4 py-3 align-top text-sm">
                     <div className="space-y-2">
                       <div>
                         <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${isDueReplay ? 'bg-red-200 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
@@ -356,12 +370,12 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
 
             return (
               <tr data-help-id="region-match-row" key={match.id} className={`border-b ${matchRowBorderColor} ${matchRowHoverColor} ${matchRowBgColor}`}>
-              <td className="px-4 py-3 text-sm text-gray-700">{new Date(match.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</td>
+              <td className="px-4 py-3 align-top text-sm text-gray-700">{new Date(match.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</td>
 
-              <td className="px-4 py-3 text-sm">
+              <td className="px-4 py-3 align-top text-sm">
                 <div className="space-y-2">
-                  <div className="flex gap-2 items-center">
-                    <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="min-w-0 flex-1 break-words">
                       <PlayerLink nickname={match.winner_nickname} userId={match.winner_id} />
                     </div>
                     <StarDisplay rating={match.loser_rating} size="sm" />
@@ -370,7 +384,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                       <span className={`inline-block px-1.5 py-0.5 text-xs rounded font-semibold ${match.winner_side === 1 ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>S{match.winner_side}</span>
                     )}
                   </div>
-                  <div className="flex gap-3 text-xs text-gray-600">
+                  <div className="flex flex-wrap gap-3 text-xs text-gray-600">
                     <div>
                       <span className="font-semibold text-gray-700">ELO: </span>
                       <span>{match.winner_elo_before || 'N/A'}</span>
@@ -398,10 +412,10 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                 </div>
               </td>
 
-              <td className="px-4 py-3 text-sm">
+              <td className="px-4 py-3 align-top text-sm">
                 <div className="space-y-2">
-                  <div className="flex gap-2 items-center">
-                    <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="min-w-0 flex-1 break-words">
                       <PlayerLink nickname={match.loser_nickname} userId={match.loser_id} />
                     </div>
                     <StarDisplay rating={match.winner_rating} size="sm" />
@@ -410,7 +424,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                       <span className={`inline-block px-1.5 py-0.5 text-xs rounded font-semibold ${match.winner_side === 1 ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}`}>S{match.winner_side === 1 ? 2 : 1}</span>
                     )}
                   </div>
-                  <div className="flex gap-3 text-xs text-gray-600">
+                  <div className="flex flex-wrap gap-3 text-xs text-gray-600">
                     <div>
                       <span className="font-semibold text-gray-700">ELO: </span>
                       <span>{match.loser_elo_before || 'N/A'}</span>
@@ -438,9 +452,9 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                 </div>
               </td>
 
-              <td className="px-4 py-3 text-sm text-gray-700">{match.map}</td>
+              <td className="break-words px-4 py-3 align-top text-sm text-gray-700">{match.map}</td>
 
-              <td className="px-4 py-3 text-sm">
+              <td className="px-4 py-3 align-top text-sm">
                 <div className="space-y-2">
                   <div>
                     <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${

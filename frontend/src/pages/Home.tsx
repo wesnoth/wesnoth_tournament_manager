@@ -283,7 +283,15 @@ const Home: React.FC = () => {
             </div>
             {recentMatches.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full table-fixed text-sm">
+                  <colgroup>
+                    <col className="w-[10%]" />
+                    <col className="w-[25%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[25%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[20%]" />
+                  </colgroup>
                   <thead className="bg-gray-100">
                     <tr>
                       <th className="px-4 py-2 text-left font-semibold text-gray-700">{t('label_date')}</th>
@@ -312,14 +320,14 @@ const Home: React.FC = () => {
 
                         return (
                           <tr key={match.id} className={`border-b ${borderColor} hover:${isDueReplay ? 'bg-red-100' : 'bg-yellow-50'} ${bgColor}`}>
-                            <td className="px-4 py-3 text-sm text-gray-700">
+                            <td className="px-4 py-3 align-top text-sm text-gray-700">
                               {new Date(match.created_at).toLocaleDateString()}
                             </td>
 
-                            <td className="px-4 py-3 text-sm" colSpan={2}>
+                            <td className="px-4 py-3 align-top text-sm" colSpan={2}>
                               <div className="space-y-2">
-                                <div className="flex gap-2 items-center">
-                                  <div className="flex-1 min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <div className="min-w-0 flex-1 break-words">
                                     <span className={`font-semibold ${textColor}`}>{player1Name}</span>
                                   </div>
                                   {match.winner_faction && (
@@ -332,10 +340,10 @@ const Home: React.FC = () => {
                               </div>
                             </td>
 
-                            <td className="px-4 py-3 text-sm" colSpan={2}>
+                            <td className="px-4 py-3 align-top text-sm" colSpan={2}>
                               <div className="space-y-2">
-                                <div className="flex gap-2 items-center">
-                                  <div className="flex-1 min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <div className="min-w-0 flex-1 break-words">
                                     <span className={`font-semibold ${textColor}`}>{player2Name}</span>
                                   </div>
                                   {match.loser_faction && (
@@ -348,9 +356,9 @@ const Home: React.FC = () => {
                               </div>
                             </td>
 
-                            <td className="px-4 py-3 text-sm">
+                            <td className="px-4 py-3 align-top text-sm">
                               <div className="space-y-2">
-                                <div className={`font-semibold ${isDueReplay ? 'text-red-900' : 'text-yellow-900'}`}>{map}</div>
+                                <div className={`break-words font-semibold ${isDueReplay ? 'text-red-900' : 'text-yellow-900'}`}>{map}</div>
                                 {(match.replay_filename || match.game_name) && (
                                   <div className={`text-xs ${badgeText} font-mono ${badgeBg} px-2 py-1 rounded truncate max-w-[200px]`} title={match.replay_filename || match.game_name}>
                                     📄 {match.replay_filename || match.game_name}
@@ -383,11 +391,11 @@ const Home: React.FC = () => {
 
                       return (
                         <tr data-help-id="region-home-recent-match-row" key={match.id} className="border-b hover:bg-gray-50 transition-colors">
-                          <td className="px-4 py-3 text-gray-700">
+                          <td className="px-4 py-3 align-top text-gray-700">
                             {new Date(match.created_at).toLocaleDateString()}
                           </td>
                           
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-3 align-top">
                             <div className="flex flex-col gap-1">
                               <span className="font-semibold text-green-600"><PlayerLink nickname={match.winner_nickname} userId={match.winner_id} /></span>
                               {match.winner_faction && (
@@ -397,12 +405,12 @@ const Home: React.FC = () => {
                                 <span className={`text-xs px-1.5 py-0.5 rounded font-semibold inline-block w-fit ${match.winner_side === 1 ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>S{match.winner_side}</span>
                               )}
                               {match.winner_comments && (
-                                <span className="text-xs text-gray-600 italic">{match.winner_comments}</span>
+                                <span className="break-words text-xs italic text-gray-600">{match.winner_comments}</span>
                               )}
                             </div>
                           </td>
                           
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-3 align-top">
                             <div className="flex flex-col gap-1">
                               <div className="text-gray-700 font-semibold">{match.winner_elo_before || 'N/A'}</div>
                               <div className={`text-sm font-semibold ${winnerEloChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -411,7 +419,7 @@ const Home: React.FC = () => {
                             </div>
                           </td>
                           
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-3 align-top">
                             <div className="flex flex-col gap-1">
                               <span className="font-semibold text-red-600"><PlayerLink nickname={match.loser_nickname} userId={match.loser_id} /></span>
                               {match.loser_faction && (
@@ -421,12 +429,12 @@ const Home: React.FC = () => {
                                 <span className={`text-xs px-1.5 py-0.5 rounded font-semibold inline-block w-fit ${match.winner_side === 1 ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}`}>S{match.winner_side === 1 ? 2 : 1}</span>
                               )}
                               {match.loser_comments && (
-                                <span className="text-xs text-gray-600 italic">{match.loser_comments}</span>
+                                <span className="break-words text-xs italic text-gray-600">{match.loser_comments}</span>
                               )}
                             </div>
                           </td>
                           
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-3 align-top">
                             <div className="flex flex-col gap-1">
                               <div className="text-gray-700 font-semibold">{match.loser_elo_before || 'N/A'}</div>
                               <div className={`text-sm font-semibold ${loserEloChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -435,7 +443,7 @@ const Home: React.FC = () => {
                             </div>
                           </td>
                           
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-3 align-top">
                             <MatchStreams match={match} compact />
                             {match.replay_file_path && (
                               <a
