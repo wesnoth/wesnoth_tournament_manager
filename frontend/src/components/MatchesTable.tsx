@@ -407,7 +407,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                     )}
                   </div>
                   {match.winner_comments && (
-                    <div className="text-xs text-gray-500 italic whitespace-normal break-words">{match.winner_comments}</div>
+                    <div className="whitespace-pre-line break-words text-xs italic text-gray-500">{match.winner_comments}</div>
                   )}
                 </div>
               </td>
@@ -447,7 +447,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                     )}
                   </div>
                   {match.loser_comments && (
-                    <div className="text-xs text-gray-500 italic whitespace-normal break-words">{match.loser_comments}</div>
+                    <div className="whitespace-pre-line break-words text-xs italic text-gray-500">{match.loser_comments}</div>
                   )}
                 </div>
               </td>

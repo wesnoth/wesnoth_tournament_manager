@@ -405,7 +405,7 @@ const Home: React.FC = () => {
                                 <span className={`text-xs px-1.5 py-0.5 rounded font-semibold inline-block w-fit ${match.winner_side === 1 ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>S{match.winner_side}</span>
                               )}
                               {match.winner_comments && (
-                                <span className="break-words text-xs italic text-gray-600">{match.winner_comments}</span>
+                                <span className="whitespace-pre-line break-words text-xs italic text-gray-600">{match.winner_comments}</span>
                               )}
                             </div>
                           </td>
@@ -429,7 +429,7 @@ const Home: React.FC = () => {
                                 <span className={`text-xs px-1.5 py-0.5 rounded font-semibold inline-block w-fit ${match.winner_side === 1 ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}`}>S{match.winner_side === 1 ? 2 : 1}</span>
                               )}
                               {match.loser_comments && (
-                                <span className="break-words text-xs italic text-gray-600">{match.loser_comments}</span>
+                                <span className="whitespace-pre-line break-words text-xs italic text-gray-600">{match.loser_comments}</span>
                               )}
                             </div>
                           </td>

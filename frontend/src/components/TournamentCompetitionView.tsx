@@ -662,7 +662,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
                       <div className="min-w-0 flex-1 break-words"><TournamentEntryName name={winnerName} userId={winnerUserId} members={displayedWinnerIsEntry1 ? game.entry1_members : game.entry2_members} /></div>
                       <StarDisplay rating={game.loser_rating} size="sm" />
                     </div>
-                  {completed && game.winner_comments && <div className="text-xs font-normal italic text-gray-500 whitespace-normal break-words">{game.winner_comments}</div>}
+                  {completed && game.winner_comments && <div className="whitespace-pre-line break-words text-xs font-normal italic text-gray-500">{game.winner_comments}</div>}
                   </div>
                 </td>
                 <td className={`px-4 py-3 align-top font-semibold ${completed ? 'text-red-700' : 'text-gray-800'}`}>
@@ -671,7 +671,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
                       <div className="min-w-0 flex-1 break-words"><TournamentEntryName name={loserName} userId={loserUserId} members={displayedWinnerIsEntry1 ? game.entry2_members : game.entry1_members} /></div>
                       <StarDisplay rating={game.winner_rating} size="sm" />
                     </div>
-                  {completed && game.loser_comments && <div className="text-xs font-normal italic text-gray-500 whitespace-normal break-words">{game.loser_comments}</div>}
+                  {completed && game.loser_comments && <div className="whitespace-pre-line break-words text-xs font-normal italic text-gray-500">{game.loser_comments}</div>}
                   </div>
                 </td>
                 <td className="px-4 py-3 align-top text-gray-700">

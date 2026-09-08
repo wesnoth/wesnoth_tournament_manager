@@ -251,7 +251,7 @@ const AdminDisputes: React.FC = () => {
 
                 <div className="bg-green-50 rounded-lg p-6 border-l-4 border-green-500">
                   <h3 className="text-lg font-bold text-green-900 mb-4">Winner's Comments</h3>
-                  <p className="text-gray-800 leading-relaxed">{selectedDispute.winner_comments || 'No comments provided'}</p>
+                  <p className="whitespace-pre-line break-words leading-relaxed text-gray-800">{selectedDispute.winner_comments || 'No comments provided'}</p>
                   {selectedDispute.winner_rating && (
                     <p className="text-sm text-green-700 mt-4 font-semibold">⭐ Match Rating: {selectedDispute.winner_rating}/5</p>
                   )}
@@ -259,7 +259,7 @@ const AdminDisputes: React.FC = () => {
 
                 <div className="bg-red-50 rounded-lg p-6 border-l-4 border-red-500">
                   <h3 className="text-lg font-bold text-red-900 mb-4">Loser's Comments / Dispute Reason</h3>
-                  <p className="text-gray-800 leading-relaxed">{selectedDispute.loser_comments || 'No comments provided'}</p>
+                  <p className="whitespace-pre-line break-words leading-relaxed text-gray-800">{selectedDispute.loser_comments || 'No comments provided'}</p>
                   {selectedDispute.loser_rating && (
                     <p className="text-sm text-red-700 mt-4 font-semibold">⭐ Match Rating: {selectedDispute.loser_rating}/5</p>
                   )}
