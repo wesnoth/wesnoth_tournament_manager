@@ -406,9 +406,9 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
             const isCancelled = match.status === 'cancelled';
             const isPendingTournamentReplay = String(match.source_type).startsWith('tournament_replay_confidence_1');
             const hasEloData = match.has_elo_data !== false;
-            const matchRowBgColor = isCancelled ? 'bg-red-100' : '';
-            const matchRowBorderColor = isCancelled ? 'border-red-200' : 'border-gray-200';
-            const matchRowHoverColor = isCancelled ? 'hover:bg-red-50' : 'hover:bg-gray-50';
+            const matchRowBgColor = isCancelled ? 'bg-red-100' : isPendingTournamentReplay ? 'bg-yellow-50' : '';
+            const matchRowBorderColor = isCancelled ? 'border-red-200' : isPendingTournamentReplay ? 'border-yellow-200' : 'border-gray-200';
+            const matchRowHoverColor = isCancelled ? 'hover:bg-red-50' : isPendingTournamentReplay ? 'hover:bg-yellow-100' : 'hover:bg-gray-50';
 
             return (
               <tr data-help-id="region-match-row" key={match.feed_id || match.id} className={`border-b ${matchRowBorderColor} ${matchRowHoverColor} ${matchRowBgColor}`}>

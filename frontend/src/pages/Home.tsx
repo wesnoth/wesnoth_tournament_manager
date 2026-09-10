@@ -399,7 +399,7 @@ const Home: React.FC = () => {
                       const isPendingTournamentReplay = String(match.source_type).startsWith('tournament_replay_confidence_1');
 
                       return (
-                        <tr data-help-id="region-home-recent-match-row" key={match.feed_id || match.id} className="border-b hover:bg-gray-50 transition-colors">
+                        <tr data-help-id="region-home-recent-match-row" key={match.feed_id || match.id} className={`border-b transition-colors ${isPendingTournamentReplay ? 'border-yellow-200 bg-yellow-50 hover:bg-yellow-100' : 'hover:bg-gray-50'}`}>
                           <td className="px-4 py-3 align-top text-gray-700">
                             {new Date(match.created_at).toLocaleDateString()}
                           </td>
