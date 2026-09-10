@@ -950,5 +950,18 @@
   "waiting_lobby_cancel": "Отменить",
   "waiting_lobby_empty": "Сейчас никто не ждёт.",
   "waiting_lobby_challenged_by": "Вызов от",
-  "help": "Помощь"
+  "help": "Помощь",
+  "match_type": {
+    "ranked": "Рейтинговая",
+    "tournament_ranked": "Рейтинговый турнир",
+    "tournament_unranked": "Турнир без рейтинга",
+    "tournament_team": "Командный турнир"
+  },
+  "match_feed": {
+    "type_filter": "Тип матча",
+    "round": "Раунд",
+    "game": "Игра",
+    "no_elo": "Без ELO",
+    "elo_unavailable": "ELO недоступен"
+  }
 }

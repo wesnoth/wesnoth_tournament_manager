@@ -15,6 +15,7 @@ interface UsePlayerProfileDataOptions {
     map: string;
     status: string;
     faction: string;
+    match_type: string;
   };
 }
 
@@ -96,7 +97,7 @@ export function usePlayerProfileData({
         const response = await userService.getEloHistory(playerId);
         setEloHistoryMatches(response.data || []);
       } else if (activeTab === 'matches') {
-        const response = await publicService.getFactions();
+        const response = await publicService.getFactions(false);
         setAvailableFactions(response.data || []);
       }
     } catch (err) {

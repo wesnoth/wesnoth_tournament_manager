@@ -12,6 +12,7 @@ interface FilterState {
   map: string;
   status: string;
   faction: string;
+  match_type: string;
 }
 
 interface MatchDetailsModal {
@@ -43,6 +44,7 @@ const Matches: React.FC = () => {
     map: '',
     status: '',
     faction: '',
+    match_type: '',
   });
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(filters);
   const [availableFactions, setAvailableFactions] = useState<any[]>([]);
@@ -50,7 +52,7 @@ const Matches: React.FC = () => {
   useEffect(() => {
     const fetchFactions = async () => {
       try {
-        const res = await publicService.getFactions();
+        const res = await publicService.getFactions(false);
         setAvailableFactions(res.data || []);
       } catch (err) {
         console.error('Error fetching factions:', err);
@@ -122,6 +124,7 @@ const Matches: React.FC = () => {
       map: '',
       status: '',
       faction: '',
+      match_type: '',
     };
     setFilters(emptyFilters);
     setAppliedFilters(emptyFilters);
@@ -142,11 +145,14 @@ const Matches: React.FC = () => {
     }, 500);
   };
 
-  const handleDownloadReplay = async (matchId: string | null, replayFilePath: string, tournamentMatchId?: string): Promise<void> => {
-    if (!matchId || !replayFilePath) return;
+  const handleDownloadReplay = async (matchId: string | null, replayFilePath: string, tournamentGameId?: string, tournamentId?: string): Promise<void> => {
+    if (!replayFilePath) return;
     try {
-      const filename = replayFilePath.split('/').pop() || `replay_${matchId}`;
-      await matchService.incrementReplayDownloads(matchId);
+      const filename = replayFilePath.split('/').pop() || `replay_${matchId || tournamentGameId || 'game'}`;
+      if (matchId) await matchService.incrementReplayDownloads(matchId);
+      else if (tournamentId && tournamentGameId) {
+        await matchService.incrementTournamentGameReplayDownloads(tournamentId, tournamentGameId);
+      }
       const link = document.createElement('a');
       link.href = replayFilePath;
       link.download = filename;
@@ -275,6 +281,7 @@ const Matches: React.FC = () => {
           <div className="flex flex-col gap-2 flex-shrink-0 min-w-[200px]">
             <label htmlFor="player" className="font-semibold text-gray-700 text-sm">{t('filter_player')}</label>
             <input
+              data-help-id="field-matches-player-filter"
               type="text"
               id="player"
               name="player"
@@ -289,6 +296,7 @@ const Matches: React.FC = () => {
           <div className="flex flex-col gap-2 flex-shrink-0 min-w-[200px]">
             <label htmlFor="map" className="font-semibold text-gray-700 text-sm">{t('filter_map')}</label>
             <input
+              data-help-id="field-matches-map-filter"
               type="text"
               id="map"
               name="map"
@@ -303,6 +311,7 @@ const Matches: React.FC = () => {
           <div className="flex flex-col gap-2 flex-shrink-0 min-w-[200px]">
             <label htmlFor="status" className="font-semibold text-gray-700 text-sm">{t('filter_match_status')}</label>
             <select
+              data-help-id="option-matches-status-filter"
               id="status"
               name="status"
               value={filters.status}
@@ -320,6 +329,7 @@ const Matches: React.FC = () => {
           <div className="flex flex-col gap-2 flex-shrink-0 min-w-[200px]">
             <label htmlFor="faction" className="font-semibold text-gray-700 text-sm">{t('filter_faction') || 'Faction'}</label>
             <select
+              data-help-id="option-matches-faction-filter"
               id="faction"
               name="faction"
               value={filters.faction}
@@ -335,8 +345,26 @@ const Matches: React.FC = () => {
             </select>
           </div>
 
-          <button className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors flex-shrink-0 h-fit self-end" onClick={resetFilters}>{t('reset_filters')}</button>
-          <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded transition-colors flex-shrink-0 h-fit self-end" onClick={handleRefresh} title={t('refresh') || 'Refresh'} aria-label={t('refresh') || 'Refresh'}>↻</button>
+          <div className="flex flex-col gap-2 flex-shrink-0 min-w-[200px]">
+            <label htmlFor="match_type" className="font-semibold text-gray-700 text-sm">{t('match_feed.type_filter', 'Match type')}</label>
+            <select
+              data-help-id="option-matches-type-filter"
+              id="match_type"
+              name="match_type"
+              value={filters.match_type}
+              onChange={handleFilterChangeWithReset}
+              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
+            >
+              <option value="">{t('all')}</option>
+              <option value="ranked">{t('match_type.ranked', 'Ranked')}</option>
+              <option value="tournament_ranked">{t('match_type.tournament_ranked', 'Ranked tournament')}</option>
+              <option value="tournament_unranked">{t('match_type.tournament_unranked', 'Unranked tournament')}</option>
+              <option value="tournament_team">{t('match_type.tournament_team', 'Team tournament')}</option>
+            </select>
+          </div>
+
+          <button data-help-id="action-reset-match-filters" className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors flex-shrink-0 h-fit self-end" onClick={resetFilters}>{t('reset_filters')}</button>
+          <button data-help-id="action-refresh-matches" className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded transition-colors flex-shrink-0 h-fit self-end" onClick={handleRefresh} title={t('refresh') || 'Refresh'} aria-label={t('refresh') || 'Refresh'}>↻</button>
         </div>
       </div>
 

@@ -2,16 +2,20 @@ import React, { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { matchService } from '../services/api';
 import StarDisplay from './StarDisplay';
+import MatchTypeBadge from './MatchTypeBadge';
+import PlayerLink from './PlayerLink';
+import { useTranslation } from 'react-i18next';
 
 interface MatchDetailsModalProps {
   match: any;
   isOpen: boolean;
   onClose: () => void;
-  onDownloadReplay?: (matchId: string | null, replayFilePath: string, tournamentMatchId?: string) => void;
+  onDownloadReplay?: (matchId: string | null, replayFilePath: string, tournamentGameId?: string, tournamentId?: string) => void;
   onCancelSuccess?: () => void;
 }
 
 const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, onClose, onDownloadReplay, onCancelSuccess }) => {
+  const { t } = useTranslation();
   const { userId } = useAuthStore();
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
@@ -26,7 +30,22 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
 
   // Check if current user is the reporter (winner) and match can be cancelled
   const isReporter = match.winner_id === userId;
-  const canCancel = isReporter && ['unconfirmed', 'confirmed'].includes(match.status);
+  const canCancel = match.source_type !== 'tournament_game' && isReporter && ['unconfirmed', 'confirmed'].includes(match.status);
+  const hasEloData = match.has_elo_data !== false;
+
+  const renderCompetitor = (winner: boolean) => {
+    const nickname = winner ? match.winner_nickname : match.loser_nickname;
+    const userId = winner ? match.winner_id : match.loser_id;
+    const members = (winner ? match.winner_members : match.loser_members) || [];
+    return (
+      <div>
+        <PlayerLink nickname={nickname} userId={userId} />
+        {members.length > 0 && <div className="mt-1 flex flex-wrap justify-center gap-2 text-xs">
+          {members.map((member: any) => <PlayerLink key={member.user_id || member.nickname} nickname={member.nickname} userId={member.user_id} />)}
+        </div>}
+      </div>
+    );
+  };
 
   const handleCancelReport = async () => {
     try {
@@ -63,6 +82,7 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
 
         <div className="px-6 py-6">
           <div>
+            <MatchTypeBadge match={match} />
             <div className="grid grid-cols-3 gap-4 mb-6 pb-4 border-b border-gray-200">
               <div>
                 <label className="text-gray-600 text-sm font-semibold">Date:</label>
@@ -97,8 +117,8 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
                 <tbody>
                   <tr className="border-b border-gray-200 hover:bg-gray-50">
                     <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">Player</td>
-                    <td className="px-4 py-3 text-center text-gray-800">{match.winner_nickname}</td>
-                    <td className="px-4 py-3 text-center text-gray-800">{match.loser_nickname}</td>
+                    <td className="px-4 py-3 text-center text-gray-800">{renderCompetitor(true)}</td>
+                    <td className="px-4 py-3 text-center text-gray-800">{renderCompetitor(false)}</td>
                   </tr>
 
                   <tr className="border-b border-gray-200 hover:bg-gray-50">
@@ -123,19 +143,19 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
                     <td className="px-4 py-3 text-center text-gray-800"><StarDisplay rating={match.winner_rating} size="md" /></td>
                   </tr>
 
-                  <tr className="border-b border-gray-200 hover:bg-gray-50">
+                  {hasEloData && <tr className="border-b border-gray-200 hover:bg-gray-50">
                     <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">ELO Before</td>
                     <td className="px-4 py-3 text-center text-gray-800">{match.winner_elo_before || 'N/A'}</td>
                     <td className="px-4 py-3 text-center text-gray-800">{match.loser_elo_before || 'N/A'}</td>
-                  </tr>
+                  </tr>}
 
-                  <tr className="border-b border-gray-200 hover:bg-gray-50">
+                  {hasEloData && <tr className="border-b border-gray-200 hover:bg-gray-50">
                     <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">ELO After</td>
                     <td className="px-4 py-3 text-center text-gray-800">{match.winner_elo_after || 'N/A'}</td>
                     <td className="px-4 py-3 text-center text-gray-800">{match.loser_elo_after || 'N/A'}</td>
-                  </tr>
+                  </tr>}
 
-                  <tr className="border-b border-gray-200 hover:bg-gray-50">
+                  {hasEloData && <tr className="border-b border-gray-200 hover:bg-gray-50">
                     <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">ELO Change</td>
                     <td className="px-4 py-3 text-center">
                       <span className={`font-semibold ${winnerEloChange(match) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -147,7 +167,16 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
                         {loserEloChange(match) >= 0 ? '+' : ''}{loserEloChange(match)}
                       </span>
                     </td>
-                  </tr>
+                  </tr>}
+
+                  {!hasEloData && <tr className="border-b border-gray-200 hover:bg-gray-50">
+                    <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">ELO</td>
+                    <td colSpan={2} className="px-4 py-3 text-center font-semibold text-gray-500">
+                      {match.match_type === 'tournament_ranked'
+                        ? t('match_feed.elo_unavailable', 'ELO unavailable')
+                        : t('match_feed.no_elo', 'No ELO')}
+                    </td>
+                  </tr>}
 
                   {(match.winner_comments || match.loser_comments) && (
                     <tr className="border-b border-gray-200 hover:bg-gray-50">
@@ -167,9 +196,15 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-block px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-semibold text-sm transition-colors"
-                          onClick={() => {
+                          onClick={(event) => {
+                            event.preventDefault();
                             if (onDownloadReplay && (match.id || match.match_id)) {
-                              onDownloadReplay(match.match_id || null, match.replay_file_path, match.id);
+                              onDownloadReplay(
+                                match.source_type === 'tournament_game' ? null : match.match_id || match.id,
+                                match.replay_file_path,
+                                match.tournament_game_id,
+                                match.tournament_id,
+                              );
                             }
                           }}
                           title={`Downloads: ${match.replay_downloads || 0}`}

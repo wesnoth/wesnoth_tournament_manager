@@ -28,6 +28,7 @@ interface FilterState {
   map: string;
   status: string;
   faction: string;
+  match_type: string;
 }
 
 const User: React.FC = () => {
@@ -51,9 +52,10 @@ const User: React.FC = () => {
     map: '',
     status: '',
     faction: '',
+    match_type: '',
   });
   const [appliedMatchFilters, setAppliedMatchFilters] = useState<FilterState>({
-    player: '', map: '', status: '', faction: '',
+    player: '', map: '', status: '', faction: '', match_type: '',
   });
   const [matchPage, setMatchPage] = useState(1);
 
@@ -102,12 +104,35 @@ const User: React.FC = () => {
     refreshData();
   };
 
+  const handleDownloadReplay = async (
+    matchId: string | null,
+    replayFilePath: string,
+    tournamentGameId?: string,
+    tournamentId?: string,
+  ) => {
+    if (matchId) await matchService.incrementReplayDownloads(matchId);
+    else if (tournamentId && tournamentGameId) {
+      await matchService.incrementTournamentGameReplayDownloads(tournamentId, tournamentGameId);
+    }
+    const link = document.createElement('a');
+    link.href = replayFilePath;
+    link.download = replayFilePath.split('/').pop() || `replay_${matchId || tournamentGameId || 'game'}`;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFilters(prev => ({
       ...prev,
       [name]: value,
     }));
+    if (name !== 'player' && name !== 'map') {
+      setAppliedMatchFilters(prev => ({ ...prev, [name]: value }));
+      setMatchPage(1);
+    }
   };
 
   const resetFilters = () => {
@@ -116,6 +141,7 @@ const User: React.FC = () => {
       map: '',
       status: '',
       faction: '',
+      match_type: '',
     };
     setFilters(emptyFilters);
     setAppliedMatchFilters(emptyFilters);
@@ -273,29 +299,7 @@ const User: React.FC = () => {
                       currentPlayerId={userId || ''}
                       onViewDetails={openMatchDetails}
                       onOpenConfirmation={openConfirmation}
-                      onDownloadReplay={async (matchId, replayFilePath) => {
-                        try {
-                          if (!replayFilePath) return;
-                          
-                          // Extract filename from path
-                          const filename = replayFilePath.split('/').pop() || `replay_${matchId}`;
-                          
-                          // Increment download count
-                          await matchService.incrementReplayDownloads(matchId);
-                          
-                          // Use the replay_file_path HTTPS URL directly
-                          const link = document.createElement('a');
-                          link.href = replayFilePath;
-                          link.download = filename;
-                          link.target = '_blank';
-                          
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
-                        } catch (err) {
-                          console.error('Error downloading replay:', err);
-                        }
-                      }}
+                      onDownloadReplay={handleDownloadReplay}
                     />
                   </div>
                 </div>
@@ -313,6 +317,7 @@ const User: React.FC = () => {
                         <div className="flex flex-col gap-2 flex-shrink-0 min-w-[200px]">
                           <label htmlFor="player" className="text-sm font-semibold text-gray-700">{t('filter_player')}</label>
                           <input
+                            data-help-id="field-user-match-player-filter"
                             type="text"
                             id="player"
                             name="player"
@@ -327,6 +332,7 @@ const User: React.FC = () => {
                         <div className="flex flex-col gap-2 flex-shrink-0 min-w-[200px]">
                           <label htmlFor="map" className="text-sm font-semibold text-gray-700">{t('filter_map')}</label>
                           <input
+                            data-help-id="field-user-match-map-filter"
                             type="text"
                             id="map"
                             name="map"
@@ -341,6 +347,7 @@ const User: React.FC = () => {
                         <div className="flex flex-col gap-2 flex-shrink-0 min-w-[200px]">
                           <label htmlFor="status" className="text-sm font-semibold text-gray-700">{t('filter_match_status')}</label>
                           <select
+                            data-help-id="option-user-match-status-filter"
                             id="status"
                             name="status"
                             value={filters.status}
@@ -360,6 +367,7 @@ const User: React.FC = () => {
                         <div className="flex flex-col gap-2 flex-shrink-0 min-w-[200px]">
                           <label htmlFor="faction" className="text-sm font-semibold text-gray-700">{t('filter_faction')}</label>
                           <select
+                            data-help-id="option-user-match-faction-filter"
                             id="faction"
                             name="faction"
                             value={filters.faction}
@@ -375,8 +383,19 @@ const User: React.FC = () => {
                           </select>
                         </div>
 
-                        <button type="button" className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-semibold flex-shrink-0 h-fit self-end" onClick={applyMatchFilters}>{t('refresh') || 'Refresh'}</button>
-                        <button type="button" className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 font-semibold flex-shrink-0 h-fit self-end" onClick={resetFilters}>{t('reset_filters')}</button>
+                        <div className="flex flex-col gap-2 flex-shrink-0 min-w-[200px]">
+                          <label htmlFor="match_type" className="text-sm font-semibold text-gray-700">{t('match_feed.type_filter', 'Match type')}</label>
+                          <select data-help-id="option-user-match-type-filter" id="match_type" name="match_type" value={filters.match_type} onChange={handleFilterChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">{t('all')}</option>
+                            <option value="ranked">{t('match_type.ranked', 'Ranked')}</option>
+                            <option value="tournament_ranked">{t('match_type.tournament_ranked', 'Ranked tournament')}</option>
+                            <option value="tournament_unranked">{t('match_type.tournament_unranked', 'Unranked tournament')}</option>
+                            <option value="tournament_team">{t('match_type.tournament_team', 'Team tournament')}</option>
+                          </select>
+                        </div>
+
+                        <button data-help-id="action-refresh-user-matches" type="button" className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-semibold flex-shrink-0 h-fit self-end" onClick={applyMatchFilters}>{t('refresh') || 'Refresh'}</button>
+                        <button data-help-id="action-reset-user-match-filters" type="button" className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 font-semibold flex-shrink-0 h-fit self-end" onClick={resetFilters}>{t('reset_filters')}</button>
                       </div>
                     </div>
 
@@ -385,29 +404,7 @@ const User: React.FC = () => {
                       currentPlayerId={userId || ''}
                       onViewDetails={openMatchDetails}
                       onOpenConfirmation={openConfirmation}
-                      onDownloadReplay={async (matchId, replayFilePath) => {
-                        try {
-                          if (!replayFilePath) return;
-                          
-                          // Extract filename from path
-                          const filename = replayFilePath.split('/').pop() || `replay_${matchId}`;
-                          
-                          // Increment download count
-                          await matchService.incrementReplayDownloads(matchId);
-                          
-                          // Use the replay_file_path HTTPS URL directly
-                          const link = document.createElement('a');
-                          link.href = replayFilePath;
-                          link.download = filename;
-                          link.target = '_blank';
-                          
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
-                        } catch (err) {
-                          console.error('Error downloading replay:', err);
-                        }
-                      }}
+                      onDownloadReplay={handleDownloadReplay}
                     />
                     <ProfileMatchesPagination {...matchPagination} onPageChange={setMatchPage} />
                   </div>

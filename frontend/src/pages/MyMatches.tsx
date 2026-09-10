@@ -15,6 +15,7 @@ interface FilterState {
   status: string;
   confirmed: string;
   faction: string;
+  match_type: string;
 }
 
 interface MatchDetailsModal {
@@ -47,6 +48,7 @@ const MyMatches: React.FC = () => {
     status: '',
     confirmed: '',
     faction: '',
+    match_type: '',
   });
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(filters);
   const [availableFactions, setAvailableFactions] = useState<any[]>([]);
@@ -62,7 +64,7 @@ const MyMatches: React.FC = () => {
   useEffect(() => {
     const fetchFactions = async () => {
       try {
-        const res = await publicService.getFactions();
+        const res = await publicService.getFactions(false);
         setAvailableFactions(res.data || []);
       } catch (err) {
         console.error('Error fetching factions:', err);
@@ -137,6 +139,7 @@ const MyMatches: React.FC = () => {
       status: '',
       confirmed: '',
       faction: '',
+      match_type: '',
     };
     setFilters(emptyFilters);
     setAppliedFilters(emptyFilters);
@@ -150,15 +153,18 @@ const MyMatches: React.FC = () => {
     }
   };
 
-  const handleDownloadReplay = async (matchId: string | null, replayFilePath: string, tournamentMatchId?: string): Promise<void> => {
-    if (!matchId || !replayFilePath) return;
+  const handleDownloadReplay = async (matchId: string | null, replayFilePath: string, tournamentGameId?: string, tournamentId?: string): Promise<void> => {
+    if (!replayFilePath) return;
     try {
       console.log('🔽 Starting download for match:', matchId);
       console.log('🔽 Incrementing download count...');
-      await matchService.incrementReplayDownloads(matchId);
+      if (matchId) await matchService.incrementReplayDownloads(matchId);
+      else if (tournamentId && tournamentGameId) {
+        await matchService.incrementTournamentGameReplayDownloads(tournamentId, tournamentGameId);
+      }
       
       // Extract filename from path
-      const filename = replayFilePath.split('/').pop() || `replay_${matchId}`;
+      const filename = replayFilePath.split('/').pop() || `replay_${matchId || tournamentGameId || 'game'}`;
       console.log('🔽 Downloading from:', replayFilePath);
       
       // Create a temporary anchor element to trigger download
@@ -283,6 +289,7 @@ const MyMatches: React.FC = () => {
           <div className="flex flex-col gap-2">
             <label htmlFor="player" className="font-semibold text-gray-700 text-sm">{t('filter_player')}</label>
             <input
+              data-help-id="field-my-matches-player-filter"
               type="text"
               id="player"
               name="player"
@@ -297,6 +304,7 @@ const MyMatches: React.FC = () => {
           <div className="flex flex-col gap-2">
             <label htmlFor="map" className="font-semibold text-gray-700 text-sm">{t('filter_map')}</label>
             <input
+              data-help-id="field-my-matches-map-filter"
               type="text"
               id="map"
               name="map"
@@ -311,6 +319,7 @@ const MyMatches: React.FC = () => {
           <div className="flex flex-col gap-2">
             <label htmlFor="status" className="font-semibold text-gray-700 text-sm">{t('filter_match_status')}</label>
             <select
+              data-help-id="option-my-matches-status-filter"
               id="status"
               name="status"
               value={filters.status}
@@ -328,6 +337,7 @@ const MyMatches: React.FC = () => {
           <div className="flex flex-col gap-2">
             <label htmlFor="confirmed" className="font-semibold text-gray-700 text-sm">{t('filter_confirmation_status')}</label>
             <select
+              data-help-id="option-my-matches-confirmation-filter"
               id="confirmed"
               name="confirmed"
               value={filters.confirmed}
@@ -345,6 +355,7 @@ const MyMatches: React.FC = () => {
           <div className="flex flex-col gap-2">
             <label htmlFor="faction" className="font-semibold text-gray-700 text-sm">{t('filter_faction') || 'Faction'}</label>
             <select
+              data-help-id="option-my-matches-faction-filter"
               id="faction"
               name="faction"
               value={filters.faction}
@@ -360,8 +371,26 @@ const MyMatches: React.FC = () => {
             </select>
           </div>
 
-          <button className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-semibold" onClick={resetFilters}>{t('reset_filters')}</button>
-          <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded-lg transition-colors" onClick={handleRefresh} title="Refresh">🔄</button>
+          <div className="flex flex-col gap-2">
+            <label htmlFor="match_type" className="font-semibold text-gray-700 text-sm">{t('match_feed.type_filter', 'Match type')}</label>
+            <select
+              data-help-id="option-my-matches-type-filter"
+              id="match_type"
+              name="match_type"
+              value={filters.match_type}
+              onChange={handleFilterChangeWithReset}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-all"
+            >
+              <option value="">{t('all')}</option>
+              <option value="ranked">{t('match_type.ranked', 'Ranked')}</option>
+              <option value="tournament_ranked">{t('match_type.tournament_ranked', 'Ranked tournament')}</option>
+              <option value="tournament_unranked">{t('match_type.tournament_unranked', 'Unranked tournament')}</option>
+              <option value="tournament_team">{t('match_type.tournament_team', 'Team tournament')}</option>
+            </select>
+          </div>
+
+          <button data-help-id="action-reset-my-match-filters" className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-semibold" onClick={resetFilters}>{t('reset_filters')}</button>
+          <button data-help-id="action-refresh-my-matches" className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded-lg transition-colors" onClick={handleRefresh} title="Refresh">🔄</button>
         </div>
 
         <div className="text-gray-700 text-sm mb-4">

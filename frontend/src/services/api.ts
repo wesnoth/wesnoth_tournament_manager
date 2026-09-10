@@ -121,6 +121,7 @@ export const userService = {
       if (filters.status) params.status = filters.status;
       if (filters.faction) params.faction = filters.faction;
       if (filters.include_pending) params.include_pending = true;
+      if (filters.match_type) params.match_type = filters.match_type;
     }
     return api.get(`/users/${id}/matches`, { params });
   },
@@ -153,6 +154,8 @@ export const matchService = {
       if (filters.map) params.map = filters.map;
       if (filters.status) params.status = filters.status;
       if (filters.confirmed) params.confirmed = filters.confirmed;
+      if (filters.faction) params.faction = filters.faction;
+      if (filters.match_type) params.match_type = filters.match_type;
     }
     return api.get('/matches', { params });
   },
@@ -162,7 +165,9 @@ export const matchService = {
       if (filters.player) params.player = filters.player;
       if (filters.map) params.map = filters.map;
       if (filters.status) params.status = filters.status;
+      if (filters.confirmed) params.confirmed = filters.confirmed;
       if (filters.faction) params.faction = filters.faction;
+      if (filters.match_type) params.match_type = filters.match_type;
     }
     return api.get(`/users/${userId}/matches`, { params });
   },
@@ -174,6 +179,8 @@ export const matchService = {
   rejectDispute: (id: string) => api.post(`/matches/admin/${id}/dispute`, { action: 'reject' }),
   awardDisputeWin: (id: string) => api.post(`/matches/admin/${id}/dispute`, { action: 'award' }),
   incrementReplayDownloads: (matchId: string) => api.post(`/matches/${matchId}/replay/download-count`),
+  incrementTournamentGameReplayDownloads: (tournamentId: string, gameId: string) =>
+    api.post(`/tournaments/${tournamentId}/games/${gameId}/replay/download-count`),
   reportConfidence1Replay: (
     replayId: string, 
     winner_choice: 'I won' | 'I lost',
@@ -320,6 +327,7 @@ export const publicService = {
       if (filters.status) params.status = filters.status;
       if (filters.confirmed) params.confirmed = filters.confirmed;
       if (filters.faction) params.faction = filters.faction;
+      if (filters.match_type) params.match_type = filters.match_type;
     }
     return api.get('/public/matches', { params });
   },

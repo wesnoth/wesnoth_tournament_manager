@@ -950,5 +950,18 @@
   "waiting_lobby_cancel": "取消",
   "waiting_lobby_empty": "目前没有等待中的玩家。",
   "waiting_lobby_challenged_by": "挑战者",
-  "help": "帮助"
+  "help": "帮助",
+  "match_type": {
+    "ranked": "排位赛",
+    "tournament_ranked": "排位锦标赛",
+    "tournament_unranked": "非排位锦标赛",
+    "tournament_team": "团队锦标赛"
+  },
+  "match_feed": {
+    "type_filter": "比赛类型",
+    "round": "轮次",
+    "game": "比赛",
+    "no_elo": "无 ELO",
+    "elo_unavailable": "ELO 不可用"
+  }
 }
