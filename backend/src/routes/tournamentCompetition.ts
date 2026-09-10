@@ -95,6 +95,32 @@ router.get('/:id/games/:gameId/streams', async (req, res) => {
   }
 });
 
+/** Increment the replay counter for a completed tournament game. */
+router.post('/:id/games/:gameId/replay/download-count', async (req, res) => {
+  try {
+    const result = await query(
+      `UPDATE tournament_games games
+       JOIN tournament_series series ON series.id = games.series_id
+       JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+       JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+       JOIN tournament_phases phases ON phases.id = groups.phase_id
+       SET games.replay_downloads = games.replay_downloads + 1
+       WHERE games.id = ? AND phases.tournament_id = ? AND games.status = 'completed'`,
+      [req.params.gameId, req.params.id],
+    );
+    if (!result.rowCount) return res.status(404).json({ error: 'Completed tournament game not found' });
+
+    const count = await query(
+      'SELECT replay_downloads FROM tournament_games WHERE id = ?',
+      [req.params.gameId],
+    );
+    return res.json({ replay_downloads: count.rows[0].replay_downloads });
+  } catch (error) {
+    console.error('Increment tournament game replay downloads error:', error);
+    return res.status(500).json({ error: 'Failed to increment replay downloads' });
+  }
+});
+
 /** Create one stream-to-game link. A broadcast covering several games uses several links. */
 router.post('/:id/games/:gameId/streams', streamerMiddleware, async (req: AuthRequest, res) => {
   try {

@@ -950,5 +950,18 @@
   "waiting_lobby_cancel": "Abbrechen",
   "waiting_lobby_empty": "Derzeit wartet niemand.",
   "waiting_lobby_challenged_by": "Herausgefordert von",
-  "help": "Hilfe"
+  "help": "Hilfe",
+  "match_type": {
+    "ranked": "Ranglistenspiel",
+    "tournament_ranked": "Ranglistenturnier",
+    "tournament_unranked": "Turnier ohne Rangliste",
+    "tournament_team": "Teamturnier"
+  },
+  "match_feed": {
+    "type_filter": "Spieltyp",
+    "round": "Runde",
+    "game": "Spiel",
+    "no_elo": "Keine ELO",
+    "elo_unavailable": "ELO nicht verfügbar"
+  }
 }

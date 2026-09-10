@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import jwt from 'jsonwebtoken';
 import { query } from '../config/database.js';
 import { getTournamentPlacements } from '../services/tournamentResultService.js';
 import { optionalAuthMiddleware } from '../middleware/auth.js';
+import { getCombinedMatchFeed } from '../services/combinedMatchFeedService.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -307,83 +307,8 @@ router.get('/news', async (req, res) => {
 // Get recent matches (public endpoint)
 router.get('/matches/recent', async (req, res) => {
   try {
-    const [matchResult, replayResult] = await Promise.all([
-      query(
-        `SELECT m.*, 
-                w.nickname as winner_nickname,
-                l.nickname as loser_nickname,
-                COALESCE((SELECT JSON_ARRAYAGG(JSON_OBJECT('id', s.id, 'stream_url', s.stream_url, 'streamer_user_id', s.streamer_user_id, 'streamer_nickname', su.nickname, 'created_at', s.created_at, 'updated_at', s.updated_at)) FROM tournament_game_streams s JOIN users_extension su ON su.id = s.streamer_user_id LEFT JOIN tournament_games sg ON sg.id = s.game_id WHERE s.match_id = m.id OR sg.match_id = m.id), JSON_ARRAY()) AS stream_links
-         FROM matches m
-         JOIN users_extension w ON m.winner_id = w.id
-         JOIN users_extension l ON m.loser_id = l.id
-         ORDER BY m.created_at DESC
-         LIMIT 20`
-      ),
-      query(
-        `SELECT r.id, r.replay_filename, r.game_name, r.replay_url, r.parse_summary, r.created_at, r.parse_status
-         FROM replays r
-         WHERE r.integration_confidence = 1
-           AND r.parsed = 1
-           AND r.parse_status NOT IN ('rejected', 'error')
-           AND r.match_id IS NULL
-           AND NOT EXISTS (SELECT 1 FROM matches linked_match WHERE linked_match.replay_id = r.id)
-           AND r.tournament_id IS NULL
-         ORDER BY r.created_at DESC
-         LIMIT 20`
-      )
-    ]);
-
-    const formattedReplays: any[] = [];
-    for (const r of replayResult.rows) {
-      try {
-        const parseSummary = typeof r.parse_summary === 'string'
-          ? JSON.parse(r.parse_summary)
-          : r.parse_summary;
-        const players = parseSummary.forumPlayers || [];
-        if (players.length < 2) continue;
-        const resolvedFactions = parseSummary.resolvedFactions || {};
-
-        const winnerName2 = parseSummary.replayVictory?.winner_name || players[0]?.user_name || 'Unknown';
-        const loserName2  = parseSummary.replayVictory?.loser_name  || players[1]?.user_name || 'Unknown';
-        const winnerPlayer2 = players.find((p: any) => p.user_name === winnerName2);
-        const loserPlayer2  = players.find((p: any) => p.user_name === loserName2);
-        const wFaction2 = (winnerPlayer2 ? resolvedFactions[`side${winnerPlayer2.side_number}`] : null) || 'Unknown';
-        const lFaction2 = (loserPlayer2  ? resolvedFactions[`side${loserPlayer2.side_number}`]  : null) || 'Unknown';
-
-        formattedReplays.push({
-          id: r.id,
-          winner_id: null,
-          loser_id: null,
-          winner_nickname: winnerName2,
-          loser_nickname: loserName2,
-          winner_faction: wFaction2,
-          loser_faction: lFaction2,
-          winner_side: parseSummary.replayVictory?.winner_side || null,
-          map: parseSummary.resolvedMap || parseSummary.parsedMap || parseSummary.scenario || 'Unknown Map',
-          status: 'pending_report',
-          winner_elo_before: null,
-          winner_elo_after: null,
-          loser_elo_before: null,
-          loser_elo_after: null,
-          replay_url: r.replay_url,
-          replay_file_path: r.replay_url,
-          replay_downloads: 0,
-          created_at: r.created_at,
-          source_type: r.parse_status === 'due' ? 'replay_confidence_1_due' : 'replay_confidence_1',
-          confidence_level: 1,
-          game_name: r.game_name,
-          replay_filename: r.replay_filename
-        });
-      } catch {
-        // skip malformed replay
-      }
-    }
-
-    const allResults = [...matchResult.rows, ...formattedReplays];
-    allResults.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-    console.log('Recent matches query result:', allResults.length, 'rows found');
-    res.json(allResults.slice(0, 20));
+    const feed = await getCombinedMatchFeed({ page: 1, limit: 20, includePending: true });
+    res.json(feed.data);
   } catch (error) {
     console.error('Error fetching recent matches:', error);
     res.status(500).json({ error: 'Failed to fetch recent matches', details: (error as any).message });
@@ -494,258 +419,30 @@ router.get('/players', async (req, res) => {
   }
 });
 
-// Get all confirmed matches (public endpoint)
-router.get('/matches', async (req, res) => {
+// Get the combined ranked and tournament match history (public endpoint).
+router.get('/matches', optionalAuthMiddleware, async (req, res) => {
   try {
-    const requestedPage = parseInt(req.query.page as string, 10);
-    const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
-    const pageSize = 20;
-    const offset = (page - 1) * pageSize;
-
-    // Parse filters
-    const player = req.query.player ? (req.query.player as string).trim() : null;
-    const map = req.query.map ? (req.query.map as string).trim() : null;
-    const status = req.query.status ? (req.query.status as string).trim() : null;
-    const confirmed = req.query.confirmed ? (req.query.confirmed as string).trim() : null;
-    const faction = req.query.faction ? (req.query.faction as string).trim() : null;
-
-    // Build WHERE conditions
-    const whereConditions: string[] = [];
-    const params: any[] = [];
-
-    if (player) {
-      whereConditions.push(`(w.nickname LIKE ? OR l.nickname LIKE ?)`);
-      params.push(`%${player}%`);
-      params.push(`%${player}%`);
-    }
-
-    if (map) {
-      whereConditions.push(`m.map LIKE ?`);
-      params.push(`%${map}%`);
-    }
-
-    if (status) {
-      whereConditions.push(`m.status = ?`);
-      params.push(status);
-    }
-
-    if (confirmed) {
-      const isConfirmed = confirmed.toLowerCase() === 'true' || confirmed === '1';
-      whereConditions.push(`m.loser_confirmed = ?`);
-      params.push(isConfirmed ? 1 : 0);
-    }
-
-    if (faction) {
-      whereConditions.push(`(m.winner_faction = ? OR m.loser_faction = ?)`);
-      params.push(faction);
-      params.push(faction);
-    }
-
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
-
-    // Get total count
-    const countQuery = `
-      SELECT COUNT(*) as count
-      FROM matches m
-      JOIN users_extension w ON m.winner_id = w.id
-      JOIN users_extension l ON m.loser_id = l.id
-      ${whereClause}
-    `;
-
-    const countResult = await query(countQuery, params);
-    const total = parseInt(countResult.rows[0].count);
-    const totalPages = Math.ceil(total / pageSize);
-
-    // Get ALL data for combining and paginating together
-    const dataQuery = `
-      SELECT m.*, 
-              w.nickname as winner_nickname,
-              l.nickname as loser_nickname,
-              COALESCE((SELECT JSON_ARRAYAGG(JSON_OBJECT('id', s.id, 'stream_url', s.stream_url, 'streamer_user_id', s.streamer_user_id, 'streamer_nickname', su.nickname, 'created_at', s.created_at, 'updated_at', s.updated_at)) FROM tournament_game_streams s JOIN users_extension su ON su.id = s.streamer_user_id LEFT JOIN tournament_games sg ON sg.id = s.game_id WHERE s.match_id = m.id OR sg.match_id = m.id), JSON_ARRAY()) AS stream_links
-       FROM matches m
-       JOIN users_extension w ON m.winner_id = w.id
-       JOIN users_extension l ON m.loser_id = l.id
-       ${whereClause}
-       ORDER BY m.created_at DESC
-    `;
-
-    const result = await query(dataQuery, params);
-
-    // Get current user info from token if authenticated
-    let currentUserNickname = '';
-    let currentUserIsAdmin = false;
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      try {
-        const token = authHeader.substring(7);
-        const decoded: any = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-        if (decoded.userId) {
-          // Get user's nickname and admin status
-          const userResult = await query(
-            `SELECT nickname, is_admin FROM users_extension WHERE id = ?`,
-            [decoded.userId]
-          );
-          if (userResult.rows.length > 0) {
-            currentUserNickname = userResult.rows[0].nickname?.toLowerCase() || '';
-            currentUserIsAdmin = !!(userResult.rows[0].is_admin);
-          }
-        }
-      } catch (tokenError) {
-      }
-    }
-
-    // Get ALL replays with confidence=1 (visible to everyone, action buttons controlled in frontend)
-    let formattedReplays = [];
-    try {
-      const replayResult = await query(
-        `SELECT 
-         r.id, 
-         r.replay_filename,
-         r.game_name,
-         r.replay_url,
-         r.parse_summary,
-         r.created_at,
-         r.wesnoth_version,
-         r.cancel_requested_by,
-         r.parse_status
-        FROM replays r
-        WHERE r.integration_confidence = 1 
-          AND r.parsed = 1
-          AND r.parse_status NOT IN ('rejected', 'error')
-          AND r.match_id IS NULL
-          AND NOT EXISTS (SELECT 1 FROM matches linked_match WHERE linked_match.replay_id = r.id)
-          AND r.tournament_id IS NULL
-        ORDER BY r.created_at DESC`
-      );
-
-      for (const r of replayResult.rows) {
-        try {
-          const parseSummary = typeof r.parse_summary === 'string' 
-            ? JSON.parse(r.parse_summary) 
-            : r.parse_summary;
-
-          const players = parseSummary.forumPlayers || [];
-          if (players.length < 2) continue;
-
-          const player1Name = players[0]?.user_name?.toLowerCase() || '';
-          const player2Name = players[1]?.user_name?.toLowerCase() || '';
-
-          const isInvolved = currentUserNickname 
-            ? currentUserNickname === player1Name || currentUserNickname === player2Name
-            : false;
-
-          // Extract map - USE resolvedMap from parse_summary
-          const replayMap = parseSummary.resolvedMap
-            || parseSummary.parsedMap 
-            || parseSummary.map 
-            || parseSummary.forumMap 
-            || parseSummary.scenario
-            || 'Unknown Map';
-          const resolvedFactions = parseSummary.resolvedFactions || {};
-
-          // Pending replays are merged with ranked matches below, so apply the same
-          // public filters here before they affect the combined pagination.
-          const normalizedPlayer = player?.toLowerCase() || '';
-          const normalizedMap = String(replayMap).toLowerCase();
-          const replayPlayers = [player1Name, player2Name];
-          const replayFactions = Object.values(resolvedFactions).map((value) => String(value).toLowerCase());
-          const matchesPlayer = !normalizedPlayer || replayPlayers.some((name) => name.includes(normalizedPlayer));
-          const matchesMap = !map || normalizedMap.includes(map.toLowerCase());
-          const matchesStatus = !status || status === 'unconfirmed' || status === 'pending_report';
-          const matchesConfirmation = !confirmed || confirmed.toLowerCase() === 'false' || confirmed === '0';
-          const matchesFaction = !faction || replayFactions.includes(faction.toLowerCase());
-          if (!matchesPlayer || !matchesMap || !matchesStatus || !matchesConfirmation || !matchesFaction) {
-            continue;
-          }
-
-          const winnerName = parseSummary.replayVictory?.winner_name || players[0]?.user_name || 'Unknown';
-          const loserName  = parseSummary.replayVictory?.loser_name  || players[1]?.user_name || 'Unknown';
-
-          const winnerPlayer = players.find((p: any) => p.user_name === winnerName);
-          const loserPlayer  = players.find((p: any) => p.user_name === loserName);
-
-          const winner_faction = (winnerPlayer ? resolvedFactions[`side${winnerPlayer.side_number}`] : null) || 'Unknown';
-          const loser_faction  = (loserPlayer  ? resolvedFactions[`side${loserPlayer.side_number}`]  : null) || 'Unknown';
-          const winner_side = winnerPlayer?.side_number || null;
-          const loser_side = loserPlayer?.side_number || null;
-
-          const replayData = {
-            id: r.id,
-            winner_id: null,
-            loser_id: null,
-            winner_nickname: winnerName,
-            loser_nickname: loserName,
-            winner_faction: winner_faction,
-            loser_faction: loser_faction,
-            winner_side: winner_side,
-            loser_side: loser_side,
-            map: replayMap,
-            status: 'pending_report',
-            winner_elo_before: null,
-            winner_elo_after: null,
-            loser_elo_before: null,
-            loser_elo_after: null,
-            winner_rating: null,
-            loser_rating: null,
-            winner_comments: null,
-            loser_comments: null,
-            replay_url: r.replay_url,
-            replay_downloads: 0,
-            created_at: r.created_at,
-            updated_at: r.created_at,
-            played_at: null,
-            admin_reviewed: false,
-            tournament_id: null,
-            source_type: r.parse_status === 'due' ? 'replay_confidence_1_due' : 'replay_confidence_1',
-            replay_id: r.id,
-            confidence_level: 1,
-            parse_summary: parseSummary,
-            replay_filename: r.replay_filename,
-            game_name: r.game_name,
-            cancel_requested_by: r.cancel_requested_by || null,
-            is_admin_view: currentUserIsAdmin && !isInvolved,
-            is_participant: isInvolved
-          };
-
-          formattedReplays.push(replayData);
-        } catch (formatError) {
-          console.error('Error formatting replay:', formatError);
-        }
-      }
-    } catch (replayQueryError) {
-      console.error('❌ [PUBLIC/MATCHES] Error fetching replays:', replayQueryError);
-    }
-
-    // Combine matches and replays
-    const allResults = [...result.rows, ...formattedReplays];
-    
-    // Sort by created_at DESC
-    allResults.sort((a: any, b: any) => {
-      const aTime = new Date(a.created_at).getTime();
-      const bTime = new Date(b.created_at).getTime();
-      return bTime - aTime;
-    });
-
-    // Paginate combined results
-    const paginatedResults = allResults.slice(offset, offset + pageSize);
-    const combinedTotal = total + (formattedReplays.length > 0 ? formattedReplays.length : 0);
-    const combinedTotalPages = Math.ceil(combinedTotal / pageSize);
-
-    res.json({
-      data: paginatedResults,
-      pagination: {
-        page,
-        pageSize,
-        total: combinedTotal,
-        totalPages: combinedTotalPages,
+    const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+    const feed = await getCombinedMatchFeed({
+      page,
+      limit: 20,
+      includePending: true,
+      viewerUserId: (req as any).userId,
+      filters: {
+        player: req.query.player as string,
+        map: req.query.map as string,
+        status: req.query.status as string,
+        confirmed: req.query.confirmed as string,
+        faction: req.query.faction as string,
+        matchType: req.query.match_type as string,
       },
     });
+    res.json(feed);
   } catch (error) {
     console.error('Error fetching matches:', error);
     res.status(500).json({ error: 'Failed to fetch matches', details: (error as any).message });
   }
 });
-
 // Get specific player profile (public endpoint)
 router.get('/players/:id', async (req, res) => {
   try {

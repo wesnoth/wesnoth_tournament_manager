@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { query } from '../config/database.js';
-import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { authMiddleware, optionalAuthMiddleware, AuthRequest } from '../middleware/auth.js';
 import { searchLimiter } from '../middleware/rateLimiter.js';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
 import { avatarManifestService } from '../services/avatarManifestService.js';
 import { validateTimezone, validateAvailabilitySchedule } from '../utils/timezoneUtils.js';
 import { isValidDiscordSnowflake, validateDiscordId } from '../services/discord.js';
+import { getCombinedMatchFeed } from '../services/combinedMatchFeedService.js';
 
 const router = Router();
 
@@ -184,255 +185,26 @@ router.get('/:id/elo-history', async (req, res) => {
   }
 });
 
-// Get user matches with pagination and filters (includes pending replays)
-router.get('/:id/matches', async (req, res) => {
+// Compose ranked and tournament history while preserving the viewer-specific replay actions.
+router.get('/:id/matches', optionalAuthMiddleware, async (req: AuthRequest, res) => {
   try {
-    console.log('🔍🔍🔍 GET /users/:id/matches endpoint called with id:', req.params.id);
-    console.log('🔍🔍🔍 Query string:', req.query);
-    const { id } = req.params;
-    const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = 20;
-    const offset = (page - 1) * limit;
-
-    // Get filter params from query
-    const playerFilter = (req.query.player as string)?.trim() || '';
-    const mapFilter = (req.query.map as string)?.trim() || '';
-    const statusFilter = (req.query.status as string)?.trim() || '';
-    const factionFilter = (req.query.faction as string)?.trim() || '';
-    const includePending = req.query.include_pending === 'true';
-
-    console.log('GET /users/:id/matches filters:', { playerFilter, mapFilter, statusFilter, factionFilter, includePending });
-
-    // Get user nickname to match against replay participants
-    const userResult = await query(
-      `SELECT nickname FROM users_extension WHERE id = ?`,
-      [id]
-    );
-    const userNickname = userResult.rows[0]?.nickname?.toLowerCase() || '';
-    console.log('🔍 User nickname:', userNickname);
-
-    // Build WHERE clause dynamically for matches
-    let whereConditions: string[] = ['(m.winner_id = ? OR m.loser_id = ?)'];
-    let params: any[] = [id, id];  // id appears twice in WHERE clause
-
-    if (playerFilter) {
-      whereConditions.push(`(LOWER(w.nickname) LIKE ? OR LOWER(l.nickname) LIKE ?)`);
-      params.push(`%${playerFilter.toLowerCase()}%`);
-      params.push(`%${playerFilter.toLowerCase()}%`);
-    }
-
-    if (mapFilter) {
-      whereConditions.push(`LOWER(m.map) LIKE ?`);
-      params.push(`%${mapFilter.toLowerCase()}%`);
-    }
-
-    if (statusFilter) {
-      whereConditions.push(`m.status = ?`);
-      params.push(statusFilter);
-    }
-
-    if (factionFilter) {
-      whereConditions.push(`(m.winner_faction = ? OR m.loser_faction = ?)`);
-      params.push(factionFilter);
-      params.push(factionFilter);
-      console.log('🔍 Faction filter applied:', factionFilter);
-    }
-
-    const whereClause = whereConditions.join(' AND ');
-
-    // Get total count of filtered matches
-    const countQuery = `SELECT COUNT(*) as total FROM matches m 
-                        JOIN users_extension w ON m.winner_id = w.id 
-                        JOIN users_extension l ON m.loser_id = l.id 
-                        WHERE ${whereClause}`;
-    const countResult = await query(countQuery, params);
-    const total = parseInt(countResult.rows[0].total);
-
-    // Get matches for current page with filters
-    const matchParams = [...params];
-    if (!includePending) {
-      matchParams.push(limit);
-      matchParams.push(offset);
-    }
-    const result = await query(
-      `SELECT 
-        m.*,
-        w.nickname as winner_nickname,
-        l.nickname as loser_nickname,
-        COALESCE((SELECT JSON_ARRAYAGG(JSON_OBJECT('id', s.id, 'stream_url', s.stream_url, 'streamer_user_id', s.streamer_user_id, 'streamer_nickname', su.nickname, 'created_at', s.created_at, 'updated_at', s.updated_at)) FROM tournament_game_streams s JOIN users_extension su ON su.id = s.streamer_user_id LEFT JOIN tournament_games sg ON sg.id = s.game_id WHERE s.match_id = m.id OR sg.match_id = m.id), JSON_ARRAY()) AS stream_links
-       FROM matches m
-       JOIN users_extension w ON m.winner_id = w.id
-       JOIN users_extension l ON m.loser_id = l.id
-       WHERE ${whereClause}
-       ORDER BY m.created_at DESC, m.id DESC
-       ${includePending ? '' : 'LIMIT ? OFFSET ?'}`,
-      matchParams
-    );
-
-    // Get pending replays for this user with confidence=1
-    let formattedReplays: any[] = [];
-    if (includePending && userNickname) {
-      try {
-        const replayResult = await query(
-          `SELECT 
-            r.id, 
-            r.replay_filename,
-            r.game_name,
-            r.replay_url,
-            r.parse_summary,
-            r.created_at,
-            r.wesnoth_version,
-            r.cancel_requested_by
-           FROM replays r
-           WHERE r.integration_confidence = 1 
-             AND r.parsed = 1
-             AND r.parse_status != 'rejected'
-             AND r.match_id IS NULL
-             AND NOT EXISTS (SELECT 1 FROM matches linked_match WHERE linked_match.replay_id = r.id)
-             AND r.tournament_id IS NULL
-           ORDER BY r.created_at DESC`,
-          []
-        );
-
-        console.log(`📋 [USER/MATCHES] Found ${replayResult.rows?.length || 0} confidence=1 replays to check`);
-
-        for (const r of replayResult.rows) {
-          try {
-            const parseSummary = typeof r.parse_summary === 'string' 
-              ? JSON.parse(r.parse_summary) 
-              : r.parse_summary;
-
-            const players = parseSummary.forumPlayers || [];
-            if (players.length < 2) continue;
-
-            const player1Name = players[0]?.user_name?.toLowerCase() || '';
-            const player2Name = players[1]?.user_name?.toLowerCase() || '';
-
-            // Only include replays where this user is a participant
-            if (userNickname !== player1Name && userNickname !== player2Name) {
-              continue;
-            }
-
-            // Apply filters to replay data
-            const map = parseSummary.resolvedMap 
-              || parseSummary.parsedMap 
-              || parseSummary.map 
-              || parseSummary.forumMap 
-              || parseSummary.scenario
-              || 'Unknown Map';
-
-            if (mapFilter && !map.toLowerCase().includes(mapFilter.toLowerCase())) {
-              continue;
-            }
-
-            if (statusFilter && statusFilter !== 'pending_report') {
-              continue;
-            }
-
-            // Extract factions
-            const resolvedFactions = parseSummary.resolvedFactions || {};
-            const winnerName = parseSummary.replayVictory?.winner_name || players[0]?.user_name || 'Unknown';
-            const loserName  = parseSummary.replayVictory?.loser_name  || players[1]?.user_name || 'Unknown';
-
-            const winnerPlayer = players.find((p: any) => p.user_name === winnerName);
-            const loserPlayer  = players.find((p: any) => p.user_name === loserName);
-
-            const winner_faction = (winnerPlayer ? resolvedFactions[`side${winnerPlayer.side_number}`] : null) || 'Unknown';
-            const loser_faction  = (loserPlayer  ? resolvedFactions[`side${loserPlayer.side_number}`]  : null) || 'Unknown';
-            const winner_side = winnerPlayer?.side_number || null;
-            const loser_side = loserPlayer?.side_number || null;
-
-            if (factionFilter) {
-              if (winner_faction.toLowerCase() !== factionFilter.toLowerCase() && 
-                  loser_faction.toLowerCase() !== factionFilter.toLowerCase()) {
-                continue;
-              }
-            }
-
-            if (playerFilter) {
-              if (!winnerName.toLowerCase().includes(playerFilter.toLowerCase()) &&
-                  !loserName.toLowerCase().includes(playerFilter.toLowerCase())) {
-                continue;
-              }
-            }
-
-            const replayData = {
-              id: r.id,
-              winner_id: null,
-              loser_id: null,
-              winner_nickname: winnerName,
-              loser_nickname: loserName,
-              winner_faction: winner_faction,
-              loser_faction: loser_faction,
-              winner_side: winner_side,
-              loser_side: loser_side,
-              map: map,
-              status: 'pending_report',
-              winner_elo_before: null,
-              winner_elo_after: null,
-              loser_elo_before: null,
-              loser_elo_after: null,
-              winner_rating: null,
-              loser_rating: null,
-              winner_comments: null,
-              loser_comments: null,
-              replay_url: r.replay_url,
-              replay_downloads: 0,
-              created_at: r.created_at,
-              updated_at: r.created_at,
-              played_at: null,
-              admin_reviewed: false,
-              tournament_id: null,
-              source_type: 'replay_confidence_1',
-              replay_id: r.id,
-              confidence_level: 1,
-              parse_summary: parseSummary,
-              replay_filename: r.replay_filename,
-              game_name: r.game_name,
-              cancel_requested_by: r.cancel_requested_by || null,
-              is_admin_view: false,
-              is_participant: true
-            };
-
-            console.log(`📋 [REPLAY] ${replayData.winner_nickname} (${winner_faction}) vs ${replayData.loser_nickname} (${loser_faction}) on ${map}`);
-            formattedReplays.push(replayData);
-          } catch (formatError) {
-            console.error('Error formatting replay:', formatError);
-          }
-        }
-      } catch (replayQueryError) {
-        console.error('❌ [USER/MATCHES] Error fetching replays:', replayQueryError);
-      }
-    }
-
-    // Combine matches and replays
-    const allResults = [...result.rows, ...formattedReplays];
-    
-    // Sort by created_at DESC
-    allResults.sort((a: any, b: any) => {
-      const aTime = new Date(a.created_at).getTime();
-      const bTime = new Date(b.created_at).getTime();
-      return bTime - aTime || String(b.id).localeCompare(String(a.id));
+    const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+    const feed = await getCombinedMatchFeed({
+      page,
+      limit: 20,
+      playerId: req.params.id,
+      includePending: req.query.include_pending === 'true',
+      viewerUserId: req.query.include_pending === 'true' ? req.userId : undefined,
+      filters: {
+        player: req.query.player as string,
+        map: req.query.map as string,
+        status: req.query.status as string,
+        confirmed: req.query.confirmed as string,
+        faction: req.query.faction as string,
+        matchType: req.query.match_type as string,
+      },
     });
-
-    // Pending replays are merged in memory only for the authenticated profile;
-    // public profiles use SQL pagination and never scan the replay queue.
-    const paginatedResults = includePending
-      ? allResults.slice(offset, offset + limit)
-      : allResults;
-    const combinedTotal = total + formattedReplays.length;
-    const totalPages = Math.ceil(combinedTotal / limit);
-
-    res.json({
-      data: paginatedResults,
-      pagination: {
-        page,
-        limit,
-        total: combinedTotal,
-        totalPages,
-        showing: paginatedResults.length
-      }
-    });
+    res.json(feed);
   } catch (error) {
     console.error('Error fetching user matches:', error);
     res.status(500).json({ error: 'Failed to fetch matches' });

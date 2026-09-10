@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { publicService, tournamentService, userService, api } from '../services/api';
+import { publicService, tournamentService, userService, api, matchService } from '../services/api';
 import { tournamentSchedulingService } from '../services/tournamentSchedulingService';
 import TournamentForm from '../components/TournamentForm';
 import MatchConfirmationModal from '../components/MatchConfirmationModal';
@@ -896,7 +896,7 @@ const handleConfirmDelete = async () => {
   }
 };
 
-const handleDownloadReplay = async (matchId: string | null, replayFilePath: string | null | undefined, tournamentMatchId?: string) => {
+const handleDownloadReplay = async (matchId: string | null, replayFilePath: string | null | undefined, tournamentGameId?: string) => {
   try {
     if (!replayFilePath) return;
     const filename = replayFilePath.split('/').pop() || `replay_${matchId || 'tournament'}`;
@@ -911,9 +911,9 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
       }
     } else {
       // For unranked/team tournaments (no match_id), increment from tournament endpoint
-      if (tournamentMatchId) {
+      if (tournamentGameId && id) {
         try {
-          await api.post(`/public/tournament-matches/${tournamentMatchId}/replay/download-count`);
+          await matchService.incrementTournamentGameReplayDownloads(id, tournamentGameId);
         } catch (e) {
           console.error('Failed to increment tournament download count:', e);
         }
@@ -3055,7 +3055,10 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                                              target="_blank"
                                              rel="noopener noreferrer"
                                              className="px-2 py-1 text-xs bg-green-500 hover:bg-green-600 text-white rounded transition-colors"
-                                             onClick={() => handleDownloadReplay(match.match_id, match.replay_file_path, match.id)}
+                                             onClick={(event) => {
+                                               event.preventDefault();
+                                               void handleDownloadReplay(match.match_id, match.replay_file_path, match.id);
+                                             }}
                                              title={`${t('downloads')}: ${match.replay_downloads || 0}`}
                                            >
                                              ⬇️

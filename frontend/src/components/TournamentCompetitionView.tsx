@@ -789,7 +789,15 @@ const TournamentCompetitionView: React.FC<Props> = ({
                       <button data-help-id="action-discard-tournament-replay" type="button" onClick={() => void decideReplay(game, 'discard')} className="rounded bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700">Discard replay</button>
                     </>}
                     {!pendingReplay && game.replay_url
-                      ? <a data-help-id="action-download-phase-game-replay" href={game.replay_url} target="_blank" rel="noopener noreferrer" className="rounded bg-green-600 px-2 py-1 text-xs font-semibold text-white hover:bg-green-700" title={`Downloads: ${game.replay_downloads || 0}`}>Replay ⬇</a>
+                      ? <a
+                          data-help-id="action-download-phase-game-replay"
+                          href={game.replay_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => { void api.post(`/tournaments/${tournamentId}/games/${game.game_id}/replay/download-count`); }}
+                          className="rounded bg-green-600 px-2 py-1 text-xs font-semibold text-white hover:bg-green-700"
+                          title={`Downloads: ${game.replay_downloads || 0}`}
+                        >Replay ⬇</a>
                       : !pendingReplay && <span className="text-xs text-gray-500">No replay</span>}
                   </div> : <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full bg-yellow-500 px-3 py-1 text-xs font-semibold text-white">Pending</span>

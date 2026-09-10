@@ -973,5 +973,18 @@
     "slots": "slots",
     "viewing_as": "Viewing as"
   },
-  "help": "Help"
+  "help": "Help",
+  "match_type": {
+    "ranked": "Ranked",
+    "tournament_ranked": "Ranked tournament",
+    "tournament_unranked": "Unranked tournament",
+    "tournament_team": "Team tournament"
+  },
+  "match_feed": {
+    "type_filter": "Match type",
+    "round": "Round",
+    "game": "Game",
+    "no_elo": "No ELO",
+    "elo_unavailable": "ELO unavailable"
+  }
 }

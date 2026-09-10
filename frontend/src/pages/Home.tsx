@@ -9,6 +9,7 @@ import PlayerLink from '../components/PlayerLink';
 import GlobalStats from '../components/GlobalStats';
 import { renderWikiMarkdown } from '../utils/wikiMarkdown';
 import MatchStreams from '../components/MatchStreams';
+import MatchTypeBadge from '../components/MatchTypeBadge';
 import WaitingLobby from '../components/WaitingLobby';
 import ChallengeFromPlayerModal from '../components/ChallengeFromPlayerModal';
 import { useAuthStore } from '../store/authStore';
@@ -79,17 +80,21 @@ const Home: React.FC = () => {
     }
   };
 
-  const handleDownloadReplay = async (matchId: string, replayFilePath: string) => {
+  const handleDownloadReplay = async (match: any, replayFilePath: string) => {
     try {
       if (!replayFilePath) {
         throw new Error('No replay file available');
       }
       
       // Extract filename from path
-      const filename = replayFilePath.split('/').pop() || `replay_${matchId}`;
+      const filename = replayFilePath.split('/').pop() || `replay_${match.id}`;
       
       // Increment download count in the database
-      await matchService.incrementReplayDownloads(matchId);
+      if (match.source_type === 'tournament_game') {
+        await matchService.incrementTournamentGameReplayDownloads(match.tournament_id, match.tournament_game_id);
+      } else {
+        await matchService.incrementReplayDownloads(match.match_id || match.id);
+      }
       
       // Refresh the matches to update the download count
       await refetchMatches();
@@ -319,7 +324,7 @@ const Home: React.FC = () => {
                         const statusLabel = isDueReplay ? t('replay_due') : t('replay_need_confirmation');
 
                         return (
-                          <tr key={match.id} className={`border-b ${borderColor} hover:${isDueReplay ? 'bg-red-100' : 'bg-yellow-50'} ${bgColor}`}>
+                          <tr key={match.feed_id || match.id} className={`border-b ${borderColor} hover:${isDueReplay ? 'bg-red-100' : 'bg-yellow-50'} ${bgColor}`}>
                             <td className="px-4 py-3 align-top text-sm text-gray-700">
                               {new Date(match.created_at).toLocaleDateString()}
                             </td>
@@ -390,7 +395,7 @@ const Home: React.FC = () => {
                       const loserEloChange = (match.loser_elo_after || 0) - (match.loser_elo_before || 0);
 
                       return (
-                        <tr data-help-id="region-home-recent-match-row" key={match.id} className="border-b hover:bg-gray-50 transition-colors">
+                        <tr data-help-id="region-home-recent-match-row" key={match.feed_id || match.id} className="border-b hover:bg-gray-50 transition-colors">
                           <td className="px-4 py-3 align-top text-gray-700">
                             {new Date(match.created_at).toLocaleDateString()}
                           </td>
@@ -398,6 +403,11 @@ const Home: React.FC = () => {
                           <td className="px-4 py-3 align-top">
                             <div className="flex flex-col gap-1">
                               <span className="font-semibold text-green-600"><PlayerLink nickname={match.winner_nickname} userId={match.winner_id} /></span>
+                              {match.winner_members?.length > 0 && (
+                                <span className="flex flex-wrap gap-2 text-xs">
+                                  {match.winner_members.map((member: any) => <PlayerLink key={member.user_id || member.nickname} nickname={member.nickname} userId={member.user_id} />)}
+                                </span>
+                              )}
                               {match.winner_faction && (
                                 <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded inline-block w-fit">{match.winner_faction}</span>
                               )}
@@ -412,16 +422,25 @@ const Home: React.FC = () => {
                           
                           <td className="px-4 py-3 align-top">
                             <div className="flex flex-col gap-1">
-                              <div className="text-gray-700 font-semibold">{match.winner_elo_before || 'N/A'}</div>
-                              <div className={`text-sm font-semibold ${winnerEloChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                ({winnerEloChange >= 0 ? '+' : ''}{winnerEloChange})
-                              </div>
+                              {match.has_elo_data === false ? (
+                                <div className="text-xs font-semibold text-gray-500">{match.match_type === 'tournament_ranked' ? t('match_feed.elo_unavailable', 'ELO unavailable') : t('match_feed.no_elo', 'No ELO')}</div>
+                              ) : <>
+                                <div className="text-gray-700 font-semibold">{match.winner_elo_before || 'N/A'}</div>
+                                <div className={`text-sm font-semibold ${winnerEloChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  ({winnerEloChange >= 0 ? '+' : ''}{winnerEloChange})
+                                </div>
+                              </>}
                             </div>
                           </td>
                           
                           <td className="px-4 py-3 align-top">
                             <div className="flex flex-col gap-1">
                               <span className="font-semibold text-red-600"><PlayerLink nickname={match.loser_nickname} userId={match.loser_id} /></span>
+                              {match.loser_members?.length > 0 && (
+                                <span className="flex flex-wrap gap-2 text-xs">
+                                  {match.loser_members.map((member: any) => <PlayerLink key={member.user_id || member.nickname} nickname={member.nickname} userId={member.user_id} />)}
+                                </span>
+                              )}
                               {match.loser_faction && (
                                 <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded inline-block w-fit">{match.loser_faction}</span>
                               )}
@@ -436,22 +455,31 @@ const Home: React.FC = () => {
                           
                           <td className="px-4 py-3 align-top">
                             <div className="flex flex-col gap-1">
-                              <div className="text-gray-700 font-semibold">{match.loser_elo_before || 'N/A'}</div>
-                              <div className={`text-sm font-semibold ${loserEloChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                ({loserEloChange >= 0 ? '+' : ''}{loserEloChange})
-                              </div>
+                              {match.has_elo_data === false ? (
+                                <div className="text-xs font-semibold text-gray-500">{match.match_type === 'tournament_ranked' ? t('match_feed.elo_unavailable', 'ELO unavailable') : t('match_feed.no_elo', 'No ELO')}</div>
+                              ) : <>
+                                <div className="text-gray-700 font-semibold">{match.loser_elo_before || 'N/A'}</div>
+                                <div className={`text-sm font-semibold ${loserEloChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  ({loserEloChange >= 0 ? '+' : ''}{loserEloChange})
+                                </div>
+                              </>}
                             </div>
                           </td>
                           
                           <td className="px-4 py-3 align-top">
+                            <MatchTypeBadge match={match} compact />
                             <MatchStreams match={match} compact />
                             {match.replay_file_path && (
                               <a
+                                data-help-id="action-download-match-replay"
                                 href={match.replay_url || match.replay_file_path}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-block px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs transition-colors"
-                                onClick={() => handleDownloadReplay(match.id, match.replay_file_path)}
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  void handleDownloadReplay(match, match.replay_file_path);
+                                }}
                                 title={`${t('downloads')}: ${match.replay_downloads || 0}`}
                               >
                                 ⬇️
