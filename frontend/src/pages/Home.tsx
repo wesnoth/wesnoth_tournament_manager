@@ -90,7 +90,10 @@ const Home: React.FC = () => {
       const filename = replayFilePath.split('/').pop() || `replay_${match.id}`;
       
       // Increment download count in the database
-      if (match.source_type === 'tournament_game') {
+      if (String(match.source_type).startsWith('tournament_replay_confidence_1')) {
+        // Pending tournament replays are downloaded without touching counters;
+        // their confirmation remains owned by the tournament competition view.
+      } else if (match.source_type === 'tournament_game') {
         await matchService.incrementTournamentGameReplayDownloads(match.tournament_id, match.tournament_game_id);
       } else {
         await matchService.incrementReplayDownloads(match.match_id || match.id);
@@ -393,6 +396,7 @@ const Home: React.FC = () => {
 
                       const winnerEloChange = (match.winner_elo_after || 0) - (match.winner_elo_before || 0);
                       const loserEloChange = (match.loser_elo_after || 0) - (match.loser_elo_before || 0);
+                      const isPendingTournamentReplay = String(match.source_type).startsWith('tournament_replay_confidence_1');
 
                       return (
                         <tr data-help-id="region-home-recent-match-row" key={match.feed_id || match.id} className="border-b hover:bg-gray-50 transition-colors">
@@ -402,6 +406,7 @@ const Home: React.FC = () => {
                           
                           <td className="px-4 py-3 align-top">
                             <div className="flex flex-col gap-1">
+                              {isPendingTournamentReplay && <span className="text-[11px] font-semibold uppercase text-gray-500">{t('match_feed.side_1', 'Side 1')}</span>}
                               <span className="font-semibold text-green-600"><PlayerLink nickname={match.winner_nickname} userId={match.winner_id} /></span>
                               {match.winner_members?.length > 0 && (
                                 <span className="flex flex-wrap gap-2 text-xs">
@@ -435,6 +440,7 @@ const Home: React.FC = () => {
                           
                           <td className="px-4 py-3 align-top">
                             <div className="flex flex-col gap-1">
+                              {isPendingTournamentReplay && <span className="text-[11px] font-semibold uppercase text-gray-500">{t('match_feed.side_2', 'Side 2')}</span>}
                               <span className="font-semibold text-red-600"><PlayerLink nickname={match.loser_nickname} userId={match.loser_id} /></span>
                               {match.loser_members?.length > 0 && (
                                 <span className="flex flex-wrap gap-2 text-xs">
@@ -468,6 +474,15 @@ const Home: React.FC = () => {
                           
                           <td className="px-4 py-3 align-top">
                             <MatchTypeBadge match={match} compact />
+                            {isPendingTournamentReplay && match.tournament_id && (
+                              <Link
+                                data-help-id="action-open-tournament-replay"
+                                to={`/tournament/${match.tournament_id}?tab=competition${match.tournament_series_id ? `&seriesId=${match.tournament_series_id}` : ''}${match.tournament_game_id ? `&gameId=${match.tournament_game_id}` : ''}`}
+                                className="my-1 inline-block rounded bg-amber-500 px-2 py-1 text-xs font-semibold text-white hover:bg-amber-600"
+                              >
+                                {t('match_feed.confirm_in_tournament', 'Confirm in tournament')}
+                              </Link>
+                            )}
                             <MatchStreams match={match} compact />
                             {match.replay_file_path && (
                               <a

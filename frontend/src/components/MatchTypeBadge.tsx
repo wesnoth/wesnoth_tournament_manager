@@ -27,6 +27,9 @@ const MatchTypeBadge: React.FC<Props> = ({ match, compact = false }) => {
       ? `${t('match_feed.game', 'Game')} ${match.tournament_game_number}`
       : null,
   ].filter(Boolean).join(' · ');
+  const tournamentUrl = match.tournament_id
+    ? `/tournament/${match.tournament_id}?tab=competition${match.tournament_series_id ? `&seriesId=${match.tournament_series_id}` : ''}${match.tournament_game_id ? `&gameId=${match.tournament_game_id}` : ''}`
+    : '';
 
   return (
     <div className={`flex flex-wrap items-center gap-1 ${compact ? 'mt-1' : 'mt-2'}`}>
@@ -36,7 +39,7 @@ const MatchTypeBadge: React.FC<Props> = ({ match, compact = false }) => {
       {match.tournament_id && match.tournament_name && (
         <Link
           data-help-id="action-open-match-tournament"
-          to={`/tournament/${match.tournament_id}`}
+          to={tournamentUrl}
           className="text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline"
         >
           {match.tournament_name}

@@ -972,6 +972,9 @@
     "round": "Ronda",
     "game": "Partida",
     "no_elo": "Sin ELO",
-    "elo_unavailable": "ELO no disponible"
+    "elo_unavailable": "ELO no disponible",
+    "side_1": "Lado 1",
+    "side_2": "Lado 2",
+    "confirm_in_tournament": "Confirmar en el torneo"
   }
 }

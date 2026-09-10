@@ -181,7 +181,12 @@ const buildTournamentGameQuery = (
 ): { sql: string; params: unknown[] } => {
   const conditions = [
     'game.match_id IS NULL',
-    "((game.status = 'completed' AND game.organizer_action IS NULL) OR game.status = 'cancelled')",
+    `(
+      (game.status = 'completed' AND game.organizer_action IS NULL)
+      OR game.status = 'cancelled'
+      OR (game.status NOT IN ('completed', 'cancelled')
+        AND game.organizer_action IS NULL AND pending_replay.id IS NOT NULL)
+    )`,
   ];
   const params: unknown[] = [];
   const matchType = normalizeMatchType(filters.matchType);
@@ -219,26 +224,32 @@ const buildTournamentGameQuery = (
     )`);
     params.push(pattern, pattern, pattern);
   }
-  if (filters.map?.trim()) {
-    conditions.push('LOWER(game.map) LIKE ?');
-    params.push(`%${filters.map.trim().toLowerCase()}%`);
-  }
   if (filters.status?.trim()) {
-    if (filters.status.trim() === 'cancelled') {
+    const status = filters.status.trim();
+    if (status === 'cancelled') {
       conditions.push("game.status = 'cancelled'");
+    } else if (status === 'pending_report') {
+      conditions.push("game.status NOT IN ('completed', 'cancelled') AND pending_replay.id IS NOT NULL");
+    } else if (status === 'unconfirmed') {
+      conditions.push(`(
+        (game.status = 'completed' AND game.confirmation_status = 'unconfirmed')
+        OR (game.status NOT IN ('completed', 'cancelled') AND pending_replay.id IS NOT NULL)
+      )`);
     } else {
       conditions.push("game.status = 'completed' AND game.confirmation_status = ?");
-      params.push(filters.status.trim());
+      params.push(status);
     }
   }
   if (filters.confirmed?.trim()) {
     const confirmed = ['true', '1', 'confirmed'].includes(filters.confirmed.trim().toLowerCase());
-    conditions.push("game.status = 'completed' AND game.confirmation_status = ?");
-    params.push(confirmed ? 'confirmed' : 'unconfirmed');
-  }
-  if (filters.faction?.trim()) {
-    conditions.push('(LOWER(game.winner_faction) = ? OR LOWER(game.loser_faction) = ?)');
-    params.push(filters.faction.trim().toLowerCase(), filters.faction.trim().toLowerCase());
+    if (confirmed) {
+      conditions.push("game.status = 'completed' AND game.confirmation_status = 'confirmed'");
+    } else {
+      conditions.push(`(
+        (game.status = 'completed' AND game.confirmation_status = 'unconfirmed')
+        OR (game.status NOT IN ('completed', 'cancelled') AND pending_replay.id IS NOT NULL)
+      )`);
+    }
   }
   if (matchType === 'ranked') {
     conditions.push('1 = 0');
@@ -256,7 +267,9 @@ const buildTournamentGameQuery = (
                  NULL AS match_id,
                  game.game_number AS tournament_game_number,
                  game.status AS game_status,
-                 CASE WHEN game.status = 'cancelled' THEN 'cancelled'
+                 CASE WHEN game.status NOT IN ('completed', 'cancelled') AND pending_replay.id IS NOT NULL
+                           THEN 'pending_report'
+                      WHEN game.status = 'cancelled' THEN 'cancelled'
                       ELSE game.confirmation_status END AS status,
                  game.map,
                  game.winner_faction,
@@ -268,7 +281,9 @@ const buildTournamentGameQuery = (
                  game.loser_rating,
                  game.replay_downloads,
                  game.played_at,
-                 COALESCE(game.played_at, game.updated_at, game.created_at) AS created_at,
+                 CASE WHEN game.status NOT IN ('completed', 'cancelled') AND pending_replay.id IS NOT NULL
+                      THEN COALESCE(pending_replay.detected_at, pending_replay.created_at, game.updated_at, game.created_at)
+                      ELSE COALESCE(game.played_at, game.updated_at, game.created_at) END AS created_at,
                  game.updated_at,
                  game.entry1_id,
                  game.entry2_id,
@@ -325,12 +340,18 @@ const buildTournamentGameQuery = (
                    WHEN 'unranked' THEN 'tournament_unranked'
                    ELSE 'tournament_ranked'
                  END AS match_type,
-                 'tournament_game' AS source_type,
+                 CASE WHEN game.status NOT IN ('completed', 'cancelled') AND pending_replay.id IS NOT NULL
+                      THEN CASE WHEN pending_replay.parse_status = 'due'
+                                THEN 'tournament_replay_confidence_1_due'
+                                ELSE 'tournament_replay_confidence_1' END
+                      ELSE 'tournament_game' END AS source_type,
                  0 AS has_elo_data,
-                 replay.id AS replay_id,
-                 replay.replay_url,
-                 replay.replay_url AS replay_file_path,
-                 replay.parse_summary AS replay_parse_summary,
+                 COALESCE(pending_replay.id, replay.id) AS replay_id,
+                 COALESCE(pending_replay.replay_url, replay.replay_url) AS replay_url,
+                 COALESCE(pending_replay.replay_url, replay.replay_url) AS replay_file_path,
+                 COALESCE(pending_replay.parse_summary, replay.parse_summary) AS replay_parse_summary,
+                 pending_replay.id AS pending_replay_id,
+                 pending_replay.parse_status AS pending_replay_parse_status,
                  COALESCE((
                    SELECT JSON_ARRAYAGG(JSON_OBJECT(
                      'player_id', replay_member.player_id,
@@ -338,7 +359,7 @@ const buildTournamentGameQuery = (
                      'side', replay_member.side
                    ))
                    FROM replay_participants replay_member
-                   WHERE replay_member.replay_id = replay.id
+                   WHERE replay_member.replay_id = COALESCE(pending_replay.id, replay.id)
                  ), JSON_ARRAY()) AS replay_participants,
                  COALESCE((
                    SELECT JSON_ARRAYAGG(JSON_OBJECT(
@@ -375,12 +396,27 @@ const buildTournamentGameQuery = (
             ORDER BY latest_replay.detected_at DESC, latest_replay.created_at DESC
             LIMIT 1
           )
+          LEFT JOIN replays pending_replay
+            ON game.status NOT IN ('completed', 'cancelled')
+           AND pending_replay.id = (
+            SELECT candidate.id
+            FROM replays candidate
+            WHERE candidate.tournament_game_id = game.id
+              AND candidate.parse_status IN ('parsed', 'due')
+              AND candidate.integration_confidence = 1
+              AND candidate.match_id IS NULL
+              AND candidate.deleted_at IS NULL
+            ORDER BY candidate.detected_at DESC, candidate.created_at DESC
+            LIMIT 1
+          )
           WHERE ${conditions.join(' AND ')}`,
     params,
   };
 };
 
 const normalizeTournamentGame = (row: any): any => {
+  const replaySummary = parseJson<any>(row.replay_parse_summary, {});
+  const isPendingReplay = String(row.source_type).startsWith('tournament_replay_confidence_1');
   const entry1Members = resolveTeamMembers(
     row.entry1_team_id,
     row.entry1_members,
@@ -393,13 +429,40 @@ const normalizeTournamentGame = (row: any): any => {
     row.replay_participants,
     row.replay_parse_summary,
   );
-  const winnerIsEntry2 = Boolean(row.has_outcome && row.winner_entry_id === row.entry2_id);
+  const winnerIsEntry2 = Boolean(!isPendingReplay && row.has_outcome && row.winner_entry_id === row.entry2_id);
+
+  const pendingFaction = (teamId: string | null, entryName: string, fallbackSide: number): string | null => {
+    const detectedTeam = teamId ? replaySummary?.detectedTeams?.[teamId] : null;
+    if (Array.isArray(detectedTeam?.factions) && detectedTeam.factions.length) {
+      return detectedTeam.factions.join(', ');
+    }
+    const player = (replaySummary?.forumPlayers || []).find(
+      (candidate: any) => String(candidate.user_name || '').toLowerCase() === String(entryName || '').toLowerCase(),
+    );
+    const side = Number(player?.side_number) || fallbackSide;
+    return replaySummary?.finalFactions?.[`side${side}`]
+      || replaySummary?.resolvedFactions?.[`side${side}`]
+      || replaySummary?.forumFactions?.[`side${side}`]
+      || player?.faction
+      || null;
+  };
+
+  const pendingMap = replaySummary?.finalMap || replaySummary?.resolvedMap
+    || replaySummary?.selectedMapName || replaySummary?.forumMap || null;
 
   const normalized = {
     ...row,
     feed_id: `tournament_game:${row.id}`,
     has_elo_data: false,
-    has_outcome: Boolean(row.has_outcome),
+    has_outcome: !isPendingReplay && Boolean(row.has_outcome),
+    map: isPendingReplay ? row.map || pendingMap : row.map,
+    winner_faction: isPendingReplay
+      ? pendingFaction(row.entry1_team_id, row.entry1_name, 1)
+      : row.winner_faction,
+    loser_faction: isPendingReplay
+      ? pendingFaction(row.entry2_team_id, row.entry2_name, 2)
+      : row.loser_faction,
+    winner_side: isPendingReplay ? null : row.winner_side,
     winner_members: winnerIsEntry2 ? entry2Members : entry1Members,
     loser_members: winnerIsEntry2 ? entry1Members : entry2Members,
     entry1_members: entry1Members,
@@ -411,6 +474,22 @@ const normalizeTournamentGame = (row: any): any => {
   delete normalized.replay_parse_summary;
   delete normalized.replay_participants;
   return normalized;
+};
+
+/** Apply display-derived filters after pending replay metadata is normalized. */
+const filterTournamentRows = (rows: any[], filters: MatchFeedFilters): any[] => {
+  const mapFilter = filters.map?.trim().toLowerCase();
+  const factionFilter = filters.faction?.trim().toLowerCase();
+  return rows.filter((row) => {
+    if (mapFilter && !String(row.map || '').toLowerCase().includes(mapFilter)) return false;
+    if (factionFilter) {
+      const factions = [row.winner_faction, row.loser_faction]
+        .flatMap((value) => String(value || '').split(','))
+        .map((value) => value.trim().toLowerCase());
+      if (!factions.includes(factionFilter)) return false;
+    }
+    return true;
+  });
 };
 
 const formatPendingReplays = async (
@@ -543,7 +622,7 @@ export async function getCombinedMatchFeed(options: MatchFeedOptions = {}) {
     has_outcome: true,
     stream_links: parseJson(row.stream_links, []),
   }));
-  const tournamentRows = tournamentResult.rows.map(normalizeTournamentGame);
+  const tournamentRows = filterTournamentRows(tournamentResult.rows.map(normalizeTournamentGame), filters);
   const allRows = [...rankedRows, ...tournamentRows, ...pendingReplays];
   allRows.sort((left, right) => {
     const dateDifference = new Date(right.created_at).getTime() - new Date(left.created_at).getTime();

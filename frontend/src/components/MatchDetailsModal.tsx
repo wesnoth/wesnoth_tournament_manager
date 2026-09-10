@@ -30,8 +30,9 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
 
   // Check if current user is the reporter (winner) and match can be cancelled
   const isReporter = match.winner_id === userId;
-  const canCancel = match.source_type !== 'tournament_game' && isReporter && ['unconfirmed', 'confirmed'].includes(match.status);
+  const canCancel = match.source_type === 'match' && isReporter && ['unconfirmed', 'confirmed'].includes(match.status);
   const hasEloData = match.has_elo_data !== false;
+  const isPendingTournamentReplay = String(match.source_type).startsWith('tournament_replay_confidence_1');
 
   const renderCompetitor = (winner: boolean) => {
     const nickname = winner ? match.winner_nickname : match.loser_nickname;
@@ -100,6 +101,7 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
                   {match.status === 'unconfirmed' && <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-semibold">⏳ Unconfirmed</span>}
                   {match.status === 'disputed' && <span className="inline-block px-3 py-1 bg-red-100 text-red-800 rounded-full text-xs font-semibold">⚠ Disputed</span>}
                   {match.status === 'cancelled' && <span className="inline-block px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-semibold">✗ Cancelled</span>}
+                  {match.status === 'pending_report' && <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-semibold">⏳ {t('replay_need_confirmation')}</span>}
                   {!match.status && <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-semibold">⏳ Unconfirmed</span>}
                 </div>
               </div>
@@ -110,8 +112,8 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
                 <thead>
                   <tr className="border-b-2 border-gray-300">
                     <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Statistic</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-green-50">Winner</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-red-50">Loser</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-green-50">{match.has_outcome === false ? t('match_feed.side_1', 'Side 1') : 'Winner'}</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-red-50">{match.has_outcome === false ? t('match_feed.side_2', 'Side 2') : 'Loser'}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -197,6 +199,7 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
                           rel="noopener noreferrer"
                           className="inline-block px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-semibold text-sm transition-colors"
                           onClick={(event) => {
+                            if (isPendingTournamentReplay) return;
                             event.preventDefault();
                             if (onDownloadReplay && (match.id || match.match_id)) {
                               onDownloadReplay(

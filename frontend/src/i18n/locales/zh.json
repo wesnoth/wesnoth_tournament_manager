@@ -962,6 +962,9 @@
     "round": "轮次",
     "game": "比赛",
     "no_elo": "无 ELO",
-    "elo_unavailable": "ELO 不可用"
+    "elo_unavailable": "ELO 不可用",
+    "side_1": "一方",
+    "side_2": "二方",
+    "confirm_in_tournament": "在锦标赛中确认"
   }
 }

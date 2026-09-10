@@ -7,6 +7,7 @@ import ReplayConfirmationModal from './ReplayConfirmationModal';
 import { useAuthStore } from '../store/authStore';
 import MatchStreams from './MatchStreams';
 import MatchTypeBadge from './MatchTypeBadge';
+import { Link } from 'react-router-dom';
 
 interface MatchesTableProps {
   matches: any[];
@@ -54,8 +55,9 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
   const handleDownloadReplay = async (match: any, replayFilePath: string) => {
     try {
       if (!replayFilePath) return;
+      const isPendingTournamentReplay = String(match.source_type).startsWith('tournament_replay_confidence_1');
       
-      if (onDownloadReplay) {
+      if (onDownloadReplay && !isPendingTournamentReplay) {
         await onDownloadReplay(
           match.source_type === 'tournament_game' ? null : match.match_id || match.id,
           replayFilePath,
@@ -94,11 +96,19 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
     const userId = winner ? match.winner_id : match.loser_id;
     const teamId = winner ? match.winner_team_id : match.loser_team_id;
     const members = (winner ? match.winner_members : match.loser_members) || [];
-    if (!teamId) return <PlayerLink nickname={nickname} userId={userId} />;
+    const isTournamentWithoutOutcome = match.has_outcome === false
+      && String(match.source_type).startsWith('tournament_');
     return (
       <div>
-        <div className="font-semibold text-gray-900">{nickname}</div>
-        {members.length > 0 && (
+        {isTournamentWithoutOutcome && (
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+            {winner ? t('match_feed.side_1', 'Side 1') : t('match_feed.side_2', 'Side 2')}
+          </div>
+        )}
+        {teamId
+          ? <div className="font-semibold text-gray-900">{nickname}</div>
+          : <PlayerLink nickname={nickname} userId={userId} />}
+        {teamId && members.length > 0 && (
           <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs">
             {members.map((member: any) => (
               <PlayerLink key={`${teamId}:${member.user_id || member.nickname}`} nickname={member.nickname} userId={member.user_id} />
@@ -394,6 +404,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
 
             // Regular match rendering
             const isCancelled = match.status === 'cancelled';
+            const isPendingTournamentReplay = String(match.source_type).startsWith('tournament_replay_confidence_1');
             const hasEloData = match.has_elo_data !== false;
             const matchRowBgColor = isCancelled ? 'bg-red-100' : '';
             const matchRowBorderColor = isCancelled ? 'border-red-200' : 'border-gray-200';
@@ -504,6 +515,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                       match.status === 'reported' ? 'bg-orange-100 text-orange-700' :
                       match.status === 'disputed' ? 'bg-red-100 text-red-700' :
                       match.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                      match.status === 'pending_report' ? 'bg-yellow-100 text-yellow-700' :
                       'bg-blue-100 text-blue-700'
                     }`}>
                       {match.status === 'confirmed' && t('match_status_confirmed')}
@@ -511,11 +523,12 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                       {match.status === 'unconfirmed' && t('match_status_unconfirmed')}
                       {match.status === 'disputed' && t('match_status_disputed')}
                       {match.status === 'cancelled' && t('match_status_cancelled')}
+                      {match.status === 'pending_report' && t('replay_need_confirmation')}
                       {!match.status && t('match_status_unconfirmed')}
                     </span>
                   </div>
                   <div className="flex gap-2 flex-wrap">
-                    {isAuthenticated && match.source_type !== 'tournament_game' && (() => {
+                    {isAuthenticated && match.source_type === 'match' && (() => {
                       const isWinner = currentPlayerId === match.winner_id;
                       const isLoser = currentPlayerId === match.loser_id;
                       const hasWinnerData = match.winner_comments && match.winner_rating;
@@ -551,6 +564,15 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
 
                       return null;
                     })()}
+                    {isPendingTournamentReplay && match.tournament_id && (
+                      <Link
+                        data-help-id="action-open-tournament-replay"
+                        to={`/tournament/${match.tournament_id}?tab=competition${match.tournament_series_id ? `&seriesId=${match.tournament_series_id}` : ''}${match.tournament_game_id ? `&gameId=${match.tournament_game_id}` : ''}`}
+                        className="px-2 py-1 bg-amber-500 text-white text-xs rounded hover:bg-amber-600 transition"
+                      >
+                        {t('match_feed.confirm_in_tournament', 'Confirm in tournament')}
+                      </Link>
+                    )}
                     <button
                       data-help-id="action-view-match-details"
                       className="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition"
@@ -570,7 +592,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                         target="_blank"
                         rel="noopener noreferrer"
                         className="px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600 transition"
-                        onClick={(event) => {
+                        onClick={isPendingTournamentReplay ? undefined : (event) => {
                           event.preventDefault();
                           void handleDownloadReplay(match, match.replay_file_path);
                         }}

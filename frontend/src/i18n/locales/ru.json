@@ -962,6 +962,9 @@
     "round": "Раунд",
     "game": "Игра",
     "no_elo": "Без ELO",
-    "elo_unavailable": "ELO недоступен"
+    "elo_unavailable": "ELO недоступен",
+    "side_1": "Сторона 1",
+    "side_2": "Сторона 2",
+    "confirm_in_tournament": "Подтвердить в турнире"
   }
 }

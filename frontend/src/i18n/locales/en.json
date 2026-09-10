@@ -985,6 +985,9 @@
     "round": "Round",
     "game": "Game",
     "no_elo": "No ELO",
-    "elo_unavailable": "ELO unavailable"
+    "elo_unavailable": "ELO unavailable",
+    "side_1": "Side 1",
+    "side_2": "Side 2",
+    "confirm_in_tournament": "Confirm in tournament"
   }
 }

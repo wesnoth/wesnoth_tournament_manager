@@ -16,6 +16,7 @@ interface Props {
   participantTeamIds?: string[];
   onScheduleGame?: (game: any) => void;
   highlightedSeriesId?: string | null;
+  highlightedGameId?: string | null;
   matchFilter?: 'all' | 'pending' | 'completed';
   showOnlyMine?: boolean;
   showPhasesGroups?: boolean;
@@ -81,6 +82,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
   participantTeamIds = [],
   onScheduleGame,
   highlightedSeriesId = null,
+  highlightedGameId = null,
   matchFilter = 'all',
   showOnlyMine = false,
   showPhasesGroups = true,
@@ -252,7 +254,9 @@ const TournamentCompetitionView: React.FC<Props> = ({
         || (matchFilter === 'completed' ? isCompleted : !isCompleted);
       if (!matchesExternalFilters || (showOnlyMine && !isMine) || game.organizer_action) return false;
 
-      const players = [game.entry1_name, game.entry2_name, ...(game.entry1_members || []), ...(game.entry2_members || [])]
+      const memberNames = [...(game.entry1_members || []), ...(game.entry2_members || [])]
+        .map((member: any) => member?.nickname || member);
+      const players = [game.entry1_name, game.entry2_name, ...memberNames]
         .filter(Boolean).join(' ').toLowerCase();
       const map = String(
         game.map || pendingSummary?.finalMap || pendingSummary?.forumMap || pendingSummary?.resolvedMap || ''
@@ -266,11 +270,19 @@ const TournamentCompetitionView: React.FC<Props> = ({
         && (!mapFilter || map.includes(mapFilter))
         && (!factionFilter || factions.includes(factionFilter));
     }).sort((first, second) => {
+      const firstHighlighted = Number(
+        highlightedGameId === first.game_id || (!highlightedGameId && highlightedSeriesId === first.series_id),
+      );
+      const secondHighlighted = Number(
+        highlightedGameId === second.game_id || (!highlightedGameId && highlightedSeriesId === second.series_id),
+      );
       const firstPending = Number(Boolean(first.pending_replay_id));
       const secondPending = Number(Boolean(second.pending_replay_id));
-      return secondPending - firstPending || String(first.game_id).localeCompare(String(second.game_id));
+      return secondHighlighted - firstHighlighted
+        || secondPending - firstPending
+        || String(first.game_id).localeCompare(String(second.game_id));
     });
-  }, [appliedFilters, currentUserId, games, matchFilter, participantTeamIds, showOnlyMine]);
+  }, [appliedFilters, currentUserId, games, highlightedGameId, highlightedSeriesId, matchFilter, participantTeamIds, showOnlyMine]);
 
   const totalPages = Math.max(1, Math.ceil(filteredGames.length / pageSize));
   const paginatedGames = filteredGames.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -278,6 +290,18 @@ const TournamentCompetitionView: React.FC<Props> = ({
   useEffect(() => {
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    if (!highlightedGameId && !highlightedSeriesId) return;
+    setCurrentPage(1);
+    const timer = setTimeout(() => {
+      const target = highlightedGameId
+        ? document.getElementById(`game-${highlightedGameId}`)
+        : document.getElementById(`series-${highlightedSeriesId}`);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [games, highlightedGameId, highlightedSeriesId]);
 
   const handlePageChange = (page: number) => {
     if (page >= 1 && page <= totalPages) {
@@ -651,7 +675,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
                 });
                 setReplayChoice(choice);
               };
-              return <tr data-help-id="region-tournament-game-row" id={`series-${game.series_id}`} key={game.game_id} className={`border-b border-gray-200 ${highlightedSeriesId === game.series_id ? 'bg-yellow-200 ring-2 ring-yellow-400' : pendingReplay ? 'bg-yellow-50 hover:bg-yellow-100' : 'hover:bg-gray-50'}`}>
+              return <tr data-help-id="region-tournament-game-row" id={highlightedGameId ? `game-${game.game_id}` : `series-${game.series_id}`} key={game.game_id} className={`border-b border-gray-200 ${highlightedGameId === game.game_id || highlightedSeriesId === game.series_id ? 'bg-yellow-200 ring-2 ring-yellow-400' : pendingReplay ? 'bg-yellow-50 hover:bg-yellow-100' : 'hover:bg-gray-50'}`}>
                 <td className="px-4 py-3 align-top text-gray-700">
                   <div className="font-medium">{game.phase_name}</div>
                   <div className="text-xs text-gray-500">{game.group_name} · Round {game.round_number} · Game {game.game_number} · Bo{game.best_of}</div>

@@ -309,6 +309,7 @@ const TournamentDetail: React.FC = () => {
   const tabInitializedForTournament = useRef<string | null>(null);
   const [highlightedMatchId, setHighlightedMatchId] = useState<string | null>(searchParams.get('matchId'));
   const [highlightedSeriesId] = useState<string | null>(searchParams.get('seriesId'));
+  const [highlightedCompetitionGameId] = useState<string | null>(searchParams.get('gameId'));
   const [myMatchesOnly, setMyMatchesOnly] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'scheduled' | 'completed'>('all');
   const [competitionMatchFilter, setCompetitionMatchFilter] = useState<'all' | 'pending' | 'completed'>('all');
@@ -817,12 +818,15 @@ const TournamentDetail: React.FC = () => {
   }, [activeTab, highlightedMatchId, roundMatches.length]);
 
   useEffect(() => {
-    if (activeTab !== 'competition' || !highlightedSeriesId) return;
+    if (activeTab !== 'competition' || (!highlightedSeriesId && !highlightedCompetitionGameId)) return;
     const timer = setTimeout(() => {
-      document.getElementById(`series-${highlightedSeriesId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const target = highlightedCompetitionGameId
+        ? document.getElementById(`game-${highlightedCompetitionGameId}`)
+        : document.getElementById(`series-${highlightedSeriesId}`);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 500);
     return () => clearTimeout(timer);
-  }, [activeTab, highlightedSeriesId]);
+  }, [activeTab, highlightedCompetitionGameId, highlightedSeriesId]);
 
   const handleTeamJoinSubmit = async (teamName: string, teammateName: string) => {
     try {
@@ -3457,6 +3461,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
             participantTeamIds={participants.map((participant: any) => participant.team_id).filter(Boolean)}
             onScheduleGame={(game) => handlePreloadSchedulingData(game.series_id, false, undefined, true)}
             highlightedSeriesId={highlightedSeriesId}
+            highlightedGameId={highlightedCompetitionGameId}
             matchFilter={competitionMatchFilter}
             showOnlyMine={competitionShowOnlyMine}
             showPhasesGroups={competitionShowPhasesGroups}
