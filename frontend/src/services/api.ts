@@ -340,6 +340,7 @@ export const publicService = {
       if (filters.min_matches) params.min_matches = filters.min_matches;
       if (filters.rated_only) params.rated_only = filters.rated_only;
       if (filters.ranked_only) params.ranked_only = filters.ranked_only;
+      if (filters.streamer_only) params.streamer_only = filters.streamer_only;
     }
     if (sortBy) params.sortBy = sortBy;
     if (sortOrder) params.sortOrder = sortOrder;

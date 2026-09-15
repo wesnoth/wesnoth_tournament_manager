@@ -1701,7 +1701,10 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
     console.log('🔍 GET /matches - Filters received:', { playerFilter, mapFilter, statusFilter, confirmedFilter, factionFilter });
 
     // Build WHERE clause dynamically
-    let whereConditions: string[] = [];
+    // This legacy history endpoint follows the same rule as the combined feed:
+    // administrative tournament outcomes remain visible in the tournament,
+    // but only played games with a replay URL belong in match histories.
+    let whereConditions: string[] = ["TRIM(COALESCE(m.replay_file_path, '')) <> ''"];
     let params: any[] = [];
     let paramCount = 1;
 

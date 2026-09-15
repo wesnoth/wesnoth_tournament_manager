@@ -339,6 +339,7 @@
   "filter_player": "玩家",
   "filter_ranked_only": "已启用排名",
   "filter_rated_only": "仅评级",
+  "filter_streamer_only": "仅主播",
   "filter_status": "状态",
   "filter_type": "锦标赛类型",
   "filter_winner": "获胜者",

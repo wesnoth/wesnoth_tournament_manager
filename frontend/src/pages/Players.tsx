@@ -27,6 +27,7 @@ interface FilterState {
   min_matches: string;
   rated_only: boolean;
   ranked_only: boolean;
+  streamer_only: boolean;
 }
 
 type SortColumn = 'nickname' | 'elo_rating' | 'is_rated' | 'matches_played' | 'total_wins' | 'total_losses' | 'winPercentage' | '';
@@ -51,6 +52,7 @@ const Players: React.FC = () => {
 
   const handleRefresh = () => {
     setAppliedFilters(inputFilters);
+    setCurrentPage(1);
     setRefreshKey(k => k + 1);
   };
 
@@ -68,6 +70,7 @@ const Players: React.FC = () => {
     min_matches: '',
     rated_only: false,
     ranked_only: false,
+    streamer_only: false,
   });
   
   // Applied filters state changes only when a filter is submitted or refreshed.
@@ -78,6 +81,7 @@ const Players: React.FC = () => {
     min_matches: '',
     rated_only: false,
     ranked_only: false,
+    streamer_only: false,
   });
   
   const handleFilterInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -171,6 +175,7 @@ const Players: React.FC = () => {
       min_matches: '',
       rated_only: false,
       ranked_only: false,
+      streamer_only: false,
     };
     setInputFilters(emptyFilters);
     setAppliedFilters(emptyFilters);
@@ -336,6 +341,19 @@ const Players: React.FC = () => {
               className="w-4 h-4 text-green-500 rounded cursor-pointer"
             />
             {t('filter_ranked_only', 'Ranked enabled')}
+          </label>
+
+          <label htmlFor="streamer_only" className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700 text-sm pb-2 whitespace-nowrap">
+            <input
+              data-help-id="option-players-streamer-only"
+              type="checkbox"
+              id="streamer_only"
+              name="streamer_only"
+              checked={inputFilters.streamer_only}
+              onChange={handleFilterInputChange}
+              className="w-4 h-4 text-orange-500 rounded cursor-pointer"
+            />
+            {t('filter_streamer_only')}
           </label>
 
           <button data-help-id="action-reset-players-filters" className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded transition-colors whitespace-nowrap" onClick={handleResetFilters}>

@@ -339,6 +339,7 @@
   "filter_player": "Spieler",
   "filter_ranked_only": "Ranked aktiviert",
   "filter_rated_only": "Nur bewertet",
+  "filter_streamer_only": "Nur Streamer",
   "filter_status": "Status",
   "filter_type": "Turnierart",
   "filter_winner": "Gewinner",

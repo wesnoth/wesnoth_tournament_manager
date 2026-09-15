@@ -85,7 +85,10 @@ const buildRankedMatchQuery = (
   filters: MatchFeedFilters,
   playerId?: string,
 ): { sql: string; params: unknown[] } => {
-  const conditions: string[] = [];
+  // Match-history feeds represent games that were actually played. Tournament
+  // decisions can still exist in their tournament bracket, but without a
+  // replay URL they must not leak into general or player match histories.
+  const conditions: string[] = ["TRIM(COALESCE(m.replay_file_path, '')) <> ''"];
   const params: unknown[] = [];
   const matchType = normalizeMatchType(filters.matchType);
 
@@ -179,8 +182,11 @@ const buildTournamentGameQuery = (
   filters: MatchFeedFilters,
   playerId?: string,
 ): { sql: string; params: unknown[] } => {
+  // The tournament page owns the complete competition record. Match-history
+  // feeds only include tournament games backed by a downloadable replay URL.
   const conditions = [
     'game.match_id IS NULL',
+    "TRIM(COALESCE(pending_replay.replay_url, replay.replay_url, '')) <> ''",
     `(
       (game.status = 'completed' AND game.organizer_action IS NULL)
       OR game.status = 'cancelled'
@@ -521,6 +527,7 @@ const formatPendingReplays = async (
      WHERE r.integration_confidence = 1
        AND r.parsed = 1
        AND r.parse_status NOT IN ('rejected', 'error')
+       AND TRIM(COALESCE(r.replay_url, '')) <> ''
        AND r.match_id IS NULL
        AND NOT EXISTS (SELECT 1 FROM matches linked_match WHERE linked_match.replay_id = r.id)
        AND r.tournament_id IS NULL

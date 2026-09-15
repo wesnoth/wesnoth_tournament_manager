@@ -341,6 +341,7 @@ router.get('/players', async (req, res) => {
     const nicknameFilter = (req.query.nickname as string)?.trim() || '';
     const ratedOnly = req.query.rated_only === 'true';
     const rankedOnly = req.query.ranked_only === 'true';
+    const streamerOnly = req.query.streamer_only === 'true';
     const minElo = req.query.min_elo ? parseInt(req.query.min_elo as string) : null;
     const maxElo = req.query.max_elo ? parseInt(req.query.max_elo as string) : null;
     const minMatches = req.query.min_matches ? parseInt(req.query.min_matches as string) : null;
@@ -350,8 +351,8 @@ router.get('/players', async (req, res) => {
     let params: any[] = [];
 
     if (nicknameFilter) {
-      whereConditions.push(`nickname LIKE ?`);
-      params.push(`%${nicknameFilter}%`);
+      whereConditions.push(`LOWER(nickname) LIKE ?`);
+      params.push(`%${nicknameFilter.toLowerCase()}%`);
     }
 
     if (ratedOnly) {
@@ -360,6 +361,10 @@ router.get('/players', async (req, res) => {
 
     if (rankedOnly) {
       whereConditions.push(`enable_ranked = 1`);
+    }
+
+    if (streamerOnly) {
+      whereConditions.push(`is_streamer = 1`);
     }
 
     if (minElo !== null) {
@@ -398,7 +403,7 @@ router.get('/players', async (req, res) => {
               ) ELSE NULL END AS global_ranking_position
        FROM users_extension u
        WHERE ${whereClause}
-       ORDER BY ${sortByExpr} ${sortOrder}
+       ORDER BY ${sortByExpr} ${sortOrder}, u.id ASC
        LIMIT ? OFFSET ?`,
       params
     );

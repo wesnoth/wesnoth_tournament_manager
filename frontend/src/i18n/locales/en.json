@@ -352,6 +352,7 @@
   "filter_player": "Player",
   "filter_ranked_only": "Ranked enabled",
   "filter_rated_only": "Rated Only",
+  "filter_streamer_only": "Streamers only",
   "filter_status": "Status",
   "filter_type": "Tournament Type",
   "filter_winner": "Winner",
