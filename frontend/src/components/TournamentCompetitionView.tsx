@@ -75,6 +75,15 @@ function buildPlannedBracketSeries(phase: any): any[] {
   return planned;
 }
 
+/**
+ * Treat a confidence-one replay as completed for display even before its game
+ * row is finalized. This is the same boundary used by the status selector and
+ * keeps category ordering consistent with the rendered section headings.
+ */
+function isCompetitionGameCompleted(game: any): boolean {
+  return game.status === 'completed' || Boolean(game.pending_replay_id);
+}
+
 const TournamentCompetitionView: React.FC<Props> = ({
   tournamentId,
   canManage = false,
@@ -236,7 +245,6 @@ const TournamentCompetitionView: React.FC<Props> = ({
     const factionFilter = appliedFilters.faction.trim().toLowerCase();
 
     return games.filter(game => {
-      const hasPendingReplay = Boolean(game.pending_replay_id);
       let pendingSummary: any = null;
       try {
         pendingSummary = typeof game.pending_replay_summary === 'string'
@@ -245,7 +253,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
       } catch {
         pendingSummary = null;
       }
-      const isCompleted = game.status === 'completed' || hasPendingReplay;
+      const isCompleted = isCompetitionGameCompleted(game);
       const isMine = Boolean(currentUserId && (
         currentUserId === game.entry1_user_id || currentUserId === game.entry2_user_id
         || participantTeamIds.includes(game.entry1_team_id) || participantTeamIds.includes(game.entry2_team_id)
@@ -270,6 +278,11 @@ const TournamentCompetitionView: React.FC<Props> = ({
         && (!mapFilter || map.includes(mapFilter))
         && (!factionFilter || factions.includes(factionFilter));
     }).sort((first, second) => {
+      // Category order must be established before slicing into pages. Otherwise
+      // scheduled and completed games are distributed across pages according
+      // to UUID order and only separated after pagination.
+      const categoryDifference = Number(isCompetitionGameCompleted(first))
+        - Number(isCompetitionGameCompleted(second));
       const firstHighlighted = Number(
         highlightedGameId === first.game_id || (!highlightedGameId && highlightedSeriesId === first.series_id),
       );
@@ -278,7 +291,8 @@ const TournamentCompetitionView: React.FC<Props> = ({
       );
       const firstPending = Number(Boolean(first.pending_replay_id));
       const secondPending = Number(Boolean(second.pending_replay_id));
-      return secondHighlighted - firstHighlighted
+      return categoryDifference
+        || secondHighlighted - firstHighlighted
         || secondPending - firstPending
         || String(first.game_id).localeCompare(String(second.game_id));
     });
@@ -292,8 +306,17 @@ const TournamentCompetitionView: React.FC<Props> = ({
   }, [currentPage, totalPages]);
 
   useEffect(() => {
-    if (!highlightedGameId && !highlightedSeriesId) return;
     setCurrentPage(1);
+  }, [matchFilter, showOnlyMine, tournamentId]);
+
+  useEffect(() => {
+    if (!highlightedGameId && !highlightedSeriesId) return;
+    const highlightedIndex = filteredGames.findIndex(game => highlightedGameId
+      ? game.game_id === highlightedGameId
+      : game.series_id === highlightedSeriesId);
+    if (highlightedIndex >= 0) {
+      setCurrentPage(Math.floor(highlightedIndex / pageSize) + 1);
+    }
     const timer = setTimeout(() => {
       const target = highlightedGameId
         ? document.getElementById(`game-${highlightedGameId}`)
@@ -301,7 +324,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
       target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 500);
     return () => clearTimeout(timer);
-  }, [games, highlightedGameId, highlightedSeriesId]);
+  }, [filteredGames, highlightedGameId, highlightedSeriesId]);
 
   const handlePageChange = (page: number) => {
     if (page >= 1 && page <= totalPages) {
@@ -546,7 +569,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
           const hasPendingReplay = Boolean(game.pending_replay_id);
           // A confidence-one replay represents a completed game even when
           // the underlying game row has not been finalized yet.
-          const isCompleted = game.status === 'completed' || hasPendingReplay;
+          const isCompleted = isCompetitionGameCompleted(game);
           const isMine = Boolean(currentUserId && (
             currentUserId === game.entry1_user_id || currentUserId === game.entry2_user_id
             || participantTeamIds.includes(game.entry1_team_id) || participantTeamIds.includes(game.entry2_team_id)
