@@ -930,10 +930,15 @@ router.get('/:id/phases/:phaseId/bracket', async (req, res) => {
  * Return phase games with the presentation metadata used by tournament detail.
  * tournament_games is authoritative for phase results; ranked match metadata is
  * a fallback, while unranked replay URLs are resolved through tournament_game_id.
+ * display_date follows the combined match feed: pending replay detection takes
+ * precedence until a result exists, then the played date takes precedence.
  */
 router.get('/:id/phases/:phaseId/games', async (req, res) => {
   const result = await query(
     `SELECT games.id AS game_id, games.game_number, games.status, games.confirmation_status, games.played_at,
+            CASE WHEN games.status NOT IN ('completed', 'cancelled') AND pending_replay.id IS NOT NULL
+                 THEN COALESCE(pending_replay.detected_at, pending_replay.created_at, games.updated_at, games.created_at)
+                 ELSE COALESCE(games.played_at, games.updated_at, games.created_at) END AS display_date,
             games.organizer_action,
             games.winner_entry_id, series.id AS series_id, series.best_of,
             phases.id AS phase_id, phases.name AS phase_name,

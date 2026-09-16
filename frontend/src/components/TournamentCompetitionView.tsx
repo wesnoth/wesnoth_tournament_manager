@@ -587,19 +587,19 @@ const TournamentCompetitionView: React.FC<Props> = ({
         const completed = section.status === 'completed';
         return <div key={section.status}>
           <h3 className="mb-4 border-b-2 border-blue-500 pb-3 text-2xl font-bold text-gray-800">{section.title}</h3>
-          <div className="overflow-x-auto"><table data-help-id="region-tournament-scheduled-games-table" className="w-full table-fixed text-sm">
+          <div className="overflow-x-auto"><table data-help-id="region-tournament-scheduled-games-table" className="w-full min-w-[800px] table-fixed text-sm">
             <colgroup>
-              <col className="w-[18%]" />
-              <col className="w-[25%]" />
-              <col className="w-[25%]" />
-              <col className="w-[14%]" />
-              <col className="w-[18%]" />
+              {completed && <col className="w-[12%]" />}
+              <col className={completed ? 'w-[25%]' : 'w-[28%]'} />
+              <col className={completed ? 'w-[25%]' : 'w-[28%]'} />
+              <col className={completed ? 'w-[22%]' : 'w-[26%]'} />
+              <col className={completed ? 'w-[16%]' : 'w-[18%]'} />
             </colgroup>
             <thead className="bg-gray-200"><tr>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">Phase / Round</th>
+              {completed && <th className="px-4 py-3 text-left font-semibold text-gray-700">{t('label_date')}</th>}
               <th className="px-4 py-3 text-left font-semibold text-gray-700">{completed ? 'Winner' : 'Player 1'}</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-700">{completed ? 'Loser' : 'Player 2'}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">Map / Factions</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">{t('label_map')}</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-700">Status / Actions</th>
             </tr></thead>
             <tbody>{sectionGames.map(game => {
@@ -634,9 +634,22 @@ const TournamentCompetitionView: React.FC<Props> = ({
               // is indexed by the entry's team_id.
               const entry1Team = detectedTeams[game.entry1_team_id || game.entry1_id];
               const entry2Team = detectedTeams[game.entry2_team_id || game.entry2_id];
-              const pendingFactionLabels = [entry1Team, entry2Team]
-                .filter(Boolean)
-                .map((team: any) => `${team.team_name}: ${(team.factions || []).join(', ')}`);
+              // Pending replays retain entry order until confirmed. Team metadata
+              // belongs to that entry; confirmed factions belong to winner / loser.
+              const renderCompetitorBadges = (first: boolean) => {
+                const team = first ? entry1Team : entry2Team;
+                const factions = pendingReplay
+                  ? team?.factions || [first ? pendingSide1Faction : pendingSide2Faction]
+                  : (first ? game.winner_faction : game.loser_faction)?.split(', ') || [];
+                const sides = pendingReplay
+                  ? team?.sides || [first ? 1 : 2]
+                  : [first ? winnerSide : loserSide];
+                return <>
+                  {factions.filter(Boolean).map((faction: string, index: number) => <span key={`faction-${index}`} className={`rounded px-2 py-1 text-xs font-semibold ${first ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}`}>{faction}</span>)}
+                  {sides.filter((side: number) => side > 0).map((side: number) => <span key={`side-${side}`} className={`rounded px-1.5 py-0.5 text-xs font-semibold ${side === 1 ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>S{side}</span>)}
+                </>;
+              };
+              const displayDate = game.display_date ? new Date(game.display_date) : null;
               const currentUserNickname = user?.nickname?.toLowerCase() || '';
               const currentUserTeam = Object.values(detectedTeams).find((team: any) =>
                 (team.members || []).some((member: string) => member.toLowerCase() === currentUserNickname)
@@ -699,15 +712,13 @@ const TournamentCompetitionView: React.FC<Props> = ({
                 setReplayChoice(choice);
               };
               return <tr data-help-id="region-tournament-game-row" id={highlightedGameId ? `game-${game.game_id}` : `series-${game.series_id}`} key={game.game_id} className={`border-b border-gray-200 ${highlightedGameId === game.game_id || highlightedSeriesId === game.series_id ? 'bg-yellow-200 ring-2 ring-yellow-400' : pendingReplay ? 'bg-yellow-50 hover:bg-yellow-100' : 'hover:bg-gray-50'}`}>
-                <td className="px-4 py-3 align-top text-gray-700">
-                  <div className="font-medium">{game.phase_name}</div>
-                  <div className="text-xs text-gray-500">{game.group_name} · Round {game.round_number} · Game {game.game_number} · Bo{game.best_of}</div>
-                </td>
+                {completed && <td className="px-4 py-3 align-top text-gray-700">{displayDate && !Number.isNaN(displayDate.getTime()) ? displayDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}</td>}
                 <td className={`px-4 py-3 align-top font-semibold ${completed ? 'text-green-700' : 'text-gray-800'}`}>
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="min-w-0 flex-1 break-words"><TournamentEntryName name={winnerName} userId={winnerUserId} members={displayedWinnerIsEntry1 ? game.entry1_members : game.entry2_members} /></div>
                       <StarDisplay rating={game.loser_rating} size="sm" />
+                      {(completed || pendingReplay) && renderCompetitorBadges(true)}
                     </div>
                   {completed && game.winner_comments && <div className="whitespace-pre-line break-words text-xs font-normal italic text-gray-500">{game.winner_comments}</div>}
                   </div>
@@ -717,23 +728,14 @@ const TournamentCompetitionView: React.FC<Props> = ({
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="min-w-0 flex-1 break-words"><TournamentEntryName name={loserName} userId={loserUserId} members={displayedWinnerIsEntry1 ? game.entry2_members : game.entry1_members} /></div>
                       <StarDisplay rating={game.winner_rating} size="sm" />
+                      {(completed || pendingReplay) && renderCompetitorBadges(false)}
                     </div>
                   {completed && game.loser_comments && <div className="whitespace-pre-line break-words text-xs font-normal italic text-gray-500">{game.loser_comments}</div>}
                   </div>
                 </td>
                 <td className="px-4 py-3 align-top text-gray-700">
                   <div className="break-words">{pendingSummary?.finalMap || pendingSummary?.resolvedMap || pendingSummary?.selectedMapName || pendingSummary?.forumMap || game.map || '—'}</div>
-                  {(completed || pendingReplay) && <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
-                    {pendingReplay && pendingFactionLabels.length > 0
-                      ? pendingFactionLabels.map((label: string, index: number) => <span key={index} className="rounded bg-blue-100 px-1.5 py-0.5 font-semibold text-blue-700">{label}</span>)
-                      : <>
-                        <span className="rounded bg-blue-100 px-1.5 py-0.5 font-semibold text-blue-700">{pendingReplay ? pendingSide1Faction || '—' : game.winner_faction || '—'}</span>
-                        {pendingReplay ? <span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-700">S1</span> : winnerSide > 0 && <span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-700">S{winnerSide}</span>}
-                        <span>vs</span>
-                        <span className="rounded bg-red-100 px-1.5 py-0.5 font-semibold text-red-700">{pendingReplay ? pendingSide2Faction || '—' : game.loser_faction || '—'}</span>
-                        {pendingReplay ? <span className="rounded bg-purple-100 px-1.5 py-0.5 font-semibold text-purple-700">S2</span> : loserSide && <span className="rounded bg-purple-100 px-1.5 py-0.5 font-semibold text-purple-700">S{loserSide}</span>}
-                      </>}
-                  </div>}
+                  <div className="mt-1 break-words text-xs text-gray-500">{game.phase_name} · {game.group_name} · Round {game.round_number} · Game {game.game_number} · Bo{game.best_of}</div>
                 </td>
                 <td data-help-id="region-game-stream-links" className="px-4 py-3 align-top text-gray-700">
                   {streamLinksFor(game).length > 0 && <div className="mb-2 flex flex-wrap items-center gap-1 border-b border-gray-100 pb-2">
