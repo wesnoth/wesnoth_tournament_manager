@@ -123,12 +123,12 @@ const ScheduleDisplay: React.FC<ScheduleDisplayProps> = ({
           </div>
         )}
 
-        {/* Schedule Grid - 7 columns horizontal */}
+        {/* Keep complete time ranges readable by reducing columns on narrow screens. */}
         <div>
           {hasSchedule && (
             <div className="text-sm text-gray-600 mb-2">{t('availability.title') || 'Available'}:</div>
           )}
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-2">
             {DAYS.map((day) => {
               const ranges = availabilitySchedule?.[day] || [];
               const hasRanges = ranges.length > 0;
@@ -143,7 +143,8 @@ const ScheduleDisplay: React.FC<ScheduleDisplayProps> = ({
                   }`}
                 >
                   <div className="font-semibold text-gray-700 mb-1 text-center">
-                    {getDayLabel(day)}
+                    <span className="sm:hidden">{t(`days.${day}`) || day}</span>
+                    <span className="hidden sm:inline">{getDayLabel(day)}</span>
                   </div>
                   {hasRanges ? (
                     <div className="space-y-0.5">
@@ -158,7 +159,7 @@ const ScheduleDisplay: React.FC<ScheduleDisplayProps> = ({
                         return (
                           <div 
                             key={`${day}-${idx}`}
-                            className="px-1 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium text-center whitespace-nowrap overflow-hidden text-ellipsis"
+                            className="px-1 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium text-center whitespace-nowrap"
                             title={`${displayStart}–${displayEnd}`}
                           >
                             {displayStart}–{displayEnd}
