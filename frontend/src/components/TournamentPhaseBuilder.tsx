@@ -63,37 +63,55 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
   const groupIds = useMemo(() => new Set(definition.phases.flatMap(item => item.groups.map(group => group.id))), [definition]);
   const groupOptions = useMemo(() => definition.phases.flatMap(item => item.groups.map(group => ({
     id: group.id,
-    label: `${item.name} / ${group.name}`,
+    // Group names can be stale when a phase changes from one group to several;
+    // render labels from the current phase and group order instead.
+    label: item.groups.length === 1 ? item.name : `${item.name} / Group ${group.order}`,
     phaseOrder: item.order,
     groupOrder: group.order,
   }))), [definition]);
   const validMappings = definition.advancement_rules.every(rule => groupIds.has(rule.source_group_id) && groupIds.has(rule.target_group_id));
-  const orderedRules = useMemo(() => {
-    const groupsById = new Map(groupOptions.map(group => [group.id, group]));
-    return [...definition.advancement_rules].sort((left, right) => {
-      const leftSource = groupsById.get(left.source_group_id);
-      const rightSource = groupsById.get(right.source_group_id);
-      const leftTarget = groupsById.get(left.target_group_id);
-      const rightTarget = groupsById.get(right.target_group_id);
-      return (leftSource?.phaseOrder || Number.MAX_SAFE_INTEGER) - (rightSource?.phaseOrder || Number.MAX_SAFE_INTEGER)
-        || (leftSource?.groupOrder || Number.MAX_SAFE_INTEGER) - (rightSource?.groupOrder || Number.MAX_SAFE_INTEGER)
-        || left.source_rank - right.source_rank
-        || (leftTarget?.phaseOrder || Number.MAX_SAFE_INTEGER) - (rightTarget?.phaseOrder || Number.MAX_SAFE_INTEGER)
-        || (leftTarget?.groupOrder || Number.MAX_SAFE_INTEGER) - (rightTarget?.groupOrder || Number.MAX_SAFE_INTEGER)
-        || left.target_seed - right.target_seed
-        || left.id.localeCompare(right.id);
+  const rulesInEntryOrder = definition.advancement_rules;
+  const duplicateTargetRuleIds = useMemo(() => {
+    const targetCounts = new Map<string, number>();
+    definition.advancement_rules.forEach(rule => {
+      const key = `${rule.target_group_id}:${rule.target_seed}`;
+      targetCounts.set(key, (targetCounts.get(key) || 0) + 1);
     });
-  }, [definition.advancement_rules, groupOptions]);
+    return new Set(definition.advancement_rules.filter(rule =>
+      (targetCounts.get(`${rule.target_group_id}:${rule.target_seed}`) || 0) > 1
+    ).map(rule => rule.id));
+  }, [definition.advancement_rules]);
+  const duplicateSourceRuleIds = useMemo(() => {
+    const sourceCounts = new Map<string, number>();
+    definition.advancement_rules.forEach(rule => {
+      const key = `${rule.source_group_id}:${rule.source_rank}`;
+      sourceCounts.set(key, (sourceCounts.get(key) || 0) + 1);
+    });
+    return new Set(definition.advancement_rules.filter(rule =>
+      (sourceCounts.get(`${rule.source_group_id}:${rule.source_rank}`) || 0) > 1
+    ).map(rule => rule.id));
+  }, [definition.advancement_rules]);
 
   const replacePhase = (index: number, next: TournamentPhaseDefinition) => {
-    const phases = definition.phases.map((item, itemIndex) => itemIndex === index ? next : item);
+    const phases = definition.phases.map((item, itemIndex) => itemIndex === index
+      ? {
+        ...next,
+        groups: next.groups.map((group, groupIndex) => ({
+          ...group,
+          name: next.groups.length === 1 ? next.name : `Group ${groupIndex + 1}`,
+          order: groupIndex + 1,
+        })),
+      }
+      : item);
     onChange({ ...definition, phases });
   };
 
   const changeGroupCount = (index: number, count: number) => {
     const current = definition.phases[index];
-    const groups = Array.from({ length: count }, (_, groupIndex) => current.groups[groupIndex] || ({
-      id: id(), name: count === 1 ? current.name : `Group ${groupIndex + 1}`, order: groupIndex + 1,
+    const groups = Array.from({ length: count }, (_, groupIndex) => ({
+      ...(current.groups[groupIndex] || { id: id() }),
+      name: count === 1 ? current.name : `Group ${groupIndex + 1}`,
+      order: groupIndex + 1,
     }));
     replacePhase(index, { ...current, groups });
   };
@@ -183,15 +201,17 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
         <button data-help-id="action-add-tournament-phase" type="button" disabled={disabled} onClick={() => onChange({ ...definition, phases: [...definition.phases, phase(`Phase ${definition.phases.length + 1}`, definition.phases.length + 1, 'single_elimination')] })} className="px-3 py-2 bg-blue-600 text-white rounded-md">Add phase</button>
         <div data-help-id="region-tournament-advancement-mappings" className="p-3 bg-white border rounded-md space-y-2">
           <h4 className="font-medium">Advancement mappings</h4>
-          <p className="text-xs text-gray-600">Rules are ordered by source phase, source group, source position, target phase, target group, and target seed.</p>
-          {orderedRules.map((rule, ruleIndex) => <div key={rule.id} className="grid grid-cols-2 md:grid-cols-5 gap-2 items-end">
+          <p className="text-xs text-gray-600">Rules stay in the order they were added.</p>
+          {rulesInEntryOrder.map((rule, ruleIndex) => <div key={rule.id} className="grid grid-cols-2 md:grid-cols-5 gap-2 items-end">
             <div className="col-span-2 md:col-span-5 text-xs font-medium text-gray-700">{ruleIndex + 1}. {groupOptions.find(group => group.id === rule.source_group_id)?.label || 'Unknown source'} position {rule.source_rank} → {groupOptions.find(group => group.id === rule.target_group_id)?.label || 'Unknown target'} seed {rule.target_seed}</div>
             <label className="text-xs">Source group<select data-help-id="option-advancement-source-group" disabled={disabled} value={rule.source_group_id} onChange={(event) => onChange({ ...definition, advancement_rules: definition.advancement_rules.map(item => item.id === rule.id ? { ...item, source_group_id: event.target.value } : item) })} className="block w-full border rounded p-1">{groupOptions.map(group => <option key={group.id} value={group.id}>{group.label}</option>)}</select></label>
-            <label className="text-xs">Source rank<input data-help-id="field-advancement-source-rank" disabled={disabled} type="number" min={1} value={rule.source_rank} onChange={(event) => onChange({ ...definition, advancement_rules: definition.advancement_rules.map(item => item.id === rule.id ? { ...item, source_rank: Number(event.target.value) } : item) })} className="block w-full border rounded p-1" /></label>
+            <label className={`text-xs ${duplicateSourceRuleIds.has(rule.id) ? 'text-red-700' : ''}`}>Source rank<input data-help-id="field-advancement-source-rank" aria-invalid={duplicateSourceRuleIds.has(rule.id)} disabled={disabled} type="number" min={1} value={rule.source_rank} onChange={(event) => onChange({ ...definition, advancement_rules: definition.advancement_rules.map(item => item.id === rule.id ? { ...item, source_rank: Number(event.target.value) } : item) })} className={`block w-full border rounded p-1 ${duplicateSourceRuleIds.has(rule.id) ? 'border-red-600 bg-red-50' : ''}`} /></label>
             <label className="text-xs">Target group<select data-help-id="option-advancement-target-group" disabled={disabled} value={rule.target_group_id} onChange={(event) => onChange({ ...definition, advancement_rules: definition.advancement_rules.map(item => item.id === rule.id ? { ...item, target_group_id: event.target.value } : item) })} className="block w-full border rounded p-1">{groupOptions.filter(group => group.phaseOrder > (groupOptions.find(source => source.id === rule.source_group_id)?.phaseOrder || 0)).map(group => <option key={group.id} value={group.id}>{group.label}</option>)}</select></label>
-            <label className="text-xs">Target preclassification<input data-help-id="field-advancement-target-seed" disabled={disabled} type="number" min={1} value={rule.target_seed} onChange={(event) => onChange({ ...definition, advancement_rules: definition.advancement_rules.map(item => item.id === rule.id ? { ...item, target_seed: Number(event.target.value) } : item) })} className="block w-full border rounded p-1" /></label>
+            <label className={`text-xs ${duplicateTargetRuleIds.has(rule.id) ? 'text-red-700' : ''}`}>Target preclassification<input data-help-id="field-advancement-target-seed" aria-invalid={duplicateTargetRuleIds.has(rule.id)} disabled={disabled} type="number" min={1} value={rule.target_seed} onChange={(event) => onChange({ ...definition, advancement_rules: definition.advancement_rules.map(item => item.id === rule.id ? { ...item, target_seed: Number(event.target.value) } : item) })} className={`block w-full border rounded p-1 ${duplicateTargetRuleIds.has(rule.id) ? 'border-red-600 bg-red-50' : ''}`} /></label>
             <button data-help-id="action-remove-advancement-rule" type="button" disabled={disabled} onClick={() => onChange({ ...definition, advancement_rules: definition.advancement_rules.filter(item => item.id !== rule.id) })} className="text-red-700 text-sm">Remove</button>
           </div>)}
+          {duplicateTargetRuleIds.size > 0 && <p role="alert" className="text-sm text-red-700">Target preclassifications must be unique within each target group. Correct the highlighted values before saving.</p>}
+          {duplicateSourceRuleIds.size > 0 && <p role="alert" className="text-sm text-red-700">A source group position can advance only once. Correct the highlighted values before saving.</p>}
           {definition.phases.length > 1 && <button data-help-id="action-add-advancement-rule" type="button" disabled={disabled || groupOptions.length < 2} onClick={() => {
             const source = groupOptions[0];
             const target = groupOptions.find(group => group.phaseOrder > source.phaseOrder);

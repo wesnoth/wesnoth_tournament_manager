@@ -113,8 +113,10 @@ function validateAdvancement(
     const targetKey = `${rule.target_group_id}:${rule.target_seed}`;
     if (targetSlots.has(targetKey)) issue(issues, path, 'duplicate_target', 'A target position can have only one source');
     targetSlots.add(targetKey);
-    const sourceKey = `${rule.source_group_id}:${rule.source_rank}:${rule.target_group_id}`;
-    if (sourceTargets.has(sourceKey)) issue(issues, path, 'duplicate_source', 'The same source rank cannot feed the same target twice');
+    // A group position represents one entry, so it cannot advance into multiple
+    // target slots even when those slots belong to different groups.
+    const sourceKey = `${rule.source_group_id}:${rule.source_rank}`;
+    if (sourceTargets.has(sourceKey)) issue(issues, path, 'duplicate_source', 'A source group position can advance only once');
     sourceTargets.add(sourceKey);
   }
 }
