@@ -47,7 +47,7 @@ function getBracketRoundSpacing(roundIndex: number): React.CSSProperties {
  * planned slots keeps the phase structure useful while registration results
  * are still being finalized.
  */
-function buildPlannedBracketSeries(phase: any): any[] {
+function buildPlannedBracketSeries(phase: any, isFinalPhase: boolean): any[] {
   const bracketSize = Number(phase.bracket_size || 0);
   if (bracketSize < 2 || (bracketSize & (bracketSize - 1)) !== 0) return [];
   const roundCount = Math.log2(bracketSize);
@@ -71,6 +71,26 @@ function buildPlannedBracketSeries(phase: any): any[] {
         ],
       });
     }
+  }
+  // A later phase has no real series until the qualifying phase completes.
+  // Count its configured advancement slots before previewing a bronze match.
+  if (isFinalPhase && Number(phase.planned_entry_count || 0) >= 4 && bracketSize >= 4) {
+    planned.push({
+      series_id: `planned-${phase.phase_id}-third-place`,
+      group_name: phase.phase_name,
+      round_number: roundCount,
+      series_position: 2,
+      series_role: 'third_place',
+      status: 'pending',
+      best_of: phase.default_best_of || 1,
+      entry1_wins: 0,
+      entry2_wins: 0,
+      winner_entry_id: null,
+      slots: [
+        { slot_number: 1, resolved_entry_name: 'Semifinal loser' },
+        { slot_number: 2, resolved_entry_name: 'Semifinal loser' },
+      ],
+    });
   }
   return planned;
 }
@@ -424,7 +444,8 @@ const TournamentCompetitionView: React.FC<Props> = ({
       }
       const series = Array.from(new Map(rows.map((row: any) => [row.series_id, { ...row, slots: [] as any[] }])).values()) as any[];
       for (const row of rows) series.find(item => item.series_id === row.series_id)?.slots.push(row);
-      const displaySeries = series.length > 0 ? series : buildPlannedBracketSeries(phase);
+      const isFinalPhase = !phases.some(candidate => Number(candidate.phase_order) > Number(phase.phase_order));
+      const displaySeries = series.length > 0 ? series : buildPlannedBracketSeries(phase, isFinalPhase);
       const bracketGroups = Array.from(new Set(displaySeries.map(item => item.group_name))) as string[];
       return <section key={phase.phase_id} className="border rounded-lg p-4 bg-white">
         <div className="flex justify-between items-center mb-3"><h3 className="font-semibold text-lg">{phase.phase_name}</h3>
@@ -435,17 +456,28 @@ const TournamentCompetitionView: React.FC<Props> = ({
         {bracketGroups.length === 0 ? <p className="text-sm text-gray-600">No elimination bracket is configured yet.</p> : <div className="space-y-5">
           {bracketGroups.map(groupName => {
             const groupSeries = displaySeries.filter(item => item.group_name === groupName);
-            const rounds = Array.from(new Set(groupSeries.map(item => item.round_number))).sort((a: any, b: any) => a - b);
+            const mainSeries = groupSeries.filter(item => item.series_role !== 'third_place');
+            const thirdPlaceSeries = groupSeries.find(item => item.series_role === 'third_place');
+            const thirdPlaceStatus = thirdPlaceSeries?.status === 'completed' ? 'completed'
+              : thirdPlaceSeries?.status === 'in_progress' ? 'in_progress'
+                : thirdPlaceSeries?.status === 'ready' ? 'ready' : 'waiting';
+            const thirdPlaceStyles = {
+              completed: 'border-green-300 bg-white',
+              in_progress: 'border-yellow-300 bg-yellow-50',
+              ready: 'border-green-300 bg-green-50',
+              waiting: 'border-gray-300 bg-gray-100',
+            }[thirdPlaceStatus];
+            const rounds = Array.from(new Set(mainSeries.map(item => item.round_number))).sort((a: any, b: any) => a - b);
             return <div key={groupName} data-help-id="region-tournament-bracket" className="rounded-lg border bg-gray-50 p-3">
               <h4 className="mb-3 font-semibold text-gray-800">{groupName}</h4>
               <div className="flex items-stretch gap-3 overflow-x-auto pb-3">
                 {rounds.map((round: any, roundIndex: number) => {
-                  const nextRoundSeries = groupSeries.filter(item => item.round_number === rounds[roundIndex + 1]);
+                  const nextRoundSeries = mainSeries.filter(item => item.round_number === rounds[roundIndex + 1]);
                   return <React.Fragment key={round}>
                   <div className="flex min-w-64 flex-col">
                     <h5 className="text-center font-medium">Round {round}</h5>
                     <div className="flex flex-1 flex-col" style={getBracketRoundSpacing(roundIndex)}>
-                      {groupSeries.filter(item => item.round_number === round).map(item => {
+                      {mainSeries.filter(item => item.round_number === round).map(item => {
                         const slots = [...item.slots].sort((a: any, b: any) => a.slot_number - b.slot_number);
                         const status = item.status === 'completed'
                           ? 'completed'
@@ -466,7 +498,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
                           in_progress: 'In progress',
                           waiting: 'Waiting',
                         }[status];
-                        return <div id={`series-${item.series_id}`} key={item.series_id} className={`relative h-28 overflow-hidden rounded border shadow-sm ${highlightedSeriesId === item.series_id ? 'border-yellow-500 bg-yellow-200 ring-4 ring-yellow-300' : statusStyles}`}>
+                        return <div key={item.series_id} className="flex flex-col gap-4"><div id={`series-${item.series_id}`} className={`relative h-28 overflow-hidden rounded border shadow-sm ${highlightedSeriesId === item.series_id ? 'border-yellow-500 bg-yellow-200 ring-4 ring-yellow-300' : statusStyles}`}>
                           <div className="flex items-center justify-between border-b border-inherit px-3 py-1 text-xs text-gray-600">
                             <span>Bo{item.best_of}</span>
                             <span className={`rounded-full px-2 py-0.5 font-semibold ${status === 'ready' ? 'bg-green-200 text-green-900' : status === 'in_progress' ? 'bg-yellow-200 text-yellow-900' : status === 'completed' ? 'bg-gray-200 text-gray-700' : 'bg-gray-200 text-gray-600'}`}>{statusLabel}</span>
@@ -483,6 +515,22 @@ const TournamentCompetitionView: React.FC<Props> = ({
                               <span className={`min-w-6 text-right font-mono text-sm ${isWinner ? 'text-green-800' : 'text-gray-600'}`}>{Number(score || 0)}</span>
                             </div>;
                           })}
+                        </div>
+                          {roundIndex === rounds.length - 1 && thirdPlaceSeries && <div id={`series-${thirdPlaceSeries.series_id}`} data-help-id="region-tournament-third-place" className={`h-28 overflow-hidden rounded border shadow-sm ${highlightedSeriesId === thirdPlaceSeries.series_id ? 'border-yellow-500 bg-yellow-200 ring-4 ring-yellow-300' : thirdPlaceStyles}`}>
+                            <div className="flex items-center justify-between border-b border-inherit px-3 py-1 text-xs text-gray-600">
+                              <span>Third-place · Bo{thirdPlaceSeries.best_of}</span>
+                              <span className={`rounded-full px-2 py-0.5 font-semibold ${thirdPlaceStatus === 'ready' ? 'bg-green-200 text-green-900' : thirdPlaceStatus === 'in_progress' ? 'bg-yellow-200 text-yellow-900' : 'bg-gray-200 text-gray-700'}`}>
+                                {{ completed: 'Completed', ready: 'Open', in_progress: 'In progress', waiting: 'Waiting' }[thirdPlaceStatus]}
+                              </span>
+                            </div>
+                            {[...thirdPlaceSeries.slots].sort((a: any, b: any) => a.slot_number - b.slot_number).map((slot: any) => {
+                              const isWinner = Boolean(slot.resolved_entry_id && thirdPlaceSeries.winner_entry_id === slot.resolved_entry_id);
+                              return <div key={slot.slot_number} className={`flex items-center justify-between gap-3 border-b border-inherit px-3 py-2 last:border-b-0 ${isWinner ? 'font-bold text-green-800' : 'text-gray-800'}`}>
+                                <span className="min-w-0 truncate"><TournamentEntryName name={slot.resolved_entry_name || 'Semifinal loser'} userId={slot.resolved_entry_user_id} members={slot.resolved_entry_members} /></span>
+                                <span className="min-w-6 text-right font-mono text-sm">{Number(slot.slot_number === 1 ? thirdPlaceSeries.entry1_wins : thirdPlaceSeries.entry2_wins)}</span>
+                              </div>;
+                            })}
+                          </div>}
                         </div>;
                       })}
                     </div>
@@ -735,7 +783,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
                 </td>
                 <td className="px-4 py-3 align-top text-gray-700">
                   <div className="break-words">{pendingSummary?.finalMap || pendingSummary?.resolvedMap || pendingSummary?.selectedMapName || pendingSummary?.forumMap || game.map || '—'}</div>
-                  <div className="mt-1 break-words text-xs text-gray-500">{game.phase_name} · {game.group_name} · Round {game.round_number} · Game {game.game_number} · Bo{game.best_of}</div>
+                  <div className="mt-1 break-words text-xs text-gray-500">{game.phase_name} · {game.group_name} · {game.series_role === 'third_place' ? 'Third-place match' : `Round ${game.round_number}`} · Game {game.game_number} · Bo{game.best_of}</div>
                 </td>
                 <td data-help-id="region-game-stream-links" className="px-4 py-3 align-top text-gray-700">
                   {streamLinksFor(game).length > 0 && <div className="mb-2 flex flex-wrap items-center gap-1 border-b border-gray-100 pb-2">

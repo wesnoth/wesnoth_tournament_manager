@@ -1247,6 +1247,7 @@ CREATE TABLE `tournament_series` (
   `id` char(36) NOT NULL,
   `round_id` char(36) NOT NULL,
   `series_position` smallint(6) NOT NULL,
+  `series_role` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'main',
   `status` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',
   `best_of` smallint(6) NOT NULL,
   `wins_required` smallint(6) NOT NULL,

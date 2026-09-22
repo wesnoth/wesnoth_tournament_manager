@@ -616,6 +616,7 @@ router.get('/:id/competition', async (req, res) => {
               p.default_best_of,
               g.id AS group_id, g.group_order, g.name AS group_name, g.status AS group_status,
               COUNT(DISTINCT pe.entry_id) AS entry_count,
+              (SELECT COUNT(*) FROM tournament_advancement_rules ar WHERE ar.target_group_id = g.id) AS planned_entry_count,
               COUNT(DISTINCT r.id) AS round_count,
               COUNT(DISTINCT s.id) AS series_count,
               COALESCE(
@@ -777,14 +778,17 @@ router.get('/:id/overall-standings', async (req, res) => {
       const result: any = materializedResults.get(entry.entry_id);
       const champion = Boolean(result?.is_champion);
       const runnerUp = tournamentFinished && Number(result?.placement) === 2;
-      const eliminated = !champion && !runnerUp && Boolean(
+      const thirdPlace = tournamentFinished && result?.placement_label === 'Third place';
+      const eliminated = !champion && !runnerUp && !thirdPlace && Boolean(
         furthest?.eliminated_round || furthest?.phase_status === 'completed'
       );
-      const status = champion ? 'champion' : runnerUp ? 'runner_up' : eliminated ? 'eliminated' : 'active';
+      const status = champion ? 'champion' : runnerUp ? 'runner_up' : thirdPlace ? 'third_place' : eliminated ? 'eliminated' : 'active';
       const outcome = champion
         ? 'Champion'
         : runnerUp
           ? 'Runner-up'
+          : thirdPlace
+            ? 'Third place'
           : furthest?.eliminated_round
             ? `Eliminated in ${furthest.phase_name}, round ${furthest.eliminated_round}`
             : eliminated && furthest?.group_position
@@ -899,7 +903,7 @@ router.get('/:id/phases/:phaseId/standings', async (req, res) => {
 router.get('/:id/phases/:phaseId/bracket', async (req, res) => {
   const result = await query(
     `SELECT g.id AS group_id, g.name AS group_name, r.id AS round_id, r.round_number, r.name AS round_name,
-            s.id AS series_id, s.series_position, s.status, s.best_of, s.entry1_wins, s.entry2_wins,
+            s.id AS series_id, s.series_position, s.series_role, s.status, s.best_of, s.entry1_wins, s.entry2_wins,
             s.winner_entry_id, sl.slot_number, sl.source_type, sl.source_group_seed,
             sl.source_series_id, sl.source_outcome, sl.resolved_entry_id,
             u.id AS resolved_entry_user_id,
@@ -940,7 +944,7 @@ router.get('/:id/phases/:phaseId/games', async (req, res) => {
                  THEN COALESCE(pending_replay.detected_at, pending_replay.created_at, games.updated_at, games.created_at)
                  ELSE COALESCE(games.played_at, games.updated_at, games.created_at) END AS display_date,
             games.organizer_action,
-            games.winner_entry_id, series.id AS series_id, series.best_of,
+            games.winner_entry_id, series.id AS series_id, series.series_role, series.best_of,
             phases.id AS phase_id, phases.name AS phase_name,
             rounds.round_number, groups.id AS group_id, groups.name AS group_name,
             games.entry1_id, games.entry2_id,

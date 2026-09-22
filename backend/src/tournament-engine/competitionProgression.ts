@@ -6,6 +6,7 @@ import {
   notifyTournamentFinished,
 } from '../services/tournamentPhaseDiscordService.js';
 import { compileNextPhaseCompetition } from './competitionCompiler.js';
+import { orderThirdPlaceStandings } from './pairingAlgorithms.js';
 
 export interface PhaseGameResultMetadata {
   map: string | null;
@@ -136,7 +137,26 @@ async function rankGroup(connection: any, groupId: string, finalize: boolean): P
               standings.gwp DESC, standings.ogp DESC, entries.initial_seed`,
     [groupId]
   );
-  for (const [index, row] of rows.entries()) {
+  let rankedRows = rows;
+  const [decidingSeries] = await connection.execute(
+    `SELECT series.series_role, series.winner_entry_id, series.loser_entry_id
+       FROM tournament_series series
+       JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+       WHERE rounds.group_id = ? AND (series.series_role = 'third_place'
+          OR rounds.round_number = (
+            SELECT MAX(round_number) FROM tournament_phase_rounds WHERE group_id = ?
+          ) AND series.series_position = 1)`,
+    [groupId, groupId]
+  );
+  const final = decidingSeries.find((row: any) => row.series_role !== 'third_place');
+  const bronze = decidingSeries.find((row: any) => row.series_role === 'third_place');
+  if (final?.winner_entry_id && final?.loser_entry_id && bronze?.winner_entry_id && bronze?.loser_entry_id) {
+    // Match outcomes outrank accumulated points: the semifinal losers have
+    // equal progress until their deciding bronze series is completed.
+    rankedRows = orderThirdPlaceStandings(rows, final.winner_entry_id, final.loser_entry_id,
+      bronze.winner_entry_id, bronze.loser_entry_id);
+  }
+  for (const [index, row] of rankedRows.entries()) {
     await connection.execute(
       `UPDATE tournament_phase_standings
        SET rank_position = ?, finalized_at = ${finalize ? 'CURRENT_TIMESTAMP' : 'NULL'}
@@ -330,6 +350,10 @@ export async function recordPhaseGameResult(
         `UPDATE tournament_series_slots SET resolved_entry_id = ?, resolved_at = CURRENT_TIMESTAMP WHERE source_series_id = ? AND source_outcome = 'winner'`,
         [winnerEntryId, game.series_id]
       );
+      await connection.execute(
+        `UPDATE tournament_series_slots SET resolved_entry_id = ?, resolved_at = CURRENT_TIMESTAMP WHERE source_series_id = ? AND source_outcome = 'loser'`,
+        [loserEntryId, game.series_id]
+      );
       const [readyRows] = await connection.execute<any[]>(
         `SELECT target.id,
                 MAX(CASE WHEN slots.slot_number = 1 THEN slots.resolved_entry_id END) AS entry1_id,
@@ -428,12 +452,22 @@ export async function recordPhaseGameResult(
            WHERE phases.id = ? ORDER BY groups.group_order, standings.rank_position`,
           [completedPhaseId]
         );
+        const [bronzeRows] = await finalConnection.execute<any[]>(
+          `SELECT COUNT(*) AS count FROM tournament_series series
+           JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+           JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+           WHERE groups.phase_id = ? AND series.series_role = 'third_place'`,
+          [completedPhaseId]
+        );
+        const hasThirdPlace = Number(bronzeRows[0].count) === 1;
         for (const row of finalRows) {
           await finalConnection.execute(
             `INSERT INTO tournament_results (tournament_id, entry_id, placement, placement_label, is_champion, determined_by_group_id)
              VALUES (?, ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE placement = VALUES(placement), placement_label = VALUES(placement_label), is_champion = VALUES(is_champion)`,
-            [tournamentId, row.entry_id, row.rank_position, row.rank_position === 1 ? 'Champion' : null, row.rank_position === 1 ? 1 : 0, row.group_id]
+            [tournamentId, row.entry_id, row.rank_position,
+              row.rank_position === 1 ? 'Champion' : row.rank_position === 2 ? 'Runner-up' : hasThirdPlace && row.rank_position === 3 ? 'Third place' : null,
+              row.rank_position === 1 ? 1 : 0, row.group_id]
           );
         }
         await finalConnection.execute(`UPDATE tournaments SET status = 'finished', finished_at = CURRENT_TIMESTAMP WHERE id = ?`, [tournamentId]);

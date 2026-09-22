@@ -233,7 +233,7 @@ async function publishTournamentFinished(tournamentId: string): Promise<void> {
   if (!tournament?.discord_thread_id) return;
 
   const results = await query(
-    `SELECT results.placement, results.is_champion,
+    `SELECT results.placement, results.placement_label, results.is_champion,
             ${entryNameSql('entries', 'participants', 'users', 'teams')} AS entry_name
      FROM tournament_results results
      JOIN tournament_entries entries ON entries.id = results.entry_id
@@ -246,6 +246,7 @@ async function publishTournamentFinished(tournamentId: string): Promise<void> {
   );
   const champion = results.rows.find((result: any) => Number(result.is_champion) === 1 || Number(result.placement) === 1);
   const runnerUp = results.rows.find((result: any) => Number(result.placement) === 2);
+  const thirdPlace = results.rows.find((result: any) => result.placement_label === 'Third place');
   const finalStandings = results.rows.slice(0, 15).map((result: any) =>
     `**${result.placement}.** ${neutralizeMentions(result.entry_name)}`
   ).join('\n');
@@ -259,6 +260,7 @@ async function publishTournamentFinished(tournamentId: string): Promise<void> {
         fields: [
           { name: '🥇 Champion', value: neutralizeMentions(champion?.entry_name || 'Unknown'), inline: true },
           { name: '🥈 Runner-up', value: neutralizeMentions(runnerUp?.entry_name || 'N/A'), inline: true },
+          ...(thirdPlace ? [{ name: '🥉 Third place', value: neutralizeMentions(thirdPlace.entry_name), inline: true }] : []),
           { name: 'Final phase standings', value: truncate(finalStandings || 'No standings available.'), inline: false },
         ],
         footer: { text: 'Tournament finished' },
