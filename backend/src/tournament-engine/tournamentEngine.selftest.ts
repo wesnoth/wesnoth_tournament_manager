@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { parseForumTopicUrl, parseTournamentCode, tournamentGameName } from './forumTopic.js';
 import { validateTournamentFormat } from './formatValidator.js';
 import type { TournamentFormatDefinition } from './types.js';
-import { buildEliminationSeedOrder } from './pairingAlgorithms.js';
+import { buildEliminationSeedOrder, orderThirdPlaceStandings } from './pairingAlgorithms.js';
 
 const swissGroup = '00000000-0000-4000-8000-000000000001';
 const bracket = '00000000-0000-4000-8000-000000000002';
@@ -33,6 +33,13 @@ assert.equal(parseTournamentCode('T60773 semifinal'), 60773);
 assert.equal(tournamentGameName(null, 'Test tournament'), 'Test tournament');
 assert.equal(tournamentGameName(60773, 'Ignored'), 'T60773');
 assert.deepEqual(buildEliminationSeedOrder(8), [1, 8, 4, 5, 2, 7, 3, 6]);
+assert.deepEqual(
+  orderThirdPlaceStandings(['semifinal-loser-a', 'final-loser', 'final-winner', 'fifth', 'semifinal-loser-b']
+    .map(entry_id => ({ entry_id })), 'final-winner', 'final-loser', 'semifinal-loser-b', 'semifinal-loser-a')
+    .map(row => row.entry_id),
+  ['final-winner', 'final-loser', 'semifinal-loser-b', 'semifinal-loser-a', 'fifth']
+);
+assert.throws(() => orderThirdPlaceStandings([{ entry_id: 'a' }], 'a', 'a', 'b', 'c'));
 assert.deepEqual(validateTournamentFormat(definition), { valid: true, issues: [] });
 
 const cyclic = structuredClone(definition);

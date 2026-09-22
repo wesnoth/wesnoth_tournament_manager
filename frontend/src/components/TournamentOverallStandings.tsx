@@ -31,7 +31,7 @@ interface OverallStanding {
   entry_members?: Array<{ user_id: string; nickname: string }> | string | null;
   entry_name: string;
   placement: number;
-  status: 'champion' | 'runner_up' | 'active' | 'eliminated';
+  status: 'champion' | 'runner_up' | 'third_place' | 'active' | 'eliminated';
   outcome: string;
   history: PhaseHistory[];
 }
@@ -41,6 +41,7 @@ interface Props { tournamentId: string; refreshKey?: number }
 const statusStyle: Record<OverallStanding['status'], string> = {
   champion: 'bg-yellow-100 text-yellow-900 border-yellow-300',
   runner_up: 'bg-slate-200 text-slate-800 border-slate-300',
+  third_place: 'bg-amber-100 text-amber-900 border-amber-300',
   active: 'bg-blue-100 text-blue-800 border-blue-300',
   eliminated: 'bg-gray-100 text-gray-700 border-gray-300',
 };
@@ -87,7 +88,7 @@ const TournamentOverallStandings: React.FC<Props> = ({ tournamentId, refreshKey 
         <tbody>{standings.map(standing => <tr data-help-id="region-tournament-overall-standing" key={standing.entry_id} className={`border-b ${standing.status === 'champion' ? 'bg-yellow-50' : standing.status === 'runner_up' ? 'bg-slate-50' : 'hover:bg-gray-50'}`}>
           <td className="px-4 py-3 text-xl font-bold text-gray-800">{standing.placement}</td>
           <td className="px-4 py-3 font-semibold text-gray-900"><TournamentEntryName name={standing.entry_name} userId={standing.entry_user_id} members={standing.entry_members} /></td>
-          <td className="px-4 py-3"><span className={`inline-block rounded-full border px-3 py-1 text-xs font-semibold ${statusStyle[standing.status]}`}>{standing.status === 'runner_up' ? 'Runner-up' : standing.status.charAt(0).toUpperCase() + standing.status.slice(1)}</span></td>
+          <td className="px-4 py-3"><span className={`inline-block rounded-full border px-3 py-1 text-xs font-semibold ${statusStyle[standing.status]}`}>{standing.status === 'runner_up' ? 'Runner-up' : standing.status === 'third_place' ? 'Third place' : standing.status.charAt(0).toUpperCase() + standing.status.slice(1)}</span></td>
           <td className="px-4 py-3 text-gray-700">{standing.outcome}</td>
           <td className="px-4 py-3">
             <div className="flex min-w-80 flex-wrap items-center gap-2">

@@ -17,6 +17,7 @@ interface GroupRow {
 
 interface PhaseRow {
   id: string;
+  tournament_id: string;
   phase_order: number;
   format: 'swiss' | 'round_robin' | 'single_elimination';
   assignment_method: 'manual' | 'random' | 'seeded_snake';
@@ -174,7 +175,8 @@ async function compileElimination(
   group: GroupRow,
   entryIds: string[],
   overrides: any[],
-  configuredSize: number | null
+  configuredSize: number | null,
+  thirdPlace: boolean
 ): Promise<void> {
   if (configuredSize && entryIds.length > configuredSize) {
     throw new Error(`Group ${group.id} has more entries than its configured bracket size`);
@@ -217,6 +219,24 @@ async function compileElimination(
         }
       }
     }
+    if (thirdPlace && roundNumber === roundCount && priorSeries.length === 2) {
+      // The bronze series shares the final round so both results must be
+      // complete before the group can finish. Its inputs are semifinal losers.
+      const bronzeId = randomUUID();
+      await connection.execute(
+        `INSERT INTO tournament_series (id, round_id, series_position, status, best_of, wins_required, series_role)
+         VALUES (?, ?, 2, 'pending', ?, ?, 'third_place')`,
+        [bronzeId, round.id, round.bestOf, Math.floor(round.bestOf / 2) + 1]
+      );
+      for (const [index, sourceSeriesId] of priorSeries.entries()) {
+        await connection.execute(
+          `INSERT INTO tournament_series_slots
+             (id, series_id, slot_number, source_type, source_series_id, source_outcome)
+           VALUES (?, ?, ?, 'series_result', ?, 'loser')`,
+          [randomUUID(), bronzeId, index + 1, sourceSeriesId]
+        );
+      }
+    }
     priorSeries = currentSeries;
   }
   await resolveEliminationByes(connection, group.id);
@@ -240,7 +260,13 @@ async function compileGroup(
     await compileSwiss(connection, phase, group, entryIds, overrides, settings[0].round_count);
   } else {
     const [settings] = await connection.execute<any[]>(`SELECT bracket_size FROM tournament_elimination_settings WHERE phase_id = ?`, [phase.id]);
-    await compileElimination(connection, phase, group, entryIds, overrides, settings[0]?.bracket_size ?? null);
+    const [laterPhases] = await connection.execute<any[]>(
+      `SELECT COUNT(*) AS count FROM tournament_phases WHERE tournament_id = ? AND phase_order > ?`,
+      [phase.tournament_id, phase.phase_order]
+    );
+    const [groupCount] = await connection.execute<any[]>(`SELECT COUNT(*) AS count FROM tournament_phase_groups WHERE phase_id = ?`, [phase.id]);
+    const thirdPlace = Number(laterPhases[0].count) === 0 && Number(groupCount[0].count) === 1 && entryIds.length >= 4;
+    await compileElimination(connection, phase, group, entryIds, overrides, settings[0]?.bracket_size ?? null, thirdPlace);
   }
 }
 
