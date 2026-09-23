@@ -63,6 +63,7 @@ Thumbs.db
 !/e2e/tournaments/
 /e2e/tournaments/*
 !/e2e/tournaments/ranked-elimination.spec.ts
+!/e2e/tournaments/guided-advancement.spec.ts
 /e2e/.auth/
 /testing/results/
 /testing/scripts/test_credentials.csv

@@ -15,6 +15,15 @@ interface GroupRow {
   group_order: number;
 }
 
+interface DirectPassRow {
+  entry_id?: string;
+  source_id: string;
+  group_id: string;
+  round_number: number | null;
+  series_position: number | null;
+  slot_number: number | null;
+}
+
 interface PhaseRow {
   id: string;
   tournament_id: string;
@@ -176,15 +185,42 @@ async function compileElimination(
   entryIds: string[],
   overrides: any[],
   configuredSize: number | null,
-  thirdPlace: boolean
+  thirdPlace: boolean,
+  directPlacements: DirectPassRow[] = []
 ): Promise<void> {
-  if (configuredSize && entryIds.length > configuredSize) {
+  if (configuredSize && entryIds.length + directPlacements.length > configuredSize) {
     throw new Error(`Group ${group.id} has more entries than its configured bracket size`);
   }
-  const minimumSize = Math.max(2, configuredSize || entryIds.length);
+  const directBracketDemand = directPlacements.reduce((largest, pass) => {
+    if (!pass.round_number || !pass.series_position || !pass.slot_number) return largest;
+    return Math.max(largest, Number(pass.series_position) * (2 ** Number(pass.round_number)));
+  }, 0);
+  if (configuredSize && directBracketDemand > configuredSize) {
+    throw new Error(`Direct pass position exceeds the configured bracket size for group ${group.id}`);
+  }
+  const minimumSize = Math.max(2, configuredSize || (entryIds.length + directPlacements.length), directBracketDemand);
   const bracketSize = 2 ** Math.ceil(Math.log2(minimumSize));
   const roundCount = Math.log2(bracketSize);
   const seedOrder = buildEliminationSeedOrder(bracketSize);
+  const occupiedDirectSlots = new Set<string>();
+  const [mappedSeedRows] = await connection.execute<any[]>(
+    `SELECT target_seed FROM tournament_advancement_rules WHERE target_group_id = ?`, [group.id]);
+  const mappedSeeds = new Set(mappedSeedRows.map(row => Number(row.target_seed)));
+  for (const pass of directPlacements) {
+    if (!pass.round_number || !pass.series_position || !pass.slot_number
+      || pass.round_number > roundCount || pass.series_position > bracketSize / (2 ** pass.round_number)) {
+      throw new Error(`Direct pass position is outside the bracket for group ${group.id}`);
+    }
+    const key = `${pass.round_number}:${pass.series_position}:${pass.slot_number}`;
+    if (occupiedDirectSlots.has(key)) throw new Error(`Two direct passes reserve the same bracket slot in group ${group.id}`);
+    occupiedDirectSlots.add(key);
+    const firstSeedIndex = (Number(pass.series_position) - 1) * (2 ** Number(pass.round_number))
+      + (Number(pass.slot_number) - 1) * (2 ** (Number(pass.round_number) - 1));
+    const bypassedSeeds = seedOrder.slice(firstSeedIndex, firstSeedIndex + (2 ** (Number(pass.round_number) - 1)));
+    if (bypassedSeeds.some(seed => mappedSeeds.has(seed))) {
+      throw new Error(`A direct pass would bypass a mapped qualifier in group ${group.id}`);
+    }
+  }
   let priorSeries: string[] = [];
   for (let roundNumber = 1; roundNumber <= roundCount; roundNumber += 1) {
     const round = await createRound(connection, group.id, roundNumber, roundCount, phase.default_best_of, overrides);
@@ -199,23 +235,42 @@ async function compileElimination(
         [seriesId, round.id, position, round.bestOf, Math.floor(round.bestOf / 2) + 1]
       );
       for (const slotIndex of [0, 1]) {
-        if (roundNumber === 1) {
+      if (roundNumber === 1) {
           const seed = seedOrder[(position - 1) * 2 + slotIndex];
-          const entryId = entryIds[seed - 1] || null;
+          const positioned = directPlacements.find(pass => pass.round_number === 1 && pass.series_position === position && pass.slot_number === slotIndex + 1);
+          const entryId = positioned?.entry_id || entryIds[seed - 1] || null;
           await connection.execute(
             `INSERT INTO tournament_series_slots
                (id, series_id, slot_number, source_type, source_group_seed, resolved_entry_id, resolved_at)
-             VALUES (?, ?, ?, 'group_seed', ?, ?, ${entryId ? 'CURRENT_TIMESTAMP' : 'NULL'})`,
-            [randomUUID(), seriesId, slotIndex + 1, seed, entryId]
+             VALUES (?, ?, ?, ?, ?, ?, ${entryId ? 'CURRENT_TIMESTAMP' : 'NULL'})`,
+            [randomUUID(), seriesId, slotIndex + 1, positioned ? 'direct' : 'group_seed', positioned ? null : seed, entryId]
           );
         } else {
           const sourceSeriesId = priorSeries[(position - 1) * 2 + slotIndex];
+          const positioned = directPlacements.find(pass => pass.round_number === roundNumber && pass.series_position === position && pass.slot_number === slotIndex + 1);
           await connection.execute(
             `INSERT INTO tournament_series_slots
-               (id, series_id, slot_number, source_type, source_series_id, source_outcome)
-             VALUES (?, ?, ?, 'series_result', ?, 'winner')`,
-            [randomUUID(), seriesId, slotIndex + 1, sourceSeriesId]
+               (id, series_id, slot_number, source_type, source_series_id, source_outcome, resolved_entry_id, resolved_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ${positioned ? 'CURRENT_TIMESTAMP' : 'NULL'})`,
+            [randomUUID(), seriesId, slotIndex + 1, positioned ? 'direct' : 'series_result', positioned ? null : sourceSeriesId,
+              positioned ? null : 'winner', positioned?.entry_id || null]
           );
+          if (positioned) {
+            // A golden-pass entrant bypasses the whole feeder subtree for this slot.
+            // Cancel those now-unreachable series so ordinary round completion is not blocked.
+            const [ancestors] = await connection.execute<any[]>(
+              `WITH RECURSIVE feeder AS (
+                 SELECT ? AS id
+                 UNION ALL
+                 SELECT slots.source_series_id
+                 FROM tournament_series_slots slots JOIN feeder ON slots.series_id = feeder.id
+                 WHERE slots.source_type = 'series_result' AND slots.source_series_id IS NOT NULL
+               ) SELECT DISTINCT id FROM feeder`, [sourceSeriesId]);
+            for (const ancestor of ancestors) {
+              await connection.execute(`UPDATE tournament_series SET status = 'cancelled' WHERE id = ? AND status = 'pending'`, [ancestor.id]);
+              await connection.execute(`UPDATE tournament_games SET status = 'cancelled' WHERE series_id = ? AND status = 'pending'`, [ancestor.id]);
+            }
+          }
         }
       }
     }
@@ -246,7 +301,8 @@ async function compileGroup(
   connection: PoolConnection,
   phase: PhaseRow,
   group: GroupRow,
-  entryIds: string[]
+  entryIds: string[],
+  directPlacements: DirectPassRow[] = []
 ): Promise<void> {
   const [overrides] = await connection.execute<any[]>(
     `SELECT * FROM tournament_phase_round_overrides WHERE phase_id = ?`,
@@ -266,7 +322,7 @@ async function compileGroup(
     );
     const [groupCount] = await connection.execute<any[]>(`SELECT COUNT(*) AS count FROM tournament_phase_groups WHERE phase_id = ?`, [phase.id]);
     const thirdPlace = Number(laterPhases[0].count) === 0 && Number(groupCount[0].count) === 1 && entryIds.length >= 4;
-    await compileElimination(connection, phase, group, entryIds, overrides, settings[0]?.bracket_size ?? null, thirdPlace);
+    await compileElimination(connection, phase, group, entryIds, overrides, settings[0]?.bracket_size ?? null, thirdPlace, directPlacements);
   }
 }
 
@@ -347,6 +403,23 @@ async function loadEntries(connection: PoolConnection, tournamentId: string, mod
   return participants.map((participant, index) => ({ id: randomUUID(), source_id: participant.source_id, initial_seed: index + 1 }));
 }
 
+async function loadDirectPasses(connection: PoolConnection, tournamentId: string, mode: string): Promise<DirectPassRow[]> {
+  const [rows] = await connection.execute<any[]>(mode === 'team'
+    ? `SELECT teams.id AS source_id, teams.direct_group_id AS group_id,
+              teams.direct_round_number AS round_number, teams.direct_series_position AS series_position,
+              teams.direct_slot_number AS slot_number
+       FROM tournament_teams teams
+       WHERE teams.tournament_id = ? AND teams.direct_group_id IS NOT NULL AND teams.status = 'active'`
+    : `SELECT participants.id AS source_id, participants.direct_group_id AS group_id,
+              participants.direct_round_number AS round_number, participants.direct_series_position AS series_position,
+              participants.direct_slot_number AS slot_number
+       FROM tournament_participants participants
+       WHERE participants.tournament_id = ? AND participants.direct_group_id IS NOT NULL
+         AND participants.participation_status = 'accepted' AND participants.team_id IS NULL`,
+  [tournamentId]);
+  return rows;
+}
+
 async function assignFirstPhase(
   connection: PoolConnection,
   phase: PhaseRow,
@@ -359,17 +432,24 @@ async function assignFirstPhase(
     const [assignments] = await connection.execute<any[]>(
       `SELECT group_id, COALESCE(participant_id, team_id) AS source_id, group_seed
        FROM tournament_phase_entry_assignments
-       WHERE group_id IN (${groups.map(() => '?').join(',')})
+       WHERE assignment_type = 'manual' AND group_id IN (${groups.map(() => '?').join(',')})
        ORDER BY group_id, group_seed`,
       groups.map(group => group.id)
     );
     const entryBySource = new Map(entries.map(entry => [entry.source_id, entry.id]));
+    let placedCount = 0;
+    const placedSources = new Set<string>();
     for (const assignment of assignments) {
       const entryId = entryBySource.get(assignment.source_id);
-      if (!entryId) throw new Error(`Manual assignment references an ineligible ${mode} entry`);
+      // A participant nominated for a later-phase direct pass is deliberately
+      // absent from the first-phase roster; stale manual membership is ignored.
+      if (!entryId) continue;
+      if (placedSources.has(assignment.source_id)) throw new Error('Manual assignment cannot place an entry in multiple first-phase groups');
+      placedSources.add(assignment.source_id);
       result.get(assignment.group_id)!.push(entryId);
+      placedCount += 1;
     }
-    if (assignments.length !== entries.length) throw new Error('Manual assignment must place every eligible entry exactly once');
+    if (placedCount !== entries.length) throw new Error('Manual assignment must place every eligible entry exactly once');
     return result;
   }
   const ordered = phase.assignment_method === 'random' ? shuffled(entries) : entries;
@@ -404,11 +484,34 @@ export async function preparePhaseCompetition(tournamentId: string): Promise<{ e
     if (!phaseRows.length) throw new Error('Tournament has no phase format');
     const phase = phaseRows[0] as PhaseRow;
     const [groups] = await connection.execute<any[]>(
-      `SELECT id, group_order FROM tournament_phase_groups WHERE phase_id = ? ORDER BY group_order`,
+      `SELECT id, group_order, direct_advancement_slots FROM tournament_phase_groups WHERE phase_id = ? ORDER BY group_order`,
       [phase.id]
     );
     const entries = await loadEntries(connection, tournamentId, tournament.tournament_mode);
-    if (entries.length < 2) throw new Error('Tournament requires at least two eligible entries');
+    const directPasses = await loadDirectPasses(connection, tournamentId, tournament.tournament_mode);
+    const eligibleSources = new Set(entries.map(entry => entry.source_id));
+    if (directPasses.some(pass => !eligibleSources.has(pass.source_id))) {
+      throw new Error('Every direct-pass participant must be eligible for the tournament phase engine');
+    }
+    const directSources = new Set(directPasses.map(pass => pass.source_id));
+    const firstPhaseEntries = entries.filter(entry => !directSources.has(entry.source_id));
+    if (firstPhaseEntries.length < 2) throw new Error('The first phase requires at least two entries that are not reserved for a direct pass');
+    const [directGroups] = await connection.execute<any[]>(
+      `SELECT groups.id, groups.direct_advancement_slots, phases.phase_order
+       FROM tournament_phase_groups groups
+       JOIN tournament_phases phases ON phases.id = groups.phase_id
+       WHERE phases.tournament_id = ? AND phases.phase_order > 1`,
+      [tournamentId]
+    );
+    for (const group of directGroups) {
+      const assigned = directPasses.filter(pass => pass.group_id === group.id);
+      if (assigned.length !== Number(group.direct_advancement_slots || 0)) {
+        throw new Error(`Direct-pass capacity for group ${group.id} must be filled exactly before preparation`);
+      }
+    }
+    if (directPasses.some(pass => !directGroups.some(group => group.id === pass.group_id))) {
+      throw new Error('A direct pass references an invalid or first-phase group');
+    }
 
     await connection.execute(`DELETE FROM tournament_entries WHERE tournament_id = ?`, [tournamentId]);
     for (const entry of entries) {
@@ -421,11 +524,32 @@ export async function preparePhaseCompetition(tournamentId: string): Promise<{ e
           tournament.tournament_mode === 'team' ? entry.source_id : null, entry.initial_seed]
       );
     }
-    const assignments = await assignFirstPhase(connection, phase, groups, entries, tournament.tournament_mode);
+    for (const directPass of directPasses) {
+      const entityColumn = tournament.tournament_mode === 'team' ? 'team_id' : 'participant_id';
+      const [updatedAssignment] = await connection.execute<any>(
+        `UPDATE tournament_phase_entry_assignments
+         SET group_seed = NULL, assignment_type = 'direct_pass', direct_round_number = ?,
+             direct_series_position = ?, direct_slot_number = ?
+         WHERE group_id = ? AND ${entityColumn} = ?`,
+        [directPass.round_number, directPass.series_position, directPass.slot_number, directPass.group_id, directPass.source_id]
+      );
+      if (Number(updatedAssignment.affectedRows) === 0) {
+        await connection.execute(
+          `INSERT INTO tournament_phase_entry_assignments
+             (id, group_id, participant_id, team_id, group_seed, assignment_type,
+              direct_round_number, direct_series_position, direct_slot_number)
+           VALUES (?, ?, ?, ?, NULL, 'direct_pass', ?, ?, ?)`,
+          [randomUUID(), directPass.group_id, tournament.tournament_mode === 'team' ? null : directPass.source_id,
+            tournament.tournament_mode === 'team' ? directPass.source_id : null, directPass.round_number,
+            directPass.series_position, directPass.slot_number]
+        );
+      }
+    }
+    const assignments = await assignFirstPhase(connection, phase, groups, firstPhaseEntries, tournament.tournament_mode);
     let seriesCount = 0;
     for (const group of groups as GroupRow[]) {
       const groupEntries = assignments.get(group.id)!;
-      if (groupEntries.length < 2) throw new Error(`Group ${group.id} requires at least two entries`);
+      if (groupEntries.length < 2) throw new Error(`Group ${group.id} requires at least two first-phase entries`);
       for (const [seedIndex, entryId] of groupEntries.entries()) {
         await connection.execute(
           `INSERT INTO tournament_phase_entries (id, group_id, entry_id, group_seed, status)
@@ -485,7 +609,7 @@ export async function compileNextPhaseCompetition(tournamentId: string, complete
       return true;
     }
     const [groups] = await connection.execute<any[]>(
-      `SELECT id, group_order FROM tournament_phase_groups WHERE phase_id = ? ORDER BY group_order`,
+      `SELECT id, group_order, direct_advancement_slots FROM tournament_phase_groups WHERE phase_id = ? ORDER BY group_order`,
       [phase.id]
     );
     for (const group of groups as GroupRow[]) {
@@ -498,19 +622,51 @@ export async function compileNextPhaseCompetition(tournamentId: string, complete
          ORDER BY rules.target_seed`,
         [group.id]
       );
-      if (qualifiers.length < 2) throw new Error(`Advancement did not produce enough entries for group ${group.id}`);
-      for (const qualifier of qualifiers) {
+      const [directPasses] = await connection.execute<any[]>(
+        `SELECT entries.id AS entry_id, assignments.direct_round_number AS round_number,
+                assignments.direct_series_position AS series_position, assignments.direct_slot_number AS slot_number
+         FROM tournament_phase_entry_assignments assignments
+         JOIN tournament_entries entries ON entries.tournament_id = ?
+           AND entries.participant_id <=> assignments.participant_id AND entries.team_id <=> assignments.team_id
+         WHERE assignments.group_id = ? AND assignments.assignment_type = 'direct_pass'
+         ORDER BY assignments.id`, [tournamentId, group.id]);
+      if (new Set([...qualifiers.map(row => row.entry_id), ...directPasses.map(row => row.entry_id)]).size
+          !== qualifiers.length + directPasses.length) {
+        throw new Error(`An entry cannot qualify normally and receive a direct pass into group ${group.id}`);
+      }
+      const allEntries = [
+        ...qualifiers.map(row => ({ entry_id: row.entry_id, target_seed: Number(row.target_seed), direct: false })),
+        ...directPasses.map((row, index) => ({ entry_id: row.entry_id, target_seed: null, direct: true,
+          round_number: row.round_number, series_position: row.series_position, slot_number: row.slot_number, index })),
+      ];
+      if (allEntries.length < 2) throw new Error(`Advancement did not produce enough entries for group ${group.id}`);
+      if (phase.format === 'single_elimination' && directPasses.some(pass => !pass.round_number || !pass.series_position || !pass.slot_number)) {
+        throw new Error(`Elimination direct passes must specify an exact round, series, and slot for group ${group.id}`);
+      }
+      if (phase.format !== 'single_elimination' && directPasses.some(pass => pass.round_number || pass.series_position || pass.slot_number)) {
+        throw new Error(`Round-robin and Swiss direct passes can only target a group, not a match slot`);
+      }
+      const nextSeed = Math.max(0, ...qualifiers.map(row => Number(row.target_seed)));
+      for (const [index, entrant] of allEntries.entries()) {
+        const seed = entrant.target_seed ?? (phase.format === 'single_elimination' ? null : nextSeed + index - qualifiers.length + 1);
         await connection.execute(
           `INSERT INTO tournament_phase_entries (id, group_id, entry_id, group_seed, status, qualified_at)
            VALUES (?, ?, ?, ?, 'active', CURRENT_TIMESTAMP)`,
-          [randomUUID(), group.id, qualifier.entry_id, qualifier.target_seed]
+          [randomUUID(), group.id, entrant.entry_id, seed]
         );
         await connection.execute(
           `INSERT INTO tournament_phase_standings (group_id, entry_id) VALUES (?, ?)`,
-          [group.id, qualifier.entry_id]
+          [group.id, entrant.entry_id]
         );
       }
-      await compileGroup(connection, phase, group, qualifiers.map(row => row.entry_id));
+      const orderedEntries = [...qualifiers].sort((a, b) => Number(a.target_seed) - Number(b.target_seed)).map(row => row.entry_id);
+      // Elimination passes carry an exact bracket slot and are injected there;
+      // league and Swiss entrants choose only a group, so they join the ordinary
+      // deterministic entrant ordering used to build those rounds.
+      const competitionEntries = phase.format === 'single_elimination'
+        ? orderedEntries
+        : [...orderedEntries, ...directPasses.map(row => row.entry_id)];
+      await compileGroup(connection, phase, group, competitionEntries, directPasses);
       await connection.execute(`UPDATE tournament_phase_groups SET status = 'ready' WHERE id = ?`, [group.id]);
     }
     await connection.execute(`UPDATE tournament_phases SET status = 'ready' WHERE id = ?`, [phase.id]);

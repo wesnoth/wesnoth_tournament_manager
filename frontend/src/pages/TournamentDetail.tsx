@@ -16,7 +16,7 @@ import { TeamReplacementModal } from '../components/TeamReplacementModal';
 import MarkdownPreview from '../components/MarkdownPreview';
 import MainLayout from '../components/MainLayout';
 import { SimulateJoinPanel } from '../components/TestSimulationControls';
-import type { TournamentFormData, TournamentRuleVersion, TournamentUpdatePayload } from '../types/tournament';
+import type { TournamentFormatDefinition, TournamentFormData, TournamentRuleVersion, TournamentUpdatePayload } from '../types/tournament';
 import TournamentCompetitionView from '../components/TournamentCompetitionView';
 import TournamentOverallStandings from '../components/TournamentOverallStandings';
 
@@ -169,6 +169,10 @@ interface TournamentParticipant {
   tournament_points: number;
   elo_rating: number;
   team_id?: string | null;
+  direct_group_id?: string | null;
+  direct_round_number?: number | null;
+  direct_series_position?: number | null;
+  direct_slot_number?: number | null;
   team_position?: number | null;
   omp?: number;
   gwp?: number;
@@ -179,6 +183,54 @@ interface TournamentParticipant {
   team_total_elo?: number;
   current_round?: number;
 }
+
+interface DirectPassGroupOption { id: string; name: string; direct_advancement_slots?: number; direct_assigned_count?: number; format?: string; }
+
+const DirectPassControl: React.FC<{
+  tournamentId: string; entityType: 'participant' | 'team'; entityId: string;
+  groups: DirectPassGroupOption[]; current?: any; disabled: boolean; onSaved: () => void;
+}> = ({ tournamentId, entityType, entityId, groups, current, disabled, onSaved }) => {
+  const [groupId, setGroupId] = useState(current?.direct_group_id || '');
+  const [round, setRound] = useState(current?.direct_round_number || '');
+  const [series, setSeries] = useState(current?.direct_series_position || '');
+  const [slot, setSlot] = useState(current?.direct_slot_number || '');
+  const [note, setNote] = useState(current?.direct_pass_note || '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    setGroupId(current?.direct_group_id || ''); setRound(current?.direct_round_number || '');
+    setSeries(current?.direct_series_position || ''); setSlot(current?.direct_slot_number || '');
+    setNote(current?.direct_pass_note || '');
+  }, [current?.direct_group_id, current?.direct_round_number, current?.direct_series_position, current?.direct_slot_number, current?.direct_pass_note]);
+  const selected = groups.find(group => group.id === groupId);
+  const availableGroups = groups.filter(group => group.id === current?.direct_group_id
+    || Number(group.direct_assigned_count || 0) < Number(group.direct_advancement_slots || 0));
+  if (!groups.length || disabled) return null;
+  return <div className="flex flex-wrap items-end gap-2">
+    <label className="text-xs">Direct pass
+      <select data-help-id="option-participant-direct-pass-group" value={groupId} onChange={event => { setError(''); setGroupId(event.target.value); }} className="ml-1 border rounded px-2 py-1">
+        <option value="">None</option>{availableGroups.map(group => <option key={group.id} value={group.id}>{group.name} ({group.direct_assigned_count || 0}/{group.direct_advancement_slots} assigned)</option>)}
+      </select>
+    </label>
+    {selected?.format === 'single_elimination' && groupId && <>
+      <label className="text-xs">Round<input data-help-id="field-participant-direct-pass-round" type="number" min={1} value={round} onChange={event => setRound(event.target.value)} className="ml-1 w-16 border rounded px-2 py-1" /></label>
+      <label className="text-xs">Series<input data-help-id="field-participant-direct-pass-series" type="number" min={1} value={series} onChange={event => setSeries(event.target.value)} className="ml-1 w-16 border rounded px-2 py-1" /></label>
+      <label className="text-xs">Slot<select data-help-id="option-participant-direct-pass-slot" value={slot} onChange={event => setSlot(event.target.value)} className="ml-1 border rounded px-2 py-1"><option value="">Select</option><option value="1">1</option><option value="2">2</option></select></label>
+    </>}
+    {groupId && <label className="text-xs">Reason<input data-help-id="field-participant-direct-pass-note" maxLength={500} value={note} onChange={event => setNote(event.target.value)} className="ml-1 border rounded px-2 py-1" /></label>}
+    <button data-help-id="action-save-participant-direct-pass" type="button" disabled={saving || Boolean(groupId && selected?.format === 'single_elimination' && (!round || !series || !slot))} className="px-2 py-1 bg-indigo-600 text-white rounded text-xs disabled:opacity-50" onClick={async () => {
+      setSaving(true);
+      try { setError(''); await tournamentService.saveDirectPass(tournamentId, entityType, entityId, {
+        group_id: groupId || null, round_number: selected?.format === 'single_elimination' && groupId ? Number(round) : null,
+        series_position: selected?.format === 'single_elimination' && groupId ? Number(series) : null,
+        slot_number: selected?.format === 'single_elimination' && groupId ? Number(slot) : null, note: groupId ? note : null,
+      }); onSaved(); } catch (saveError: any) {
+        setError(saveError.response?.data?.error || 'Could not save this direct pass.');
+      } finally { setSaving(false); }
+    }}>{saving ? 'Saving…' : 'Save pass'}</button>
+    {error && <span role="alert" className="text-xs text-red-700">{error}</span>}
+  </div>;
+};
 
 type TournamentDetailTab = 'participants' | 'matches' | 'rounds' | 'roundMatches' | 'ranking' | 'competition' | 'tournamentStandings' | 'teams';
 
@@ -290,6 +342,7 @@ const TournamentDetail: React.FC = () => {
   const [roundMatches, setRoundMatches] = useState<any[]>([]);
   const [rounds, setRounds] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
+  const [directPassFormat, setDirectPassFormat] = useState<TournamentFormatDefinition | null>(null);
   const [organizers, setOrganizers] = useState<TournamentOrganizer[]>([]);
   const [organizerUsers, setOrganizerUsers] = useState<OrganizerUserOption[]>([]);
   const [organizerCandidateId, setOrganizerCandidateId] = useState('');
@@ -471,6 +524,10 @@ const TournamentDetail: React.FC = () => {
       setSelectedRulesVersion(null);
 
       setTournament(tournamentRes.data);
+      if (Number(tournamentRes.data.competition_model_version) === 2) {
+        const formatRes = await tournamentService.getTournamentFormat(id!);
+        setDirectPassFormat(formatRes.data);
+      } else setDirectPassFormat(null);
       setRulesDraft(tournamentRes.data.rules_content || '');
       setRulesEditMode(false);
       const usesLoadedPhaseEngine = Number(tournamentRes.data.competition_model_version) === 2;
@@ -1313,6 +1370,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
   };
 
   const isOrganizer = Boolean(userId && organizers.some((organizer) => organizer.user_id === userId));
+  const usesPhaseEngine = Number(tournament?.competition_model_version) === 2;
   const isTournamentCompleted = ['finished', 'completed', 'complete'].includes(tournament?.status || '');
   const selectedRules = selectedRulesVersion === null
     ? null
@@ -1321,6 +1379,12 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
   const isPrimaryOrganizer = Boolean(userId && tournament?.creator_id === userId);
   const isAcceptedParticipant = userParticipationStatus === 'accepted';
   const canManageParticipants = isOrganizer || isAdmin || isTournamentModerator;
+  const directPassGroups: DirectPassGroupOption[] = (directPassFormat?.phases || []).slice(1).flatMap(phase =>
+    phase.groups.filter(group => Number(group.direct_advancement_slots || 0) > 0).map(group => ({
+      id: group.id, name: `${phase.name} / ${group.name}`, direct_advancement_slots: group.direct_advancement_slots,
+      direct_assigned_count: group.direct_assigned_count, format: phase.format,
+    })));
+  const directPassEditable = usesPhaseEngine && canManageParticipants && ['registration_open', 'registration_closed'].includes(tournament?.status || '');
   const canRenameTeam = (team: any) =>
     isOrganizer || isAdmin || isTournamentModerator || (userTeamId && team.id === userTeamId);
 
@@ -1605,7 +1669,6 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
     );
   }
 
-  const usesPhaseEngine = Number(tournament.competition_model_version) === 2;
   const phaseDefinition = editData.format_definition;
 
   return (
@@ -2352,6 +2415,10 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                         </div>
                       </div>}
                     </div>
+                    {directPassEditable && tournament?.tournament_mode === 'team' && <div className="mb-3">
+                      <DirectPassControl tournamentId={id!} entityType="team" entityId={team.id} groups={directPassGroups} current={team}
+                        disabled={!['active'].includes(team.status)} onSaved={() => { void fetchTournamentData(); }} />
+                    </div>}
                     {team.members_with_elo && team.members_with_elo.length > 0 ? (
                       <div className="mt-4 max-md:overflow-x-auto max-md:-webkit-overflow-scrolling-touch">
                         <table className="w-full text-sm max-md:min-w-[600px]">
@@ -2486,6 +2553,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                       <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_points')}</th>
                     </>}
                     {(isOrganizer || canManageParticipants || userId) && tournament?.status === 'registration_open' && <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_actions')}</th>}
+                    {directPassEditable && <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">Direct pass</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -2545,6 +2613,9 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                         </div>
                       </td>
                       )}
+                      {directPassEditable && <td className="px-4 py-3 text-gray-700"><DirectPassControl tournamentId={id!} entityType="participant" entityId={p.id}
+                        groups={directPassGroups} current={p} disabled={p.participation_status !== 'accepted' || Boolean(p.team_id)}
+                        onSaved={() => { void fetchTournamentData(); }} /></td>}
                   </tr>
                 ))}
               </tbody>

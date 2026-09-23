@@ -5,6 +5,7 @@ import type {
   TournamentFormatDefinition,
   TournamentPhaseDefinition,
 } from '../types/tournament';
+import { tournamentService } from '../services/api';
 
 interface Props {
   value?: TournamentFormatDefinition;
@@ -56,6 +57,10 @@ function template(code: string): TournamentFormatDefinition {
 
 const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, initialTemplate = 'swiss', entryOptions = [] }) => {
   const [advanced, setAdvanced] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState(initialTemplate);
+  const [showMappings, setShowMappings] = useState(false);
+  const [generationError, setGenerationError] = useState('');
+  const [sameSourcePairs, setSameSourcePairs] = useState<Array<{ target_group_id: string; seed_one: number; seed_two: number }>>([]);
   useEffect(() => {
     if (!value) onChange(template(initialTemplate));
   }, [value, onChange, initialTemplate]);
@@ -116,12 +121,44 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
     replacePhase(index, { ...current, groups });
   };
 
+  const generateMappings = async (sourceIndex: number) => {
+    const source = definition.phases[sourceIndex];
+    const target = definition.phases[sourceIndex + 1];
+    if (!source || !target) return;
+    const replacing = definition.advancement_rules.some(rule =>
+      source.groups.some(group => group.id === rule.source_group_id)
+      && target.groups.some(group => group.id === rule.target_group_id)
+    );
+    if (replacing && !window.confirm('Regenerating these mappings replaces existing mappings and manual edits between these phases. Continue?')) return;
+    setGenerationError('');
+    try {
+      const response = await tournamentService.previewAdvancementMappings(definition, source.id, target.id);
+      const generated = response.data.rules as TournamentFormatDefinition['advancement_rules'];
+      const sourceIds = new Set(source.groups.map(group => group.id));
+      const targetIds = new Set(target.groups.map(group => group.id));
+      const retained = definition.advancement_rules.filter(rule =>
+        !(sourceIds.has(rule.source_group_id) && targetIds.has(rule.target_group_id))
+      );
+      onChange({ ...definition, advancement_rules: [...retained, ...generated] });
+      setSameSourcePairs(response.data.same_source_first_round_pairs || []);
+      setShowMappings(true);
+    } catch (error: any) {
+      setGenerationError(error.response?.data?.error || 'Could not generate mappings. Check that every group advances at least one entry.');
+    }
+  };
+
   return (
     <section data-help-id="region-tournament-phase-builder" className="p-4 border border-blue-200 rounded-lg bg-blue-50 space-y-4">
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex-1 min-w-64 text-sm font-medium text-gray-700">
           Format template
-          <select data-help-id="option-tournament-format-template" disabled={disabled} className="mt-1 w-full px-3 py-2 border rounded-md bg-white" onChange={(event) => onChange(template(event.target.value))} defaultValue={initialTemplate}>
+          <select data-help-id="option-tournament-format-template" disabled={disabled} className="mt-1 w-full px-3 py-2 border rounded-md bg-white" value={selectedTemplate} onChange={(event) => {
+            const nextTemplate = event.target.value;
+            if (nextTemplate !== selectedTemplate
+              && !window.confirm('Applying a template replaces the current phase configuration and mappings. Continue?')) return;
+            setSelectedTemplate(nextTemplate);
+            onChange(template(nextTemplate));
+          }}>
             <option value="swiss">Swiss</option>
             <option value="league">Round robin league</option>
             <option value="elimination">Single elimination</option>
@@ -197,8 +234,45 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
           </div>
         ))}
       </div>
-      {advanced && <div className="space-y-3">
-        <button data-help-id="action-add-tournament-phase" type="button" disabled={disabled} onClick={() => onChange({ ...definition, phases: [...definition.phases, phase(`Phase ${definition.phases.length + 1}`, definition.phases.length + 1, 'single_elimination')] })} className="px-3 py-2 bg-blue-600 text-white rounded-md">Add phase</button>
+      {definition.phases.slice(0, -1).map((source, sourceIndex) => {
+        const target = definition.phases[sourceIndex + 1];
+        return <div key={`advancement-${source.id}`} className="p-3 bg-white border rounded-md space-y-2">
+          <h4 className="font-medium">Advancement from {source.name} to {target.name}</h4>
+          <p className="text-xs text-gray-600">Choose how many qualify from each group. Counts are per group; if a later phase exists, each group must advance at least one entry.</p>
+          <p className="text-sm text-gray-700">Configured total: {source.groups.reduce((total, group) => total + Number(group.advance_count || 0), 0)} qualifier(s)</p>
+          <div className="grid gap-2 md:grid-cols-2">
+            {source.groups.map(group => <label key={group.id} className="text-sm">{group.name} qualifiers
+              <input data-help-id="field-group-advance-count" disabled={disabled} type="number" min={1} value={group.advance_count ?? ''} onChange={event => {
+                const nextValue = event.target.value === '' ? null : Math.max(1, Number(event.target.value));
+                const phases = definition.phases.map(item => item.id !== source.id ? item : {
+                  ...item,
+                  groups: item.groups.map(row => row.id === group.id ? { ...row, advance_count: nextValue } : row),
+                });
+                onChange({ ...definition, phases });
+              }} className="mt-1 block w-full border rounded px-2 py-1" />
+            </label>)}
+          </div>
+          <button data-help-id="action-generate-advancement-mappings" type="button" disabled={disabled} onClick={() => void generateMappings(sourceIndex)} className="px-3 py-2 border border-blue-600 text-blue-700 rounded-md">Generate / review mappings</button>
+          {generationError && <p role="alert" className="text-sm text-red-700">{generationError}</p>}
+        </div>;
+      })}
+      {definition.phases.slice(1).map(target => <div key={`direct-capacity-${target.id}`} className="p-3 bg-white border rounded-md space-y-2">
+        <h4 className="font-medium">Direct-pass capacity in {target.name}</h4>
+        <div className="grid gap-2 md:grid-cols-2">
+          {target.groups.map(group => <label key={group.id} className="text-sm">{group.name} reserved direct passes
+            <input data-help-id="field-group-direct-advancement-capacity" disabled={disabled} type="number" min={0} value={group.direct_advancement_slots ?? 0} onChange={event => {
+              const value = Math.max(0, Number(event.target.value));
+              const phases = definition.phases.map(item => item.id !== target.id ? item : {
+                ...item,
+                groups: item.groups.map(row => row.id === group.id ? { ...row, direct_advancement_slots: value } : row),
+              });
+              onChange({ ...definition, phases });
+            }} className="mt-1 block w-full border rounded px-2 py-1" />
+          </label>)}
+        </div>
+      </div>)}
+      {(advanced || showMappings) && <div className="space-y-3">
+        {advanced && <button data-help-id="action-add-tournament-phase" type="button" disabled={disabled} onClick={() => onChange({ ...definition, phases: [...definition.phases, phase(`Phase ${definition.phases.length + 1}`, definition.phases.length + 1, 'single_elimination')] })} className="px-3 py-2 bg-blue-600 text-white rounded-md">Add phase</button>}
         <div data-help-id="region-tournament-advancement-mappings" className="p-3 bg-white border rounded-md space-y-2">
           <h4 className="font-medium">Advancement mappings</h4>
           <p className="text-xs text-gray-600">Rules stay in the order they were added.</p>
@@ -212,6 +286,7 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
           </div>)}
           {duplicateTargetRuleIds.size > 0 && <p role="alert" className="text-sm text-red-700">Target preclassifications must be unique within each target group. Correct the highlighted values before saving.</p>}
           {duplicateSourceRuleIds.size > 0 && <p role="alert" className="text-sm text-red-700">A source group position can advance only once. Correct the highlighted values before saving.</p>}
+          {sameSourcePairs.length > 0 && <p role="alert" className="text-sm text-amber-700">Some first-round matches still contain qualifiers from the same source group: {sameSourcePairs.map(pair => `${groupOptions.find(group => group.id === pair.target_group_id)?.label || 'Bracket'} seeds ${pair.seed_one} and ${pair.seed_two}`).join('; ')}.</p>}
           {definition.phases.length > 1 && <button data-help-id="action-add-advancement-rule" type="button" disabled={disabled || groupOptions.length < 2} onClick={() => {
             const source = groupOptions[0];
             const target = groupOptions.find(group => group.phaseOrder > source.phaseOrder);

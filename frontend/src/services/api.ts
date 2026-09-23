@@ -215,6 +215,15 @@ export const tournamentService = {
     api.put(`/tournaments/${id}/assets`, { faction_ids: factionIds, map_ids: mapIds }),
   deleteTournament: (id: string) => api.delete(`/tournaments/${id}`),
   prepareTournament: (id: string) => api.post(`/tournaments/${id}/prepare`),
+  previewAdvancementMappings: (definition: NonNullable<TournamentCreatePayload['format_definition']>, sourcePhaseId: string, targetPhaseId: string) =>
+    api.post('/tournaments/format/preview-advancement', {
+      definition,
+      source_phase_id: sourcePhaseId,
+      target_phase_id: targetPhaseId,
+    }),
+  getTournamentFormat: (id: string) => api.get(`/tournaments/${id}/format`),
+  saveDirectPass: (id: string, entityType: 'participant' | 'team', entityId: string, data: any) =>
+    api.put(`/tournaments/${id}/direct-pass/${entityType}/${entityId}`, data),
   startTournament: (id: string) => api.post(`/tournaments/${id}/start`),
   closeRegistration: (id: string, confirm?: boolean) => 
     api.post(`/tournaments/${id}/close-registration`, confirm ? { confirm: true } : {}),

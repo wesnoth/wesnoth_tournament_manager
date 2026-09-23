@@ -67,6 +67,28 @@ export async function saveTournamentFormat(tournamentId: string, definition: Tou
       throw new Error('Tournament format can only be edited before preparation');
     }
 
+    // Direct nominations live on tournament-owned participants/teams and must
+    // not be orphaned when an organizer replaces the declarative phase graph.
+    const nextDirectCapacities = new Map<string, { capacity: number; isLaterPhase: boolean }>();
+    for (const phase of definition.phases) {
+      for (const group of phase.groups) nextDirectCapacities.set(group.id, {
+        capacity: group.direct_advancement_slots || 0,
+        isLaterPhase: phase.order > 1,
+      });
+    }
+    const [existingNominations] = await connection.execute<any[]>(
+      `SELECT direct_group_id AS group_id, COUNT(*) AS nomination_count FROM (
+         SELECT direct_group_id FROM tournament_participants WHERE tournament_id = ? AND direct_group_id IS NOT NULL
+         UNION ALL
+         SELECT direct_group_id FROM tournament_teams WHERE tournament_id = ? AND direct_group_id IS NOT NULL
+       ) nominations GROUP BY direct_group_id`, [tournamentId, tournamentId]);
+    for (const nomination of existingNominations) {
+      const target = nextDirectCapacities.get(nomination.group_id);
+      if (!target?.isLaterPhase || target.capacity < Number(nomination.nomination_count)) {
+        throw new Error('Remove or reassign existing direct passes before removing their target group or reducing its capacity');
+      }
+    }
+
     await connection.execute(`DELETE FROM tournament_phases WHERE tournament_id = ?`, [tournamentId]);
     for (const phase of [...definition.phases].sort((a, b) => a.order - b.order)) {
       await connection.execute(
@@ -80,9 +102,11 @@ export async function saveTournamentFormat(tournamentId: string, definition: Tou
       await insertSettings(connection, phase);
       for (const group of [...phase.groups].sort((a, b) => a.order - b.order)) {
         await connection.execute(
-          `INSERT INTO tournament_phase_groups (id, phase_id, group_order, name, status)
-           VALUES (?, ?, ?, ?, 'pending')`,
-          [group.id, phase.id, group.order, group.name.trim()]
+          `INSERT INTO tournament_phase_groups
+             (id, phase_id, group_order, name, advance_count, direct_advancement_slots, status)
+           VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
+          [group.id, phase.id, group.order, group.name.trim(), group.advance_count ?? null,
+            group.direct_advancement_slots ?? 0]
         );
         for (const [seedIndex, sourceId] of (group.entry_ids || []).entries()) {
           const entityColumn = phase.assignment_method === 'manual'
@@ -123,8 +147,12 @@ export async function saveTournamentFormat(tournamentId: string, definition: Tou
 export async function getTournamentFormat(tournamentId: string): Promise<TournamentFormatDefinition> {
   const [phasesResult, groupsResult, assignmentsResult, swissResult, leagueResult, eliminationResult, overridesResult, rulesResult] = await Promise.all([
     query(`SELECT * FROM tournament_phases WHERE tournament_id = ? ORDER BY phase_order`, [tournamentId]),
-    query(`SELECT g.* FROM tournament_phase_groups g JOIN tournament_phases p ON p.id = g.phase_id WHERE p.tournament_id = ? ORDER BY p.phase_order, g.group_order`, [tournamentId]),
-    query(`SELECT a.group_id, COALESCE(a.participant_id, a.team_id) AS source_id FROM tournament_phase_entry_assignments a JOIN tournament_phase_groups g ON g.id = a.group_id JOIN tournament_phases p ON p.id = g.phase_id WHERE p.tournament_id = ? ORDER BY a.group_id, a.group_seed`, [tournamentId]),
+    query(`SELECT g.*,
+                  (SELECT COUNT(*) FROM tournament_participants participants WHERE participants.direct_group_id = g.id)
+                  + (SELECT COUNT(*) FROM tournament_teams teams WHERE teams.direct_group_id = g.id) AS direct_assigned_count
+           FROM tournament_phase_groups g JOIN tournament_phases p ON p.id = g.phase_id
+           WHERE p.tournament_id = ? ORDER BY p.phase_order, g.group_order`, [tournamentId]),
+    query(`SELECT a.group_id, COALESCE(a.participant_id, a.team_id) AS source_id FROM tournament_phase_entry_assignments a JOIN tournament_phase_groups g ON g.id = a.group_id JOIN tournament_phases p ON p.id = g.phase_id WHERE p.tournament_id = ? AND a.assignment_type = 'manual' ORDER BY a.group_id, a.group_seed`, [tournamentId]),
     query(`SELECT s.* FROM tournament_swiss_settings s JOIN tournament_phases p ON p.id = s.phase_id WHERE p.tournament_id = ?`, [tournamentId]),
     query(`SELECT s.* FROM tournament_round_robin_settings s JOIN tournament_phases p ON p.id = s.phase_id WHERE p.tournament_id = ?`, [tournamentId]),
     query(`SELECT s.* FROM tournament_elimination_settings s JOIN tournament_phases p ON p.id = s.phase_id WHERE p.tournament_id = ?`, [tournamentId]),
@@ -148,7 +176,15 @@ export async function getTournamentFormat(tournamentId: string): Promise<Tournam
   const groupsByPhase = new Map<string, any[]>();
   for (const group of groupsResult.rows) {
     const groups = groupsByPhase.get(group.phase_id) || [];
-    groups.push({ id: group.id, name: group.name, order: group.group_order, entry_ids: assignmentsByGroup.get(group.id) || [] });
+    groups.push({
+      id: group.id,
+      name: group.name,
+      order: group.group_order,
+      advance_count: group.advance_count == null ? null : Number(group.advance_count),
+      direct_advancement_slots: Number(group.direct_advancement_slots || 0),
+      direct_assigned_count: Number(group.direct_assigned_count || 0),
+      entry_ids: assignmentsByGroup.get(group.id) || [],
+    });
     groupsByPhase.set(group.phase_id, groups);
   }
   const byPhase = (rows: any[]) => new Map(rows.map(row => [row.phase_id, row]));

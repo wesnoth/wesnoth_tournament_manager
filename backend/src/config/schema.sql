@@ -764,6 +764,11 @@ CREATE TABLE `tournament_participants` (
   `ogp` decimal(5,2) DEFAULT 0.00,
   `team_id` char(36) DEFAULT NULL,
   `team_position` smallint(6) DEFAULT NULL,
+  `direct_group_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `direct_round_number` smallint(6) DEFAULT NULL,
+  `direct_series_position` smallint(6) DEFAULT NULL,
+  `direct_slot_number` tinyint(4) DEFAULT NULL,
+  `direct_pass_note` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `replacement_requested_at` datetime DEFAULT NULL,
   `replaced_by_participant_id` char(36) DEFAULT NULL,
   `requested_replacement_of_id` char(36) DEFAULT NULL,
@@ -772,6 +777,7 @@ CREATE TABLE `tournament_participants` (
   KEY `idx_tournament_id` (`tournament_id`),
   KEY `idx_user_id` (`user_id`),
   KEY `idx_team_id` (`team_id`),
+  KEY `idx_tournament_participants_direct_group` (`direct_group_id`),
   KEY `idx_tournament_participants_replacement_requested_at` (`replacement_requested_at`),
   KEY `idx_tournament_participants_replaced_by` (`replaced_by_participant_id`),
   KEY `idx_tournament_participants_replacement_of` (`requested_replacement_of_id`)
@@ -802,8 +808,14 @@ CREATE TABLE `tournament_teams` (
   `current_round` int(11) DEFAULT 1,
   `tournament_ranking` int(11) DEFAULT NULL,
   `team_elo` int(11) DEFAULT 0,
+  `direct_group_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `direct_round_number` smallint(6) DEFAULT NULL,
+  `direct_series_position` smallint(6) DEFAULT NULL,
+  `direct_slot_number` tinyint(4) DEFAULT NULL,
+  `direct_pass_note` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   PRIMARY KEY (`id`),
-  KEY `idx_tournament_id` (`tournament_id`)
+  KEY `idx_tournament_id` (`tournament_id`),
+  KEY `idx_tournament_teams_direct_group` (`direct_group_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -1151,6 +1163,8 @@ CREATE TABLE `tournament_phase_groups` (
   `phase_id` char(36) NOT NULL,
   `group_order` smallint(6) NOT NULL,
   `name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `advance_count` smallint(6) DEFAULT NULL,
+  `direct_advancement_slots` smallint(6) NOT NULL DEFAULT 0,
   `status` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',
   `started_at` datetime DEFAULT NULL,
   `completed_at` datetime DEFAULT NULL,
@@ -1158,7 +1172,9 @@ CREATE TABLE `tournament_phase_groups` (
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_tournament_phase_groups_order` (`phase_id`,`group_order`),
-  KEY `idx_tournament_phase_groups_status` (`phase_id`,`status`)
+  KEY `idx_tournament_phase_groups_status` (`phase_id`,`status`),
+  CONSTRAINT `chk_tournament_phase_group_advance_count` CHECK (`advance_count` is null or `advance_count` >= 1),
+  CONSTRAINT `chk_tournament_phase_group_direct_slots` CHECK (`direct_advancement_slots` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `tournament_phase_entry_assignments` (
@@ -1166,7 +1182,11 @@ CREATE TABLE `tournament_phase_entry_assignments` (
   `group_id` char(36) NOT NULL,
   `participant_id` char(36) DEFAULT NULL,
   `team_id` char(36) DEFAULT NULL,
-  `group_seed` int(11) NOT NULL,
+  `group_seed` int(11) DEFAULT NULL,
+  `assignment_type` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'manual',
+  `direct_round_number` smallint(6) DEFAULT NULL,
+  `direct_series_position` smallint(6) DEFAULT NULL,
+  `direct_slot_number` tinyint(4) DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_tournament_phase_assignment_participant` (`group_id`,`participant_id`),
@@ -1174,6 +1194,12 @@ CREATE TABLE `tournament_phase_entry_assignments` (
   UNIQUE KEY `uq_tournament_phase_assignment_seed` (`group_id`,`group_seed`),
   KEY `idx_tournament_phase_assignment_participant` (`participant_id`),
   KEY `idx_tournament_phase_assignment_team` (`team_id`),
+  UNIQUE KEY `uq_tournament_phase_assignment_direct_slot` (`group_id`,`direct_round_number`,`direct_series_position`,`direct_slot_number`),
+  CONSTRAINT `chk_tournament_phase_assignment_type` CHECK (`assignment_type` in ('manual','direct_pass')),
+  CONSTRAINT `chk_tournament_phase_assignment_direct_slot` CHECK (
+    (`direct_round_number` is null and `direct_series_position` is null and `direct_slot_number` is null)
+    or (`assignment_type` = 'direct_pass' and `direct_round_number` >= 1 and `direct_series_position` >= 1 and `direct_slot_number` in (1,2))
+  ),
   CONSTRAINT `chk_tournament_phase_assignment_entity` CHECK (
     (`participant_id` is not null and `team_id` is null)
     or (`participant_id` is null and `team_id` is not null)

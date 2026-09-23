@@ -19,8 +19,9 @@ context.
 | `tournaments` | Tournament identity and lifecycle | `id` | `name`, `forum_topic_id`, `competition_model_version`, `tournament_mode`, `status` |
 | `tournament_entries` | Immutable competitive player/team identities | `id` | `tournament_id`, `entry_type`, `participant_id`, `team_id`, `initial_seed` |
 | `tournament_phases` | Ordered phase graph | `id` | `tournament_id`, `phase_order`, `format`, `status` |
-| `tournament_phase_groups` | Parallel groups or brackets inside a phase | `id` | `phase_id`, `group_order`, `status` |
+| `tournament_phase_groups` | Parallel groups or brackets inside a phase, per-group qualification counts, and direct-pass capacity | `id` | `phase_id`, `group_order`, `advance_count`, `direct_advancement_slots`, `status` |
 | `tournament_phase_entries` | Entry membership and preclassification per group | `id` | `group_id`, `entry_id`, `group_seed`, `status` |
+| `tournament_phase_entry_assignments` | Manual first-phase placement and prepared direct-pass placement | `id` | `group_id`, `participant_id`, `team_id`, `group_seed`, `assignment_type`, direct elimination round/position |
 | `tournament_phase_rounds` | Rounds scoped to one group/bracket | `id` | `group_id`, `round_number`, `best_of`, `status` |
 | `tournament_series` | Best-of competitive series, including a final-round third-place series | `id` | `round_id`, `series_role`, `best_of`, `winner_entry_id`, `status` |
 | `tournament_series_slots` | Direct or derived bracket positions | `id` | `series_id`, `slot_number`, `source_type`, `resolved_entry_id` |
@@ -29,8 +30,8 @@ context.
 | `tournament_organizers` | Co-organizers per tournament | (`tournament_id`,`user_id`) | `tournament_id`, `user_id`, `created_by` |
 | `tournament_rule_templates` | Reusable markdown rules templates | `id` | `title`, `content_markdown`, `is_active` |
 | `tournament_rule_versions` | Immutable tournament rules history | `id` | `tournament_id`, `version_number`, `rules_content`, `changed_by`, `changed_at` |
-| `tournament_participants` | Players in tournaments | `id` | `user_id`, `team_id`, `status` |
-| `tournament_teams` | Team records (2v2) | `id` | `name`, `tournament_id`, `status` |
+| `tournament_participants` | Players in tournaments, including optional direct-pass placement | `id` | `user_id`, `team_id`, `status`, `direct_group_id`, `direct_round_number`, `direct_series_position`, `direct_slot_number` |
+| `tournament_teams` | Team records (2v2), including optional direct-pass placement | `id` | `name`, `tournament_id`, `status`, `direct_group_id`, `direct_round_number`, `direct_series_position`, `direct_slot_number` |
 | `match_schedule_proposals` | Series-level tournament and P2P schedule proposals | `id` | `tournament_series_id`, `proposed_by_user_id`, `challenge_mode`, `challenged_user_id`, `status` |
 | `match_schedule_slots` | Time slots within a proposal | `id` | `proposal_id`, `slot_datetime`, `status` |
 | `match_schedule_confirmations` | User confirmations of proposals | `id` | `proposal_id`, `user_id`, `confirmed_at` |
@@ -459,12 +460,18 @@ Links users to tournaments. Tracks participant status throughout tournament life
 | `ogp` | decimal(5,2) | YES | | Opponent Game-Win Percentage tiebreaker (default: 0.00) |
 | `team_id` | char(36) | YES | MUL | FK→tournament_teams(id), for 2v2 tournaments (default: NULL) |
 | `team_position` | smallint(6) | YES | | Player slot within team: 1 or 2 (default: NULL) |
+| `direct_group_id` | char(36) | YES | MUL | Optional direct-pass destination group; NULL means no direct pass |
+| `direct_round_number` | smallint(6) | YES | | Optional elimination round for a later-round direct pass |
+| `direct_series_position` | smallint(6) | YES | | Target series position when entering a later elimination round |
+| `direct_slot_number` | tinyint(4) | YES | | Target series slot (1 or 2) for a later-round direct pass |
+| `direct_pass_note` | varchar(500) | YES | | Optional organizer explanation |
 
 **Indices:**
 - `uq_tournament_participants_tournament_user` UNIQUE on (`tournament_id`, `user_id`)
 - `idx_tournament_id` on `tournament_id`
 - `idx_user_id` on `user_id`
 - `idx_team_id` on `team_id`
+- `idx_tournament_participants_direct_group` on `direct_group_id`
 - `idx_tournament_participants_replacement_requested_at` on `replacement_requested_at`
 - `idx_tournament_participants_replaced_by` on `replaced_by_participant_id`
 - `idx_tournament_participants_replacement_of` on `requested_replacement_of_id`
@@ -515,6 +522,11 @@ Teams for 2v2 tournaments.
 | `current_round` | int | |
 | `tournament_ranking` | int | |
 | `team_elo` | int | Combined team ELO |
+| `direct_group_id` | char(36) | YES | MUL | Optional direct-pass destination group; NULL means no direct pass |
+| `direct_round_number` | smallint(6) | YES | | Optional elimination round for a later-round direct pass |
+| `direct_series_position` | smallint(6) | YES | | Target series position when entering a later elimination round |
+| `direct_slot_number` | tinyint(4) | YES | | Target series slot (1 or 2) for a later-round direct pass |
+| `direct_pass_note` | varchar(500) | YES | | Optional organizer explanation |
 | `created_at` | datetime | |
 | `updated_at` | datetime | |
 

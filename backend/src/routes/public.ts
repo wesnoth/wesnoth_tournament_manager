@@ -273,7 +273,8 @@ router.get('/tournaments/:id/participants', async (req, res) => {
         tp.tournament_ranking,
         tp.tournament_wins,
         tp.tournament_losses,
-        tp.tournament_points
+        tp.tournament_points,
+        tp.direct_group_id, tp.direct_round_number, tp.direct_series_position, tp.direct_slot_number, tp.direct_pass_note
       FROM tournament_participants tp
       LEFT JOIN users_extension u ON tp.user_id = u.id
       WHERE tp.tournament_id = ?
@@ -693,12 +694,13 @@ router.get('/tournaments/:id/teams', async (req, res) => {
         tt.tournament_wins,
         tt.tournament_losses,
         tt.tournament_points,
-        tt.status,
+        tt.status, tt.direct_group_id, tt.direct_round_number, tt.direct_series_position, tt.direct_slot_number, tt.direct_pass_note,
         COUNT(tp.id) as member_count
       FROM tournament_teams tt
       LEFT JOIN tournament_participants tp ON tt.id = tp.team_id AND tp.participation_status IN ('pending', 'unconfirmed', 'accepted', 'pending_replacement')
       WHERE tt.tournament_id = ?
-      GROUP BY tt.id, tt.name, tt.tournament_wins, tt.tournament_losses, tt.tournament_points, tt.status
+      GROUP BY tt.id, tt.name, tt.tournament_wins, tt.tournament_losses, tt.tournament_points, tt.status,
+        tt.direct_group_id, tt.direct_round_number, tt.direct_series_position, tt.direct_slot_number, tt.direct_pass_note
       ORDER BY tt.name`,
       [id]
     );

@@ -39,6 +39,13 @@ function validatePhase(phase: PhaseDefinition, index: number, issues: FormatVali
     if (!Number.isInteger(group.order) || group.order < 1 || groupOrders.has(group.order)) {
       issue(issues, `${groupPath}.order`, 'duplicate_group_order', 'Group order must be a unique positive integer');
     }
+    if (group.advance_count != null && (!Number.isInteger(group.advance_count) || group.advance_count < 1)) {
+      issue(issues, `${groupPath}.advance_count`, 'invalid_advance_count', 'A group with a following phase must advance at least one entry');
+    }
+    if (group.direct_advancement_slots != null
+      && (!Number.isInteger(group.direct_advancement_slots) || group.direct_advancement_slots < 0)) {
+      issue(issues, `${groupPath}.direct_advancement_slots`, 'invalid_direct_capacity', 'Direct-entry capacity must be a non-negative integer');
+    }
     groupIds.add(group.id);
     groupOrders.add(group.order);
     for (const [entryIndex, entryId] of (group.entry_ids || []).entries()) {
@@ -101,8 +108,8 @@ function validateAdvancement(
     const targetOrder = groupPhaseOrder.get(rule.target_group_id);
     if (sourceOrder == null) issue(issues, `${path}.source_group_id`, 'unknown_group', 'Source group does not exist');
     if (targetOrder == null) issue(issues, `${path}.target_group_id`, 'unknown_group', 'Target group does not exist');
-    if (sourceOrder != null && targetOrder != null && sourceOrder >= targetOrder) {
-      issue(issues, path, 'cyclic_advancement', 'Advancement must point to a later phase');
+    if (sourceOrder != null && targetOrder != null && targetOrder !== sourceOrder + 1) {
+      issue(issues, path, 'non_adjacent_advancement', 'Advancement must point to the immediately following phase');
     }
     if (!Number.isInteger(rule.source_rank) || rule.source_rank < 1) {
       issue(issues, `${path}.source_rank`, 'invalid_rank', 'Source rank must be a positive integer');
@@ -152,6 +159,42 @@ export function validateTournamentFormat(definition: TournamentFormatDefinition)
     issue(issues, 'phases', 'ambiguous_champion', 'The final phase must contain exactly one group or bracket');
   }
   validateAdvancement(definition.advancement_rules || [], definition.phases, issues);
+
+  const orderedPhases = [...definition.phases].sort((a, b) => a.order - b.order);
+  const nextByOrder = new Map(orderedPhases.map((phase, index) => [phase.order, orderedPhases[index + 1]]));
+  for (const [phaseIndex, phase] of orderedPhases.entries()) {
+    const nextPhase = nextByOrder.get(phase.order);
+    for (const [groupIndex, group] of phase.groups.entries()) {
+      const groupPath = `phases[${phaseIndex}].groups[${groupIndex}]`;
+      if (group.advance_count != null) {
+        if (!nextPhase) {
+          issue(issues, `${groupPath}.advance_count`, 'final_phase_advance_count', 'The final phase cannot configure qualifiers to a later phase');
+        } else {
+          const count = (definition.advancement_rules || []).filter(rule =>
+            rule.source_group_id === group.id
+            && nextPhase.groups.some(targetGroup => targetGroup.id === rule.target_group_id)
+          ).length;
+          if (count !== group.advance_count) {
+            issue(issues, `${groupPath}.advance_count`, 'advancement_count_mismatch', 'Generate or review mappings so they match this group’s qualifier count');
+          }
+        }
+      }
+      const directSlots = group.direct_advancement_slots || 0;
+      if (directSlots > 0 && phase.order === 1) {
+        issue(issues, `${groupPath}.direct_advancement_slots`, 'first_phase_direct_entry', 'Direct passes can only enter a later phase');
+      }
+      if (phase.format === 'single_elimination' && phase.elimination?.bracket_size) {
+        const targetRules = (definition.advancement_rules || []).filter(rule => rule.target_group_id === group.id);
+        const mapped = targetRules.length;
+        if (mapped + directSlots > phase.elimination.bracket_size) {
+          issue(issues, `${groupPath}.direct_advancement_slots`, 'target_bracket_over_capacity', 'Qualifiers and direct entries exceed this bracket’s configured size');
+        }
+        if (targetRules.some(rule => rule.target_seed > phase.elimination!.bracket_size!)) {
+          issue(issues, `${groupPath}.elimination.bracket_size`, 'target_seed_outside_bracket', 'A mapped preclassification is outside this bracket size');
+        }
+      }
+    }
+  }
 
   return { valid: issues.length === 0, issues };
 }

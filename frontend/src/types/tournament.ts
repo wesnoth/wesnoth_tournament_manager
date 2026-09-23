@@ -8,6 +8,9 @@ export interface TournamentPhaseGroupDefinition {
   id: string;
   name: string;
   order: number;
+  advance_count?: number | null;
+  direct_advancement_slots?: number;
+  direct_assigned_count?: number;
   entry_ids?: string[];
 }
 

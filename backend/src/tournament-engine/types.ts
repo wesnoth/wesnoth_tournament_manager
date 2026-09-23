@@ -6,6 +6,12 @@ export interface PhaseGroupDefinition {
   id: string;
   name: string;
   order: number;
+  /** Number of qualifiers from this group to the immediately following phase; omitted for advanced/manual-only formats. */
+  advance_count?: number | null;
+  /** Reserved direct-entry places assigned to participants or teams; zero disables direct entry. */
+  direct_advancement_slots?: number;
+  /** Read-model count of tournament nominations currently targeting this group. */
+  direct_assigned_count?: number;
   /** Participant or team ids in preclassification order, used only by manual assignment. */
   entry_ids?: string[];
 }
