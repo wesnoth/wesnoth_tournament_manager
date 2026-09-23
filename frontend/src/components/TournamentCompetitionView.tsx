@@ -48,51 +48,64 @@ function getBracketRoundSpacing(roundIndex: number): React.CSSProperties {
  * are still being finalized.
  */
 function buildPlannedBracketSeries(phase: any, isFinalPhase: boolean): any[] {
-  const bracketSize = Number(phase.bracket_size || 0);
-  if (bracketSize < 2 || (bracketSize & (bracketSize - 1)) !== 0) return [];
-  const roundCount = Math.log2(bracketSize);
-  const planned: any[] = [];
-  for (let round = 1; round <= roundCount; round += 1) {
-    const seriesCount = bracketSize / (2 ** round);
-    for (let position = 1; position <= seriesCount; position += 1) {
+  const groups = Array.isArray(phase.groups) && phase.groups.length > 0
+    ? phase.groups
+    : [{
+      id: phase.group_id,
+      name: phase.group_name || phase.phase_name,
+      bracket_size: phase.bracket_size,
+      planned_entry_count: phase.planned_entry_count,
+    }];
+
+  return groups.flatMap((group: any) => {
+    const bracketSize = Number(group.bracket_size ?? phase.bracket_size ?? 0);
+    if (bracketSize < 2 || (bracketSize & (bracketSize - 1)) !== 0) return [];
+    const roundCount = Math.log2(bracketSize);
+    const groupName = group.name || group.group_name || phase.phase_name;
+    const groupKey = group.id || group.group_id || groupName;
+    const planned: any[] = [];
+    for (let round = 1; round <= roundCount; round += 1) {
+      const seriesCount = bracketSize / (2 ** round);
+      for (let position = 1; position <= seriesCount; position += 1) {
+        planned.push({
+          series_id: `planned-${phase.phase_id}-${groupKey}-${round}-${position}`,
+          group_name: groupName,
+          round_number: round,
+          series_position: position,
+          status: 'pending',
+          best_of: phase.default_best_of || 1,
+          entry1_wins: 0,
+          entry2_wins: 0,
+          winner_entry_id: null,
+          slots: [
+            { slot_number: 1, resolved_entry_name: round === 1 ? 'Seed ?' : 'TBD' },
+            { slot_number: 2, resolved_entry_name: round === 1 ? 'Seed ?' : 'TBD' },
+          ],
+        });
+      }
+    }
+    // A later phase has no real series until the qualifying phase completes.
+    // Count this bracket's configured slots before previewing a bronze match.
+    if (isFinalPhase && Number(group.planned_entry_count ?? phase.planned_entry_count ?? 0) >= 4 && bracketSize >= 4) {
       planned.push({
-        series_id: `planned-${phase.phase_id}-${round}-${position}`,
-        group_name: phase.phase_name,
-        round_number: round,
-        series_position: position,
+        series_id: `planned-${phase.phase_id}-${groupKey}-third-place`,
+        group_name: groupName,
+        round_number: roundCount,
+        series_position: 2,
+        series_role: 'third_place',
         status: 'pending',
         best_of: phase.default_best_of || 1,
         entry1_wins: 0,
         entry2_wins: 0,
         winner_entry_id: null,
         slots: [
-          { slot_number: 1, resolved_entry_name: round === 1 ? 'Seed ?' : 'TBD' },
-          { slot_number: 2, resolved_entry_name: round === 1 ? 'Seed ?' : 'TBD' },
+          { slot_number: 1, resolved_entry_name: 'Semifinal loser' },
+          { slot_number: 2, resolved_entry_name: 'Semifinal loser' },
         ],
       });
     }
-  }
-  // A later phase has no real series until the qualifying phase completes.
-  // Count its configured advancement slots before previewing a bronze match.
-  if (isFinalPhase && Number(phase.planned_entry_count || 0) >= 4 && bracketSize >= 4) {
-    planned.push({
-      series_id: `planned-${phase.phase_id}-third-place`,
-      group_name: phase.phase_name,
-      round_number: roundCount,
-      series_position: 2,
-      series_role: 'third_place',
-      status: 'pending',
-      best_of: phase.default_best_of || 1,
-      entry1_wins: 0,
-      entry2_wins: 0,
-      winner_entry_id: null,
-      slots: [
-        { slot_number: 1, resolved_entry_name: 'Semifinal loser' },
-        { slot_number: 2, resolved_entry_name: 'Semifinal loser' },
-      ],
-    });
-  }
-  return planned;
+    return planned;
+  });
 }
 
 /**
@@ -212,7 +225,16 @@ const TournamentCompetitionView: React.FC<Props> = ({
     const load = async () => {
       try {
         const competition = await api.get(`/tournaments/${tournamentId}/competition`);
-        const uniquePhases = Array.from(new Map((competition.data.phases || []).map((row: any) => [row.phase_id, row])).values()) as any[];
+        const phaseRows = competition.data.phases || [];
+        const uniquePhases = Array.from(new Map(phaseRows.map((row: any) => [row.phase_id, {
+          ...row,
+          groups: phaseRows.filter((groupRow: any) => groupRow.phase_id === row.phase_id && groupRow.group_id).map((groupRow: any) => ({
+            id: groupRow.group_id,
+            name: groupRow.group_name,
+            bracket_size: groupRow.bracket_size,
+            planned_entry_count: groupRow.planned_entry_count,
+          })),
+        }])).values()) as any[];
         setPhases(uniquePhases);
         const loaded = await Promise.all(uniquePhases.map(async phase => {
           const endpoint = phase.format === 'single_elimination' ? 'bracket' : 'standings';

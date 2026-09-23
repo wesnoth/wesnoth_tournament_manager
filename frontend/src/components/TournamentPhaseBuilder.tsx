@@ -242,8 +242,12 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
           <p className="text-sm text-gray-700">Configured total: {source.groups.reduce((total, group) => total + Number(group.advance_count || 0), 0)} qualifier(s)</p>
           <div className="grid gap-2 md:grid-cols-2">
             {source.groups.map(group => <label key={group.id} className="text-sm">{group.name} qualifiers
-              <input data-help-id="field-group-advance-count" disabled={disabled} type="number" min={1} value={group.advance_count ?? ''} onChange={event => {
-                const nextValue = event.target.value === '' ? null : Math.max(1, Number(event.target.value));
+              <input data-help-id="field-group-advance-count" disabled={disabled} type="text" inputMode="numeric" pattern="[0-9]*" value={group.advance_count ?? ''} onChange={event => {
+                const rawValue = event.target.value;
+                const parsedValue = Number(rawValue);
+                const nextValue = rawValue === '' ? null
+                  : /^\d+$/.test(rawValue) && Number.isSafeInteger(parsedValue) ? parsedValue
+                    : group.advance_count ?? null;
                 const phases = definition.phases.map(item => item.id !== source.id ? item : {
                   ...item,
                   groups: item.groups.map(row => row.id === group.id ? { ...row, advance_count: nextValue } : row),
