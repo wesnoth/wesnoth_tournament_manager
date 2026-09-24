@@ -148,6 +148,12 @@ async function simulateOpenMatch(page: import('@playwright/test').Page, tourname
   await expect(matchMode).toHaveValue(simulationMode);
   await page.waitForTimeout(1_000);
   const tournamentSelect = page.locator('[data-help-id="field-test-tournament"]');
+  if (!(await tournamentSelect.locator('option', { hasText: tournamentName }).count())) {
+    // The simulator excludes finished tournaments. The final simulated game
+    // can finish the tournament while this panel is still open.
+    const state = await readTournamentStatus(page, tournamentName);
+    if (/\bFinished\b/i.test(state.status)) return 0;
+  }
   await expect(tournamentSelect.locator('option', { hasText: tournamentName })).toHaveCount(1, { timeout: 30_000 });
   await tournamentSelect.selectOption({ label: tournamentName });
   const openMatch = page.locator('[data-help-id="field-test-open-match"]');
@@ -334,7 +340,9 @@ test('flexible tournament accepts simulated joins and progresses through every c
     await page.locator(`[data-help-id="option-tournament-mode-${tournamentMode}"]`).check();
     await page.waitForTimeout(1_000);
     await openTournamentSection(page, 'action-toggle-tournament-phase-configuration');
+    page.once('dialog', dialog => dialog.accept());
     await page.locator('[data-help-id="option-tournament-format-template"]').selectOption(formatTemplate);
+    await page.locator('[data-help-id="action-toggle-advanced-phase-builder"]').click();
     if (formatTemplate === 'swiss_brackets_final') {
       // Guard the template contract itself before exercising the engine. This
       // catches accidental UI/template changes independently of progression.
@@ -501,4 +509,114 @@ test('flexible tournament accepts simulated joins and progresses through every c
   await expect(page).toHaveURL(/\/tournament\//, { timeout: 30_000 });
   await assertOverallStandings(page, participantCount);
   await assertTeamMembersAcrossCompetition(page, page.url().split('/').pop()!);
+});
+
+test('a direct pass enters a played semifinal and leaves a third-place match', async ({ page }) => {
+  test.setTimeout(600_000);
+  const organizer = 'Blair';
+  const existingId = process.env.E2E_DIRECT_PASS_TOURNAMENT_ID;
+  let name = process.env.E2E_DIRECT_PASS_NAME || `codex_single_group_semifinal_${Date.now()}`;
+  const players = (await findRealPlayers(page, true, 8)).filter(nickname => nickname !== organizer).slice(0, 7);
+  expect(players).toHaveLength(7);
+  const loginAs = async (username: string) => {
+    await page.getByRole('button', { name: 'Logout' }).click();
+    await page.goto('/login');
+    await page.getByPlaceholder(/Wesnoth Forum Username/i).fill(username);
+    await page.getByPlaceholder(/password/i).fill('password');
+    await page.getByRole('button', { name: /log in|login/i }).click();
+    await page.waitForURL(url => !url.pathname.endsWith('/login'));
+  };
+  if (existingId) {
+    const existingResponse = await page.request.get(`/api/public/tournaments/${existingId}`);
+    expect(existingResponse.ok()).toBe(true);
+    name = (await existingResponse.json()).name;
+    await page.goto(`/tournament/${existingId}`);
+  } else {
+    await page.goto('/my-tournaments');
+    await page.locator('[data-help-id="action-open-create-tournament"]').click();
+    await page.locator('[data-help-id="field-tournament-name"]').fill(name);
+    await page.locator('[data-help-id="field-tournament-description"]').fill('# Sparse direct-pass E2E scenario');
+    await page.locator('[data-help-id="option-tournament-mode-ranked"]').check();
+    await openTournamentSection(page, 'action-toggle-tournament-phase-configuration');
+    page.once('dialog', dialog => dialog.accept());
+    await page.locator('[data-help-id="option-tournament-format-template"]').selectOption('swiss');
+    await page.locator('[data-help-id="action-toggle-advanced-phase-builder"]').click();
+    await page.locator('[data-help-id="action-add-tournament-phase"]').click();
+    await page.locator('[data-help-id="field-tournament-swiss-rounds"]').fill('1');
+    for (const bestOf of await page.locator('[data-help-id="option-tournament-phase-best-of"]').all()) {
+      await bestOf.selectOption('1');
+    }
+    await page.locator('[data-help-id="field-group-direct-advancement-capacity"]').fill('1');
+    await page.locator('[data-help-id="field-group-advance-count"]').fill('6');
+    await page.locator('[data-help-id="action-generate-advancement-mappings"]').click();
+    await expect(page.locator('[data-help-id="field-advancement-target-seed"]')).toHaveCount(6);
+    await openTournamentSection(page, 'action-toggle-tournament-format-settings');
+    await page.locator('[data-help-id="field-tournament-max-participants"]').fill('7');
+    await openTournamentSection(page, 'action-toggle-tournament-assets');
+    for (const asset of await page.locator('[data-help-id="option-tournament-faction"], [data-help-id="option-tournament-map"]').all()) {
+      if (!(await asset.isChecked())) await asset.check();
+    }
+    await openTournamentSection(page, 'action-toggle-tournament-round-configuration');
+    const autoAdvance = page.locator('[data-help-id="option-tournament-auto-advance"]');
+    if (!(await autoAdvance.isChecked())) await autoAdvance.check();
+    await page.locator('[data-help-id="action-create-tournament"]').click();
+    const createdRow = page.locator('tr').filter({ hasText: name }).last();
+    await expect(createdRow).toBeVisible({ timeout: 30_000 });
+    await createdRow.locator('[data-help-id="action-open-tournament-from-name"]').click();
+  }
+  await expect(page).toHaveURL(/\/tournament\//);
+  const tournamentUrl = page.url();
+  const tournamentId = tournamentUrl.split('/').pop()!;
+  if (await page.getByText('Registration Open', { exact: true }).count()) {
+    for (const nickname of players) {
+      await loginAs(nickname);
+      await page.goto(tournamentUrl);
+      await expect(page.getByText('Registration Open', { exact: true })).toBeVisible();
+      const join = page.locator('[data-help-id="action-join-tournament"]');
+      const alreadyJoined = page.getByText(/Your participation status|Participation status/i);
+      if (!(await alreadyJoined.count())) {
+        await expect(join).toBeVisible({ timeout: 15_000 });
+        await join.click();
+        await expect(join).toHaveCount(0);
+      }
+    }
+    await loginAs(organizer);
+    await page.goto(tournamentUrl);
+    await page.locator('[data-help-id="action-tab-participants"]').click();
+    for (const nickname of players) {
+      const row = page.locator('tbody tr').filter({ hasText: nickname }).first();
+      const accept = row.locator('[data-help-id="action-accept-participant"]');
+      if (await accept.count()) await accept.click();
+      await expect(row).toContainText('Accepted');
+    }
+    const passRow = page.locator('tbody tr').filter({ hasText: players[6] }).first();
+    await passRow.locator('[data-help-id="option-participant-direct-pass-group"]').selectOption({ index: 1 });
+    await passRow.locator('[data-help-id="field-participant-direct-pass-round"]').fill('2');
+    await passRow.locator('[data-help-id="action-save-participant-direct-pass"]').click();
+    await expect(passRow.locator('[data-help-id="option-participant-direct-pass-group"]')).toHaveValue(/.+/);
+    await expect(passRow.locator('[data-help-id="field-participant-direct-pass-round"]')).toHaveValue('2');
+    await expect(passRow).toContainText('1/1 assigned');
+    await page.locator('[data-help-id="action-close-registration"]').click();
+    await page.locator('[data-help-id="action-prepare-tournament"]').click();
+    await expect(page.getByText('Prepared', { exact: true })).toBeVisible();
+    await page.locator('[data-help-id="action-start-tournament"]').click();
+  }
+  await loginAs('clmates');
+  const statusResponse = await page.request.get(`/api/public/tournaments/${tournamentId}`);
+  expect(statusResponse.ok()).toBe(true);
+  if ((await statusResponse.json()).status !== 'finished') {
+    await advanceTournamentUntilFinished(page, name, true);
+  }
+  const formatResponse = await page.request.get(`/api/tournaments/${tournamentId}/format`);
+  expect(formatResponse.ok()).toBe(true);
+  const format = await formatResponse.json();
+  const finalPhase = format.phases[1];
+  const bracketResponse = await page.request.get(`/api/tournaments/${tournamentId}/phases/${finalPhase.id}/bracket`);
+  expect(bracketResponse.ok()).toBe(true);
+  const bracket = await bracketResponse.json();
+  const semifinalSlots = bracket.slots.filter((slot: any) => Number(slot.round_number) === 2);
+  const passSemifinal = semifinalSlots.find((slot: any) => slot.resolved_entry_name === players[6]);
+  expect(passSemifinal).toBeTruthy();
+  expect(semifinalSlots.filter((slot: any) => slot.series_id === passSemifinal.series_id && slot.resolved_entry_id)).toHaveLength(2);
+  expect(bracket.slots.some((slot: any) => slot.series_role === 'third_place' && slot.status === 'completed')).toBe(true);
 });

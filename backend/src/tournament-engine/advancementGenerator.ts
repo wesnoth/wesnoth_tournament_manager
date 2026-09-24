@@ -6,6 +6,14 @@ export interface GeneratedAdvancementRule extends Omit<AdvancementRuleDefinition
 export interface AdvancementGenerationResult {
   rules: GeneratedAdvancementRule[];
   sameSourceFirstRoundPairs: Array<{ target_group_id: string; seed_one: number; seed_two: number }>;
+  targetGroups: Array<{
+    target_group_id: string;
+    qualifier_count: number;
+    direct_pass_capacity: number;
+    projected_entries: number;
+    recommended_bracket_size: number | null;
+    byes: number | null;
+  }>;
 }
 
 interface Qualifier {
@@ -98,15 +106,24 @@ export function generateAdvancementRules(
     for (let index = 0; index < seedOrder.length; index += 2) {
       pairSeedSlots.push([seedOrder[index], seedOrder[index + 1]]);
     }
-    const remaining = rows.slice();
+    const remainingByGroup = new Map<string, Qualifier[]>();
+    for (const row of rows) {
+      const groupRows = remainingByGroup.get(row.source_group_id) || [];
+      groupRows.push(row);
+      remainingByGroup.set(row.source_group_id, groupRows);
+    }
+    const takeLargestGroup = (): Qualifier | undefined => {
+      const group = [...remainingByGroup.values()]
+        .filter(groupRows => groupRows.length)
+        .sort((left, right) => right.length - left.length || compareQualifier(left[0], right[0]))[0];
+      return group?.shift();
+    };
     for (const [seedOne, seedTwo] of pairSeedSlots) {
-      if (!remaining.length) break;
-      const first = remaining.shift()!;
-      // Pair against a different source group if one remains. This greedy
-      // choice is optimal for avoiding same-source pairs in a single pass
-      // because every remaining match has the same two available slots.
-      const opponentIndex = remaining.findIndex(row => row.source_group_id !== first.source_group_id);
-      const second = opponentIndex >= 0 ? remaining.splice(opponentIndex, 1)[0] : remaining.shift();
+      const first = takeLargestGroup();
+      if (!first) break;
+      // Taking the two largest remaining source groups leaves the fewest
+      // unavoidable same-source pairs for later matches.
+      const second = takeLargestGroup();
       rules.push({
         source_group_id: first.source_group_id,
         source_rank: first.source_rank,
@@ -127,5 +144,31 @@ export function generateAdvancementRules(
     }
   }
 
-  return { rules, sameSourceFirstRoundPairs: conflicts };
+  const targetGroups = buckets.map(bucket => {
+    const qualifierCount = bucket.qualifiers.length;
+    const directPassCapacity = Number(bucket.group.direct_advancement_slots || 0);
+    const projectedEntries = qualifierCount + directPassCapacity;
+    if (target.format !== 'single_elimination') {
+      return {
+        target_group_id: bucket.group.id,
+        qualifier_count: qualifierCount,
+        direct_pass_capacity: directPassCapacity,
+        projected_entries: projectedEntries,
+        recommended_bracket_size: null,
+        byes: null,
+      };
+    }
+    const configuredSize = target.elimination?.bracket_size || undefined;
+    const bracketSize = configuredSize || 2 ** Math.ceil(Math.log2(Math.max(2, projectedEntries)));
+    return {
+      target_group_id: bucket.group.id,
+      qualifier_count: qualifierCount,
+      direct_pass_capacity: directPassCapacity,
+      projected_entries: projectedEntries,
+      recommended_bracket_size: bracketSize,
+      byes: Math.max(0, bracketSize - projectedEntries),
+    };
+  });
+
+  return { rules, sameSourceFirstRoundPairs: conflicts, targetGroups };
 }

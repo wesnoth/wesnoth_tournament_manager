@@ -18,6 +18,7 @@ import MainLayout from '../components/MainLayout';
 import { SimulateJoinPanel } from '../components/TestSimulationControls';
 import type { TournamentFormatDefinition, TournamentFormData, TournamentRuleVersion, TournamentUpdatePayload } from '../types/tournament';
 import TournamentCompetitionView from '../components/TournamentCompetitionView';
+import TournamentCompositionPreview from '../components/TournamentCompositionPreview';
 import TournamentOverallStandings from '../components/TournamentOverallStandings';
 
 // Helper function to extract parsed replay data from JSON summary
@@ -192,43 +193,48 @@ const DirectPassControl: React.FC<{
 }> = ({ tournamentId, entityType, entityId, groups, current, disabled, onSaved }) => {
   const [groupId, setGroupId] = useState(current?.direct_group_id || '');
   const [round, setRound] = useState(current?.direct_round_number || '');
-  const [series, setSeries] = useState(current?.direct_series_position || '');
-  const [slot, setSlot] = useState(current?.direct_slot_number || '');
   const [note, setNote] = useState(current?.direct_pass_note || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [savedPlacement, setSavedPlacement] = useState('');
   useEffect(() => {
     setGroupId(current?.direct_group_id || ''); setRound(current?.direct_round_number || '');
-    setSeries(current?.direct_series_position || ''); setSlot(current?.direct_slot_number || '');
     setNote(current?.direct_pass_note || '');
-  }, [current?.direct_group_id, current?.direct_round_number, current?.direct_series_position, current?.direct_slot_number, current?.direct_pass_note]);
+  }, [current?.direct_group_id, current?.direct_round_number, current?.direct_pass_note]);
   const selected = groups.find(group => group.id === groupId);
   const availableGroups = groups.filter(group => group.id === current?.direct_group_id
     || Number(group.direct_assigned_count || 0) < Number(group.direct_advancement_slots || 0));
   if (!groups.length || disabled) return null;
   return <div className="flex flex-wrap items-end gap-2">
     <label className="text-xs">Direct pass
-      <select data-help-id="option-participant-direct-pass-group" value={groupId} onChange={event => { setError(''); setGroupId(event.target.value); }} className="ml-1 border rounded px-2 py-1">
+      <select data-help-id="option-participant-direct-pass-group" value={groupId} onChange={event => { setError(''); setSavedPlacement(''); setGroupId(event.target.value); }} className="ml-1 border rounded px-2 py-1">
         <option value="">None</option>{availableGroups.map(group => <option key={group.id} value={group.id}>{group.name} ({group.direct_assigned_count || 0}/{group.direct_advancement_slots} assigned)</option>)}
       </select>
     </label>
     {selected?.format === 'single_elimination' && groupId && <>
-      <label className="text-xs">Round<input data-help-id="field-participant-direct-pass-round" type="number" min={1} value={round} onChange={event => setRound(event.target.value)} className="ml-1 w-16 border rounded px-2 py-1" /></label>
-      <label className="text-xs">Series<input data-help-id="field-participant-direct-pass-series" type="number" min={1} value={series} onChange={event => setSeries(event.target.value)} className="ml-1 w-16 border rounded px-2 py-1" /></label>
-      <label className="text-xs">Slot<select data-help-id="option-participant-direct-pass-slot" value={slot} onChange={event => setSlot(event.target.value)} className="ml-1 border rounded px-2 py-1"><option value="">Select</option><option value="1">1</option><option value="2">2</option></select></label>
+      <label className="text-xs">Round<input data-help-id="field-participant-direct-pass-round" type="number" min={1} value={round} onChange={event => { setError(''); setSavedPlacement(''); setRound(event.target.value); }} className="ml-1 w-16 border rounded px-2 py-1" /></label>
+      <span className="text-xs text-gray-600">The system chooses an available series and slot. In later rounds, the series position identifies the bracket branch.</span>
     </>}
     {groupId && <label className="text-xs">Reason<input data-help-id="field-participant-direct-pass-note" maxLength={500} value={note} onChange={event => setNote(event.target.value)} className="ml-1 border rounded px-2 py-1" /></label>}
-    <button data-help-id="action-save-participant-direct-pass" type="button" disabled={saving || Boolean(groupId && selected?.format === 'single_elimination' && (!round || !series || !slot))} className="px-2 py-1 bg-indigo-600 text-white rounded text-xs disabled:opacity-50" onClick={async () => {
+    {(groupId || current?.direct_group_id) && <button data-help-id="action-save-participant-direct-pass" type="button" disabled={saving || Boolean(groupId && selected?.format === 'single_elimination' && !round)} className="px-2 py-1 bg-indigo-600 text-white rounded text-xs disabled:opacity-50" onClick={async () => {
       setSaving(true);
-      try { setError(''); await tournamentService.saveDirectPass(tournamentId, entityType, entityId, {
+      try { setError(''); setSavedPlacement(''); const response = await tournamentService.saveDirectPass(tournamentId, entityType, entityId, {
         group_id: groupId || null, round_number: selected?.format === 'single_elimination' && groupId ? Number(round) : null,
-        series_position: selected?.format === 'single_elimination' && groupId ? Number(series) : null,
-        slot_number: selected?.format === 'single_elimination' && groupId ? Number(slot) : null, note: groupId ? note : null,
-      }); onSaved(); } catch (saveError: any) {
+        note: groupId ? note : null,
+      });
+        const placement = response.data?.round_number
+          ? `Saved for round ${response.data.round_number}, branch/series ${response.data.series_position}, slot ${response.data.slot_number}.`
+          : groupId ? 'Direct pass saved.' : 'Direct pass removed.';
+        setSavedPlacement(response.data?.adjusted_mappings
+          ? `${placement} ${response.data.adjusted_mappings} qualifier mapping(s) adjusted so the round-one pass has an opponent.`
+          : placement);
+        onSaved();
+      } catch (saveError: any) {
         setError(saveError.response?.data?.error || 'Could not save this direct pass.');
       } finally { setSaving(false); }
-    }}>{saving ? 'Saving…' : 'Save pass'}</button>
+    }}>{saving ? 'Saving…' : groupId ? 'Save pass' : 'Remove pass'}</button>}
     {error && <span role="alert" className="text-xs text-red-700">{error}</span>}
+    {savedPlacement && <span role="status" className="text-xs text-green-700">{savedPlacement}</span>}
   </div>;
 };
 
@@ -616,6 +622,24 @@ const TournamentDetail: React.FC = () => {
       setError(t('error_loading_tournament'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  /** Refresh saved direct-pass data without unmounting the other rows' unsaved form state. */
+  const refreshDirectPassData = async () => {
+    if (!id) return;
+    try {
+      const [participantsRes, formatRes, teamsRes] = await Promise.all([
+        publicService.getTournamentParticipants(id),
+        tournamentService.getTournamentFormat(id),
+        tournament?.tournament_mode === 'team' ? publicService.getTournamentTeams(id) : Promise.resolve(null),
+      ]);
+      setParticipants(participantsRes.data || []);
+      setDirectPassFormat(formatRes.data);
+      if (teamsRes) setTeams(teamsRes.data?.data || []);
+    } catch (refreshError) {
+      console.error('Could not refresh direct-pass data:', refreshError);
+      setError('The direct pass was saved, but the page could not refresh its latest assignments. Use Refresh to retry.');
     }
   };
 
@@ -1385,6 +1409,18 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
       direct_assigned_count: group.direct_assigned_count, format: phase.format,
     })));
   const directPassEditable = usesPhaseEngine && canManageParticipants && ['registration_open', 'registration_closed'].includes(tournament?.status || '');
+  const directPassDescription = (entry: any) => {
+    if (!entry?.direct_group_id) return null;
+    const destination = directPassGroups.find(group => group.id === entry.direct_group_id);
+    const placement = entry.direct_round_number
+      ? ` · Round ${entry.direct_round_number}${entry.direct_series_position ? `, match ${entry.direct_series_position}` : ''}${entry.direct_slot_number ? `, slot ${entry.direct_slot_number}` : ''}`
+      : '';
+    return `${destination?.name || 'Later phase'}${placement}`;
+  };
+  const compositionEntries = tournament?.tournament_mode === 'team'
+    ? teams.filter(team => team.status === 'active').map(team => ({ id: team.id, direct_group_id: team.direct_group_id, direct_round_number: team.direct_round_number }))
+    : participants.filter(participant => participant.participation_status === 'accepted' && !participant.team_id)
+      .map(participant => ({ id: participant.id, direct_group_id: participant.direct_group_id, direct_round_number: participant.direct_round_number }));
   const canRenameTeam = (team: any) =>
     isOrganizer || isAdmin || isTournamentModerator || (userTeamId && team.id === userTeamId);
 
@@ -2034,6 +2070,13 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
         )}
       </div>
 
+      {usesPhaseEngine && !editMode && ['registration_open', 'registration_closed'].includes(tournament.status) && directPassFormat && (
+        <TournamentCompositionPreview
+          format={directPassFormat}
+          entries={compositionEntries}
+        />
+      )}
+
       {/* Tournament Actions Section */}
       <div className="flex flex-row flex-wrap gap-3 items-center justify-between mb-6">
         {/* Join button (only if logged in and NOT in edit mode) - Left side */}
@@ -2417,8 +2460,9 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                     </div>
                     {directPassEditable && tournament?.tournament_mode === 'team' && <div className="mb-3">
                       <DirectPassControl tournamentId={id!} entityType="team" entityId={team.id} groups={directPassGroups} current={team}
-                        disabled={!['active'].includes(team.status)} onSaved={() => { void fetchTournamentData(); }} />
+                        disabled={!['active'].includes(team.status)} onSaved={() => { void refreshDirectPassData(); }} />
                     </div>}
+                    {usesPhaseEngine && directPassDescription(team) && <p className="mb-3 text-sm font-medium text-indigo-800">Direct pass: {directPassDescription(team)}</p>}
                     {team.members_with_elo && team.members_with_elo.length > 0 ? (
                       <div className="mt-4 max-md:overflow-x-auto max-md:-webkit-overflow-scrolling-touch">
                         <table className="w-full text-sm max-md:min-w-[600px]">
@@ -2553,7 +2597,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                       <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_points')}</th>
                     </>}
                     {(isOrganizer || canManageParticipants || userId) && tournament?.status === 'registration_open' && <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_actions')}</th>}
-                    {directPassEditable && <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">Direct pass</th>}
+                    {usesPhaseEngine && directPassGroups.length > 0 && <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">Direct pass</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -2613,9 +2657,15 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                         </div>
                       </td>
                       )}
-                      {directPassEditable && <td className="px-4 py-3 text-gray-700"><DirectPassControl tournamentId={id!} entityType="participant" entityId={p.id}
-                        groups={directPassGroups} current={p} disabled={p.participation_status !== 'accepted' || Boolean(p.team_id)}
-                        onSaved={() => { void fetchTournamentData(); }} /></td>}
+                      {usesPhaseEngine && directPassGroups.length > 0 && <td className="px-4 py-3 text-gray-700">
+                        {directPassEditable
+                          ? <DirectPassControl tournamentId={id!} entityType="participant" entityId={p.id}
+                              groups={directPassGroups} current={p} disabled={p.participation_status !== 'accepted' || Boolean(p.team_id)}
+                              onSaved={() => { void refreshDirectPassData(); }} />
+                          : directPassDescription(p)
+                            ? <span className="font-medium text-indigo-800">{directPassDescription(p)}</span>
+                            : <span className="text-gray-400">—</span>}
+                      </td>}
                   </tr>
                 ))}
               </tbody>

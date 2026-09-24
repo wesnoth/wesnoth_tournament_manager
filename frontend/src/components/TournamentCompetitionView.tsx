@@ -43,9 +43,8 @@ function getBracketRoundSpacing(roundIndex: number): React.CSSProperties {
 
 /**
  * Build a read-only bracket outline before the compiler creates real series.
- * Advancement rules already define the target seed range, so showing the
- * planned slots keeps the phase structure useful while registration results
- * are still being finalized.
+ * Advancement seeds and direct-pass slots describe the future bracket even
+ * before qualifying results exist. Preview only matches with a possible path.
  */
 function buildPlannedBracketSeries(phase: any, isFinalPhase: boolean): any[] {
   const groups = Array.isArray(phase.groups) && phase.groups.length > 0
@@ -64,9 +63,26 @@ function buildPlannedBracketSeries(phase: any, isFinalPhase: boolean): any[] {
     const groupName = group.name || group.group_name || phase.phase_name;
     const groupKey = group.id || group.group_id || groupName;
     const planned: any[] = [];
+    const bypassedPositions = new Map<number, Set<number>>();
+    for (const pass of group.direct_passes || []) {
+      const passRound = Number(pass.round_number);
+      const passPosition = Number(pass.series_position);
+      const passSlot = Number(pass.slot_number);
+      // A later-round direct entrant makes every match in that slot's feeder
+      // subtree unreachable; don't preview those phantom first-round matchups.
+      for (let feederRound = 1; feederRound < passRound; feederRound += 1) {
+        const first = (passPosition - 1) * (2 ** (passRound - feederRound))
+          + (passSlot - 1) * (2 ** (passRound - 1 - feederRound)) + 1;
+        const count = 2 ** (passRound - 1 - feederRound);
+        const positions = bypassedPositions.get(feederRound) || new Set<number>();
+        for (let index = first; index < first + count; index += 1) positions.add(index);
+        bypassedPositions.set(feederRound, positions);
+      }
+    }
     for (let round = 1; round <= roundCount; round += 1) {
       const seriesCount = bracketSize / (2 ** round);
       for (let position = 1; position <= seriesCount; position += 1) {
+        if (bypassedPositions.get(round)?.has(position)) continue;
         planned.push({
           series_id: `planned-${phase.phase_id}-${groupKey}-${round}-${position}`,
           group_name: groupName,
@@ -77,16 +93,43 @@ function buildPlannedBracketSeries(phase: any, isFinalPhase: boolean): any[] {
           entry1_wins: 0,
           entry2_wins: 0,
           winner_entry_id: null,
-          slots: [
-            { slot_number: 1, resolved_entry_name: round === 1 ? 'Seed ?' : 'TBD' },
-            { slot_number: 2, resolved_entry_name: round === 1 ? 'Seed ?' : 'TBD' },
-          ],
+          slots: [1, 2].map(slotNumber => {
+            const directPass = (group.direct_passes || []).find((pass: any) =>
+              Number(pass.round_number) === round && Number(pass.series_position) === position
+                && Number(pass.slot_number) === slotNumber);
+            return {
+              slot_number: slotNumber,
+              resolved_entry_id: directPass?.entry_id || null,
+              resolved_entry_user_id: directPass?.entry_user_id || null,
+              resolved_entry_members: directPass?.entry_members || [],
+              resolved_entry_name: directPass?.entry_name || (round === 1 ? 'Qualifier' : 'TBD'),
+              direct_pass: Boolean(directPass),
+            };
+          }),
         });
       }
     }
-    // A later phase has no real series until the qualifying phase completes.
-    // Count this bracket's configured slots before previewing a bronze match.
-    if (isFinalPhase && Number(group.planned_entry_count ?? phase.planned_entry_count ?? 0) >= 4 && bracketSize >= 4) {
+    // A bronze match requires two real semifinals, each with two possible
+    // entrants. A pass directly into the final does not create a semifinal loser.
+    let seedOrder = [1, 2];
+    while (seedOrder.length < bracketSize) {
+      const complement = seedOrder.length * 2 + 1;
+      seedOrder = seedOrder.flatMap(seed => [seed, complement - seed]);
+    }
+    const mappedSeeds = new Set<number>((group.mapped_seeds || []).map(Number));
+    const semifinalSlotHasEntrant = (slotIndex: number): boolean => {
+      const width = bracketSize / 4;
+      const start = slotIndex * width;
+      if (seedOrder.slice(start, start + width).some(seed => mappedSeeds.has(seed))) return true;
+      return (group.direct_passes || []).some((pass: any) => {
+        const round = Number(pass.round_number);
+        if (!round || round >= roundCount) return false;
+        const passStart = (Number(pass.series_position) - 1) * (2 ** round)
+          + (Number(pass.slot_number) - 1) * (2 ** (round - 1));
+        return passStart >= start && passStart < start + width;
+      });
+    };
+    if (isFinalPhase && groups.length === 1 && bracketSize >= 4 && [0, 1, 2, 3].every(semifinalSlotHasEntrant)) {
       planned.push({
         series_id: `planned-${phase.phase_id}-${groupKey}-third-place`,
         group_name: groupName,
@@ -233,13 +276,18 @@ const TournamentCompetitionView: React.FC<Props> = ({
             name: groupRow.group_name,
             bracket_size: groupRow.bracket_size,
             planned_entry_count: groupRow.planned_entry_count,
+            direct_passes: groupRow.direct_passes || [],
+            mapped_seeds: groupRow.mapped_seeds || [],
           })),
         }])).values()) as any[];
         setPhases(uniquePhases);
         const loaded = await Promise.all(uniquePhases.map(async phase => {
           const endpoint = phase.format === 'single_elimination' ? 'bracket' : 'standings';
           const response = await api.get(`/tournaments/${tournamentId}/phases/${phase.phase_id}/${endpoint}`);
-          return [phase.phase_id, response.data.slots || response.data.standings || []] as const;
+          const rows = response.data.slots || response.data.standings || [];
+          return [phase.phase_id, phase.format === 'single_elimination'
+            ? rows.filter((slot: any) => slot.status !== 'cancelled')
+            : rows] as const;
         }));
         setDetails(Object.fromEntries(loaded));
         const gameResponses = await Promise.all(uniquePhases.map(phase => api.get(`/tournaments/${tournamentId}/phases/${phase.phase_id}/games`)));
@@ -534,6 +582,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
                                 userId={slot.resolved_entry_user_id}
                                 members={slot.resolved_entry_members}
                               /></span>
+                              {(slot.direct_pass || slot.source_type === 'direct') && <span className="shrink-0 rounded bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-800">Direct pass</span>}
                               <span className={`min-w-6 text-right font-mono text-sm ${isWinner ? 'text-green-800' : 'text-gray-600'}`}>{Number(score || 0)}</span>
                             </div>;
                           })}

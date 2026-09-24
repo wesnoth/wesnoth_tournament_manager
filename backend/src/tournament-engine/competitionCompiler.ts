@@ -202,6 +202,13 @@ async function compileElimination(
   const bracketSize = 2 ** Math.ceil(Math.log2(minimumSize));
   const roundCount = Math.log2(bracketSize);
   const seedOrder = buildEliminationSeedOrder(bracketSize);
+  const [seedEntryRows] = await connection.execute<any[]>(
+    `SELECT group_seed, entry_id FROM tournament_phase_entries WHERE group_id = ? AND group_seed IS NOT NULL`,
+    [group.id]
+  );
+  // Advancement seeds may be sparse when a direct pass reserves a later-round
+  // subtree. Never infer a bracket seed from an entrant's array position.
+  const entryBySeed = new Map<number, string>(seedEntryRows.map(row => [Number(row.group_seed), row.entry_id]));
   const occupiedDirectSlots = new Set<string>();
   const [mappedSeedRows] = await connection.execute<any[]>(
     `SELECT target_seed FROM tournament_advancement_rules WHERE target_group_id = ?`, [group.id]);
@@ -221,6 +228,19 @@ async function compileElimination(
       throw new Error(`A direct pass would bypass a mapped qualifier in group ${group.id}`);
     }
   }
+  const hasSemifinalEntrant = (slotIndex: number): boolean => {
+    const width = bracketSize / 4;
+    const start = slotIndex * width;
+    const end = start + width;
+    if (seedOrder.slice(start, end).some(seed => entryBySeed.has(seed))) return true;
+    return directPlacements.some(pass => {
+      if (!pass.round_number || pass.round_number >= roundCount || !pass.series_position || !pass.slot_number) return false;
+      const passStart = (Number(pass.series_position) - 1) * (2 ** Number(pass.round_number))
+        + (Number(pass.slot_number) - 1) * (2 ** (Number(pass.round_number) - 1));
+      return passStart >= start && passStart < end;
+    });
+  };
+  const createThirdPlace = thirdPlace && bracketSize >= 4 && [0, 1, 2, 3].every(hasSemifinalEntrant);
   let priorSeries: string[] = [];
   for (let roundNumber = 1; roundNumber <= roundCount; roundNumber += 1) {
     const round = await createRound(connection, group.id, roundNumber, roundCount, phase.default_best_of, overrides);
@@ -238,7 +258,7 @@ async function compileElimination(
       if (roundNumber === 1) {
           const seed = seedOrder[(position - 1) * 2 + slotIndex];
           const positioned = directPlacements.find(pass => pass.round_number === 1 && pass.series_position === position && pass.slot_number === slotIndex + 1);
-          const entryId = positioned?.entry_id || entryIds[seed - 1] || null;
+          const entryId = positioned?.entry_id || entryBySeed.get(seed) || null;
           await connection.execute(
             `INSERT INTO tournament_series_slots
                (id, series_id, slot_number, source_type, source_group_seed, resolved_entry_id, resolved_at)
@@ -274,7 +294,7 @@ async function compileElimination(
         }
       }
     }
-    if (thirdPlace && roundNumber === roundCount && priorSeries.length === 2) {
+    if (createThirdPlace && roundNumber === roundCount && priorSeries.length === 2) {
       // The bronze series shares the final round so both results must be
       // complete before the group can finish. Its inputs are semifinal losers.
       const bronzeId = randomUUID();
@@ -321,7 +341,7 @@ async function compileGroup(
       [phase.tournament_id, phase.phase_order]
     );
     const [groupCount] = await connection.execute<any[]>(`SELECT COUNT(*) AS count FROM tournament_phase_groups WHERE phase_id = ?`, [phase.id]);
-    const thirdPlace = Number(laterPhases[0].count) === 0 && Number(groupCount[0].count) === 1 && entryIds.length >= 4;
+    const thirdPlace = Number(laterPhases[0].count) === 0 && Number(groupCount[0].count) === 1;
     await compileElimination(connection, phase, group, entryIds, overrides, settings[0]?.bracket_size ?? null, thirdPlace, directPlacements);
   }
 }
@@ -354,6 +374,13 @@ async function resolveEliminationByes(connection: PoolConnection, groupId: strin
            VALUES (?, ?, 1, ?, ?, 'pending')`,
           [randomUUID(), row.id, row.entry1_id, row.entry2_id]
         );
+        changed = true;
+      } else if (!row.entry1_id && !row.entry2_id
+        && [row.source1_type, row.source2_type].every((type, index) =>
+          type === 'group_seed' || ['completed', 'cancelled'].includes(index === 0 ? row.source1_status : row.source2_status))) {
+        // An empty feeder cannot produce a winner. Cancelling it also lets
+        // its parent identify a structural bye instead of waiting forever.
+        await connection.execute(`UPDATE tournament_series SET status = 'cancelled' WHERE id = ?`, [row.id]);
         changed = true;
       } else if (row.entry1_id || row.entry2_id) {
         const missingSlotKnownEmpty = row.entry1_id
@@ -484,7 +511,7 @@ export async function preparePhaseCompetition(tournamentId: string): Promise<{ e
     if (!phaseRows.length) throw new Error('Tournament has no phase format');
     const phase = phaseRows[0] as PhaseRow;
     const [groups] = await connection.execute<any[]>(
-      `SELECT id, group_order, direct_advancement_slots FROM tournament_phase_groups WHERE phase_id = ? ORDER BY group_order`,
+      `SELECT id, group_order, advance_count, direct_advancement_slots FROM tournament_phase_groups WHERE phase_id = ? ORDER BY group_order`,
       [phase.id]
     );
     const entries = await loadEntries(connection, tournamentId, tournament.tournament_mode);
@@ -550,6 +577,9 @@ export async function preparePhaseCompetition(tournamentId: string): Promise<{ e
     for (const group of groups as GroupRow[]) {
       const groupEntries = assignments.get(group.id)!;
       if (groupEntries.length < 2) throw new Error(`Group ${group.id} requires at least two first-phase entries`);
+      if (Number((group as GroupRow & { advance_count: number | null }).advance_count || 0) > groupEntries.length) {
+        throw new Error(`Group ${group.id} advances more entries than its assigned roster contains`);
+      }
       for (const [seedIndex, entryId] of groupEntries.entries()) {
         await connection.execute(
           `INSERT INTO tournament_phase_entries (id, group_id, entry_id, group_seed, status)
@@ -613,6 +643,9 @@ export async function compileNextPhaseCompetition(tournamentId: string, complete
       [phase.id]
     );
     for (const group of groups as GroupRow[]) {
+      const [ruleCountRows] = await connection.execute<any[]>(
+        `SELECT COUNT(*) AS count FROM tournament_advancement_rules WHERE target_group_id = ?`, [group.id]
+      );
       const [qualifiers] = await connection.execute<any[]>(
         `SELECT standings.entry_id, rules.target_seed
          FROM tournament_advancement_rules rules
@@ -622,6 +655,9 @@ export async function compileNextPhaseCompetition(tournamentId: string, complete
          ORDER BY rules.target_seed`,
         [group.id]
       );
+      if (qualifiers.length !== Number(ruleCountRows[0].count)) {
+        throw new Error(`Advancement into group ${group.id} references a source rank without an entry`);
+      }
       const [directPasses] = await connection.execute<any[]>(
         `SELECT entries.id AS entry_id, assignments.direct_round_number AS round_number,
                 assignments.direct_series_position AS series_position, assignments.direct_slot_number AS slot_number
@@ -635,9 +671,8 @@ export async function compileNextPhaseCompetition(tournamentId: string, complete
         throw new Error(`An entry cannot qualify normally and receive a direct pass into group ${group.id}`);
       }
       const allEntries = [
-        ...qualifiers.map(row => ({ entry_id: row.entry_id, target_seed: Number(row.target_seed), direct: false })),
-        ...directPasses.map((row, index) => ({ entry_id: row.entry_id, target_seed: null, direct: true,
-          round_number: row.round_number, series_position: row.series_position, slot_number: row.slot_number, index })),
+        ...qualifiers.map(row => ({ entry_id: row.entry_id, target_seed: Number(row.target_seed) })),
+        ...directPasses.map(row => ({ entry_id: row.entry_id, target_seed: null })),
       ];
       if (allEntries.length < 2) throw new Error(`Advancement did not produce enough entries for group ${group.id}`);
       if (phase.format === 'single_elimination' && directPasses.some(pass => !pass.round_number || !pass.series_position || !pass.slot_number)) {

@@ -3,6 +3,7 @@ import { parseForumTopicUrl, parseTournamentCode, tournamentGameName } from './f
 import { validateTournamentFormat } from './formatValidator.js';
 import type { TournamentFormatDefinition } from './types.js';
 import { generateAdvancementRules } from './advancementGenerator.js';
+import { findDirectPassPlacement, rebalanceRoundOneDirectPasses } from './directPassPlacement.js';
 import { buildEliminationSeedOrder, orderThirdPlaceStandings } from './pairingAlgorithms.js';
 
 const swissGroup = '00000000-0000-4000-8000-000000000001';
@@ -44,6 +45,48 @@ const generated = generateAdvancementRules({
 assert.equal(generated.rules.length, 8);
 assert.equal(new Set(generated.rules.map(rule => rule.target_seed)).size, 8);
 assert.deepEqual(generated.sameSourceFirstRoundPairs, []);
+const directPassAwareGeneration = generateAdvancementRules({
+  id: 'source', name: 'Swiss groups', order: 1, format: 'swiss', assignment_method: 'seeded_snake', default_best_of: 1,
+  groups: Array.from({ length: 4 }, (_, index) => ({ id: `direct-source-${index + 1}`, name: `Group ${index + 1}`, order: index + 1, advance_count: 2 })),
+}, {
+  id: 'target', name: 'Elimination brackets', order: 2, format: 'single_elimination', assignment_method: 'seeded_snake', default_best_of: 1,
+  groups: [
+    { id: 'bracket-1', name: 'Bracket 1', order: 1, direct_advancement_slots: 1 },
+    { id: 'bracket-2', name: 'Bracket 2', order: 2, direct_advancement_slots: 1 },
+  ],
+});
+assert.deepEqual(directPassAwareGeneration.targetGroups.map(group => ({
+  qualifier_count: group.qualifier_count,
+  direct_pass_capacity: group.direct_pass_capacity,
+  projected_entries: group.projected_entries,
+  recommended_bracket_size: group.recommended_bracket_size,
+  byes: group.byes,
+})), [
+  { qualifier_count: 4, direct_pass_capacity: 1, projected_entries: 5, recommended_bracket_size: 8, byes: 3 },
+  { qualifier_count: 4, direct_pass_capacity: 1, projected_entries: 5, recommended_bracket_size: 8, byes: 3 },
+]);
+assert.deepEqual(findDirectPassPlacement(8, 1, new Set([1, 4, 5, 8])), {
+  round_number: 1, series_position: 3, slot_number: 1,
+});
+assert.deepEqual(findDirectPassPlacement(8, 2, new Set([1, 4, 5, 8])), {
+  round_number: 2, series_position: 2, slot_number: 1,
+});
+assert.equal(findDirectPassPlacement(8, 1, new Set([1, 2, 3, 4, 5, 6, 7, 8])), null);
+const mixedPassMappings = [1, 8, 4, 5].map((seed, index) => ({
+  id: `qualifier-${index}`, target_seed: seed, source_rank: index < 2 ? 1 : 2,
+}));
+const mixedPassPlacements = [
+  { round_number: 1, series_position: 4, slot_number: 1 },
+  { round_number: 2, series_position: 2, slot_number: 1 },
+];
+assert.deepEqual(rebalanceRoundOneDirectPasses(8, mixedPassMappings, mixedPassPlacements), [
+  { id: 'qualifier-3', from_seed: 5, to_seed: 6 },
+]);
+assert.deepEqual(rebalanceRoundOneDirectPasses(8, mixedPassMappings.slice(0, 1), mixedPassPlacements), []);
+assert.deepEqual(rebalanceRoundOneDirectPasses(8, mixedPassMappings, [
+  { round_number: 1, series_position: 4, slot_number: 1 },
+  { round_number: 1, series_position: 4, slot_number: 2 },
+]), []);
 const unavoidableSameGroupPair = generateAdvancementRules({
   id: 'one-group-source', name: 'Groups', order: 1, format: 'swiss', assignment_method: 'seeded_snake', default_best_of: 1,
   groups: [{ id: 'only-group', name: 'Only group', order: 1, advance_count: 2 }],
@@ -52,6 +95,18 @@ const unavoidableSameGroupPair = generateAdvancementRules({
   groups: [{ id: 'small-bracket', name: 'Bracket', order: 1 }], elimination: { bracket_size: 2 },
 });
 assert.equal(unavoidableSameGroupPair.sameSourceFirstRoundPairs.length, 1);
+const avoidableSameGroupPair = generateAdvancementRules({
+  id: 'uneven-source', name: 'Groups', order: 1, format: 'swiss', assignment_method: 'seeded_snake', default_best_of: 1,
+  groups: [
+    { id: 'single-a', name: 'A', order: 1, advance_count: 1 },
+    { id: 'single-b', name: 'B', order: 2, advance_count: 1 },
+    { id: 'double-c', name: 'C', order: 3, advance_count: 2 },
+  ],
+}, {
+  id: 'uneven-target', name: 'Elimination', order: 2, format: 'single_elimination', assignment_method: 'seeded_snake', default_best_of: 1,
+  groups: [{ id: 'uneven-bracket', name: 'Bracket', order: 1 }], elimination: { bracket_size: 4 },
+});
+assert.deepEqual(avoidableSameGroupPair.sameSourceFirstRoundPairs, []);
 assert.deepEqual(generated, generateAdvancementRules({
   id: 'source', name: 'Groups', order: 1, format: 'swiss', assignment_method: 'seeded_snake', default_best_of: 1,
   groups: Array.from({ length: 4 }, (_, index) => ({ id: `g${index + 1}`, name: `Group ${index + 1}`, order: index + 1, advance_count: 2 })),

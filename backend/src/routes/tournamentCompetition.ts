@@ -6,7 +6,7 @@ import { isTournamentOrganizer } from '../services/tournamentAuthorizationServic
 import { checkUserIsForumModerator } from '../services/phpbbAuth.js';
 import { validateTournamentFormat } from '../tournament-engine/formatValidator.js';
 import { generateAdvancementRules } from '../tournament-engine/advancementGenerator.js';
-import { buildEliminationSeedOrder } from '../tournament-engine/pairingAlgorithms.js';
+import { findDirectPassPlacement, rebalanceRoundOneDirectPasses } from '../tournament-engine/directPassPlacement.js';
 import { getTournamentFormat, saveTournamentFormat } from '../tournament-engine/formatService.js';
 import type { TournamentFormatDefinition } from '../tournament-engine/types.js';
 import { pool, query } from '../config/database.js';
@@ -35,6 +35,7 @@ router.post('/format/preview-advancement', authMiddleware, async (req: AuthReque
     return res.json({
       rules: generated.rules.map(rule => ({ ...rule, id: uuidv4() })),
       same_source_first_round_pairs: generated.sameSourceFirstRoundPairs,
+      target_groups: generated.targetGroups,
     });
   } catch (error: any) {
     return res.status(400).json({ error: error.message || 'Could not generate advancement mappings' });
@@ -44,11 +45,14 @@ router.post('/format/preview-advancement', authMiddleware, async (req: AuthReque
 router.put('/:id/direct-pass/:entityType/:entityId', authMiddleware, async (req: AuthRequest, res) => {
   const { id: tournamentId, entityType, entityId } = req.params;
   const connection = await pool.getConnection();
+  let transactionOpen = false;
   try {
     if (!['participant', 'team'].includes(entityType)) return res.status(400).json({ error: 'Unsupported direct-pass entity type' });
     if (!(await isTournamentOrganizer(tournamentId, req.userId!))) {
       return res.status(403).json({ error: 'Only tournament organizers can assign direct passes' });
     }
+    await connection.beginTransaction();
+    transactionOpen = true;
     const [tournaments] = await connection.execute<any[]>(
       `SELECT tournament_mode, competition_model_version, status FROM tournaments WHERE id = ? FOR UPDATE`,
       [tournamentId]
@@ -67,28 +71,32 @@ router.put('/:id/direct-pass/:entityType/:entityId', authMiddleware, async (req:
     const entityColumn = 'id';
     const [entities] = await connection.execute<any[]>(
       isTeam
-        ? `SELECT teams.id FROM tournament_teams teams
+        ? `SELECT teams.id, teams.direct_group_id, teams.direct_round_number,
+                  teams.direct_series_position, teams.direct_slot_number FROM tournament_teams teams
            WHERE teams.id = ? AND teams.tournament_id = ? AND teams.status = 'active'
              AND (SELECT COUNT(*) FROM tournament_participants members
                   WHERE members.team_id = teams.id AND members.participation_status = 'accepted') = 2 FOR UPDATE`
-        : `SELECT id FROM tournament_participants WHERE id = ? AND tournament_id = ? AND participation_status = 'accepted' AND team_id IS NULL FOR UPDATE`,
+        : `SELECT id, direct_group_id, direct_round_number, direct_series_position, direct_slot_number
+           FROM tournament_participants WHERE id = ? AND tournament_id = ?
+             AND participation_status = 'accepted' AND team_id IS NULL FOR UPDATE`,
       [entityId, tournamentId]
     );
     if (!entities.length) return res.status(404).json({ error: 'Eligible tournament participant/team not found' });
 
     const { group_id: groupId = null, round_number: roundNumber = null,
-      series_position: seriesPosition = null, slot_number: slotNumber = null, note = null } = req.body || {};
+      series_position: requestedSeriesPosition = null, slot_number: requestedSlotNumber = null, note = null } = req.body || {};
     if (note != null && (typeof note !== 'string' || note.length > 500)) {
       return res.status(400).json({ error: 'Direct-pass note must be 500 characters or fewer' });
     }
-    const placement = [roundNumber, seriesPosition, slotNumber];
-    if (placement.some(value => value != null) && placement.some(value => value == null)) {
-      return res.status(400).json({ error: 'Elimination round, series position, and slot must be set together' });
+    const hasManualPosition = requestedSeriesPosition != null || requestedSlotNumber != null;
+    if (hasManualPosition && (requestedSeriesPosition == null || requestedSlotNumber == null || roundNumber == null)) {
+      return res.status(400).json({ error: 'Round, series position, and slot must be set together when specifying a manual position' });
     }
     if (!groupId) {
-      if (placement.some(value => value != null) || note) return res.status(400).json({ error: 'Clear the placement and note when removing a direct pass' });
+      if (roundNumber != null || hasManualPosition || note) return res.status(400).json({ error: 'Clear the placement and note when removing a direct pass' });
       await connection.execute(`UPDATE ${entityTable} SET direct_group_id = NULL, direct_round_number = NULL, direct_series_position = NULL, direct_slot_number = NULL, direct_pass_note = NULL WHERE ${entityColumn} = ?`, [entityId]);
       await connection.commit();
+      transactionOpen = false;
       await logAuditEvent({
         event_type: 'DIRECT_PASS_UPDATED', user_id: req.userId!, ip_address: getUserIP(req),
         user_agent: getUserAgent(req), details: { tournament_id: tournamentId, entity_type: entityType, entity_id: entityId, target_group_id: null },
@@ -107,14 +115,18 @@ router.put('/:id/direct-pass/:entityType/:entityId', authMiddleware, async (req:
     const target = groups[0];
     const capacity = Number(target.direct_advancement_slots || 0);
     if (capacity < 1) return res.status(409).json({ error: 'This group has no reserved direct-pass capacity' });
-    if (target.format !== 'single_elimination' && placement.some(value => value != null)) {
+    if (target.format !== 'single_elimination' && (roundNumber != null || hasManualPosition)) {
       return res.status(400).json({ error: 'Round-specific placement is only available for elimination brackets' });
     }
-    if (target.format === 'single_elimination' && placement.some(value => value == null)) {
-      return res.status(400).json({ error: 'Elimination direct passes must select a round, series, and slot' });
-    }
-    if (placement.some(value => value != null)) {
-      if (![roundNumber, seriesPosition, slotNumber].every(Number.isInteger) || Number(roundNumber) < 1 || Number(seriesPosition) < 1 || ![1, 2].includes(Number(slotNumber))) {
+    let seriesPosition: number | null = null;
+    let slotNumber: number | null = null;
+    let mappingMoves: Array<{ id: string; from_seed: number; to_seed: number }> = [];
+    if (target.format === 'single_elimination') {
+      if (!Number.isInteger(roundNumber) || Number(roundNumber) < 1) {
+        return res.status(400).json({ error: 'Choose the elimination round for this direct pass' });
+      }
+      if (hasManualPosition && (!Number.isInteger(requestedSeriesPosition) || Number(requestedSeriesPosition) < 1
+        || ![1, 2].includes(Number(requestedSlotNumber)))) {
         return res.status(400).json({ error: 'Invalid elimination round position' });
       }
       const [bracketRows] = await connection.execute<any[]>(
@@ -128,40 +140,37 @@ router.put('/:id/direct-pass/:entityType/:entityId', authMiddleware, async (req:
       const minimumSize = Math.max(2, configuredSize || Number(bracketRows[0]?.mapped_count || 0) + capacity);
       const bracketSize = 2 ** Math.ceil(Math.log2(minimumSize));
       const roundCount = Math.log2(bracketSize);
-      if (Number(roundNumber) > roundCount || Number(seriesPosition) > bracketSize / (2 ** Number(roundNumber))) {
-        return res.status(400).json({ error: 'The selected round position is outside the configured elimination bracket' });
-      }
-      const start = (Number(seriesPosition) - 1) * (2 ** Number(roundNumber))
-        + (Number(slotNumber) - 1) * (2 ** (Number(roundNumber) - 1)) + 1;
-      const end = start + (2 ** (Number(roundNumber) - 1)) - 1;
-      const coveredSeeds = buildEliminationSeedOrder(bracketSize).slice(start - 1, end);
-      const [mappedOwners] = await connection.execute<any[]>(
-        `SELECT COUNT(*) AS count FROM tournament_advancement_rules
-         WHERE target_group_id = ? AND target_seed IN (${coveredSeeds.map(() => '?').join(',')})`,
-        [groupId, ...coveredSeeds]);
-      if (Number(mappedOwners[0].count) > 0) {
-        return res.status(409).json({ error: 'This placement would bypass a mapped qualifier in its feeder matches' });
+      if (Number(roundNumber) > roundCount) {
+        return res.status(400).json({ error: 'The selected round is outside the configured elimination bracket' });
       }
       const [existingPlacements] = await connection.execute<any[]>(
         `SELECT id, direct_round_number AS round_number, direct_series_position AS series_position,
                 direct_slot_number AS slot_number
          FROM ${entityTable} WHERE direct_group_id = ? AND ${entityColumn} <> ?
            AND direct_round_number IS NOT NULL`, [groupId, entityId]);
-      for (const existing of existingPlacements) {
-        const existingStart = (Number(existing.series_position) - 1) * (2 ** Number(existing.round_number))
-          + (Number(existing.slot_number) - 1) * (2 ** (Number(existing.round_number) - 1)) + 1;
-        const existingEnd = existingStart + (2 ** (Number(existing.round_number) - 1)) - 1;
-        if (start <= existingEnd && existingStart <= end) {
-          return res.status(409).json({ error: 'This direct pass overlaps another reserved bracket slot or its feeder path' });
-        }
-      }
-      const [slotOwners] = await connection.execute<any[]>(
-        `SELECT COUNT(*) AS count FROM ${entityTable}
-         WHERE direct_group_id = ? AND direct_round_number = ? AND direct_series_position = ?
-           AND direct_slot_number = ? AND ${entityColumn} <> ?`,
-        [groupId, roundNumber, seriesPosition, slotNumber, entityId]
+      const [mappedSeedRows] = await connection.execute<any[]>(
+        `SELECT id, source_rank, target_seed FROM tournament_advancement_rules WHERE target_group_id = ?`, [groupId]);
+      const mappedSeeds = new Set(mappedSeedRows.map((row: any) => Number(row.target_seed)));
+      const currentPlacement = entities[0].direct_group_id === groupId
+        && Number(entities[0].direct_round_number) === Number(roundNumber)
+        && entities[0].direct_series_position && entities[0].direct_slot_number
+        ? { series_position: Number(entities[0].direct_series_position), slot_number: Number(entities[0].direct_slot_number) }
+        : undefined;
+      const available = findDirectPassPlacement(
+        bracketSize,
+        Number(roundNumber),
+        mappedSeeds,
+        existingPlacements,
+        hasManualPosition ? { series_position: Number(requestedSeriesPosition), slot_number: Number(requestedSlotNumber) } : currentPlacement,
       );
-      if (Number(slotOwners[0].count) > 0) return res.status(409).json({ error: 'That elimination slot is already reserved by another direct pass' });
+      if (!available) {
+        return res.status(409).json({
+          error: `No position is available in round ${roundNumber} without bypassing mapped qualifiers or overlapping another direct pass. Choose another round.`,
+        });
+      }
+      seriesPosition = available.series_position;
+      slotNumber = available.slot_number;
+      mappingMoves = rebalanceRoundOneDirectPasses(bracketSize, mappedSeedRows, [...existingPlacements, available]);
     }
     const [assignedRows] = await connection.execute<any[]>(
       `SELECT COUNT(*) AS count FROM ${entityTable} WHERE direct_group_id = ? AND ${entityColumn} <> ?`,
@@ -173,20 +182,32 @@ router.put('/:id/direct-pass/:entityType/:entityId', authMiddleware, async (req:
       `UPDATE ${entityTable}
        SET direct_group_id = ?, direct_round_number = ?, direct_series_position = ?, direct_slot_number = ?, direct_pass_note = ?
        WHERE ${entityColumn} = ?`,
-      [groupId, roundNumber, seriesPosition, slotNumber, note?.trim() || null, entityId]
+      [groupId, target.format === 'single_elimination' ? roundNumber : null,
+        seriesPosition, slotNumber, note?.trim() || null, entityId]
     );
+    for (const move of mappingMoves) {
+      await connection.execute(
+        `UPDATE tournament_advancement_rules SET target_seed = ? WHERE id = ? AND target_group_id = ?`,
+        [move.to_seed, move.id, groupId]
+      );
+    }
     await connection.commit();
+    transactionOpen = false;
     await logAuditEvent({
       event_type: 'DIRECT_PASS_UPDATED', user_id: req.userId!, ip_address: getUserIP(req),
       user_agent: getUserAgent(req), details: { tournament_id: tournamentId, entity_type: entityType, entity_id: entityId, target_group_id: groupId },
     });
-    return res.json({ message: 'Direct pass saved', group_id: groupId, round_number: roundNumber, series_position: seriesPosition, slot_number: slotNumber });
+    return res.json({ message: 'Direct pass saved', group_id: groupId, round_number: roundNumber,
+      series_position: seriesPosition, slot_number: slotNumber, adjusted_mappings: mappingMoves.length });
   } catch (error) {
-    await connection.rollback();
     console.error('Save tournament direct pass error:', error);
     return res.status(500).json({ error: 'Failed to save direct pass' });
   } finally {
-    connection.release();
+    try {
+      if (transactionOpen) await connection.rollback();
+    } finally {
+      connection.release();
+    }
   }
 });
 
@@ -785,6 +806,7 @@ router.get('/:id/competition', async (req, res) => {
       `SELECT p.id AS phase_id, p.phase_order, p.name AS phase_name, p.format, p.status AS phase_status,
               p.default_best_of,
               g.id AS group_id, g.group_order, g.name AS group_name, g.status AS group_status,
+              g.direct_advancement_slots,
               COUNT(DISTINCT pe.entry_id) AS entry_count,
               (SELECT COUNT(*) FROM tournament_advancement_rules ar WHERE ar.target_group_id = g.id) AS planned_entry_count,
               COUNT(DISTINCT r.id) AS round_count,
@@ -801,11 +823,64 @@ router.get('/:id/competition', async (req, res) => {
        LEFT JOIN tournament_series s ON s.round_id = r.id
        WHERE p.tournament_id = ?
        GROUP BY p.id, p.phase_order, p.name, p.format, p.status, p.default_best_of,
-                g.id, g.group_order, g.name, g.status
+                g.id, g.group_order, g.name, g.status, g.direct_advancement_slots
        ORDER BY p.phase_order, g.group_order`,
       [req.params.id]
     );
-    return res.json({ phases: result.rows });
+    const passes = await query(
+      `SELECT groups.id AS group_id, assignments.direct_round_number AS round_number,
+              assignments.direct_series_position AS series_position, assignments.direct_slot_number AS slot_number,
+              entries.id AS entry_id, users.id AS entry_user_id,
+              CASE WHEN teams.id IS NULL THEN JSON_ARRAY() ELSE COALESCE((
+                SELECT JSON_ARRAYAGG(JSON_OBJECT('user_id', member_user.id, 'nickname', member_user.nickname))
+                FROM tournament_participants member
+                JOIN users_extension member_user ON member_user.id = member.user_id
+                WHERE member.team_id = teams.id AND member.participation_status = 'accepted'
+              ), JSON_ARRAY()) END AS entry_members,
+              ${competitionEntryNameSql('users', 'teams')} AS entry_name
+       FROM tournament_phase_entry_assignments assignments
+       JOIN tournament_phase_groups groups ON groups.id = assignments.group_id
+       JOIN tournament_phases phases ON phases.id = groups.phase_id
+       JOIN tournament_entries entries ON entries.tournament_id = phases.tournament_id
+         AND entries.participant_id <=> assignments.participant_id AND entries.team_id <=> assignments.team_id
+       LEFT JOIN tournament_participants participants ON participants.id = entries.participant_id
+       LEFT JOIN users_extension users ON users.id = participants.user_id
+       LEFT JOIN tournament_teams teams ON teams.id = entries.team_id
+       WHERE phases.tournament_id = ? AND assignments.assignment_type = 'direct_pass'
+       ORDER BY groups.group_order, assignments.direct_round_number, assignments.direct_series_position, assignments.direct_slot_number`,
+      [req.params.id]
+    );
+    const directPassesByGroup = new Map<string, any[]>();
+    for (const pass of passes.rows) {
+      const list = directPassesByGroup.get(pass.group_id) || [];
+      list.push(pass);
+      directPassesByGroup.set(pass.group_id, list);
+    }
+    const mappedSeeds = await query(
+      `SELECT rules.target_group_id, rules.target_seed
+       FROM tournament_advancement_rules rules
+       JOIN tournament_phase_groups groups ON groups.id = rules.target_group_id
+       JOIN tournament_phases phases ON phases.id = groups.phase_id
+       WHERE phases.tournament_id = ? ORDER BY rules.target_group_id, rules.target_seed`,
+      [req.params.id]
+    );
+    const mappedSeedsByGroup = new Map<string, number[]>();
+    for (const rule of mappedSeeds.rows as any[]) {
+      const seeds = mappedSeedsByGroup.get(rule.target_group_id) || [];
+      seeds.push(Number(rule.target_seed));
+      mappedSeedsByGroup.set(rule.target_group_id, seeds);
+    }
+    return res.json({ phases: result.rows.map((row: any) => ({
+      ...row,
+      bracket_size: row.format === 'single_elimination' && row.group_id
+        ? 2 ** Math.ceil(Math.log2(Math.max(2, Number(row.bracket_size || 0),
+          Number(row.planned_entry_count || 0) + Number(row.direct_advancement_slots || 0),
+          ...(directPassesByGroup.get(row.group_id) || []).map(pass =>
+            Number(pass.series_position || 0) * (2 ** Number(pass.round_number || 0))))))
+        : row.bracket_size,
+      direct_passes: directPassesByGroup.get(row.group_id) || [],
+      mapped_seeds: mappedSeedsByGroup.get(row.group_id) || [],
+    })) });
   } catch (error) {
     console.error('Get tournament competition error:', error);
     return res.status(500).json({ error: 'Failed to fetch tournament competition' });
@@ -899,14 +974,29 @@ router.get('/:id/overall-standings', async (req, res) => {
                    AND phases.format = 'single_elimination'
                    AND elimination_series.loser_entry_id = phase_entries.entry_id
                  ORDER BY elimination_round.round_number DESC LIMIT 1) AS elimination_game_losses
-         FROM tournament_phase_entries phase_entries
+         FROM (
+           SELECT phase_entries.group_id, phase_entries.entry_id
+           FROM tournament_phase_entries phase_entries
+           UNION
+           SELECT assignments.group_id, entries.id AS entry_id
+           FROM tournament_phase_entry_assignments assignments
+           JOIN tournament_phase_groups direct_groups ON direct_groups.id = assignments.group_id
+           JOIN tournament_phases direct_phases ON direct_phases.id = direct_groups.phase_id
+           JOIN tournament_entries entries ON entries.tournament_id = direct_phases.tournament_id
+             AND entries.participant_id <=> assignments.participant_id
+             AND entries.team_id <=> assignments.team_id
+           LEFT JOIN tournament_phase_entries materialized
+             ON materialized.group_id = assignments.group_id AND materialized.entry_id = entries.id
+           WHERE assignments.assignment_type = 'direct_pass'
+             AND direct_phases.tournament_id = ? AND materialized.entry_id IS NULL
+         ) phase_entries
          JOIN tournament_phase_groups groups ON groups.id = phase_entries.group_id
          JOIN tournament_phases phases ON phases.id = groups.phase_id
          LEFT JOIN tournament_phase_standings standings
            ON standings.group_id = groups.id AND standings.entry_id = phase_entries.entry_id
          WHERE phases.tournament_id = ?
          ORDER BY phases.phase_order, groups.group_order`,
-        [req.params.id]
+        [req.params.id, req.params.id]
       ),
       query(
         `SELECT entry_id, placement, placement_label, is_champion
@@ -1067,7 +1157,34 @@ router.get('/:id/phases/:phaseId/standings', async (req, res) => {
      ORDER BY g.group_order, s.rank_position IS NULL, s.rank_position, s.points DESC`,
     [req.params.id, req.params.phaseId]
   );
-  return res.json({ standings: result.rows });
+  const passes = await query(
+    `SELECT assignments.group_id, entries.id AS entry_id, 'direct_pass' AS assignment_type,
+            NULL AS rank_position, 0 AS matches_played, 0 AS wins, 0 AS losses,
+            0 AS points, 0 AS omp, 0 AS gwp, 0 AS ogp,
+            groups.name AS group_name, groups.status AS group_status, entries.entry_type,
+            users.id AS entry_user_id,
+            CASE WHEN teams.id IS NULL THEN JSON_ARRAY() ELSE COALESCE((
+              SELECT JSON_ARRAYAGG(JSON_OBJECT('user_id', member_user.id, 'nickname', member_user.nickname))
+              FROM tournament_participants member
+              JOIN users_extension member_user ON member_user.id = member.user_id
+              WHERE member.team_id = teams.id AND member.participation_status = 'accepted'
+            ), JSON_ARRAY()) END AS entry_members,
+            ${competitionEntryNameSql('users', 'teams')} AS entry_name
+     FROM tournament_phase_entry_assignments assignments
+     JOIN tournament_phase_groups groups ON groups.id = assignments.group_id
+     JOIN tournament_phases phases ON phases.id = groups.phase_id
+     JOIN tournament_entries entries ON entries.tournament_id = phases.tournament_id
+       AND entries.participant_id <=> assignments.participant_id AND entries.team_id <=> assignments.team_id
+     LEFT JOIN tournament_phase_standings existing
+       ON existing.group_id = groups.id AND existing.entry_id = entries.id
+     LEFT JOIN tournament_participants participants ON participants.id = entries.participant_id
+     LEFT JOIN users_extension users ON users.id = participants.user_id
+     LEFT JOIN tournament_teams teams ON teams.id = entries.team_id
+     WHERE phases.tournament_id = ? AND phases.id = ?
+       AND assignments.assignment_type = 'direct_pass' AND existing.entry_id IS NULL`,
+    [req.params.id, req.params.phaseId]
+  );
+  return res.json({ standings: [...result.rows, ...passes.rows] });
 });
 
 router.get('/:id/phases/:phaseId/bracket', async (req, res) => {

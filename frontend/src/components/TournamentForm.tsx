@@ -9,6 +9,7 @@ import type { MatchFormat, TournamentFormData, TournamentMode, TournamentType } 
 import type { TournamentFormatDefinition } from '../types/tournament';
 import TournamentPhaseBuilder from './TournamentPhaseBuilder';
 import TournamentMapPackSelector from './TournamentMapPackSelector';
+import EditableIntegerInput from './EditableIntegerInput';
 
 interface RuleTemplate {
   id: string;
@@ -528,15 +529,14 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
         <div className="flex flex-col md:flex-row items-start md:items-end gap-4 mb-4">
           <div className="flex-1">
             <label className="block font-medium text-gray-700 mb-2">{t('label_round_duration', 'Round Duration (days)')}</label>
-            <input
+            <EditableIntegerInput
               data-help-id="field-tournament-round-duration"
-              type="number"
-              min="1"
-              max="365"
+              min={1}
+              max={365}
               value={formData.round_duration_days}
-              onChange={(e) => onFormDataChange({ 
+              onValueChange={(days) => onFormDataChange({
                 ...formData, 
-                round_duration_days: parseInt(e.target.value) 
+                round_duration_days: days,
               })}
               disabled={isLoading}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
