@@ -1403,6 +1403,8 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
   const isPrimaryOrganizer = Boolean(userId && tournament?.creator_id === userId);
   const isAcceptedParticipant = userParticipationStatus === 'accepted';
   const canManageParticipants = isOrganizer || isAdmin || isTournamentModerator;
+  // Keep the table header and participant rows at the same column count for public visitors.
+  const showParticipantActions = Boolean((canManageParticipants || userId) && tournament?.status === 'registration_open');
   const directPassGroups: DirectPassGroupOption[] = (directPassFormat?.phases || []).slice(1).flatMap(phase =>
     phase.groups.filter(group => Number(group.direct_advancement_slots || 0) > 0).map(group => ({
       id: group.id, name: `${phase.name} / ${group.name}`, direct_advancement_slots: group.direct_advancement_slots,
@@ -2596,7 +2598,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                       <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_losses')}</th>
                       <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_points')}</th>
                     </>}
-                    {(isOrganizer || canManageParticipants || userId) && tournament?.status === 'registration_open' && <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_actions')}</th>}
+                    {showParticipantActions && <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_actions')}</th>}
                     {usesPhaseEngine && directPassGroups.length > 0 && <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">Direct pass</th>}
                   </tr>
                 </thead>
@@ -2623,7 +2625,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
                         <td className="px-4 py-3 text-gray-700">{p.tournament_losses}</td>
                         <td className="px-4 py-3 text-gray-700">{p.tournament_points}</td>
                       </>}
-                      {tournament?.status === 'registration_open' && (
+                      {showParticipantActions && (
                       <td className="px-4 py-3 text-gray-700">
                         <div className="flex gap-1 flex-wrap">
                         {isOrganizer && p.participation_status === 'pending' && (
