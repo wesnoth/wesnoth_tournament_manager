@@ -45,9 +45,22 @@ export async function logAuditEvent(entry: AuditLogEntry) {
 }
 
 /**
- * Get user's IP address (handles proxies)
+ * Get the client IP address recorded in audit events.
+ *
+ * When `TRUST_PROXY` is configured, this returns `req.ip`: Express walks
+ * `X-Forwarded-For` from the right and stops at the first untrusted address,
+ * so the value cannot be forged by the client and matches the rate-limit key.
+ *
+ * Compatibility: without `TRUST_PROXY`, `req.ip` is always the proxy address,
+ * so the legacy behavior is kept and the left-most `X-Forwarded-For` entry is
+ * returned. That entry is client-controlled (the proxy appends to, rather than
+ * replaces, a client-supplied header), so audit IPs are only trustworthy once
+ * `TRUST_PROXY` is set.
  */
 export function getUserIP(req: Request | AuthRequest): string {
+  if (req.app?.get('trust proxy')) {
+    return req.ip || req.socket.remoteAddress || 'unknown';
+  }
   return (
     (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
     req.socket.remoteAddress ||
@@ -56,19 +69,33 @@ export function getUserIP(req: Request | AuthRequest): string {
 }
 
 /**
- * TEMPORARY proxy diagnostics for the 2026-09-28 audit (findings 1-2). Remove
- * after the reverse-proxy chain and the correct `trust proxy` value are known.
- *
- * Captures the raw forwarding headers exactly as the backend receives them so
- * the number of proxy hops can be counted: each proxy appends the address of
- * the peer that connected to it to `X-Forwarded-For`, so a single proxy yields
- * `client` (or `spoofed, client`), while Apache -> nginx yields an extra entry.
- * `X-Forwarded-Server`/`X-Forwarded-Host` are added by Apache mod_proxy, and
- * `X-Real-IP` is commonly set by nginx, which helps identify each hop.
- * `socket_remote_address` is the direct TCP peer (the last proxy), and
- * `express_req_ip` is what the rate limiters currently key on.
+ * Whether proxy diagnostics are added to audit events, controlled by
+ * `AUDIT_LOG_HEADERS` (on/off; also accepts true/false and 1/0). Off by default
+ * because the extra data is only needed while diagnosing the proxy chain.
  */
-export function getProxyDiagnostics(req: Request | AuthRequest): Record<string, unknown> {
+const auditLogHeadersEnabled = (): boolean =>
+  ['on', 'true', '1'].includes(String(process.env.AUDIT_LOG_HEADERS || '').trim().toLowerCase());
+
+/**
+ * Optional audit `details` fragment with proxy diagnostics. Returns an empty
+ * object when `AUDIT_LOG_HEADERS` is off, so callers can always spread it.
+ */
+export function getAuditProxyDetails(req: Request | AuthRequest): Record<string, unknown> {
+  return auditLogHeadersEnabled() ? { proxy_diagnostics: getProxyDiagnostics(req) } : {};
+}
+
+/**
+ * Capture the raw forwarding data exactly as the backend receives it, to
+ * determine the reverse-proxy chain and the correct `TRUST_PROXY` value.
+ *
+ * Each proxy appends the address of the peer that connected to it to
+ * `X-Forwarded-For`, so the number of entries after any client-supplied value
+ * equals the number of proxy hops. `X-Forwarded-Server`/`X-Forwarded-Host` are
+ * added by Apache mod_proxy and `X-Real-IP` is commonly set by nginx, which
+ * helps identify each hop. `socket_remote_address` is the direct TCP peer (the
+ * last proxy), and `express_req_ip` is the value the rate limiters key on.
+ */
+function getProxyDiagnostics(req: Request | AuthRequest): Record<string, unknown> {
   return {
     x_forwarded_for: req.headers['x-forwarded-for'] ?? null,
     x_real_ip: req.headers['x-real-ip'] ?? null,

@@ -27,6 +27,40 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+/**
+ * Resolve Express's `trust proxy` setting from `TRUST_PROXY`.
+ *
+ * The backend is reachable only through a reverse proxy, so the TCP peer is
+ * always the proxy and the real client address arrives in `X-Forwarded-For`.
+ * Express only derives `req.ip` from that header when told which proxies to
+ * trust; every IP-keyed rate limiter depends on `req.ip`.
+ *
+ * Accepted values:
+ * - unset, empty, `false`, `off`, or `0`: trust nothing (`req.ip` is the TCP peer).
+ * - a positive integer: the number of proxy hops in front of the backend.
+ * - an address, CIDR, or Express preset (`loopback`, `linklocal`, `uniquelocal`),
+ *   comma-separated: trust only those proxy addresses (the strictest option).
+ *
+ * `true` is rejected on purpose: it trusts the left-most `X-Forwarded-For`
+ * entry, which the client controls, so any client could choose its own
+ * rate-limit key and audit IP. It falls back to trusting nothing.
+ */
+const resolveTrustProxy = (value: string | undefined): boolean | number | string[] => {
+  const normalized = (value || '').trim();
+  const lower = normalized.toLowerCase();
+  if (['', 'false', 'off', '0'].includes(lower)) return false;
+  if (['true', 'on'].includes(lower)) {
+    console.warn('⚠️  TRUST_PROXY=true is unsafe (client-controlled X-Forwarded-For); set a hop count or proxy address. Trusting no proxy.');
+    return false;
+  }
+  if (/^\d+$/.test(normalized)) return Number(normalized);
+  return normalized.split(',').map((entry) => entry.trim()).filter(Boolean);
+};
+
+const trustProxy = resolveTrustProxy(process.env.TRUST_PROXY);
+app.set('trust proxy', trustProxy);
+console.log(`ℹ️  TRUST_PROXY: ${JSON.stringify(trustProxy)}`);
+
 // CORS configuration - allow Cloudflare Pages and custom domains
 const allowedOrigins = [
   'https://wesnoth-tournament-manager.pages.dev',       // Cloudflare Pages (production)
