@@ -4,7 +4,7 @@ import { authenticatePhpbbUser, getPhpbbUser, checkForumBanlist, checkUserIsForu
 import { generateUUID } from '../utils/uuid.js';
 import { queryTournament } from '../config/tournamentDatabase.js';
 import { query } from '../config/database.js';
-import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
+import { logAuditEvent, getUserIP, getUserAgent, getProxyDiagnostics } from '../middleware/audit.js';
 import { loginLimiter } from '../middleware/rateLimiter.js';
 import { isAccountLocked, recordFailedLoginAttempt, recordSuccessfulLogin, getRemainingLockoutTime } from '../services/accountLockout.js';
 
@@ -133,7 +133,8 @@ router.post('/login', loginLimiter, async (req, res) => {
         username: normalizedUsername,
         ip_address: getUserIP(req),
         user_agent: getUserAgent(req),
-        details: { reason: authResult.error }
+        // TEMPORARY: proxy diagnostics for the 2026-09-28 audit; remove afterwards.
+        details: { reason: authResult.error, proxy_diagnostics: getProxyDiagnostics(req) }
       });
       return res.status(401).json({ error: 'Invalid credentials' });
     }

@@ -56,6 +56,33 @@ export function getUserIP(req: Request | AuthRequest): string {
 }
 
 /**
+ * TEMPORARY proxy diagnostics for the 2026-09-28 audit (findings 1-2). Remove
+ * after the reverse-proxy chain and the correct `trust proxy` value are known.
+ *
+ * Captures the raw forwarding headers exactly as the backend receives them so
+ * the number of proxy hops can be counted: each proxy appends the address of
+ * the peer that connected to it to `X-Forwarded-For`, so a single proxy yields
+ * `client` (or `spoofed, client`), while Apache -> nginx yields an extra entry.
+ * `X-Forwarded-Server`/`X-Forwarded-Host` are added by Apache mod_proxy, and
+ * `X-Real-IP` is commonly set by nginx, which helps identify each hop.
+ * `socket_remote_address` is the direct TCP peer (the last proxy), and
+ * `express_req_ip` is what the rate limiters currently key on.
+ */
+export function getProxyDiagnostics(req: Request | AuthRequest): Record<string, unknown> {
+  return {
+    x_forwarded_for: req.headers['x-forwarded-for'] ?? null,
+    x_real_ip: req.headers['x-real-ip'] ?? null,
+    x_forwarded_host: req.headers['x-forwarded-host'] ?? null,
+    x_forwarded_server: req.headers['x-forwarded-server'] ?? null,
+    x_forwarded_proto: req.headers['x-forwarded-proto'] ?? null,
+    via: req.headers['via'] ?? null,
+    socket_remote_address: req.socket.remoteAddress ?? null,
+    express_req_ip: req.ip ?? null,
+    trust_proxy: req.app.get('trust proxy') ?? null,
+  };
+}
+
+/**
  * Get user agent
  */
 export function getUserAgent(req: Request | AuthRequest): string {
