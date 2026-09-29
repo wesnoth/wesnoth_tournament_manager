@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { authService, userService, SESSION_END_REASON_KEY } from '../services/api';
@@ -13,20 +13,20 @@ const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [banInfo, setBanInfo] = useState<{ reason?: string; until?: string | null } | null>(null);
   const [lockoutInfo, setLockoutInfo] = useState<{ remainingSeconds?: number } | null>(null);
-  const [blockedInfo, setBlockedInfo] = useState<{ message?: string } | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  // Explain a forced logout: the reason is stored by endRejectedSession just
-  // before redirecting here, and consumed once so a later visit shows no notice.
-  useEffect(() => {
+  // Explain a forced logout. endRejectedSession stores the reason just before
+  // redirecting here. It is read in the state initializer and not removed on
+  // mount, because the page can mount more than once while App validates a
+  // stored token (the loading screen unmounts the routes); a one-shot read would
+  // consume the reason on the first mount and lose it on the second. The reason
+  // is cleared when the user submits the form.
+  const [blockedInfo, setBlockedInfo] = useState<{ message?: string } | null>(() => {
     try {
-      const reason = sessionStorage.getItem(SESSION_END_REASON_KEY);
-      sessionStorage.removeItem(SESSION_END_REASON_KEY);
-      if (reason === 'ACCOUNT_BLOCKED') setBlockedInfo({});
+      return sessionStorage.getItem(SESSION_END_REASON_KEY) === 'ACCOUNT_BLOCKED' ? {} : null;
     } catch {
-      // Storage unavailable: show the plain login form.
+      return null;
     }
-  }, []);
+  });
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,6 +35,11 @@ const Login: React.FC = () => {
     setBanInfo(null);
     setLockoutInfo(null);
     setBlockedInfo(null);
+    try {
+      sessionStorage.removeItem(SESSION_END_REASON_KEY);
+    } catch {
+      // Storage unavailable: nothing to clear.
+    }
     
     try {
       const response = await authService.login(username, password);
