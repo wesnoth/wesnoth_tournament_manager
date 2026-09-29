@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { generateTokenWithUsername } from '../utils/auth.js';
 import { resolveSession } from '../middleware/auth.js';
-import { isTestModeActive } from '../config/securityConfig.js';
+import bcrypt from 'bcrypt';
+import { isTestModeActive, getTestModePasswordHash } from '../config/securityConfig.js';
 import { authenticatePhpbbUser, getPhpbbUser, checkForumBanlist, checkUserIsForumModerator } from '../services/phpbbAuth.js';
 import { generateUUID } from '../utils/uuid.js';
 import { queryTournament } from '../config/tournamentDatabase.js';
@@ -25,7 +26,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     // Warn clearly if TEST_MODE is active
     const isTestMode = isTestModeActive();
     if (isTestMode) {
-      console.warn(`⚠️  [LOGIN] *** TEST_MODE IS ACTIVE — password validation may be skipped ***`);
+      console.warn(`⚠️  [LOGIN] *** TEST_MODE IS ACTIVE — the shared test password is accepted for non-privileged users ***`);
     }
 
     // Normalize username to lowercase for case-insensitive comparison
@@ -112,7 +113,11 @@ router.post('/login', loginLimiter, async (req, res) => {
       if (isPhpbbModerator || isTournamentAdmin) {
         console.warn(`⚠️  [LOGIN] TEST_MODE active but ${normalizedUsername} is admin/moderator — enforcing password validation`);
       } else {
-        skipPasswordCheck = true;
+        // The bypass requires the shared test password, compared against its
+        // bcrypt hash (bcrypt.compare is constant-time for the digest). Any
+        // other password falls through to normal phpBB validation, so a real
+        // user can still log in with their own forum password on TEST.
+        skipPasswordCheck = await bcrypt.compare(password, getTestModePasswordHash());
       }
     }
 

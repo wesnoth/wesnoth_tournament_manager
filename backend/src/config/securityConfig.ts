@@ -46,7 +46,8 @@ export const getJwtSecret = (): string => {
  * Whether the TEST_MODE login bypass is active.
  *
  * Double check: `TEST_MODE=true` alone is not enough; `NODE_ENV` must also be
- * something other than `production`. This keeps the bypass available on the
+ * something other than `production`. While active, the bypass still requires
+ * the shared test password (`TEST_MODE_PASSWORD_HASH`). This keeps the bypass available on the
  * TEST server and in local development, where testers log in as real replay
  * players whose forum passwords they do not know. The production combination
  * is rejected at startup by `validateSecurityConfig`, so this check is a second
@@ -54,6 +55,23 @@ export const getJwtSecret = (): string => {
  */
 export const isTestModeActive = (): boolean =>
   (process.env.TEST_MODE || '').trim().toLowerCase() === 'true' && nodeEnv() !== 'production';
+
+/**
+ * bcrypt hash format (`$2a$`/`$2b$`/`$2y$`, two-digit cost, 53-character salt
+ * and digest). Checked at startup so a truncated value (for example, `$`
+ * sequences expanded by a shell or an unquoted env file) fails loudly instead
+ * of making every test login fail.
+ */
+const BCRYPT_HASH_PATTERN = /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/;
+
+/**
+ * Return the bcrypt hash of the shared TEST_MODE password.
+ *
+ * Only the hash is stored in configuration, so reading the server settings
+ * does not reveal the password. `validateSecurityConfig` guarantees a valid
+ * hash whenever TEST_MODE is active, so login code can rely on it.
+ */
+export const getTestModePasswordHash = (): string => (process.env.TEST_MODE_PASSWORD_HASH || '').trim();
 
 /**
  * Validate security configuration before the server accepts requests.
@@ -67,6 +85,9 @@ export const isTestModeActive = (): boolean =>
  *   client shares the proxy address as its rate-limit key and audit IP.
  * - `TEST_MODE=true` with `NODE_ENV=production`: abort instead of silently
  *   ignoring the flag, so the misconfiguration is noticed.
+ * - `TEST_MODE` active without a valid `TEST_MODE_PASSWORD_HASH`: abort in
+ *   every environment. The bypass must never again accept an arbitrary
+ *   password; testers need the shared secret.
  * - `TEST_MODE` active: log a prominent banner.
  *
  * @param trustProxy the value Express resolved for `trust proxy`.
@@ -95,6 +116,14 @@ export const validateSecurityConfig = (trustProxy: unknown): void => {
     errors.push('TEST_MODE=true is not allowed with NODE_ENV=production.');
   }
 
+  if (isTestModeActive() && !BCRYPT_HASH_PATTERN.test(getTestModePasswordHash())) {
+    errors.push(
+      getTestModePasswordHash()
+        ? 'TEST_MODE_PASSWORD_HASH is not a valid bcrypt hash (quote it in single quotes so "$" is not expanded).'
+        : 'TEST_MODE=true requires TEST_MODE_PASSWORD_HASH (bcrypt hash of the shared test password).'
+    );
+  }
+
   for (const warning of warnings) {
     console.warn(`⚠️  [CONFIG] ${warning}`);
   }
@@ -103,7 +132,7 @@ export const validateSecurityConfig = (trustProxy: unknown): void => {
     console.warn('');
     console.warn('⚠️  ***************************************************************');
     console.warn(`⚠️  TEST_MODE IS ACTIVE (NODE_ENV=${env}): non-privileged users can log in`);
-    console.warn('⚠️  without their forum password. Admins and moderators still need it.');
+    console.warn('⚠️  with the shared test password. Admins and moderators still need their own.');
     console.warn('⚠️  ***************************************************************');
     console.warn('');
   }
