@@ -47,25 +47,17 @@ export async function logAuditEvent(entry: AuditLogEntry) {
 /**
  * Get the client IP address recorded in audit events.
  *
- * When `TRUST_PROXY` is configured, this returns `req.ip`: Express walks
+ * Always `req.ip`: with `TRUST_PROXY` configured, Express walks
  * `X-Forwarded-For` from the right and stops at the first untrusted address,
  * so the value cannot be forged by the client and matches the rate-limit key.
  *
- * Compatibility: without `TRUST_PROXY`, `req.ip` is always the proxy address,
- * so the legacy behavior is kept and the left-most `X-Forwarded-For` entry is
- * returned. That entry is client-controlled (the proxy appends to, rather than
- * replaces, a client-supplied header), so audit IPs are only trustworthy once
- * `TRUST_PROXY` is set.
+ * The left-most `X-Forwarded-For` entry is never used: the proxy appends to a
+ * client-supplied header, so that entry is attacker-controlled. Startup refuses
+ * to run without `TRUST_PROXY` outside development (`validateSecurityConfig`);
+ * in local development without a proxy, `req.ip` is the real TCP peer.
  */
 export function getUserIP(req: Request | AuthRequest): string {
-  if (req.app?.get('trust proxy')) {
-    return req.ip || req.socket.remoteAddress || 'unknown';
-  }
-  return (
-    (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
-    req.socket.remoteAddress ||
-    'unknown'
-  );
+  return req.ip || req.socket.remoteAddress || 'unknown';
 }
 
 /**

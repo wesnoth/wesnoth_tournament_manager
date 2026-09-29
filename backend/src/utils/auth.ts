@@ -2,6 +2,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { query } from '../config/database.js';
 import { PasswordPolicy, User } from '../types/index.js';
+import { getJwtSecret } from '../config/securityConfig.js';
 
 const SALT_ROUNDS = 10;
 
@@ -14,14 +15,14 @@ export const comparePasswords = async (password: string, hash: string): Promise<
 };
 
 export const generateToken = (userId: string): string => {
-  const secret = (process.env.JWT_SECRET || 'your-secret-key') as string;
+  const secret = getJwtSecret();
   return jwt.sign({ userId }, secret, {
     expiresIn: (process.env.JWT_EXPIRATION || '7d') as string,
   } as any);
 };
 
 export const generateTokenWithUsername = (username: string, userId: string | number): string => {
-  const secret = (process.env.JWT_SECRET || 'your-secret-key') as string;
+  const secret = getJwtSecret();
   // Store userId (string or number) for identification
   // The middleware will use this as the primary identifier
   return jwt.sign({ userId: userId.toString(), username }, secret, {
@@ -30,8 +31,10 @@ export const generateTokenWithUsername = (username: string, userId: string | num
 };
 
 export const verifyToken = (token: string): any => {
-  const secret = (process.env.JWT_SECRET || 'your-secret-key') as string;
-  return jwt.verify(token, secret);
+  const secret = getJwtSecret();
+  // Pin the algorithm the tokens are signed with, so a token declaring another
+  // algorithm (for example `none`) is rejected regardless of library defaults.
+  return jwt.verify(token, secret, { algorithms: ['HS256'] });
 };
 
 export const validatePassword = async (password: string, userId?: string): Promise<{ valid: boolean; errors: string[] }> => {

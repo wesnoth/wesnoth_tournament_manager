@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { generateTokenWithUsername } from '../utils/auth.js';
 import { resolveSession } from '../middleware/auth.js';
+import { isTestModeActive } from '../config/securityConfig.js';
 import { authenticatePhpbbUser, getPhpbbUser, checkForumBanlist, checkUserIsForumModerator } from '../services/phpbbAuth.js';
 import { generateUUID } from '../utils/uuid.js';
 import { queryTournament } from '../config/tournamentDatabase.js';
@@ -22,7 +23,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     }
 
     // Warn clearly if TEST_MODE is active
-    const isTestMode = process.env.TEST_MODE === 'true' && process.env.NODE_ENV?.toLowerCase() !== 'production';
+    const isTestMode = isTestModeActive();
     if (isTestMode) {
       console.warn(`⚠️  [LOGIN] *** TEST_MODE IS ACTIVE — password validation may be skipped ***`);
     }
@@ -194,7 +195,11 @@ router.post('/login', loginLimiter, async (req, res) => {
       username: normalizedUsername,
       ip_address: getUserIP(req),
       user_agent: getUserAgent(req),
-      details: { isNewUser: !existingUsers || existingUsers.length === 0 }
+      // `auth_method` separates TEST_MODE impersonation from real password logins.
+      details: {
+        isNewUser: !existingUsers || existingUsers.length === 0,
+        auth_method: skipPasswordCheck ? 'test_mode_bypass' : 'password',
+      }
     });
 
     res.json({ 

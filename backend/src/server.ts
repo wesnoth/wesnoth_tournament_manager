@@ -1,4 +1,5 @@
 import app from './app.js';
+import { validateSecurityConfig } from './config/securityConfig.js';
 import { initializeScheduledJobs, autoDiscardUnconfirmedReplays } from './jobs/scheduler.js';
 import { runMigrations } from './services/migrationRunner.js';
 import { avatarManifestService } from './services/avatarManifestService.js';
@@ -38,6 +39,9 @@ const startServer = async () => {
     console.log(`   PORT: ${PORT}`);
     console.log(`   DISCORD_ENABLED: ${process.env.DISCORD_ENABLED === 'true' ? 'true' : 'false'}\n`);
     
+    // Refuse to start with a weak authentication or proxy configuration.
+    validateSecurityConfig(app.get('trust proxy'));
+
     // Validate replay auto-discard configuration
     validateReplayAutoDiscardConfig();
     
