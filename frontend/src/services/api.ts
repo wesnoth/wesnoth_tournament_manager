@@ -32,18 +32,50 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+/** sessionStorage key carrying why the session ended, read once by the login page. */
+export const SESSION_END_REASON_KEY = 'sessionEndReason';
+
+/**
+ * End a session the backend no longer accepts and go to the login page.
+ *
+ * Clears the stored credentials and performs a full navigation, which resets
+ * the in-memory auth store. `reason` is the backend rejection code (for
+ * example `ACCOUNT_BLOCKED`); the login page uses it to explain the logout.
+ */
+export const endRejectedSession = (reason?: string) => {
+  localStorage.removeItem('token');
+  localStorage.removeItem('userId');
+  localStorage.removeItem('username');
+  if (reason) {
+    try {
+      sessionStorage.setItem(SESSION_END_REASON_KEY, reason);
+    } catch {
+      // Storage may be unavailable; the logout itself must still happen.
+    }
+  }
+  window.location.href = '/login';
+};
+
 // Error handling and 401 logout
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Public endpoints answer anonymously for a rejected token and flag it in
+    // this header (see optionalAuthMiddleware). End the stale session so the
+    // navbar stops showing the user as logged in.
+    const rejected = response.headers?.['x-session-rejected'];
+    if (rejected && localStorage.getItem('token')) {
+      endRejectedSession(rejected);
+    }
+    return response;
+  },
   async (error: AxiosError) => {
     const config = error.config;
     
-    // Handle 401 - logout user
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('userId');
-      localStorage.removeItem('username');
-      window.location.href = '/login';
+    // Handle 401 - logout user. A failed login is also a 401, but it must stay
+    // on the page so the form can show the reason (invalid credentials,
+    // blocked, locked, or banned).
+    if (error.response?.status === 401 && !config?.url?.endsWith('/auth/login')) {
+      endRejectedSession((error.response.data as { code?: string } | undefined)?.code);
       return Promise.reject(error);
     }
     

@@ -124,6 +124,14 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
 };
 
 /**
+ * Response header that tells the client its stored token no longer grants a
+ * session, on endpoints that answer anonymously instead of failing. The value
+ * is the rejection code (for example `ACCOUNT_BLOCKED`), or `INVALID` when the
+ * rejection has no code. Exposed through CORS in `app.ts`.
+ */
+export const SESSION_REJECTED_HEADER = 'X-Session-Rejected';
+
+/**
  * Optional authentication for public endpoints that personalize their output.
  *
  * A request with a token that `resolveSession` would reject (invalid, revoked,
@@ -131,6 +139,12 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
  * instead of failing: the endpoint is public, so the caller must still get the
  * anonymous response rather than a 401/503. Only a fully valid session sets
  * `req.userId`.
+ *
+ * For 401-class rejections the response also carries `SESSION_REJECTED_HEADER`,
+ * so the frontend can end its stale session (otherwise a blocked user browsing
+ * public pages keeps a logged-in navbar until a protected request fails).
+ * Maintenance (503) is not signaled: the session is still valid and resumes
+ * when maintenance ends.
  */
 export const optionalAuthMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -141,6 +155,8 @@ export const optionalAuthMiddleware = async (req: AuthRequest, res: Response, ne
       if ('session' in result) {
         req.userId = result.session.userId;
         req.username = result.session.username;
+      } else if (result.rejection.status === 401) {
+        res.setHeader(SESSION_REJECTED_HEADER, result.rejection.body.code || 'INVALID');
       }
     } catch (error) {
       // A lookup failure also degrades to an anonymous request.

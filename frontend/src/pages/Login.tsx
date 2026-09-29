@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { authService, userService } from '../services/api';
+import { authService, userService, SESSION_END_REASON_KEY } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 
 const Login: React.FC = () => {
@@ -15,6 +15,18 @@ const Login: React.FC = () => {
   const [lockoutInfo, setLockoutInfo] = useState<{ remainingSeconds?: number } | null>(null);
   const [blockedInfo, setBlockedInfo] = useState<{ message?: string } | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Explain a forced logout: the reason is stored by endRejectedSession just
+  // before redirecting here, and consumed once so a later visit shows no notice.
+  useEffect(() => {
+    try {
+      const reason = sessionStorage.getItem(SESSION_END_REASON_KEY);
+      sessionStorage.removeItem(SESSION_END_REASON_KEY);
+      if (reason === 'ACCOUNT_BLOCKED') setBlockedInfo({});
+    } catch {
+      // Storage unavailable: show the plain login form.
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

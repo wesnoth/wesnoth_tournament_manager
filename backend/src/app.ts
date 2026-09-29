@@ -91,6 +91,9 @@ app.use(cors({
     }
   },
   credentials: true,
+  // Let cross-origin frontends (Cloudflare Pages) read the stale-session signal
+  // set by optionalAuthMiddleware; browsers hide non-safelisted headers otherwise.
+  exposedHeaders: ['X-Session-Rejected'],
 }));
 
 // Expose only this non-sensitive feature flag to the frontend. The simulator

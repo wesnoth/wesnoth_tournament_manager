@@ -4,6 +4,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../store/authStore';
 import { getHelpSlugFromPath } from '../utils/helpNavigation';
+import { endRejectedSession } from '../services/api';
 
 /** Minimal notification shape required by the navbar dropdown. */
 interface NavbarNotification {
@@ -64,6 +65,14 @@ const Navbar: React.FC = () => {
               'Authorization': `Bearer ${token}`,
             },
           });
+          if (response.status === 401) {
+            // This poll is the only periodic authenticated request, so it is
+            // what ends a revoked or blocked session on pages that make no
+            // other protected call.
+            const body = await response.json().catch(() => ({}));
+            endRejectedSession(body?.code);
+            return;
+          }
           if (response.ok) {
             const data = await response.json();
             setUnreadCount(data.unreadCount || 0);
