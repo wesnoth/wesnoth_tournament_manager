@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { generateTokenWithUsername, verifyToken } from '../utils/auth.js';
+import { generateTokenWithUsername } from '../utils/auth.js';
+import { resolveSession } from '../middleware/auth.js';
 import { authenticatePhpbbUser, getPhpbbUser, checkForumBanlist, checkUserIsForumModerator } from '../services/phpbbAuth.js';
 import { generateUUID } from '../utils/uuid.js';
 import { queryTournament } from '../config/tournamentDatabase.js';
@@ -221,48 +222,32 @@ router.get('/validate-token', async (req, res) => {
     const token = authHeader.substring(7);
     console.log(`🔐 [VALIDATE] Token validation requested`);
 
-    // Verify JWT token
-    const decoded = verifyToken(token);
-    console.log(`✅ [VALIDATE] Token verified for user: ${decoded.username}`);
+    // Apply the same session rules as authMiddleware (revocation, blocked
+    // account, maintenance) so the frontend never treats a rejected session as valid.
+    const result = await resolveSession(token);
+    if ('rejection' in result) {
+      return res.status(result.rejection.status).json(result.rejection.body);
+    }
+    const { session } = result;
+    console.log(`✅ [VALIDATE] Token verified for user: ${session.username}`);
 
     // Get full user info from phpBB
-    const phpbbUser = await getPhpbbUser(decoded.username);
+    const phpbbUser = await getPhpbbUser(session.username);
     if (!phpbbUser) {
-      console.warn(`⚠️  [VALIDATE] User no longer exists in phpBB: ${decoded.username}`);
+      console.warn(`⚠️  [VALIDATE] User no longer exists in phpBB: ${session.username}`);
       return res.status(401).json({ error: 'User not found' });
     }
 
-    // Get tournament user info to check if admin
-    const tournamentUserResult = await query(
-      'SELECT is_admin, is_streamer, token_invalidated_at FROM users_extension WHERE id = ?',
-      [decoded.userId]
-    );
-
-    const isAdmin = tournamentUserResult.rows[0]?.is_admin || false;
-    const isStreamer = Boolean(tournamentUserResult.rows[0]?.is_streamer);
-    const invalidatedAt = tournamentUserResult.rows[0]?.token_invalidated_at;
-    if (invalidatedAt && decoded.iat * 1000 <= new Date(invalidatedAt).getTime()) {
-      return res.status(401).json({ code: 'TOKEN_INVALIDATED', error: 'Session expired. Please log in again.' });
-    }
-    if (!isAdmin) {
-      const maintenanceResult = await query(
-        'SELECT setting_value FROM system_settings WHERE setting_key = ?',
-        ['maintenance_mode']
-      );
-      if (maintenanceResult.rows[0]?.setting_value === 'true') {
-        return res.status(503).json({ code: 'MAINTENANCE_MODE', error: 'Maintenance mode is active. Please try again later.' });
-      }
-    }
-    const isTournamentModerator = await checkUserIsForumModerator(decoded.username);
+    const isTournamentModerator = await checkUserIsForumModerator(session.username);
 
     // Return user info
     res.json({
       valid: true,
-      userId: decoded.userId,
+      userId: session.userId,
       username: phpbbUser.username,
-      nickname: tournamentUserResult.rows[0]?.nickname || phpbbUser.username,
-      isAdmin: isAdmin,
-      isStreamer,
+      nickname: phpbbUser.username,
+      isAdmin: session.isAdmin,
+      isStreamer: session.isStreamer,
       isTournamentModerator,
     });
 

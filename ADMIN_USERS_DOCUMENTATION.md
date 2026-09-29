@@ -21,7 +21,7 @@ Visibility of buttons in the frontend is not sufficient authorization. Every pro
 
 ## Operational behavior
 
-Blocking prevents the target account from normal use. Unlocking resets account lockout state and clears the blocked flag. Deleting removes the corresponding `users_extension` record and is irreversible from this interface.
+Blocking prevents the target account from logging in and ends its existing sessions immediately: authenticated requests from that account are rejected, and public pages treat it as anonymous. After unblocking, the user must log in again. Unlocking resets account lockout state and clears the blocked flag. Deleting removes the corresponding `users_extension` record and is irreversible from this interface.
 
 Global statistics recalculation replays the supported match history and rebuilds derived player and balance statistics. Maintenance mode prevents non-admin users from logging in while it is enabled; administrators use the reason field to document the operational event.
 

@@ -233,7 +233,13 @@ router.post('/users/:id/block', moderatorOrAdminMiddleware, async (req: AuthRequ
     if (target.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     if (target.rows[0].is_admin) return res.status(403).json({ error: 'Cannot block an admin user' });
 
-    await query(`UPDATE users_extension SET is_blocked = 1 WHERE id = ?`, [id]);
+    // Revoke existing sessions as well: tokens issued before this moment fail the
+    // `token_invalidated_at` check even if the blocked-account check were bypassed.
+    // Unblocking needs no counterpart, because a new login issues a newer token.
+    await query(
+      `UPDATE users_extension SET is_blocked = 1, token_invalidated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      [id]
+    );
 
     await logAuditEvent({
       event_type: 'USER_BLOCKED',

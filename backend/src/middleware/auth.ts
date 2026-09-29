@@ -8,6 +8,101 @@ export interface AuthRequest extends Request {
   username?: string;
 }
 
+/** Reason a bearer token does not grant an authenticated session. */
+export interface SessionRejection {
+  status: 401 | 503;
+  body: { error: string; code?: string };
+}
+
+/** Authenticated session data resolved from a valid bearer token. */
+export interface ResolvedSession {
+  userId: string;
+  username: string;
+  isAdmin: boolean;
+  isStreamer: boolean;
+}
+
+/**
+ * Resolve a bearer token into a session, applying every account-level rule.
+ *
+ * This is the single source of truth for session validity. `authMiddleware`,
+ * `optionalAuthMiddleware`, and `GET /auth/validate-token` all use it, so a
+ * rule added here (such as the blocked-account check) cannot be missed by one
+ * entry point while the others enforce it.
+ *
+ * Rules, in order:
+ * 1. The JWT signature and expiry must be valid.
+ * 2. The user must still exist in `users_extension`.
+ * 3. The account must not be administratively blocked. This is checked before
+ *    revocation on purpose: blocking also sets `token_invalidated_at`, and the
+ *    client should receive the more specific `ACCOUNT_BLOCKED` code.
+ * 4. The token must have been issued after `token_invalidated_at` (set by
+ *    maintenance mode and by blocking). `iat` has one-second granularity, so a
+ *    token issued in the same second as the invalidation is treated as revoked.
+ * 5. During maintenance mode only administrators keep their sessions.
+ *
+ * @returns the session, or the HTTP status and body the caller should send.
+ */
+export const resolveSession = async (
+  token: string
+): Promise<{ session: ResolvedSession } | { rejection: SessionRejection }> => {
+  let decoded: any;
+  try {
+    decoded = verifyToken(token);
+  } catch {
+    return { rejection: { status: 401, body: { error: 'Invalid token' } } };
+  }
+
+  const userResult = await query(
+    'SELECT is_admin, is_blocked, is_streamer, token_invalidated_at FROM users_extension WHERE id = ?',
+    [decoded.userId]
+  );
+  const user = userResult.rows[0];
+  if (!user) return { rejection: { status: 401, body: { error: 'User not found' } } };
+
+  if (user.is_blocked) {
+    return {
+      rejection: {
+        status: 401,
+        body: { code: 'ACCOUNT_BLOCKED', error: 'Your account has been blocked by an administrator.' },
+      },
+    };
+  }
+
+  if (user.token_invalidated_at && decoded.iat * 1000 <= new Date(user.token_invalidated_at).getTime()) {
+    return {
+      rejection: {
+        status: 401,
+        body: { code: 'TOKEN_INVALIDATED', error: 'Your session has expired. Please log in again.' },
+      },
+    };
+  }
+
+  if (!user.is_admin) {
+    const maintenanceResult = await query(
+      'SELECT setting_value FROM system_settings WHERE setting_key = ?',
+      ['maintenance_mode']
+    );
+    if (maintenanceResult.rows[0]?.setting_value === 'true') {
+      return {
+        rejection: {
+          status: 503,
+          body: { code: 'MAINTENANCE_MODE', error: 'Maintenance mode is active. Please try again later.' },
+        },
+      };
+    }
+  }
+
+  return {
+    session: {
+      userId: decoded.userId,
+      username: decoded.username,
+      isAdmin: Boolean(user.is_admin),
+      isStreamer: Boolean(user.is_streamer),
+    },
+  };
+};
+
 export const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
   const token = req.headers.authorization?.split(' ')[1];
 
@@ -16,50 +111,39 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
   }
 
   try {
-    const decoded = verifyToken(token);
-    const userResult = await query(
-      'SELECT is_admin, token_invalidated_at FROM users_extension WHERE id = ?',
-      [decoded.userId]
-    );
-    const user = userResult.rows[0];
-    if (!user) return res.status(401).json({ error: 'User not found' });
-
-    // Maintenance invalidates non-admin sessions both immediately and after it ends.
-    if (user.token_invalidated_at && decoded.iat * 1000 <= new Date(user.token_invalidated_at).getTime()) {
-      return res.status(401).json({ code: 'TOKEN_INVALIDATED', error: 'Your session has expired. Please log in again.' });
+    const result = await resolveSession(token);
+    if ('rejection' in result) {
+      return res.status(result.rejection.status).json(result.rejection.body);
     }
-
-    if (!user.is_admin) {
-      const maintenanceResult = await query(
-        'SELECT setting_value FROM system_settings WHERE setting_key = ?',
-        ['maintenance_mode']
-      );
-      if (maintenanceResult.rows[0]?.setting_value === 'true') {
-        return res.status(503).json({
-          code: 'MAINTENANCE_MODE',
-          error: 'Maintenance mode is active. Please try again later.',
-        });
-      }
-    }
-    req.userId = decoded.userId;
-    req.username = decoded.username;
+    req.userId = result.session.userId;
+    req.username = result.session.username;
     next();
   } catch (error) {
     res.status(401).json({ error: 'Invalid token' });
   }
 };
 
-// Optional auth middleware - extracts user ID if token is provided, but doesn't fail if missing.
-export const optionalAuthMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
+/**
+ * Optional authentication for public endpoints that personalize their output.
+ *
+ * A request with a token that `resolveSession` would reject (invalid, revoked,
+ * blocked account, or maintenance for non-admins) is served as anonymous
+ * instead of failing: the endpoint is public, so the caller must still get the
+ * anonymous response rather than a 401/503. Only a fully valid session sets
+ * `req.userId`.
+ */
+export const optionalAuthMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
   const token = req.headers.authorization?.split(' ')[1];
 
   if (token) {
     try {
-      const decoded = verifyToken(token);
-      req.userId = decoded.userId;
-      req.username = decoded.username;
+      const result = await resolveSession(token);
+      if ('session' in result) {
+        req.userId = result.session.userId;
+        req.username = result.session.username;
+      }
     } catch (error) {
-      // Token is invalid, but we continue anyway
+      // A lookup failure also degrades to an anonymous request.
     }
   }
 
