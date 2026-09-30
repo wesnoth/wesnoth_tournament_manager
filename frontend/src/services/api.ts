@@ -304,7 +304,6 @@ export const adminService = {
     api.post('/admin/toggle-maintenance', { enable, reason }),
   getMaintenanceLogs: (limit?: number) =>
     api.get('/admin/maintenance-logs', { params: limit ? { limit } : {} }),
-  deleteUser: (id: string) => api.delete(`/admin/users/${id}`),
   recalculateAllStats: () => api.post('/admin/recalculate-all-stats'),
   getRecalculateAllStatsStatus: (jobId: string) => api.get(`/admin/recalculate-all-stats/${jobId}`),
   

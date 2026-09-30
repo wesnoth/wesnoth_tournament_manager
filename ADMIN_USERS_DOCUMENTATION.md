@@ -12,9 +12,9 @@ The user list supports nickname and status filtering, pagination, navigation to 
 
 The page is available to authenticated site administrators and tournament moderators through the shared `MainLayout`. The backend remains the authorization boundary:
 
-- Administrators can view users, block or unblock accounts, grant or revoke the site-admin role, and delete accounts.
+- Administrators can view users, block or unblock accounts, and grant or revoke the site-admin role.
 - Tournament moderators can view users, block or unblock non-admin accounts, and clear the temporary lockout of non-admin accounts.
-- Only administrators can recalculate global statistics, toggle maintenance mode, change administrator roles, or delete accounts.
+- Only administrators can recalculate global statistics, toggle maintenance mode, or change administrator roles.
 - Moderators cannot block, unblock, or clear the temporary lockout of administrator accounts.
 
 Visibility of buttons in the frontend is not sufficient authorization. Every protected endpoint validates the caller role independently, and administrative mutations are audit-sensitive operations.
@@ -25,7 +25,7 @@ Blocking prevents the target account from logging in and ends its existing sessi
 
 Five failed logins without a successful one in between lock an account temporarily (15 minutes), whatever the source address. This is an accepted trade-off: someone who knows a nickname can lock that player out, so the page marks temporarily locked accounts and lets moderators and administrators clear the lockout when the player asks for help (for example on Discord). Clearing a lockout never changes the blocked flag, and it is audited as `ACCOUNT_UNLOCKED`.
 
-Deleting removes the corresponding `users_extension` record and is irreversible from this interface.
+Accounts are not deleted from this page: tournament accounts are created automatically from the Wesnoth forum on first login, so deleting one would only discard its history until the next login recreates it. Use blocking to deny access.
 
 Global statistics recalculation replays the supported match history and rebuilds derived player and balance statistics. Maintenance mode prevents non-admin users from logging in while it is enabled; administrators use the reason field to document the operational event.
 

@@ -204,10 +204,6 @@ const AdminUsers: React.FC = () => {
           await adminService.removeStreamer(selectedUser.id);
           setMessage(t('admin.streamer_removed', { nickname: selectedUser.nickname }));
           break;
-        case 'delete':
-          await adminService.deleteUser(selectedUser.id);
-          setMessage(t('admin.user_deleted', { nickname: selectedUser.nickname }));
-          break;
       }
 
       setShowModal(false);
@@ -227,10 +223,6 @@ const AdminUsers: React.FC = () => {
     setSelectedUser(user);
     setActionType(action);
     setShowModal(true);
-  };
-
-  const handleConfirmDelete = (user: ManagedUser) => {
-    handleAction(user, 'delete');
   };
 
   const handleRecalculateAllStats = async () => {
@@ -516,12 +508,6 @@ const AdminUsers: React.FC = () => {
                               {t('admin.make_streamer')}
                             </button>
                           )}
-                          <button
-                            className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
-                            onClick={() => handleConfirmDelete(user)}
-                          >
-                            {t('btn_delete')}
-                          </button>
                         </>
                       )}
                     </div>
@@ -580,7 +566,6 @@ const AdminUsers: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div data-help-id="region-admin-role-confirmation" className="bg-white rounded-lg shadow-lg p-6 max-w-sm">
             <h3 className="text-lg font-semibold text-gray-800 mb-4">
-              {actionType === 'delete' && t('admin.confirm_delete_title')}
               {actionType === 'block' && t('admin.confirm_block_title')}
               {actionType === 'unblock' && t('admin.confirm_unblock_title', 'Unblock User')}
               {actionType === 'clearLockout' && t('admin.confirm_clear_lockout_title')}
@@ -589,7 +574,6 @@ const AdminUsers: React.FC = () => {
               {(actionType === 'makeStreamer' || actionType === 'removeStreamer') && t('admin.confirm_streamer_title')}
             </h3>
             <p className="text-gray-700 mb-6">
-              {actionType === 'delete' && t('admin.confirm_delete', { nickname: selectedUser.nickname })}
               {actionType === 'block' && t('admin.confirm_block', { nickname: selectedUser.nickname })}
               {actionType === 'unblock' && t('admin.confirm_unblock', { nickname: selectedUser.nickname })}
               {actionType === 'clearLockout' && t('admin.confirm_clear_lockout', { nickname: selectedUser.nickname })}

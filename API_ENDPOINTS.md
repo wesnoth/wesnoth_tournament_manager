@@ -204,9 +204,9 @@ P2P proposal creation, counter-proposal, and update operations share a rolling p
 - `[GET] /api/admin/users/all` — Private (admin + moderator) — List users with management status and public player fields.
 - `[POST] /api/admin/users/:id/block` — Private (admin + moderator) — Block user (`is_blocked = 1`). Moderators cannot block admin users.
 - `[POST] /api/admin/users/:id/unlock` — Private (admin + moderator) — Reset failed login attempts and unblock user.
+- `[POST] /api/admin/users/:id/clear-lockout` — Private (admin + moderator; admin targets require admin) — Clear only the temporary failed-login lockout; never changes `is_blocked`.
 - `[POST] /api/admin/users/:id/make-admin` — Private (admin) — Grant site admin role (`is_admin = 1`).
 - `[POST] /api/admin/users/:id/remove-admin` — Private (admin) — Revoke site admin role.
-- `[DELETE] /api/admin/users/:id` — Private (admin) — Delete user account from `users_extension`.
 
 ### Maintenance Mode
 - `[GET] /api/admin/maintenance-status` — Private (admin) — Get current maintenance mode status.

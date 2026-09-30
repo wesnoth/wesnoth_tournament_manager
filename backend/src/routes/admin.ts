@@ -399,17 +399,6 @@ router.post('/users/:id/remove-streamer', authMiddleware, adminMiddleware, async
   }
 });
 
-// Delete user
-router.delete('/users/:id', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
-  try {
-    const { id } = req.params;
-    await query('DELETE FROM users_extension WHERE id = ?', [id]);
-    res.json({ message: 'User deleted' });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to delete user' });
-  }
-});
-
 /**
  * DEBUG ENDPOINT: Faction Map Statistics Diagnosis
  */
