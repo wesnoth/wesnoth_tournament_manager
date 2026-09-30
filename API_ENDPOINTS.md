@@ -232,7 +232,6 @@ P2P proposal creation, counter-proposal, and update operations share a rolling p
 ### Statistics & Debug
 - `[POST] /api/admin/recalculate-all-stats` — Private (admin) — Recalculate all player statistics.
 - `[POST] /api/admin/recalculate-snapshots` — Private (admin) — Clear and rebuild the complete cumulative balance snapshot history; maintenance/recovery operation.
-- `[GET] /api/admin/debug/faction-map-stats` — Private (admin) — Debug: raw faction/map stats data.
 - `[GET] /api/admin/player-of-month` — Private (admin) — Get player of the month data.
 - `[POST] /api/admin/calculate-player-of-month` — Private (admin) — Recalculate player of the month.
 
