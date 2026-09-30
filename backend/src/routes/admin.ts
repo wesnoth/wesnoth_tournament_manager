@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { pool, query } from '../config/database.js';
 import { queryPhpbb } from '../config/phpbbDatabase.js';
@@ -307,39 +307,47 @@ router.post('/users/:id/block', moderatorOrAdminMiddleware, async (req: AuthRequ
   }
 });
 
-// Make user admin
-router.post('/users/:id/make-admin', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
+/**
+ * Grant or revoke the site-admin role and record who did it.
+ *
+ * The target is looked up first so a missing user is a 404 without a write,
+ * and the audit entry carries the previous value: a request that does not
+ * change the role is still recorded, because the attempt itself matters when
+ * reviewing privilege changes. `adminMiddleware` re-reads `is_admin` on every
+ * request, so a revocation takes effect immediately without ending sessions.
+ */
+async function setSiteAdminRole(req: AuthRequest, res: Response, grant: boolean) {
   try {
-    const { id } = req.params;
-    await query(`UPDATE users_extension SET is_admin = 1 WHERE id = ?`, [id]);
-    const result = await query(`SELECT id, nickname, is_blocked, is_admin FROM users_extension WHERE id = ?`, [id]);
-
-    if (result.rows.length === 0) {
+    const target = await query('SELECT id, nickname, is_admin FROM users_extension WHERE id = ?', [req.params.id]);
+    if (target.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
+    const user = target.rows[0];
 
-    res.json(result.rows[0]);
+    await query('UPDATE users_extension SET is_admin = ? WHERE id = ?', [grant ? 1 : 0, user.id]);
+
+    await logAuditEvent({
+      event_type: grant ? 'ADMIN_GRANTED' : 'ADMIN_REVOKED',
+      user_id: req.userId,
+      username: req.username,
+      ip_address: getUserIP(req),
+      user_agent: getUserAgent(req),
+      details: { target_user_id: user.id, target_nickname: user.nickname, previous_is_admin: !!user.is_admin },
+    });
+
+    const result = await query('SELECT id, nickname, is_blocked, is_admin FROM users_extension WHERE id = ?', [user.id]);
+    return res.json(result.rows[0]);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to make user admin' });
+    console.error(grant ? 'Make admin error:' : 'Remove admin error:', error);
+    return res.status(500).json({ error: grant ? 'Failed to make user admin' : 'Failed to remove admin' });
   }
-});
+}
+
+// Make user admin
+router.post('/users/:id/make-admin', authMiddleware, adminMiddleware, (req: AuthRequest, res) => setSiteAdminRole(req, res, true));
 
 // Remove admin
-router.post('/users/:id/remove-admin', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
-  try {
-    const { id } = req.params;
-    await query(`UPDATE users_extension SET is_admin = 0 WHERE id = ?`, [id]);
-    const result = await query(`SELECT id, nickname, is_blocked, is_admin FROM users_extension WHERE id = ?`, [id]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    res.json(result.rows[0]);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to remove admin' });
-  }
-});
+router.post('/users/:id/remove-admin', authMiddleware, adminMiddleware, (req: AuthRequest, res) => setSiteAdminRole(req, res, false));
 
 // Grant streamer capability. This is global and does not alter admin or moderator status.
 router.post('/users/:id/make-streamer', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
