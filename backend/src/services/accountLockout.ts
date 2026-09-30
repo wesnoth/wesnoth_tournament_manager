@@ -104,6 +104,23 @@ export async function unlockAccount(userId: string): Promise<void> {
 }
 
 /**
+ * Seconds left on a `locked_until` value, or 0 when there is no active lockout.
+ *
+ * The comparison is done in JavaScript, not with SQL `NOW()`, because
+ * `recordFailedLoginAttempt` writes `locked_until` from a JavaScript `Date`
+ * through the driver; comparing in the same layer keeps both sides in the same
+ * timezone interpretation. An expired value is reported as 0 even though the
+ * column is only cleared lazily on the next login attempt.
+ */
+export function lockoutRemainingSeconds(lockedUntil: Date | string | null | undefined): number {
+  if (!lockedUntil) {
+    return 0;
+  }
+  const remaining = Math.floor((new Date(lockedUntil).getTime() - Date.now()) / 1000);
+  return Math.max(0, remaining);
+}
+
+/**
  * Get remaining lockout time in seconds
  */
 export async function getRemainingLockoutTime(userId: string): Promise<number> {
@@ -117,11 +134,7 @@ export async function getRemainingLockoutTime(userId: string): Promise<number> {
       return 0;
     }
 
-    const lockedUntil = new Date(result.rows[0].locked_until);
-    const now = new Date();
-    const remaining = Math.floor((lockedUntil.getTime() - now.getTime()) / 1000);
-
-    return Math.max(0, remaining);
+    return lockoutRemainingSeconds(result.rows[0].locked_until);
   } catch (error) {
     console.error('Error getting remaining lockout time:', error);
     return 0;

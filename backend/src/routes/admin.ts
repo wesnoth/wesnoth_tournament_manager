@@ -4,7 +4,7 @@ import { pool, query } from '../config/database.js';
 import { queryPhpbb } from '../config/phpbbDatabase.js';
 import { adminMiddleware, authMiddleware, moderatorOrAdminMiddleware, AuthRequest } from '../middleware/auth.js';
 import { calculateNewRating, calculateTrend } from '../utils/elo.js';
-import { unlockAccount } from '../services/accountLockout.js';
+import { unlockAccount, lockoutRemainingSeconds } from '../services/accountLockout.js';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
 import { performGlobalStatsRecalculation } from './matches.js';
 import {
@@ -26,7 +26,7 @@ const REPLACED_PLAYERS_TEAM_ID = '00000000-0000-0000-0000-000000000001';
 router.get('/users/all', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
   try {
     const result = await query(
-      `SELECT id, nickname, language, discord_id, is_admin, is_streamer, is_active, is_blocked, is_rated, elo_rating, enable_ranked, matches_played, total_wins, total_losses, created_at, updated_at
+      `SELECT id, nickname, language, discord_id, is_admin, is_streamer, is_active, is_blocked, is_rated, elo_rating, enable_ranked, matches_played, total_wins, total_losses, created_at, updated_at, locked_until
        FROM users_extension 
        WHERE id != '00000000-0000-0000-0000-000000000000'
        ORDER BY created_at DESC`
@@ -50,9 +50,13 @@ router.get('/users/all', moderatorOrAdminMiddleware, async (req: AuthRequest, re
       }
     }
 
-    const users = result.rows.map((u: any) => ({
+    // Expose the temporary failed-login lockout as remaining seconds instead of
+    // the raw timestamp, so the client never compares server and browser clocks
+    // or mistakes an expired (lazily cleared) `locked_until` for an active lock.
+    const users = result.rows.map(({ locked_until, ...u }: any) => ({
       ...u,
       is_moderator: !u.is_admin && moderatorNicknames.has((u.nickname || '').toLowerCase()),
+      lockout_remaining_seconds: lockoutRemainingSeconds(locked_until),
     }));
 
     res.json(users);
@@ -104,6 +108,53 @@ router.post('/users/:id/unlock', moderatorOrAdminMiddleware, async (req: AuthReq
   } catch (error) {
     console.error('Unlock account error:', error);
     res.status(500).json({ error: 'Failed to unlock account' });
+  }
+});
+
+/**
+ * Clear only the temporary failed-login lockout (`failed_login_attempts` and
+ * `locked_until`) so a player locked out by someone guessing their password can
+ * log in again before the lockout expires.
+ *
+ * Unlike `/users/:id/unlock`, this never touches `is_blocked`: a moderator
+ * releasing a lockout must not silently lift a block set by an administrator.
+ * Moderators may clear lockouts on regular accounts; clearing an administrator
+ * account's lockout requires an administrator.
+ */
+router.post('/users/:id/clear-lockout', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+
+    const target = await query('SELECT nickname, is_admin, locked_until FROM users_extension WHERE id = ?', [id]);
+    if (target.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const user = target.rows[0];
+
+    if (user.is_admin) {
+      // moderatorOrAdminMiddleware also lets forum moderators through, so the
+      // administrator requirement for admin targets is checked here.
+      const requester = await query('SELECT is_admin FROM users_extension WHERE id = ?', [req.userId]);
+      if (!requester.rows[0]?.is_admin) {
+        return res.status(403).json({ error: 'Only administrators can clear the lockout of an admin account' });
+      }
+    }
+
+    const remainingSeconds = lockoutRemainingSeconds(user.locked_until);
+    await unlockAccount(id);
+
+    await logAuditEvent({
+      event_type: 'ACCOUNT_UNLOCKED',
+      user_id: req.userId,
+      ip_address: getUserIP(req),
+      user_agent: getUserAgent(req),
+      details: { target_user_id: id, target_nickname: user.nickname, remaining_seconds: remainingSeconds }
+    });
+
+    res.json({ message: 'Account lockout cleared' });
+  } catch (error) {
+    console.error('Clear lockout error:', error);
+    res.status(500).json({ error: 'Failed to clear account lockout' });
   }
 });
 

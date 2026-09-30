@@ -292,6 +292,7 @@ export const adminService = {
   getAllUsers: () => api.get('/admin/users/all'),
   blockUser: (id: string) => api.post(`/admin/users/${id}/block`),
   unlockAccount: (id: string) => api.post(`/admin/users/${id}/unlock`),
+  clearLockout: (id: string) => api.post(`/admin/users/${id}/clear-lockout`),
   makeAdmin: (id: string) => api.post(`/admin/users/${id}/make-admin`),
   removeAdmin: (id: string) => api.post(`/admin/users/${id}/remove-admin`),
   makeStreamer: (id: string) => api.post(`/admin/users/${id}/make-streamer`),

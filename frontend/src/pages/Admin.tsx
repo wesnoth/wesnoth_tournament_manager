@@ -19,7 +19,12 @@ interface ManagedUser {
   is_streamer?: boolean;
   is_moderator?: boolean;
   enable_ranked?: boolean;
+  /** Seconds left on the temporary failed-login lockout; 0 when not locked. */
+  lockout_remaining_seconds?: number;
 }
+
+/** A temporary lockout is independent of the admin block flag; both can coexist. */
+const isTemporarilyLocked = (user: ManagedUser) => (user.lockout_remaining_seconds ?? 0) > 0;
 
 const AdminUsers: React.FC = () => {
   const { t } = useTranslation();
@@ -93,6 +98,8 @@ const AdminUsers: React.FC = () => {
     // Filter by status
     if (statusValue === 'blocked') {
       filtered = filtered.filter((user) => !!user.is_blocked);
+    } else if (statusValue === 'locked') {
+      filtered = filtered.filter(isTemporarilyLocked);
     } else if (statusValue === 'active') {
       filtered = filtered.filter((user) => !user.is_blocked && !!user.is_active);
     } else if (statusValue === 'inactive') {
@@ -176,6 +183,10 @@ const AdminUsers: React.FC = () => {
         case 'unblock':
           await adminService.unlockAccount(selectedUser.id);
           setMessage(t('admin.user_unblocked', { nickname: selectedUser.nickname }));
+          break;
+        case 'clearLockout':
+          await adminService.clearLockout(selectedUser.id);
+          setMessage(t('admin.lockout_cleared', { nickname: selectedUser.nickname }));
           break;
         case 'makeAdmin':
           await adminService.makeAdmin(selectedUser.id);
@@ -312,6 +323,7 @@ const AdminUsers: React.FC = () => {
               className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
             />
             <select 
+              data-help-id="field-admin-users-status"
               value={userStatusFilter} 
               onChange={(e) => handleStatusFilterChange(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
@@ -320,6 +332,7 @@ const AdminUsers: React.FC = () => {
               <option value="active">{t('admin.filter_active', 'Active')}</option>
               <option value="inactive">{t('status_inactive')}</option>
               <option value="blocked">{t('admin.filter_blocked', 'Blocked')}</option>
+              <option value="locked">{t('admin.filter_locked', 'Temporarily locked')}</option>
             </select>
             <button
               data-help-id="action-refresh-admin-users"
@@ -407,6 +420,13 @@ const AdminUsers: React.FC = () => {
                     }`}>
                       {user.is_blocked ? t('status_blocked') : user.is_active ? t('status_active') : t('status_inactive')}
                     </span>
+                    {isTemporarilyLocked(user) && (
+                      <span className="ml-1 px-2 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-800">
+                        {t('status_locked_temporarily', {
+                          minutes: Math.ceil((user.lockout_remaining_seconds ?? 0) / 60),
+                        })}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
@@ -448,6 +468,16 @@ const AdminUsers: React.FC = () => {
                             {t('btn_block')}
                           </button>
                         )
+                      )}
+                      {/* Clearing a temporary lockout on an admin account is admin-only; the backend enforces the same rule. */}
+                      {isTemporarilyLocked(user) && (isAdmin || !user.is_admin) && (
+                        <button
+                          data-help-id="action-clear-lockout"
+                          className="px-2 py-1 text-xs bg-amber-500 text-white rounded hover:bg-amber-600"
+                          onClick={() => handleAction(user, 'clearLockout')}
+                        >
+                          {t('btn_clear_lockout')}
+                        </button>
                       )}
                       {/* Admin-only actions */}
                       {isAdmin && (
@@ -553,6 +583,7 @@ const AdminUsers: React.FC = () => {
               {actionType === 'delete' && t('admin.confirm_delete_title')}
               {actionType === 'block' && t('admin.confirm_block_title')}
               {actionType === 'unblock' && t('admin.confirm_unblock_title', 'Unblock User')}
+              {actionType === 'clearLockout' && t('admin.confirm_clear_lockout_title')}
               {actionType === 'makeAdmin' && t('admin.confirm_action_title')}
               {actionType === 'removeAdmin' && t('admin.confirm_action_title')}
               {(actionType === 'makeStreamer' || actionType === 'removeStreamer') && t('admin.confirm_streamer_title')}
@@ -561,6 +592,7 @@ const AdminUsers: React.FC = () => {
               {actionType === 'delete' && t('admin.confirm_delete', { nickname: selectedUser.nickname })}
               {actionType === 'block' && t('admin.confirm_block', { nickname: selectedUser.nickname })}
               {actionType === 'unblock' && t('admin.confirm_unblock', { nickname: selectedUser.nickname })}
+              {actionType === 'clearLockout' && t('admin.confirm_clear_lockout', { nickname: selectedUser.nickname })}
               {actionType === 'makeAdmin' && t('admin.confirm_make_admin', { nickname: selectedUser.nickname })}
               {actionType === 'removeAdmin' && t('admin.confirm_remove_admin', { nickname: selectedUser.nickname })}
               {actionType === 'makeStreamer' && t('admin.confirm_make_streamer', { nickname: selectedUser.nickname })}

@@ -13,15 +13,19 @@ The user list supports nickname and status filtering, pagination, navigation to 
 The page is available to authenticated site administrators and tournament moderators through the shared `MainLayout`. The backend remains the authorization boundary:
 
 - Administrators can view users, block or unblock accounts, grant or revoke the site-admin role, and delete accounts.
-- Tournament moderators can view users and block or unblock non-admin accounts.
+- Tournament moderators can view users, block or unblock non-admin accounts, and clear the temporary lockout of non-admin accounts.
 - Only administrators can recalculate global statistics, toggle maintenance mode, change administrator roles, or delete accounts.
-- Moderators cannot block or unblock administrator accounts.
+- Moderators cannot block, unblock, or clear the temporary lockout of administrator accounts.
 
 Visibility of buttons in the frontend is not sufficient authorization. Every protected endpoint validates the caller role independently, and administrative mutations are audit-sensitive operations.
 
 ## Operational behavior
 
-Blocking prevents the target account from logging in and ends its existing sessions immediately: authenticated requests from that account are rejected, and public pages treat it as anonymous. After unblocking, the user must log in again. Unlocking resets account lockout state and clears the blocked flag. Deleting removes the corresponding `users_extension` record and is irreversible from this interface.
+Blocking prevents the target account from logging in and ends its existing sessions immediately: authenticated requests from that account are rejected, and public pages treat it as anonymous. After unblocking, the user must log in again. Unblocking also resets the temporary lockout state.
+
+Five failed logins without a successful one in between lock an account temporarily (15 minutes), whatever the source address. This is an accepted trade-off: someone who knows a nickname can lock that player out, so the page marks temporarily locked accounts and lets moderators and administrators clear the lockout when the player asks for help (for example on Discord). Clearing a lockout never changes the blocked flag, and it is audited as `ACCOUNT_UNLOCKED`.
+
+Deleting removes the corresponding `users_extension` record and is irreversible from this interface.
 
 Global statistics recalculation replays the supported match history and rebuilds derived player and balance statistics. Maintenance mode prevents non-admin users from logging in while it is enabled; administrators use the reason field to document the operational event.
 
