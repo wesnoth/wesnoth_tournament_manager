@@ -68,41 +68,56 @@ async function initializeMigrationsTable(): Promise<void> {
 }
 
 /**
- * Get list of already applied migrations
+ * Get list of already applied migrations.
+ *
+ * Failures are rethrown, never mapped to an empty list: an empty history makes
+ * every migration file look pending, so a transient read error would re-apply
+ * already-applied (autocommitted, possibly non-idempotent) DDL and data changes.
+ * An unexpected result shape is treated the same way.
+ *
+ * @throws When the history cannot be read or is not a row array.
  */
 async function getAppliedMigrations(): Promise<string[]> {
+  let results: unknown;
   try {
-    const results = await queryTournament(
-      'SELECT name FROM migrations ORDER BY executed_at'
-    ) as any;
-    // Handle both { rows: [...] } and direct array formats
-    const rows = results?.rows || results || [];
-    return rows.map((row: any) => row.name);
+    results = await queryTournament('SELECT name FROM migrations ORDER BY executed_at');
   } catch (error) {
-    console.error('❌ Error fetching applied migrations:', error);
-    return [];
+    // Rethrow the original error so startup reports the real cause.
+    console.error('❌ Cannot read the migration history; refusing to guess which migrations are applied');
+    throw error;
   }
+  if (!Array.isArray(results)) {
+    throw new Error('Unexpected migration history result; refusing to guess which migrations are applied');
+  }
+  return results.map((row: any) => row.name);
 }
 
 /**
- * Get list of pending SQL migration files
+ * List every SQL migration file on disk, sorted chronologically by name.
+ * The caller subtracts the applied history to obtain the pending ones.
+ *
+ * A read failure is rethrown: an unreadable directory must not be reported as
+ * "database is up to date", which would hide a broken deployment.
+ *
+ * @throws When the migrations directory cannot be read.
  */
-function getPendingMigrationFiles(): string[] {
+function listMigrationFiles(): string[] {
+  let files: string[];
   try {
-    const files = fs.readdirSync(MIGRATIONS_DIR);
-    
-    // Filter SQL files that look like migrations (start with date or have .sql extension)
-    const sqlFiles = files.filter(
-      (file) =>
-        file.endsWith('.sql') &&
-        (file.match(/^\d{8}/) || file.match(/^\d{4}-\d{2}-\d{2}/))
-    );
-    
-    return sqlFiles.sort(); // Sort alphabetically/chronologically
+    files = fs.readdirSync(MIGRATIONS_DIR);
   } catch (error) {
-    console.error('❌ Error reading migrations directory:', error);
-    return [];
+    console.error(`❌ Cannot read the migrations directory ${MIGRATIONS_DIR}`);
+    throw error;
   }
+
+  // Filter SQL files that look like migrations (start with date or have .sql extension)
+  const sqlFiles = files.filter(
+    (file) =>
+      file.endsWith('.sql') &&
+      (file.match(/^\d{8}/) || file.match(/^\d{4}-\d{2}-\d{2}/))
+  );
+
+  return sqlFiles.sort(); // Sort alphabetically/chronologically
 }
 
 /**
@@ -168,7 +183,7 @@ export async function runMigrations(): Promise<void> {
     console.log(`📊 Already applied: ${appliedMigrations.length} migrations\n`);
 
     // Step 3: Get pending migrations
-    const allMigrations = getPendingMigrationFiles();
+    const allMigrations = listMigrationFiles();
     const pendingMigrations = allMigrations.filter(
       (file) => !appliedMigrations.includes(file)
     );
