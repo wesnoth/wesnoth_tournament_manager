@@ -15,6 +15,7 @@ import {
 import { getSchedulingConflictsForUsers } from '../services/schedulingConflictService.js';
 import { buildNotificationMessage, formatTimeRangesForDiscordByTimezone, groupSlotsIntoRanges } from '../utils/slotGrouping.js';
 import { sendUserActionRateLimitError } from '../utils/userActionRateLimitResponse.js';
+import { clientErrorMessage } from '../utils/clientError.js';
 import { cancelWaiting, getWaitingForUser, listWaitingPlayers, publishWaiting } from '../services/p2pWaitingLobbyService.js';
 
 const router = Router();
@@ -108,7 +109,7 @@ router.post('/waiting', authMiddleware, async (req: AuthRequest, res: Response) 
       { name: 'Available until', value: `${expiry} UTC`, inline: true },
     ]);
     return res.json({ success: true, waiting });
-  } catch (error) { return res.status(400).json({ error: (error as Error).message || 'Failed to publish waiting status' }); }
+  } catch (error) { return res.status(400).json({ error: clientErrorMessage(error, 'Failed to publish waiting status') }); }
 });
 
 router.delete('/waiting', authMiddleware, async (req: AuthRequest, res: Response) => {
@@ -219,7 +220,7 @@ router.post('/proposals', authMiddleware, async (req: AuthRequest, res: Response
   } catch (error) {
     console.error('❌ [CHALLENGES] Error creating proposal:', error);
     if (sendUserActionRateLimitError(req, res, error)) return;
-    return res.status(400).json({ error: (error as Error).message || 'Failed to create challenge proposal' });
+    return res.status(400).json({ error: clientErrorMessage(error, 'Failed to create challenge proposal') });
   }
 });
 
@@ -294,7 +295,7 @@ router.post('/proposals/:proposalId/confirm-slots', authMiddleware, async (req: 
     return res.json(result);
   } catch (error) {
     console.error('❌ [CHALLENGES] Error confirming proposal:', error);
-    const message = (error as Error).message || 'Failed to confirm challenge proposal';
+    const message = clientErrorMessage(error, 'Failed to confirm challenge proposal');
     return res.status(message.includes('already reserved') ? 409 : 400).json({ error: message });
   }
 });
@@ -351,7 +352,7 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
   } catch (error) {
     console.error('❌ [CHALLENGES] Error creating counter-proposal:', error);
     if (sendUserActionRateLimitError(req, res, error)) return;
-    return res.status(400).json({ error: (error as Error).message || 'Failed to create counter-proposal' });
+    return res.status(400).json({ error: clientErrorMessage(error, 'Failed to create counter-proposal') });
   }
 });
 
@@ -409,7 +410,7 @@ router.post('/proposals/:proposalId/cancel', authMiddleware, async (req: AuthReq
     return res.json({ success: true });
   } catch (error) {
     console.error('❌ [CHALLENGES] Error cancelling proposal:', error);
-    return res.status(400).json({ error: (error as Error).message || 'Failed to cancel proposal' });
+    return res.status(400).json({ error: clientErrorMessage(error, 'Failed to cancel proposal') });
   }
 });
 
@@ -481,7 +482,7 @@ router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, re
   } catch (error) {
     console.error('❌ [CHALLENGES] Error updating proposal:', error);
     if (sendUserActionRateLimitError(req, res, error)) return;
-    return res.status(400).json({ error: (error as Error).message || 'Failed to update proposal' });
+    return res.status(400).json({ error: clientErrorMessage(error, 'Failed to update proposal') });
   }
 });
 

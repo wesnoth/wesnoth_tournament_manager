@@ -184,10 +184,16 @@ app.get('/api/health', (req, res) => {
 });
 
 // Global error handler - MUST be last
+// Only client errors explicitly marked `expose` (set by http-errors, e.g. body
+// parser failures such as malformed JSON or 413) keep their message. Every
+// other error, including all 5xx, returns a generic message so SQL, paths, or
+// stack-derived text never reach the client; the full error stays in the log.
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Global error handler:', err);
-  res.status(err.status || 500).json({
-    error: err.message || 'Internal server error',
+  const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
+  const exposeMessage = status < 500 && err?.expose === true && typeof err.message === 'string';
+  res.status(status).json({
+    error: exposeMessage ? err.message : 'Internal server error',
     path: req.path,
     method: req.method,
   });

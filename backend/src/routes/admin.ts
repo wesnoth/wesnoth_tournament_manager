@@ -62,7 +62,7 @@ router.get('/users/all', moderatorOrAdminMiddleware, async (req: AuthRequest, re
     res.json(users);
   } catch (error) {
     console.error('Error fetching users:', error);
-    res.status(500).json({ error: 'Failed to fetch users', details: (error as any).message });
+    res.status(500).json({ error: 'Failed to fetch users' });
   }
 });
 
@@ -192,7 +192,7 @@ router.post('/news', authMiddleware, adminMiddleware, async (req: AuthRequest, r
     res.status(201).json({ id: createdNewsId });
   } catch (error: any) {
     console.error('News creation error:', error);
-    res.status(500).json({ error: 'Failed to create news', details: error.message });
+    res.status(500).json({ error: 'Failed to create news' });
   }
 });
 
@@ -244,7 +244,7 @@ router.put('/news/:id', authMiddleware, adminMiddleware, async (req: AuthRequest
     res.json({ message: 'News updated' });
   } catch (error: any) {
     console.error('News update error:', error);
-    res.status(500).json({ error: 'Failed to update news', details: error.message });
+    res.status(500).json({ error: 'Failed to update news' });
   }
 });
 
@@ -487,7 +487,7 @@ router.get('/debug/faction-map-stats', authMiddleware, async (req: AuthRequest, 
     res.json(summary);
   } catch (error) {
     console.error('❌ Diagnosis error:', error);
-    res.status(500).json({ error: 'Diagnosis failed', details: String(error) });
+    res.status(500).json({ error: 'Diagnosis failed' });
   }
 });
 
@@ -1638,8 +1638,7 @@ router.post('/recalculate-snapshots', authMiddleware, async (req: AuthRequest, r
   } catch (error) {
     console.error('🔴 ERROR recalculating balance event snapshots:', error);
     res.status(500).json({
-      error: 'Failed to recalculate balance event snapshots',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Failed to recalculate balance event snapshots'
     });
   }
 });
@@ -1676,8 +1675,7 @@ router.get('/player-of-month', async (req, res) => {
     console.error('❌ Error in /player-of-month:', error);
     console.error('Error stack:', error.stack);
     res.status(500).json({
-      error: 'Failed to fetch player of month',
-      details: error.message
+      error: 'Failed to fetch player of month'
     });
   }
 });
@@ -1698,8 +1696,7 @@ router.post('/calculate-player-of-month', authMiddleware, async (req: AuthReques
   } catch (error) {
     console.error('Error calculating player of month:', error);
     res.status(500).json({
-      error: 'Failed to calculate player of month',
-      details: (error as any).message
+      error: 'Failed to calculate player of month'
     });
   }
 });
@@ -2715,7 +2712,7 @@ router.get('/system-settings', authMiddleware, adminMiddleware, async (req: Auth
     res.json(result.rows || []);
   } catch (error) {
     console.error('Error fetching system settings:', error);
-    res.status(500).json({ error: 'Failed to fetch system settings', details: (error as any).message });
+    res.status(500).json({ error: 'Failed to fetch system settings' });
   }
 });
 
@@ -2778,7 +2775,7 @@ router.put('/system-settings/:setting_key', authMiddleware, adminMiddleware, asy
     });
   } catch (error) {
     console.error('Error updating system setting:', error);
-    res.status(500).json({ error: 'Failed to update system setting', details: (error as any).message });
+    res.status(500).json({ error: 'Failed to update system setting' });
   }
 });
 

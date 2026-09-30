@@ -10,6 +10,7 @@
 
 import { Router, Request, Response } from 'express';
 import { AuthRequest, moderatorOrAdminMiddleware } from '../middleware/auth.js';
+import { clientErrorMessage } from '../utils/clientError.js';
 import multer from 'multer';
 import * as wikiAdminService from '../services/wikiAdminService.js';
 import * as wikiExportImportService from '../services/wikiExportImportService.js';
@@ -38,7 +39,7 @@ router.post('/upload-image', moderatorOrAdminMiddleware, upload.single('image'),
     const result = await wikiAdminService.uploadImage(req.file, req.userId || null);
     res.status(201).json(result);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
+    const msg = clientErrorMessage(error, 'Wiki request failed', `[WIKI ADMIN] ${req.method} ${req.path}`);
     res.status(400).json({ error: msg });
   }
 });
@@ -52,7 +53,7 @@ router.get('/images', moderatorOrAdminMiddleware, async (req: AuthRequest, res: 
     const images = await wikiAdminService.getAllImages();
     res.json(images);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
+    const msg = clientErrorMessage(error, 'Wiki request failed', `[WIKI ADMIN] ${req.method} ${req.path}`);
     res.status(500).json({ error: msg });
   }
 });
@@ -66,7 +67,7 @@ router.get('/images/orphaned/list', moderatorOrAdminMiddleware, async (req: Auth
     const result = await wikiAdminService.detectOrphanedImages();
     res.json(result);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
+    const msg = clientErrorMessage(error, 'Wiki request failed', `[WIKI ADMIN] ${req.method} ${req.path}`);
     res.status(500).json({ error: msg });
   }
 });
@@ -87,7 +88,7 @@ router.delete('/images/orphaned/cleanup', moderatorOrAdminMiddleware, async (req
     const result = await wikiAdminService.deleteOrphanedImages(filenames);
     res.json(result);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
+    const msg = clientErrorMessage(error, 'Wiki request failed', `[WIKI ADMIN] ${req.method} ${req.path}`);
     res.status(500).json({ error: msg });
   }
 });
@@ -108,7 +109,7 @@ router.delete('/images/unused/cleanup', moderatorOrAdminMiddleware, async (req: 
     const result = await wikiAdminService.deleteUnusedImages(filenames);
     res.json(result);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
+    const msg = clientErrorMessage(error, 'Wiki request failed', `[WIKI ADMIN] ${req.method} ${req.path}`);
     res.status(500).json({ error: msg });
   }
 });
@@ -126,7 +127,7 @@ router.get('/images/:filename/usage', moderatorOrAdminMiddleware, async (req: Au
     const usage = await wikiAdminService.getImageUsage(filename);
     res.json(usage);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
+    const msg = clientErrorMessage(error, 'Wiki request failed', `[WIKI ADMIN] ${req.method} ${req.path}`);
     res.status(500).json({ error: msg });
   }
 });
@@ -144,7 +145,7 @@ router.delete('/images/:filename', moderatorOrAdminMiddleware, async (req: AuthR
     await wikiAdminService.deleteImage(filename);
     res.json({ filename, message: 'Image deleted successfully' });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
+    const msg = clientErrorMessage(error, 'Wiki request failed', `[WIKI ADMIN] ${req.method} ${req.path}`);
     res.status(400).json({ error: msg });
   }
 });
@@ -162,7 +163,7 @@ router.get('/', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Respon
     const result = await wikiAdminService.getArticlesList();
     res.json(result);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
+    const msg = clientErrorMessage(error, 'Wiki request failed', `[WIKI ADMIN] ${req.method} ${req.path}`);
     res.status(500).json({ error: msg });
   }
 });
@@ -199,7 +200,7 @@ router.get('/:slug/export', moderatorOrAdminMiddleware, async (req: AuthRequest,
       }
     });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
+    const msg = clientErrorMessage(error, 'Wiki request failed', `[WIKI ADMIN] ${req.method} ${req.path}`);
     res.status(400).json({ error: msg });
   }
 });
@@ -240,7 +241,7 @@ router.get('/import-check/:slug', moderatorOrAdminMiddleware, async (req: AuthRe
       current_languages,
     });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
+    const msg = clientErrorMessage(error, 'Wiki request failed', `[WIKI ADMIN] ${req.method} ${req.path}`);
     res.status(400).json({ error: msg });
   }
 });
@@ -320,7 +321,7 @@ router.post('/import', moderatorOrAdminMiddleware, async (req: AuthRequest, res:
 
     res.status(force ? 200 : 201).json(result);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
+    const msg = clientErrorMessage(error, 'Wiki request failed', `[WIKI ADMIN] ${req.method} ${req.path}`);
     res.status(400).json({ error: msg });
   }
 });
@@ -354,7 +355,7 @@ router.post('/', moderatorOrAdminMiddleware, async (req: AuthRequest, res: Respo
 
     res.status(201).json({ id: articleId, slug, message: 'Article created successfully' });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
+    const msg = clientErrorMessage(error, 'Wiki request failed', `[WIKI ADMIN] ${req.method} ${req.path}`);
     res.status(400).json({ error: msg });
   }
 });
@@ -379,7 +380,7 @@ router.get('/:slug', moderatorOrAdminMiddleware, async (req: AuthRequest, res: R
 
     res.json(article);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
+    const msg = clientErrorMessage(error, 'Wiki request failed', `[WIKI ADMIN] ${req.method} ${req.path}`);
     res.status(500).json({ error: msg });
   }
 });
@@ -417,7 +418,7 @@ router.put('/:slug', moderatorOrAdminMiddleware, async (req: AuthRequest, res: R
 
     res.json({ slug, message: 'Article updated successfully' });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
+    const msg = clientErrorMessage(error, 'Wiki request failed', `[WIKI ADMIN] ${req.method} ${req.path}`);
     res.status(400).json({ error: msg });
   }
 });
@@ -437,7 +438,7 @@ router.delete('/:slug', moderatorOrAdminMiddleware, async (req: AuthRequest, res
     await wikiAdminService.deleteArticle(slug);
     res.json({ slug, message: 'Article deleted successfully' });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
+    const msg = clientErrorMessage(error, 'Wiki request failed', `[WIKI ADMIN] ${req.method} ${req.path}`);
     res.status(400).json({ error: msg });
   }
 });

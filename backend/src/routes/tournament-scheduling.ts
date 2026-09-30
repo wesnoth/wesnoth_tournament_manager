@@ -16,6 +16,7 @@ import {
   rejectProposal
 } from '../services/tournamentSchedulingService.js';
 import { sendUserActionRateLimitError } from '../utils/userActionRateLimitResponse.js';
+import { clientErrorMessage } from '../utils/clientError.js';
 
 const router = Router();
 
@@ -378,8 +379,8 @@ router.post('/tournament/:tournamentId/series/:seriesId/propose-slots', authMidd
     }
     return res.json({ success: true, ...result });
   } catch (error) {
-    const message = (error as Error).message || 'Failed to propose schedule';
     if (sendUserActionRateLimitError(req, res, error)) return;
+    const message = clientErrorMessage(error, 'Failed to propose schedule');
     return res.status(message.includes('already reserved') ? 409 : 400).json({ error: message });
   }
 });
@@ -457,7 +458,7 @@ router.post('/tournament/:tournamentId/series/:seriesId/confirm-slots', authMidd
     await notifySeriesParticipants(seriesId, proposal_id, req.userId, 'schedule_confirmed');
     return res.json({ success: true, fullyConfirmed: result.fullyConfirmed, confirmedSlots: result.confirmedSlots });
   } catch (error) {
-    const message = (error as Error).message || 'Failed to confirm slots';
+    const message = clientErrorMessage(error, 'Failed to confirm slots');
     return res.status(message.includes('already reserved') ? 409 : 400).json({ error: message });
   }
 });
@@ -484,7 +485,7 @@ router.post('/proposals/:proposalId/confirm', authMiddleware, async (req: AuthRe
   } catch (error) {
     console.error('❌ [SCHEDULING] Error confirming proposal:', error);
     res.status(400).json({
-      error: (error as any).message || 'Failed to confirm proposal'
+      error: clientErrorMessage(error, 'Failed to confirm proposal')
     });
   }
 });
@@ -520,7 +521,7 @@ router.post('/proposals/:proposalId/reject', authMiddleware, async (req: AuthReq
   } catch (error) {
     console.error('❌ [SCHEDULING] Error rejecting proposal:', error);
     return res.status(400).json({
-      error: (error as any).message || 'Failed to reject proposal'
+      error: clientErrorMessage(error, 'Failed to reject proposal')
     });
   }
 });
@@ -543,7 +544,7 @@ router.post('/proposals/:proposalId/cancel-confirmation', authMiddleware, async 
   } catch (error) {
     console.error('❌ [SCHEDULING] Error cancelling confirmation:', error);
     res.status(400).json({
-      error: (error as any).message || 'Failed to cancel confirmation'
+      error: clientErrorMessage(error, 'Failed to cancel confirmation')
     });
   }
 });
@@ -575,7 +576,7 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
   } catch (error) {
     console.error('❌ [SCHEDULING] Error creating counter-proposal:', error);
     if (sendUserActionRateLimitError(req, res, error)) return;
-    return res.status(400).json({ error: (error as any).message || 'Failed to create counter-proposal' });
+    return res.status(400).json({ error: clientErrorMessage(error, 'Failed to create counter-proposal') });
   }
 });
 router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, res: Response) => {
@@ -606,7 +607,7 @@ router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, re
   } catch (error) {
     console.error('❌ [SCHEDULING] Error modifying proposal:', error);
     if (sendUserActionRateLimitError(req, res, error)) return;
-    return res.status(400).json({ error: (error as any).message || 'Failed to modify proposal' });
+    return res.status(400).json({ error: clientErrorMessage(error, 'Failed to modify proposal') });
   }
 });
 router.delete('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, res: Response) => {
@@ -632,7 +633,7 @@ router.delete('/proposals/:proposalId', authMiddleware, async (req: AuthRequest,
     return res.json({ success: true });
   } catch (error) {
     console.error('❌ [SCHEDULING] Error cancelling proposal:', error);
-    return res.status(400).json({ error: (error as any).message || 'Failed to cancel proposal' });
+    return res.status(400).json({ error: clientErrorMessage(error, 'Failed to cancel proposal') });
   }
 });
 

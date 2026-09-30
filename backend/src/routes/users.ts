@@ -379,7 +379,7 @@ router.put('/profile/update', authMiddleware, async (req: AuthRequest, res) => {
     res.json(user);
   } catch (error) {
     console.error('Error updating profile:', error);
-    res.status(500).json({ error: 'Failed to update profile', details: (error as any).message });
+    res.status(500).json({ error: 'Failed to update profile' });
   }
 });
 
@@ -518,7 +518,7 @@ router.get('/ranking/global', async (req, res) => {
     });
   } catch (error) {
     console.error('Ranking error:', error);
-    res.status(500).json({ error: 'Failed to fetch ranking', details: (error as any).message });
+    res.status(500).json({ error: 'Failed to fetch ranking' });
   }
 });
 
@@ -540,7 +540,7 @@ router.get('/ranking/active', async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('Active ranking error:', error);
-    res.status(500).json({ error: 'Failed to fetch active ranking', details: (error as any).message });
+    res.status(500).json({ error: 'Failed to fetch active ranking' });
   }
 });
 
@@ -564,7 +564,7 @@ router.get('/all', async (req, res) => {
     res.json({ data: result.rows });
   } catch (error) {
     console.error('All users error:', error);
-    res.status(500).json({ error: 'Failed to fetch users', details: (error as any).message });
+    res.status(500).json({ error: 'Failed to fetch users' });
   }
 });
 
@@ -656,7 +656,7 @@ router.get('/:id/stats/month', async (req, res) => {
     });
   } catch (error) {
     console.error('Monthly stats error:', error);
-    res.status(500).json({ error: 'Failed to fetch monthly stats', details: (error as any).message });
+    res.status(500).json({ error: 'Failed to fetch monthly stats' });
   }
 });
 
@@ -717,7 +717,7 @@ router.get('/data/countries', async (req, res) => {
     res.json(countries);
   } catch (error) {
     console.error('❌ Countries error:', error);
-    res.status(500).json({ error: 'Failed to fetch countries', details: (error as any).message });
+    res.status(500).json({ error: 'Failed to fetch countries' });
   }
 });
 
@@ -730,7 +730,7 @@ router.get('/data/avatars', async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('Avatars error:', error);
-    res.status(500).json({ error: 'Failed to fetch avatars', details: (error as any).message });
+    res.status(500).json({ error: 'Failed to fetch avatars' });
   }
 });
 
@@ -741,7 +741,7 @@ router.get('/data/avatar-manifest', async (req, res) => {
     res.json(manifest);
   } catch (error) {
     console.error('Avatar manifest error:', error);
-    res.status(500).json({ error: 'Failed to fetch avatar manifest', details: (error as any).message });
+    res.status(500).json({ error: 'Failed to fetch avatar manifest' });
   }
 });
 

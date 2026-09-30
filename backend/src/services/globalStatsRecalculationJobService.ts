@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../config/database.js';
+import { isClientSafeError } from '../utils/clientError.js';
 
 export type GlobalStatsRecalculationProgress = {
   phase: string;
@@ -104,11 +105,15 @@ const runGlobalStatsRecalculationJob = async (
       ]
     );
   } catch (error) {
+    // `error_message` is returned by the job-status endpoint, so only domain
+    // messages are persisted; internal details (SQL, stack-derived text) stay
+    // in the server log.
+    console.error(`Global stats recalculation job ${jobId} failed:`, error);
     await query(
       `UPDATE global_stats_recalculation_jobs
        SET status = 'failed', phase = 'failed', error_message = ?, completed_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [error instanceof Error ? error.message : String(error), jobId]
+      [isClientSafeError(error) ? error.message : 'Internal error (see server log)', jobId]
     );
   } finally {
     activeJobId = null;

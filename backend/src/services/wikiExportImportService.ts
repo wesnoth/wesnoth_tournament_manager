@@ -18,12 +18,26 @@
 import { queryTournament } from '../config/tournamentDatabase.js';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { isClientSafeError } from '../utils/clientError.js';
 import { ZipArchive } from 'archiver';
 import { Writable, PassThrough } from 'stream';
 import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Inner message to embed when re-throwing an export/import failure.
+ *
+ * The re-thrown plain `Error` is treated as client-safe by the routes, so an
+ * internal inner error (SQL, filesystem, archive library) must not be copied
+ * into it; that detail is logged here instead.
+ */
+const wrappedErrorMessage = (error: unknown, operation: 'export' | 'import'): string => {
+  if (isClientSafeError(error)) return error.message;
+  console.error(`Wiki article ${operation} failed:`, error);
+  return 'internal error';
+};
 
 interface ArticleMetadata {
   slug: string;
@@ -276,7 +290,7 @@ export async function exportArticleAsZip(
       filename: `${slug}-${Date.now()}.zip`,
     };
   } catch (error) {
-    throw new Error(`Failed to export article: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(`Failed to export article: ${wrappedErrorMessage(error, 'export')}`);
   }
 }
 
@@ -418,7 +432,7 @@ export async function importArticle(
       message: `Article "${slug}" imported successfully with ${importedLanguages.length} languages and ${images.length} images.`,
     };
   } catch (error) {
-    throw new Error(`Failed to import article: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(`Failed to import article: ${wrappedErrorMessage(error, 'import')}`);
   }
 }
 

@@ -19,6 +19,7 @@ import {
 } from '../tournament-engine/competitionCompiler.js';
 import { forumTopicUrl, tournamentGameName } from '../tournament-engine/forumTopic.js';
 import { getUserAgent, getUserIP, logAuditEvent } from '../middleware/audit.js';
+import { clientErrorMessage, isClientSafeError } from '../utils/clientError.js';
 
 const router = Router();
 
@@ -38,7 +39,7 @@ router.post('/format/preview-advancement', authMiddleware, async (req: AuthReque
       target_groups: generated.targetGroups,
     });
   } catch (error: any) {
-    return res.status(400).json({ error: error.message || 'Could not generate advancement mappings' });
+    return res.status(400).json({ error: clientErrorMessage(error, 'Could not generate advancement mappings') });
   }
 });
 
@@ -226,8 +227,8 @@ router.post('/:id/prepare', authMiddleware, async (req: AuthRequest, res) => {
       ...(await preparePhaseCompetition(req.params.id)),
     });
   } catch (error: any) {
-    if (error.message === 'Tournament not found') return res.status(404).json({ error: error.message });
-    if (error.message?.includes('must be') || error.message?.includes('does not use') || error.message?.includes('requires') || error.message?.includes('no phase') || error.message?.includes('Group')) {
+    if (isClientSafeError(error) && (error.message === 'Tournament not found')) return res.status(404).json({ error: error.message });
+    if (isClientSafeError(error) && (error.message?.includes('must be') || error.message?.includes('does not use') || error.message?.includes('requires') || error.message?.includes('no phase') || error.message?.includes('Group'))) {
       return res.status(409).json({ error: error.message });
     }
     console.error('Prepare tournament phase competition error:', error);
@@ -243,8 +244,8 @@ router.post('/:id/start', authMiddleware, async (req: AuthRequest, res) => {
     }
     return res.json(await startPhaseCompetition(req.params.id));
   } catch (error: any) {
-    if (error.message === 'Tournament not found') return res.status(404).json({ error: error.message });
-    if (error.message?.includes('must be') || error.message?.includes('does not use') || error.message?.includes('no first phase')) {
+    if (isClientSafeError(error) && (error.message === 'Tournament not found')) return res.status(404).json({ error: error.message });
+    if (isClientSafeError(error) && (error.message?.includes('must be') || error.message?.includes('does not use') || error.message?.includes('no first phase'))) {
       return res.status(409).json({ error: error.message });
     }
     console.error('Start tournament phase competition error:', error);
@@ -476,8 +477,7 @@ router.post('/:id/phases/:phaseId/advance', authMiddleware, async (req: AuthRequ
     const compiled = await compileNextPhaseCompetition(req.params.id, req.params.phaseId);
     return res.json({ compiled });
   } catch (error: any) {
-    console.error('Compile tournament advancement error:', error);
-    return res.status(409).json({ error: error.message || 'Failed to compile advancement' });
+    return res.status(409).json({ error: clientErrorMessage(error, 'Failed to compile advancement', 'Compile tournament advancement error') });
   }
 });
 
@@ -490,7 +490,7 @@ router.post('/:id/groups/:groupId/recalculate-tiebreakers', authMiddleware, asyn
     await recalculateGroupStandings(req.params.id, req.params.groupId);
     return res.json({ recalculated: true });
   } catch (error: any) {
-    return res.status(409).json({ error: error.message || 'Failed to recalculate standings' });
+    return res.status(409).json({ error: clientErrorMessage(error, 'Failed to recalculate standings') });
   }
 });
 
@@ -533,8 +533,8 @@ router.post('/:id/phases/:phaseId/start', authMiddleware, async (req: AuthReques
     }
     return res.json(await startReadyPhase(req.params.id, req.params.phaseId));
   } catch (error: any) {
-    if (error.message?.includes('not found')) return res.status(404).json({ error: error.message });
-    if (error.message?.includes('ready') || error.message?.includes('Earlier')) return res.status(409).json({ error: error.message });
+    if (isClientSafeError(error) && (error.message?.includes('not found'))) return res.status(404).json({ error: error.message });
+    if (isClientSafeError(error) && (error.message?.includes('ready') || error.message?.includes('Earlier'))) return res.status(409).json({ error: error.message });
     console.error('Start tournament phase error:', error);
     return res.status(500).json({ error: 'Failed to start tournament phase' });
   }
@@ -555,8 +555,8 @@ router.post('/:id/games/:gameId/result', authMiddleware, async (req: AuthRequest
       typeof req.body.match_id === 'string' ? req.body.match_id : null
     ));
   } catch (error: any) {
-    if (error.message?.includes('not found')) return res.status(404).json({ error: error.message });
-    if (error.message?.includes('already') || error.message?.includes('not part')) return res.status(409).json({ error: error.message });
+    if (isClientSafeError(error) && (error.message?.includes('not found'))) return res.status(404).json({ error: error.message });
+    if (isClientSafeError(error) && (error.message?.includes('already') || error.message?.includes('not part'))) return res.status(409).json({ error: error.message });
     console.error('Record phase game result error:', error);
     return res.status(500).json({ error: 'Failed to record phase game result' });
   }
@@ -757,8 +757,8 @@ router.post('/:id/series/:seriesId/admin-decision', authMiddleware, async (req: 
     });
     return res.json({ ...result, organizer_action: action });
   } catch (error: any) {
-    if (error.message?.includes('not found')) return res.status(404).json({ error: error.message });
-    if (error.message?.includes('already') || error.message?.includes('not part')) {
+    if (isClientSafeError(error) && (error.message?.includes('not found'))) return res.status(404).json({ error: error.message });
+    if (isClientSafeError(error) && (error.message?.includes('already') || error.message?.includes('not part'))) {
       return res.status(409).json({ error: error.message });
     }
     console.error('Record phase administrative decision error:', error);
@@ -782,8 +782,8 @@ router.put('/:id/format', authMiddleware, async (req: AuthRequest, res) => {
     return res.json({ message: 'Tournament format saved', format: await getTournamentFormat(req.params.id) });
   } catch (error: any) {
     if (error.issues) return res.status(400).json({ error: error.message, issues: error.issues });
-    if (error.message === 'Tournament not found') return res.status(404).json({ error: error.message });
-    if (error.message?.includes('before preparation')) return res.status(409).json({ error: error.message });
+    if (isClientSafeError(error) && (error.message === 'Tournament not found')) return res.status(404).json({ error: error.message });
+    if (isClientSafeError(error) && (error.message?.includes('before preparation'))) return res.status(409).json({ error: error.message });
     console.error('Save tournament competition format error:', error);
     return res.status(500).json({ error: 'Failed to save tournament format' });
   }

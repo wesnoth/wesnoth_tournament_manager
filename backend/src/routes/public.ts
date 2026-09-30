@@ -301,7 +301,7 @@ router.get('/news', async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching news:', error);
-    res.status(500).json({ error: 'Failed to fetch news', details: (error as any).message });
+    res.status(500).json({ error: 'Failed to fetch news' });
   }
 });
 
@@ -312,7 +312,7 @@ router.get('/matches/recent', async (req, res) => {
     res.json(feed.data);
   } catch (error) {
     console.error('Error fetching recent matches:', error);
-    res.status(500).json({ error: 'Failed to fetch recent matches', details: (error as any).message });
+    res.status(500).json({ error: 'Failed to fetch recent matches' });
   }
 });
 
@@ -446,7 +446,7 @@ router.get('/matches', optionalAuthMiddleware, async (req, res) => {
     res.json(feed);
   } catch (error) {
     console.error('Error fetching matches:', error);
-    res.status(500).json({ error: 'Failed to fetch matches', details: (error as any).message });
+    res.status(500).json({ error: 'Failed to fetch matches' });
   }
 });
 // Get specific player profile (public endpoint)
@@ -518,7 +518,7 @@ router.get('/players/:id', async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('❌ [PLAYERS] Error fetching player:', error);
-    res.status(500).json({ error: 'Failed to fetch player', details: (error as any).message });
+    res.status(500).json({ error: 'Failed to fetch player' });
   }
 });
 
@@ -608,8 +608,7 @@ router.get('/player-of-month', async (req, res) => {
     console.error('❌ Error in /player-of-month:', error);
     console.error('Error stack:', error.stack);
     res.status(500).json({
-      error: 'Failed to fetch player of month',
-      details: error.message
+      error: 'Failed to fetch player of month'
     });
   }
 });

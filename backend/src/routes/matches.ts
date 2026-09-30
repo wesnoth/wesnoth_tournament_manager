@@ -552,7 +552,7 @@ router.post('/preview-replay-base64', authMiddleware, async (req: AuthRequest, r
     return res.json({ map, players });
   } catch (error) {
     console.error('[PREVIEW-B64] Error in preview-replay-base64 endpoint:', error);
-    res.status(500).json({ error: 'Failed to parse replay file', details: error instanceof Error ? error.message : String(error) });
+    res.status(500).json({ error: 'Failed to parse replay file' });
   }
 });
 
@@ -716,8 +716,7 @@ router.post('/preview-replay', authMiddleware, upload.single('replay'), async (r
     console.error('[PREVIEW] Error in preview-replay endpoint:', error);
 
     res.status(400).json({
-      error: 'Failed to parse replay file',
-      details: error.message,
+      error: 'Failed to parse replay file'
     });
   }
 });
@@ -1001,8 +1000,12 @@ router.post('/admin/:id/dispute', moderatorOrAdminMiddleware, async (req: AuthRe
             previousResult.admin_reviewed_by, id,
           ]
         );
-        return res.status(error.name === 'GlobalStatsRecalculationInProgressError' ? 409 : 500).json({
-          error: error.message || 'Could not schedule statistics recalculation',
+        // Only the in-progress conflict carries a client-facing message; any
+        // other scheduling failure is internal and stays in the server log.
+        const inProgress = error.name === 'GlobalStatsRecalculationInProgressError';
+        if (!inProgress) console.error('Could not schedule statistics recalculation:', error);
+        return res.status(inProgress ? 409 : 500).json({
+          error: inProgress ? error.message : 'Could not schedule statistics recalculation',
           jobId: error.jobId,
         });
       }
@@ -1462,7 +1465,7 @@ router.post('/report-confidence-1-replay', authMiddleware, globalRecalculationMi
     return res.json({ success: true, status: 'completed', replay_id: replayId, progression });
   } catch (error) {
     console.error('❌ Error reporting confidence-1 replay:', error);
-    return res.status(500).json({ error: 'Failed to report replay', details: error instanceof Error ? error.message : String(error) });
+    return res.status(500).json({ error: 'Failed to report replay' });
   }
 });
 
@@ -1569,7 +1572,7 @@ router.post('/cancel-confidence-1-replay', authMiddleware, globalRecalculationMi
 
   } catch (error) {
     console.error('❌ Error cancelling confidence-1 replay:', error);
-    res.status(500).json({ error: 'Failed to cancel replay', details: error instanceof Error ? error.message : String(error) });
+    res.status(500).json({ error: 'Failed to cancel replay' });
   }
 });
 
@@ -1973,16 +1976,14 @@ router.post('/:id/cancel-own', authMiddleware, async (req: AuthRequest, res) => 
       console.log(`Match ${id} self-cancelled by reporter ${userId}: Stats recalculated`);
       res.json({ 
         message: 'Match cancelled successfully. Stats have been recalculated.',
-        matchId: id,
-        debugLogs: recalcResult.logs
+        matchId: id
       });
     } else {
       console.error(`Match ${id} cancelled but stats recalculation may have failed`);
       res.json({ 
         message: 'Match cancelled successfully.',
         matchId: id,
-        warning: 'Stats recalculation encountered some issues',
-        debugLogs: recalcResult.logs
+        warning: 'Stats recalculation encountered some issues'
       });
     }
   } catch (error) {

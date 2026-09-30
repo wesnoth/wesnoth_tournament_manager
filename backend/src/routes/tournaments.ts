@@ -601,7 +601,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       message: 'Tournament created successfully. Registration is now open.' 
     });
   } catch (error: any) {
-    console.error('Tournament creation error:', error.message || error);
+    console.error('Tournament creation error:', error);
     if (tournamentId) {
       // Creation spans several association tables. Compensating cleanup keeps a
       // failed request from leaving a partially configurable tournament.
@@ -615,7 +615,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     }
     if (sendUserActionRateLimitError(req, res, error)) return;
     if (error.issues) return res.status(400).json({ error: error.message, issues: error.issues });
-    res.status(500).json({ error: 'Failed to create tournament', details: error.message });
+    res.status(500).json({ error: 'Failed to create tournament' });
   }
 });
 
@@ -769,7 +769,7 @@ router.post('/:id/organizers', authMiddleware, async (req: AuthRequest, res) => 
     });
   } catch (error: any) {
     console.error('Add organizer error:', error);
-    res.status(500).json({ error: 'Failed to add tournament organizer', details: error.message });
+    res.status(500).json({ error: 'Failed to add tournament organizer' });
   }
 });
 
@@ -811,7 +811,7 @@ router.delete('/:id/organizers/:organizerUserId', authMiddleware, async (req: Au
     res.json({ message: 'Organizer removed successfully' });
   } catch (error: any) {
     console.error('Remove organizer error:', error);
-    res.status(500).json({ error: 'Failed to remove tournament organizer', details: error.message });
+    res.status(500).json({ error: 'Failed to remove tournament organizer' });
   }
 });
 
@@ -1089,8 +1089,8 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
       tournament: updated.rows[0]
     });
   } catch (error: any) {
-    console.error('Update tournament error:', error.message || error);
-    res.status(500).json({ error: 'Failed to update tournament', details: error.message });
+    console.error('Update tournament error:', error);
+    res.status(500).json({ error: 'Failed to update tournament' });
   }
 });
 
@@ -1270,8 +1270,8 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res) => {
       tournament_id: id
     });
   } catch (error: any) {
-    console.error('Delete tournament error:', error.message || error);
-    res.status(500).json({ error: 'Failed to cancel tournament', details: error.message });
+    console.error('Delete tournament error:', error);
+    res.status(500).json({ error: 'Failed to cancel tournament' });
   }
 });
 
@@ -1541,12 +1541,12 @@ router.post('/:id/request-join', authMiddleware, async (req: AuthRequest, res) =
         : 'Join request sent. Waiting for organizer approval.'
     });
   } catch (error: any) {
-    console.error('Request-join error:', error.message || error);
+    console.error('Request-join error:', error);
     console.error('Full error:', error);
     if (error.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({ error: 'You are already registered in this tournament' });
     }
-    res.status(500).json({ error: 'Failed to request join tournament', details: error.message });
+    res.status(500).json({ error: 'Failed to request join tournament' });
   }
 });
 
@@ -1636,8 +1636,8 @@ router.post('/:tournamentId/participants/:participantId/accept', authMiddleware,
       message: 'Participant accepted successfully'
     });
   } catch (error: any) {
-    console.error('Accept participant error:', error.message || error);
-    res.status(500).json({ error: 'Failed to accept participant', details: error.message });
+    console.error('Accept participant error:', error);
+    res.status(500).json({ error: 'Failed to accept participant' });
   }
 });
 
@@ -1738,8 +1738,8 @@ router.post('/:tournamentId/participants/:participantId/confirm', authMiddleware
       message: 'Participation confirmed! Waiting for organizer approval.'
     });
   } catch (error: any) {
-    console.error('Confirm participant error:', error.message || error);
-    res.status(500).json({ error: 'Failed to confirm participation', details: error.message });
+    console.error('Confirm participant error:', error);
+    res.status(500).json({ error: 'Failed to confirm participation' });
   }
 });
 
@@ -1885,8 +1885,8 @@ router.post('/:tournamentId/participants/:participantId/reject', authMiddleware,
       message: 'Participant rejected successfully'
     });
   } catch (error: any) {
-    console.error('Reject participant error:', error.message || error);
-    res.status(500).json({ error: 'Failed to reject participant', details: error.message });
+    console.error('Reject participant error:', error);
+    res.status(500).json({ error: 'Failed to reject participant' });
   }
 });
 

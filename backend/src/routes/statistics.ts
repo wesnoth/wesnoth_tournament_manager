@@ -160,10 +160,8 @@ router.get('/matchups', async (req, res) => {
     
     res.json(result.rows);
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error('[MATCHUPS] Error caught:', errorMsg);
-    console.error('[MATCHUPS] Full error:', error);
-    res.status(500).json({ error: `Failed to fetch matchup statistics: ${errorMsg}` });
+    console.error('[MATCHUPS] Error fetching matchup statistics:', error);
+    res.status(500).json({ error: 'Failed to fetch matchup statistics' });
   }
 });
 

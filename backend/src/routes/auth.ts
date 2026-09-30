@@ -217,7 +217,7 @@ router.post('/login', loginLimiter, async (req, res) => {
 
   } catch (error) {
     console.error(`❌ [LOGIN] Error:`, error);
-    res.status(500).json({ error: 'Login failed', details: error instanceof Error ? error.message : String(error) });
+    res.status(500).json({ error: 'Login failed' });
   }
 });
 
