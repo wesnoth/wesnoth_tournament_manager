@@ -2016,7 +2016,7 @@ router.post('/admin-discard-replay', authMiddleware, globalRecalculationMiddlewa
 
     // Verify replay exists and is awaiting confirmation
     const replayResult = await query(
-      `SELECT id, parse_status, integration_confidence, need_integration FROM replays WHERE id = ?`,
+      `SELECT id, parse_status, integration_confidence, need_integration, replay_filename FROM replays WHERE id = ?`,
       [replayId]
     );
     const replay = replayResult.rows?.[0];
@@ -2028,6 +2028,23 @@ router.post('/admin-discard-replay', authMiddleware, globalRecalculationMiddlewa
       `UPDATE replays SET parse_status = 'rejected', need_integration = 0, parsed = 1, updated_at = NOW() WHERE id = ?`,
       [replayId]
     );
+
+    // Same event as the Admin Replays force-discard, so every staff discard is
+    // found under one type; `source` tells the two entry points apart.
+    await logAuditEvent({
+      event_type: 'REPLAY_FORCE_DISCARDED',
+      user_id: req.userId,
+      username: req.username,
+      ip_address: getUserIP(req),
+      user_agent: getUserAgent(req),
+      details: {
+        replay_id: replayId,
+        filename: replay.replay_filename,
+        previous_status: replay.parse_status,
+        integration_confidence: replay.integration_confidence,
+        source: 'confirmation_queue',
+      }
+    });
 
     console.log(`🗑️  [ADMIN DISCARD] Replay ${replayId} discarded by admin ${req.userId}`);
     res.json({ status: 'success', message: 'Replay discarded by admin', replay_id: replayId });

@@ -845,7 +845,7 @@ router.post('/replays/:replayId/force-discard', moderatorOrAdminMiddleware, glob
       username: req.username,
       ip_address: getUserIP(req),
       user_agent: getUserAgent(req),
-      details: { replay_id: replayId, filename: replay.replay_filename, previous_status: replay.parse_status }
+      details: { replay_id: replayId, filename: replay.replay_filename, previous_status: replay.parse_status, source: 'admin_replays' }
     });
 
     res.json({ status: 'success', message: 'Replay force-discarded', replay_id: replayId });
