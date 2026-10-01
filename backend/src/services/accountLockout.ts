@@ -90,17 +90,18 @@ export async function recordSuccessfulLogin(userId: string): Promise<void> {
 }
 
 /**
- * Manually unlock a user account (admin function)
+ * Clear the failed-login counter and any temporary lockout of an account.
+ *
+ * Write failures are propagated, not swallowed: the staff endpoints record an
+ * audit event and report success only after this resolves, so a failed update
+ * must never look like a cleared lockout. The login-time caller
+ * (`isAccountLocked`) has its own catch for the lazy expiry path.
  */
 export async function unlockAccount(userId: string): Promise<void> {
-  try {
-    await query(
-      `UPDATE users_extension SET failed_login_attempts = 0, locked_until = NULL WHERE id = ?`,
-      [userId]
-    );
-  } catch (error) {
-    console.error('Error unlocking account:', error);
-  }
+  await query(
+    `UPDATE users_extension SET failed_login_attempts = 0, locked_until = NULL WHERE id = ?`,
+    [userId]
+  );
 }
 
 /**

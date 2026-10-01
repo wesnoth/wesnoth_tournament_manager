@@ -17,7 +17,9 @@ const styles: Record<string, string> = {
 /** Display the match mode and its competition context without changing actions. */
 const MatchTypeBadge: React.FC<Props> = ({ match, compact = false }) => {
   const { t } = useTranslation();
-  const matchType = match.match_type || (match.tournament_id ? 'tournament_ranked' : 'ranked');
+  // Typed as string so the i18next default-value overload resolves to a string
+  // (with `any` it widens to an object type that React cannot render).
+  const matchType: string = match.match_type || (match.tournament_id ? 'tournament_ranked' : 'ranked');
   const context = [
     match.tournament_phase_name,
     match.tournament_round_name || (match.tournament_round_number

@@ -234,8 +234,11 @@ router.post('/:replayId/confirm-winner', authMiddleware, globalRecalculationMidd
         });
 
     if (!result.success) {
+      // result.error may carry raw driver text (SQL state, duplicate key values,
+      // index names), so it stays in the server log and the client gets a
+      // stable generic message.
       console.error('[CONFIRM-WINNER] Match creation failed:', result.error);
-      return res.status(500).json({ error: `Failed to create match: ${result.error}` });
+      return res.status(500).json({ error: 'Failed to create match' });
     }
 
     if (summary.linkedTournamentId && summary.linkedTournamentGameId) {
