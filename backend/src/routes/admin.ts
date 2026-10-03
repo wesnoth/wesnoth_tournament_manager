@@ -162,6 +162,27 @@ router.post('/users/:id/clear-lockout', moderatorOrAdminMiddleware, async (req: 
 // User management endpoints
 // =============================
 
+/**
+ * Record a staff mutation as an `ADMIN_ACTION` audit event.
+ *
+ * `action` is an UPPER_SNAKE_CASE verb in the past tense and names what
+ * changed; `details` carries the identifiers needed to reconstruct the change
+ * later (target ids plus names, because the target row may be deleted).
+ * Call it only after the mutation succeeded, so every event describes a change
+ * that actually happened. `logAuditEvent` never throws: a failed audit write
+ * is reported on the console and does not undo or block the staff action.
+ */
+async function auditStaffAction(req: AuthRequest, action: string, details: Record<string, unknown> = {}) {
+  await logAuditEvent({
+    event_type: 'ADMIN_ACTION',
+    user_id: req.userId,
+    username: req.username,
+    ip_address: getUserIP(req),
+    user_agent: getUserAgent(req),
+    details: { action, ...details },
+  });
+}
+
 // Create a multilingual news publication.
 // Body: { en: {title, content}, es: {title, content}, zh: {title, content}, de: {title, content}, ru: {title, content} }
 router.post('/news', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
@@ -175,6 +196,7 @@ router.post('/news', authMiddleware, adminMiddleware, async (req: AuthRequest, r
     }
 
     const createdNewsId = uuidv4();
+    const createdLanguages: string[] = [];
     for (const lang of languages) {
       const langData = req.body[lang];
       // Skip languages that are not provided (except English which is required)
@@ -187,7 +209,10 @@ router.post('/news', authMiddleware, adminMiddleware, async (req: AuthRequest, r
          VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
         [createdNewsId, langData.title, langData.content, lang, req.userId]
       );
+      createdLanguages.push(lang);
     }
+
+    await auditStaffAction(req, 'NEWS_CREATED', { news_id: createdNewsId, title: enData.title, languages: createdLanguages });
 
     res.status(201).json({ id: createdNewsId });
   } catch (error: any) {
@@ -210,6 +235,7 @@ router.put('/news/:id', authMiddleware, adminMiddleware, async (req: AuthRequest
     }
 
     // Update existing news for each language (preserving created_at, published_at, and updating only updated_at)
+    const updatedLanguages: string[] = [];
     for (const lang of languages) {
       const langData = req.body[lang];
       // Skip languages that are not provided (except English which is required)
@@ -239,7 +265,10 @@ router.put('/news/:id', authMiddleware, adminMiddleware, async (req: AuthRequest
           [id, langData.title, langData.content, lang, req.userId]
         );
       }
+      updatedLanguages.push(lang);
     }
+
+    await auditStaffAction(req, 'NEWS_UPDATED', { news_id: id, title: enData.title, languages: updatedLanguages });
 
     res.json({ message: 'News updated' });
   } catch (error: any) {
@@ -252,7 +281,17 @@ router.put('/news/:id', authMiddleware, adminMiddleware, async (req: AuthRequest
 router.delete('/news/:id', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
-    await query('DELETE FROM news WHERE id = ?', [id]);
+    // Read the English title first: once deleted, the id alone cannot tell
+    // a reviewer which publication was removed.
+    const existing = await query(`SELECT title FROM news WHERE id = ? AND language_code = 'en'`, [id]);
+    const result = await query('DELETE FROM news WHERE id = ?', [id]);
+    if ((result.rowCount ?? 0) > 0) {
+      await auditStaffAction(req, 'NEWS_DELETED', {
+        news_id: id,
+        title: existing.rows[0]?.title ?? null,
+        deleted_rows: result.rowCount,
+      });
+    }
     res.json({ message: 'News deleted' });
   } catch (error) {
     console.error('News delete error:', error);
@@ -431,6 +470,8 @@ router.post('/recalculate-all-stats', authMiddleware, async (req: AuthRequest, r
         return recalcResult;
       },
     });
+
+    await auditStaffAction(req, 'GLOBAL_STATS_RECALCULATION_QUEUED', { job_id: jobId });
 
     res.status(202).json({
       message: 'Global stats recalculation queued',
@@ -1183,6 +1224,10 @@ router.post('/maps', authMiddleware, async (req: AuthRequest, res) => {
     const mapResult = await query(`
       SELECT id, name, is_active, is_ranked, created_at FROM game_maps WHERE id = ?
     `, [mapId]);
+    await auditStaffAction(req, 'MAP_CREATED', {
+      map_id: mapId, name, language_code,
+      is_active: !!mapResult.rows[0]?.is_active, is_ranked: !!mapResult.rows[0]?.is_ranked,
+    });
     res.json(mapResult.rows[0]);
   } catch (error) {
     console.error('Error creating map:', error);
@@ -1201,6 +1246,13 @@ router.patch('/maps/:mapId', authMiddleware, async (req: AuthRequest, res) => {
 
     const { mapId } = req.params;
     const { is_active, is_ranked, name } = req.body;
+
+    // Read the current state first so the audit event records the transition,
+    // not only the requested values.
+    const previous = await query('SELECT name, is_active, is_ranked FROM game_maps WHERE id = ?', [mapId]);
+    if (previous.rows.length === 0) {
+      return res.status(404).json({ error: 'Map not found' });
+    }
 
     await query(`
       UPDATE game_maps
@@ -1223,6 +1275,14 @@ router.patch('/maps/:mapId', authMiddleware, async (req: AuthRequest, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Map not found' });
     }
+
+    const before = previous.rows[0];
+    const after = result.rows[0];
+    await auditStaffAction(req, 'MAP_UPDATED', {
+      map_id: mapId,
+      previous: { name: before.name, is_active: !!before.is_active, is_ranked: !!before.is_ranked },
+      current: { name: after.name, is_active: !!after.is_active, is_ranked: !!after.is_ranked },
+    });
 
     res.json(result.rows[0]);
   } catch (error) {
@@ -1259,6 +1319,7 @@ router.post('/maps/:mapId/translations', authMiddleware, async (req: AuthRequest
     const result = await query(`
       SELECT id, map_id, language_code, name, description FROM map_translations WHERE map_id = ? AND language_code = ?
     `, [mapId, language_code]);
+    await auditStaffAction(req, 'MAP_TRANSLATION_SAVED', { map_id: mapId, language_code, name });
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error adding translation:', error);
@@ -1284,6 +1345,7 @@ router.delete('/maps/:mapId', authMiddleware, async (req: AuthRequest, res) => {
     const usage = await getMapUsage(mapId, mapResult.rows[0].name);
     if (hasAssetUsage(usage)) {
       await query('UPDATE game_maps SET is_active = 0 WHERE id = ?', [mapId]);
+      await auditStaffAction(req, 'MAP_DEACTIVATED', { map_id: mapId, name: mapResult.rows[0].name, usage });
       return res.json({
         success: true,
         deactivated: true,
@@ -1294,6 +1356,7 @@ router.delete('/maps/:mapId', authMiddleware, async (req: AuthRequest, res) => {
 
     await query('DELETE FROM map_translations WHERE map_id = ?', [mapId]);
     await query('DELETE FROM game_maps WHERE id = ?', [mapId]);
+    await auditStaffAction(req, 'MAP_DELETED', { map_id: mapId, name: mapResult.rows[0].name });
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting map:', error);
@@ -1384,6 +1447,10 @@ router.post('/factions', authMiddleware, async (req: AuthRequest, res) => {
     const factionResult = await query(`
       SELECT id, name, is_active, is_ranked, created_at FROM factions WHERE id = ?
     `, [factionId]);
+    await auditStaffAction(req, 'FACTION_CREATED', {
+      faction_id: factionId, name, language_code,
+      is_active: !!factionResult.rows[0]?.is_active, is_ranked: !!factionResult.rows[0]?.is_ranked,
+    });
     res.json(factionResult.rows[0]);
   } catch (error) {
     console.error('Error creating faction:', error);
@@ -1402,6 +1469,13 @@ router.patch('/factions/:factionId', authMiddleware, async (req: AuthRequest, re
 
     const { factionId } = req.params;
     const { is_active, is_ranked, name } = req.body;
+
+    // Read the current state first so the audit event records the transition,
+    // not only the requested values.
+    const previous = await query('SELECT name, is_active, is_ranked FROM factions WHERE id = ?', [factionId]);
+    if (previous.rows.length === 0) {
+      return res.status(404).json({ error: 'Faction not found' });
+    }
 
     await query(`
       UPDATE factions
@@ -1424,6 +1498,14 @@ router.patch('/factions/:factionId', authMiddleware, async (req: AuthRequest, re
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Faction not found' });
     }
+
+    const before = previous.rows[0];
+    const after = result.rows[0];
+    await auditStaffAction(req, 'FACTION_UPDATED', {
+      faction_id: factionId,
+      previous: { name: before.name, is_active: !!before.is_active, is_ranked: !!before.is_ranked },
+      current: { name: after.name, is_active: !!after.is_active, is_ranked: !!after.is_ranked },
+    });
 
     res.json(result.rows[0]);
   } catch (error) {
@@ -1460,6 +1542,7 @@ router.post('/factions/:factionId/translations', authMiddleware, async (req: Aut
     const result = await query(`
       SELECT id, faction_id, language_code, name, description FROM faction_translations WHERE faction_id = ? AND language_code = ?
     `, [factionId, language_code]);
+    await auditStaffAction(req, 'FACTION_TRANSLATION_SAVED', { faction_id: factionId, language_code, name });
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error adding translation:', error);
@@ -1485,6 +1568,7 @@ router.delete('/factions/:factionId', authMiddleware, async (req: AuthRequest, r
     const usage = await getFactionUsage(factionId, factionResult.rows[0].name);
     if (hasAssetUsage(usage)) {
       await query('UPDATE factions SET is_active = 0 WHERE id = ?', [factionId]);
+      await auditStaffAction(req, 'FACTION_DEACTIVATED', { faction_id: factionId, name: factionResult.rows[0].name, usage });
       return res.json({
         success: true,
         deactivated: true,
@@ -1495,6 +1579,7 @@ router.delete('/factions/:factionId', authMiddleware, async (req: AuthRequest, r
 
     await query('DELETE FROM faction_translations WHERE faction_id = ?', [factionId]);
     await query('DELETE FROM factions WHERE id = ?', [factionId]);
+    await auditStaffAction(req, 'FACTION_DELETED', { faction_id: factionId, name: factionResult.rows[0].name });
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting faction:', error);
@@ -1600,6 +1685,8 @@ router.post('/calculate-player-of-month', authMiddleware, async (req: AuthReques
     const { calculatePlayerOfMonth } = await import('../jobs/playerOfMonthJob.js');
     await calculatePlayerOfMonth();
 
+    await auditStaffAction(req, 'PLAYER_OF_MONTH_CALCULATED');
+
     res.json({ message: 'Player of month calculation triggered successfully' });
   } catch (error) {
     console.error('Error calculating player of month:', error);
@@ -1677,6 +1764,9 @@ router.post('/unranked-factions', authMiddleware, async (req: AuthRequest, res) 
        VALUES (?, ?, 1, 0)`,
       [newFactionId, name]
     );
+    // Any authenticated user may create unranked assets (tournament creators add
+    // custom ones), so this records players as well as staff (finding 19).
+    await auditStaffAction(req, 'UNRANKED_FACTION_CREATED', { faction_id: newFactionId, name });
     const result = await query(
       `SELECT id, name, is_ranked, created_at FROM factions WHERE id = ?`,
       [newFactionId]
@@ -1786,6 +1876,7 @@ router.delete('/unranked-factions/:id', authMiddleware, async (req: AuthRequest,
     const usage = await getFactionUsage(id, factionResult.rows[0].name);
     if (hasAssetUsage(usage)) {
       await query('UPDATE factions SET is_active = 0 WHERE id = ?', [id]);
+      await auditStaffAction(req, 'UNRANKED_FACTION_DEACTIVATED', { faction_id: id, name: factionResult.rows[0].name, usage });
       return res.json({
         success: true,
         deactivated: true,
@@ -1796,6 +1887,7 @@ router.delete('/unranked-factions/:id', authMiddleware, async (req: AuthRequest,
 
     await query('DELETE FROM faction_translations WHERE faction_id = ?', [id]);
     await query('DELETE FROM factions WHERE id = ?', [id]);
+    await auditStaffAction(req, 'UNRANKED_FACTION_DELETED', { faction_id: id, name: factionResult.rows[0].name });
 
     res.json({ success: true, message: 'Faction deleted successfully' });
   } catch (error) {
@@ -1869,6 +1961,9 @@ router.post('/unranked-maps', authMiddleware, async (req: AuthRequest, res) => {
        VALUES (?, ?, 1, 0)`,
       [mapId, name]
     );
+    // Any authenticated user may create unranked assets (tournament creators add
+    // custom ones), so this records players as well as staff (finding 19).
+    await auditStaffAction(req, 'UNRANKED_MAP_CREATED', { map_id: mapId, name });
 
     const inserted = await query(
       'SELECT id, name, is_ranked, is_active, created_at FROM game_maps WHERE id = ?',
@@ -1979,6 +2074,7 @@ router.delete('/unranked-maps/:id', authMiddleware, async (req: AuthRequest, res
     const usage = await getMapUsage(id, mapResult.rows[0].name);
     if (hasAssetUsage(usage)) {
       await query('UPDATE game_maps SET is_active = 0 WHERE id = ?', [id]);
+      await auditStaffAction(req, 'UNRANKED_MAP_DEACTIVATED', { map_id: id, name: mapResult.rows[0].name, usage });
       return res.json({
         success: true,
         deactivated: true,
@@ -1989,6 +2085,7 @@ router.delete('/unranked-maps/:id', authMiddleware, async (req: AuthRequest, res
 
     await query('DELETE FROM map_translations WHERE map_id = ?', [id]);
     await query('DELETE FROM game_maps WHERE id = ?', [id]);
+    await auditStaffAction(req, 'UNRANKED_MAP_DELETED', { map_id: id, name: mapResult.rows[0].name });
 
     res.json({ success: true, message: 'Map deleted successfully' });
   } catch (error) {
@@ -2132,6 +2229,8 @@ router.post('/tournaments/:id/teams', authMiddleware, async (req: AuthRequest, r
       [teamId]
     );
 
+    await auditStaffAction(req, 'TEAM_CREATED', { tournament_id: id, team_id: teamId, team_name: name.trim() });
+
     res.json({ success: true, data: teamInserted.rows[0], message: 'Team created successfully' });
   } catch (error: any) {
     console.error('Error creating team:', error);
@@ -2184,6 +2283,10 @@ router.post('/tournaments/:id/teams/:teamId/members', authMiddleware, async (req
       [newParticipantId, id, player_id, teamId, position]
     );
 
+    await auditStaffAction(req, 'TEAM_MEMBER_ADDED', {
+      tournament_id: id, team_id: teamId, player_id, position, participant_id: newParticipantId,
+    });
+
     res.json({ success: true, message: 'Member added successfully' });
   } catch (error: any) {
     console.error('Error adding member:', error);
@@ -2232,6 +2335,8 @@ router.delete('/tournaments/:id/teams/:teamId/members/:playerId', authMiddleware
       return res.status(404).json({ success: false, error: 'Member not found in team' });
     }
 
+    await auditStaffAction(req, 'TEAM_MEMBER_REMOVED', { tournament_id: id, team_id: teamId, player_id: playerId });
+
     res.json({ success: true, message: 'Member removed successfully' });
   } catch (error) {
     console.error('Error removing member:', error);
@@ -2274,11 +2379,17 @@ router.post('/tournaments/:id/teams/:teamId/substitutes', authMiddleware, async 
     );
     const nextOrder = orderResult.rows[0].next_order;
 
-    await query(
+    const insertResult = await query(
       `INSERT IGNORE INTO team_substitutes (team_id, player_id, substitute_order)
        VALUES (?, ?, ?)`,
       [teamId, player_id, nextOrder]
     );
+
+    // INSERT IGNORE turns a duplicate substitute into a no-op; only an actual
+    // insert is a change worth auditing.
+    if ((insertResult.rowCount ?? 0) > 0) {
+      await auditStaffAction(req, 'TEAM_SUBSTITUTE_ADDED', { tournament_id: id, team_id: teamId, player_id });
+    }
 
     res.json({ success: true, message: 'Substitute added successfully' });
   } catch (error) {
@@ -2333,6 +2444,8 @@ router.delete('/tournaments/:id/teams/:teamId/substitutes/:playerId', authMiddle
       );
     }
 
+    await auditStaffAction(req, 'TEAM_SUBSTITUTE_REMOVED', { tournament_id: id, team_id: teamId, player_id: playerId });
+
     res.json({ success: true, message: 'Substitute removed successfully' });
   } catch (error) {
     console.error('Error removing substitute:', error);
@@ -2378,6 +2491,9 @@ router.delete('/tournaments/:id/teams/:teamId', authMiddleware, async (req: Auth
       return res.status(400).json({ success: false, error: 'Cannot delete team with matches' });
     }
 
+    // Read the name first: after the delete only the id would remain in the log.
+    const teamNameResult = await query('SELECT name FROM tournament_teams WHERE id = ? AND tournament_id = ?', [teamId, id]);
+
     // Delete team
     const result = await query(
       'DELETE FROM tournament_teams WHERE id = ? AND tournament_id = ?',
@@ -2387,6 +2503,8 @@ router.delete('/tournaments/:id/teams/:teamId', authMiddleware, async (req: Auth
     if (result.rowCount === 0) {
       return res.status(404).json({ success: false, error: 'Team not found' });
     }
+
+    await auditStaffAction(req, 'TEAM_DELETED', { tournament_id: id, team_id: teamId, team_name: teamNameResult.rows[0]?.name ?? null });
 
     res.json({ success: true, message: 'Team deleted successfully' });
   } catch (error) {
@@ -2623,6 +2741,14 @@ router.post('/tournaments/:id/teams/:teamId/replace-member', authMiddleware, asy
     } finally {
       connection.release();
     }
+
+    await auditStaffAction(req, 'TEAM_MEMBER_REPLACEMENT_REQUESTED', {
+      tournament_id: id,
+      team_id: teamId,
+      replaced_participant_id: playerToReplaceParticipantId,
+      new_player_id,
+      new_participant_id: newParticipantId,
+    });
 
     res.json({ 
       success: true, 
