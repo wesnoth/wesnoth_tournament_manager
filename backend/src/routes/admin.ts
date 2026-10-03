@@ -1589,7 +1589,9 @@ router.delete('/factions/:factionId', authMiddleware, async (req: AuthRequest, r
 });
 
 // ===== RECALCULATE BALANCE EVENT SNAPSHOTS =====
-router.post('/recalculate-snapshots', authMiddleware, async (req: AuthRequest, res) => {
+// Rejected with 409 while a global stats recalculation job runs: snapshots are
+// copies of the live faction/map statistics, which that job is rewriting.
+router.post('/recalculate-snapshots', authMiddleware, globalRecalculationMiddleware, async (req: AuthRequest, res) => {
   try {
     // Check if user is admin
     const userResult = await query('SELECT is_admin FROM users_extension WHERE id = ?', [req.userId]);
@@ -1608,11 +1610,16 @@ router.post('/recalculate-snapshots', authMiddleware, async (req: AuthRequest, r
     const startedAt = Date.now();
 
     // Call TypeScript function to recalculate snapshots
-    const { recalculateBalanceEventSnapshots } = await import('../services/statisticsCalculator.js');
+    const { recalculateBalanceEventSnapshots, BalanceSnapshotRecalculationInProgressError } =
+      await import('../services/statisticsCalculator.js');
     let tsResult: Awaited<ReturnType<typeof recalculateBalanceEventSnapshots>>;
     try {
       tsResult = await recalculateBalanceEventSnapshots(recreateAll === true);
     } catch (recalcError) {
+      // A rejected concurrent request changed nothing, so it is not audited as a failed run.
+      if (recalcError instanceof BalanceSnapshotRecalculationInProgressError) {
+        return res.status(409).json({ code: 'BALANCE_SNAPSHOT_RECALCULATION_IN_PROGRESS', error: recalcError.message });
+      }
       // Audit details are shown in the admin UI, so internal error text is redacted.
       await auditStaffAction(req, 'BALANCE_SNAPSHOTS_RECALCULATION_FAILED', {
         recreate_all: recreateAll === true,
@@ -1622,12 +1629,26 @@ router.post('/recalculate-snapshots', authMiddleware, async (req: AuthRequest, r
       throw recalcError;
     }
 
-    await auditStaffAction(req, 'BALANCE_SNAPSHOTS_RECALCULATED', {
+    // Per-event failures do not abort the service loop, so a run that skipped
+    // any event is reported and audited as failed: its history is incomplete.
+    const failedCount = tsResult.failed_event_ids.length;
+    await auditStaffAction(req, failedCount > 0 ? 'BALANCE_SNAPSHOTS_RECALCULATION_FAILED' : 'BALANCE_SNAPSHOTS_RECALCULATED', {
       recreate_all: recreateAll === true,
+      events_total: tsResult.balance_events_total,
       events_processed: tsResult.balance_events_updated,
+      failed_event_ids: tsResult.failed_event_ids,
       snapshots_created: tsResult.snapshots_created,
       duration_seconds: Math.round((Date.now() - startedAt) / 1000),
     });
+
+    if (failedCount > 0) {
+      return res.status(500).json({
+        error: `Balance snapshots were rebuilt for ${tsResult.balance_events_updated} of ${tsResult.balance_events_total} events; ${failedCount} failed (see server log)`,
+        totalEventsProcessed: tsResult.balance_events_updated,
+        totalSnapshotsCreated: tsResult.snapshots_created,
+        failedEventIds: tsResult.failed_event_ids,
+      });
+    }
 
     res.json({
       success: true,

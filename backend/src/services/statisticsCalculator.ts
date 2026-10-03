@@ -1454,13 +1454,45 @@ export async function getBalanceEventIntervalImpact(
   return result;
 }
 
+/** Thrown when a balance snapshot recalculation is requested while one is running. */
+export class BalanceSnapshotRecalculationInProgressError extends Error {
+  constructor() {
+    super('A balance snapshot recalculation is already in progress');
+    this.name = 'BalanceSnapshotRecalculationInProgressError';
+  }
+}
+
 /**
- * Recalculate balance event snapshots and impacts
+ * In-process guard for `recalculateBalanceEventSnapshots`. The backend runs as a
+ * single instance, so a module flag is enough to serialize runs; it is set
+ * synchronously before the first `await`, so two requests cannot both pass it.
+ */
+let balanceSnapshotRecalculationRunning = false;
+
+/**
+ * Recalculate balance event snapshots and impacts.
+ *
+ * With `recreateAll`, the snapshot dates are cleared and the history table is
+ * truncated first, so every event is rebuilt; this is not transactional
+ * (`TRUNCATE` autocommits), which is why concurrent runs are rejected: a second
+ * run would truncate rows the first one is still writing.
+ *
+ * A failure on one event does not stop the others. The result reports
+ * `balance_events_total` and `failed_event_ids` so the caller can treat a
+ * partial rebuild as a failure instead of a success with a lower count.
+ *
+ * @throws BalanceSnapshotRecalculationInProgressError when another run is active.
  */
 export async function recalculateBalanceEventSnapshots(recreateAll: boolean = false): Promise<{
+  balance_events_total: number;
   balance_events_updated: number;
+  failed_event_ids: string[];
   snapshots_created: number;
 }> {
+  if (balanceSnapshotRecalculationRunning) {
+    throw new BalanceSnapshotRecalculationInProgressError();
+  }
+  balanceSnapshotRecalculationRunning = true;
   try {
     if (recreateAll) {
       // Clear all snapshot dates so every event is reprocessed
@@ -1469,14 +1501,17 @@ export async function recalculateBalanceEventSnapshots(recreateAll: boolean = fa
       await query(`TRUNCATE TABLE faction_map_statistics_history`);
     }
 
-    // Get all balance events without snapshots (after optional clear above, this picks up all)
+    // Get all balance events without snapshots (after optional clear above, this picks up all).
+    // The date columns are selected so an event that already has one side's
+    // snapshot only gets the missing side rebuilt.
     const eventsResult = await query(
-      `SELECT id FROM balance_events
+      `SELECT id, snapshot_before_date, snapshot_after_date FROM balance_events
        WHERE snapshot_before_date IS NULL OR snapshot_after_date IS NULL`
     );
 
     let eventsUpdated = 0;
     let snapshotsCreated = 0;
+    const failedEventIds: string[] = [];
 
     for (const event of eventsResult.rows) {
       try {
@@ -1491,16 +1526,21 @@ export async function recalculateBalanceEventSnapshots(recreateAll: boolean = fa
         eventsUpdated++;
       } catch (e) {
         console.error(`Error processing balance event ${event.id}:`, e);
+        failedEventIds.push(event.id);
       }
     }
 
     return {
+      balance_events_total: eventsResult.rows.length,
       balance_events_updated: eventsUpdated,
+      failed_event_ids: failedEventIds,
       snapshots_created: snapshotsCreated
     };
   } catch (error) {
     console.error('Error recalculating balance event snapshots:', error);
     throw error;
+  } finally {
+    balanceSnapshotRecalculationRunning = false;
   }
 }
 /**
