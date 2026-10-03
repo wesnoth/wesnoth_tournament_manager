@@ -1128,7 +1128,17 @@ async function getFactionUsage(factionId: string, factionName: string): Promise<
        (SELECT COUNT(*) FROM faction_map_statistics_history WHERE faction_id = ? OR opponent_faction_id = ?) AS statistics_history_count,
        (SELECT COUNT(*) FROM player_match_statistics WHERE faction_id = ? OR opponent_faction_id = ?) AS player_statistics_count,
        (SELECT COUNT(*) FROM balance_events WHERE faction_id = ?) AS balance_events_count`,
-    [factionId, factionId, factionName, factionName, factionId, factionId, factionId, factionId, factionId, factionId, factionId, factionId],
+    // One group per subquery, in SQL order: the prepared statement rejects the
+    // call (ER_WRONG_ARGUMENTS) when the count differs from the 11 placeholders.
+    [
+      factionId,                // active_tournaments
+      factionId,                // tournament_selections
+      factionName, factionName, // matches_count (matches store faction names)
+      factionId, factionId,     // statistics_count
+      factionId, factionId,     // statistics_history_count
+      factionId, factionId,     // player_statistics_count
+      factionId,                // balance_events_count
+    ],
   );
   return Object.fromEntries(
     Object.entries(result.rows[0] || {}).map(([key, value]) => [key, Number(value)]),
