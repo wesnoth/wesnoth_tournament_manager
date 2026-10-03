@@ -2074,6 +2074,21 @@ router.get('/tournaments/:id/teams', authMiddleware, async (req: AuthRequest, re
   }
 });
 
+/**
+ * Check that a team belongs to the tournament named in the route.
+ *
+ * Organizer permission is checked against `:id`, so every team route must also
+ * bind `:teamId` to that tournament; otherwise the organizer of any tournament
+ * could change the rosters of teams in tournaments they do not organize.
+ */
+async function teamBelongsToTournament(teamId: string, tournamentId: string): Promise<boolean> {
+  const result = await query(
+    'SELECT 1 FROM tournament_teams WHERE id = ? AND tournament_id = ? LIMIT 1',
+    [teamId, tournamentId]
+  );
+  return result.rows.length > 0;
+}
+
 // Create a team
 router.post('/tournaments/:id/teams', authMiddleware, async (req: AuthRequest, res) => {
   try {
@@ -2198,6 +2213,10 @@ router.delete('/tournaments/:id/teams/:teamId/members/:playerId', authMiddleware
       return res.status(403).json({ success: false, error: 'Only tournament organizers can remove members' });
     }
 
+    if (!(await teamBelongsToTournament(teamId, id))) {
+      return res.status(404).json({ success: false, error: 'Team not found' });
+    }
+
     // Remove member (mark as not participating instead of hard delete for history)
     const result = await query(
       `UPDATE tournament_participants 
@@ -2244,6 +2263,10 @@ router.post('/tournaments/:id/teams/:teamId/substitutes', authMiddleware, async 
       return res.status(403).json({ success: false, error: 'Only tournament organizers can add substitutes' });
     }
 
+    if (!(await teamBelongsToTournament(teamId, id))) {
+      return res.status(404).json({ success: false, error: 'Team not found' });
+    }
+
     // Add substitute
     const orderResult = await query(
       'SELECT COALESCE(MAX(substitute_order), 0) + 1 AS next_order FROM team_substitutes WHERE team_id = ?',
@@ -2281,6 +2304,10 @@ router.delete('/tournaments/:id/teams/:teamId/substitutes/:playerId', authMiddle
 
     if (!(await isTournamentOrganizer(id, req.userId!))) {
       return res.status(403).json({ success: false, error: 'Only tournament organizers can remove substitutes' });
+    }
+
+    if (!(await teamBelongsToTournament(teamId, id))) {
+      return res.status(404).json({ success: false, error: 'Team not found' });
     }
 
     // Delete substitute
