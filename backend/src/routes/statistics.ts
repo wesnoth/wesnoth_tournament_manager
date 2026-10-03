@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { query } from '../config/database.js';
 import { adminMiddleware, authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { getUserIP, getUserAgent, logAuditEvent } from '../middleware/audit.js';
+import { isClientSafeError } from '../utils/clientError.js';
 import {
   getBalanceTrend,
   getBalanceEventSnapshotImpact,
@@ -622,7 +623,28 @@ router.post('/history/snapshot', authMiddleware, adminMiddleware, async (req: Au
       return res.status(400).json({ error: 'Missing required field: date' });
     }
     
-    const { snapshots_created, snapshots_skipped } = await createFactionMapStatisticsSnapshot(new Date(`${snapshotDate}T00:00:00Z`));
+    // A failed backfill is audited too: it may have written part of the day's
+    // snapshot rows before failing. Internal error text is redacted because
+    // audit details are shown in the admin UI.
+    let snapshotResult: Awaited<ReturnType<typeof createFactionMapStatisticsSnapshot>>;
+    try {
+      snapshotResult = await createFactionMapStatisticsSnapshot(new Date(`${snapshotDate}T00:00:00Z`));
+    } catch (snapshotError) {
+      await logAuditEvent({
+        event_type: 'ADMIN_ACTION',
+        user_id: req.userId,
+        username: req.username,
+        ip_address: getUserIP(req),
+        user_agent: getUserAgent(req),
+        details: {
+          action: 'BALANCE_SNAPSHOT_BACKFILL_FAILED',
+          snapshot_date: snapshotDate,
+          error: isClientSafeError(snapshotError) ? snapshotError.message : 'Internal error (see server log)',
+        },
+      });
+      throw snapshotError;
+    }
+    const { snapshots_created, snapshots_skipped } = snapshotResult;
 
     await logAuditEvent({
       event_type: 'ADMIN_ACTION',

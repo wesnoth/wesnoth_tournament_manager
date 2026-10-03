@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../config/database.js';
 import { isClientSafeError } from '../utils/clientError.js';
+import { logAuditEvent } from '../middleware/audit.js';
 
 export type GlobalStatsRecalculationProgress = {
   phase: string;
@@ -20,6 +21,30 @@ type RecalculationExecutor = (
 ) => Promise<RecalculationResult>;
 
 let activeJobId: string | null = null;
+
+/**
+ * Record how a recalculation job ended.
+ *
+ * Queuing is audited by the route that requested the job; the job itself runs
+ * after the HTTP response, so its outcome is recorded here. The event carries
+ * the requester as `user_id` (so filtering the log by that staff member shows
+ * both the request and its result) and `localhost` as the address, matching the
+ * scheduler's background events. Every job that reaches a final state produces
+ * exactly one event: completed, failed, or interrupted by a restart.
+ */
+const auditJobOutcome = async (
+  action: 'GLOBAL_STATS_RECALCULATION_COMPLETED' | 'GLOBAL_STATS_RECALCULATION_FAILED',
+  job: { id: string; requestedBy: string | null; reason: string },
+  details: Record<string, unknown>
+): Promise<void> => {
+  await logAuditEvent({
+    event_type: 'ADMIN_ACTION',
+    user_id: job.requestedBy ?? undefined,
+    username: 'Background job',
+    ip_address: 'localhost',
+    details: { action, job_id: job.id, reason: job.reason, ...details },
+  });
+};
 
 export const getActiveGlobalStatsRecalculationJobId = async (): Promise<string | null> => {
   if (activeJobId) return activeJobId;
@@ -63,16 +88,21 @@ export const enqueueGlobalStatsRecalculation = async (options: {
   );
 
   setImmediate(() => {
-    void runGlobalStatsRecalculationJob(jobId, options.execute);
+    void runGlobalStatsRecalculationJob(
+      { id: jobId, requestedBy: options.requestedBy, reason: options.reason },
+      options.execute
+    );
   });
 
   return jobId;
 };
 
 const runGlobalStatsRecalculationJob = async (
-  jobId: string,
+  job: { id: string; requestedBy: string | null; reason: string },
   execute: RecalculationExecutor
 ): Promise<void> => {
+  const jobId = job.id;
+  const startedAt = Date.now();
   try {
     await query(
       `UPDATE global_stats_recalculation_jobs
@@ -104,6 +134,18 @@ const runGlobalStatsRecalculationJob = async (
         jobId,
       ]
     );
+
+    // `success: false` means the replay finished but some step reported
+    // errors; it is still a failure from the auditor's point of view.
+    await auditJobOutcome(
+      result.success ? 'GLOBAL_STATS_RECALCULATION_COMPLETED' : 'GLOBAL_STATS_RECALCULATION_FAILED',
+      job,
+      {
+        matches_processed: result.matchesProcessed,
+        users_updated: result.usersUpdated,
+        duration_seconds: Math.round((Date.now() - startedAt) / 1000),
+      }
+    );
   } catch (error) {
     // `error_message` is returned by the job-status endpoint, so only domain
     // messages are persisted; internal details (SQL, stack-derived text) stay
@@ -115,6 +157,11 @@ const runGlobalStatsRecalculationJob = async (
        WHERE id = ?`,
       [isClientSafeError(error) ? error.message : 'Internal error (see server log)', jobId]
     );
+    // Same redaction as `error_message`: audit details are shown in the admin UI.
+    await auditJobOutcome('GLOBAL_STATS_RECALCULATION_FAILED', job, {
+      error: isClientSafeError(error) ? error.message : 'Internal error (see server log)',
+      duration_seconds: Math.round((Date.now() - startedAt) / 1000),
+    });
   } finally {
     activeJobId = null;
   }
@@ -141,8 +188,19 @@ export const getGlobalStatsRecalculationJob = async (jobId: string) => {
   return job;
 };
 
-/** Mark work interrupted by a backend restart so it cannot block future jobs. */
+/**
+ * Mark work interrupted by a backend restart so it cannot block future jobs.
+ *
+ * The interrupted jobs are read first so each one still gets its closing audit
+ * event; otherwise a queued recalculation would have no recorded outcome.
+ */
 export const recoverInterruptedGlobalStatsRecalculationJobs = async (): Promise<void> => {
+  const interrupted = await query(
+    `SELECT id, requested_by, reason, phase FROM global_stats_recalculation_jobs
+     WHERE status IN ('queued', 'running')`
+  );
+  if (interrupted.rows.length === 0) return;
+
   await query(
     `UPDATE global_stats_recalculation_jobs
      SET status = 'failed', phase = 'failed',
@@ -150,4 +208,12 @@ export const recoverInterruptedGlobalStatsRecalculationJobs = async (): Promise<
          completed_at = CURRENT_TIMESTAMP
      WHERE status IN ('queued', 'running')`
   );
+
+  for (const row of interrupted.rows) {
+    await auditJobOutcome(
+      'GLOBAL_STATS_RECALCULATION_FAILED',
+      { id: row.id, requestedBy: row.requested_by ?? null, reason: row.reason },
+      { error: 'Backend restarted before the recalculation completed', interrupted_phase: row.phase }
+    );
+  }
 };

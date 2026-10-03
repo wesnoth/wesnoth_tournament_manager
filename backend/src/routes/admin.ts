@@ -13,6 +13,7 @@ import {
   GlobalStatsRecalculationInProgressError,
 } from '../services/globalStatsRecalculationJobService.js';
 import { isTournamentOrganizer } from '../services/tournamentAuthorizationService.js';
+import { isClientSafeError } from '../utils/clientError.js';
 import { getSystemPauseStatus, globalRecalculationMiddleware, invalidateNonAdminTokens } from '../services/systemPauseService.js';
 
 const router = Router();
@@ -1599,26 +1600,33 @@ router.post('/recalculate-snapshots', authMiddleware, async (req: AuthRequest, r
     const { recreateAll } = req.body;
 
     // A full rebuild is deliberately explicit because it truncates historical
-    // derived rows and recreates them from matches. Audit the operation after
-    // the service succeeds so the audit record reflects a completed rebuild.
+    // derived rows and recreates them from matches. The run is synchronous, so
+    // it gets a single audit event with its outcome: success with the counts,
+    // or failure, because a failed full rebuild can leave the history partially
+    // truncated and an auditor must be able to see that it happened.
     console.log('Starting balance event snapshots recalculation', { recreateAll });
+    const startedAt = Date.now();
 
     // Call TypeScript function to recalculate snapshots
     const { recalculateBalanceEventSnapshots } = await import('../services/statisticsCalculator.js');
-    const tsResult = await recalculateBalanceEventSnapshots(recreateAll === true);
-
-    await logAuditEvent({
-      event_type: 'ADMIN_ACTION',
-      user_id: req.userId,
-      username: req.username,
-      ip_address: getUserIP(req),
-      user_agent: getUserAgent(req),
-      details: {
-        action: 'BALANCE_SNAPSHOTS_RECALCULATED',
+    let tsResult: Awaited<ReturnType<typeof recalculateBalanceEventSnapshots>>;
+    try {
+      tsResult = await recalculateBalanceEventSnapshots(recreateAll === true);
+    } catch (recalcError) {
+      // Audit details are shown in the admin UI, so internal error text is redacted.
+      await auditStaffAction(req, 'BALANCE_SNAPSHOTS_RECALCULATION_FAILED', {
         recreate_all: recreateAll === true,
-        events_processed: tsResult.balance_events_updated,
-        snapshots_created: tsResult.snapshots_created,
-      },
+        error: isClientSafeError(recalcError) ? recalcError.message : 'Internal error (see server log)',
+        duration_seconds: Math.round((Date.now() - startedAt) / 1000),
+      });
+      throw recalcError;
+    }
+
+    await auditStaffAction(req, 'BALANCE_SNAPSHOTS_RECALCULATED', {
+      recreate_all: recreateAll === true,
+      events_processed: tsResult.balance_events_updated,
+      snapshots_created: tsResult.snapshots_created,
+      duration_seconds: Math.round((Date.now() - startedAt) / 1000),
     });
 
     res.json({
