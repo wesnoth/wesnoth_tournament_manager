@@ -271,6 +271,21 @@ function getOptionValueById(
   return typeof match?.value === 'string' ? match.value : undefined;
 }
 
+/**
+ * Read the Ranked add-on tournament flag from a WML node.
+ *
+ * The add-on stores the flag only as `tournament_mode`, the same id as its
+ * game option (see extractRankedModificationConfig); a real 1.19.27
+ * tournament replay carries `tournament_mode` in its variables and nothing
+ * sets a `tournament` key. Reading `tournament` made every variables block
+ * report tournament=false, so a ranked tournament game (ranked_mode=yes,
+ * tournament_mode=yes) was returned early as a ranked game outside the
+ * tournament and never searched by game name.
+ */
+function readTournamentFlag(node: WmlNode): boolean {
+  return node.tournament_mode === 'yes';
+}
+
 function extractRankedModificationConfig(
   container: WmlNode | undefined,
   locationLabel: string,
@@ -397,7 +412,7 @@ function extractAddonConfig(wml: WmlNode): RankedAddonConfig {
       const scenarioData = scenario['scenario_data'] as WmlNode | undefined;
       if (scenarioData) {
         rankedMode = scenarioData.ranked_mode === 'yes';
-        tournament = scenarioData.tournament === 'yes';
+        tournament = readTournamentFlag(scenarioData);
         tournamentName = tournament ? (scenarioData.tournament_name as string | undefined) : undefined;
 
         // Fallback to root-level scenario field if tournament=yes but no tournament_name
@@ -423,7 +438,7 @@ function extractAddonConfig(wml: WmlNode): RankedAddonConfig {
       const variables = replayStart.variables as WmlNode | undefined;
       if (variables) {
         rankedMode = variables.ranked_mode === 'yes';
-        tournament = variables.tournament === 'yes';
+        tournament = readTournamentFlag(variables);
         tournamentName = tournament ? (variables.tournament_name as string | undefined) : undefined;
 
         if (rankedMode || tournament) {
@@ -453,7 +468,7 @@ function extractAddonConfig(wml: WmlNode): RankedAddonConfig {
       const variables = carryoverSidesStart.variables as WmlNode | undefined;
       if (variables) {
         rankedMode = variables.ranked_mode === 'yes';
-        tournament = variables.tournament === 'yes';
+        tournament = readTournamentFlag(variables);
         tournamentName = tournament ? (variables.tournament_name as string | undefined) : undefined;
 
         if (rankedMode || tournament) {
@@ -481,7 +496,7 @@ function extractAddonConfig(wml: WmlNode): RankedAddonConfig {
     const rootScenarioData = wml['scenario_data'] as WmlNode | undefined;
     if (rootScenarioData) {
       rankedMode = rootScenarioData.ranked_mode === 'yes';
-      tournament = rootScenarioData.tournament === 'yes';
+      tournament = readTournamentFlag(rootScenarioData);
       tournamentName = tournament ? (rootScenarioData.tournament_name as string | undefined) : undefined;
 
       // Fallback to root-level scenario field if tournament=yes but no tournament_name
