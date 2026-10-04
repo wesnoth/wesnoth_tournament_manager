@@ -9,25 +9,12 @@ backend/build/
 frontend/dist/
 frontend/build/
 
-# Environment files (keep .env.example files)
+# Environment files: ignore .env and every .env.* variant (development, test,
+# production, local, ...) in any directory. Only the .env.example templates
+# are tracked; they must never contain real values.
 .env
-.env.local
-backend/.env
-backend/.env.local
-backend/.env.dev
-backend/.env.development
-backend/.env.migration
-backend/.env.test
-backend/.env.production
-frontend/.env
-frontend/.env.local
-frontend/.env.migration
-frontend/.env.dev
-frontend/.env.development
-frontend/.env.staging
-frontend/.env.main
-frontend/.env.test
-frontend/.env.production
+.env.*
+!.env.example
 
 # Migration data files (CSV exports, sensitive data)
 backend/migrations/manual_migrations/
