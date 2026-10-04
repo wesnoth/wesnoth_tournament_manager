@@ -158,6 +158,7 @@ export const ReplayConfirmationModal: React.FC<ReplayConfirmationModalProps> = (
                 {t('label_comments') || 'Comments'} <span className="text-gray-500 font-normal text-xs">(optional)</span>
               </label>
               <textarea
+                data-help-id="field-replay-confirmation-comments"
                 value={comments}
                 onChange={(e) => setComments(e.target.value)}
                 placeholder={t('label_additional_notes') || 'Share your thoughts about this match...'}
@@ -197,6 +198,7 @@ export const ReplayConfirmationModal: React.FC<ReplayConfirmationModalProps> = (
           {/* Action buttons */}
           <div className="flex gap-3 pt-4 border-t border-gray-200">
             <button
+              data-help-id="action-close-replay-confirmation"
               onClick={onClose}
               disabled={isSubmitting}
               className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
@@ -204,6 +206,7 @@ export const ReplayConfirmationModal: React.FC<ReplayConfirmationModalProps> = (
               {t('button_cancel') || 'Cancel'}
             </button>
             <button
+              data-help-id="action-submit-replay-confirmation"
               onClick={handleSubmit}
               disabled={isSubmitting}
               className={`flex-1 px-4 py-2 text-white rounded-lg font-semibold transition ${

@@ -343,6 +343,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                           </div>
                           <div className="flex gap-2 flex-wrap">
                             <button
+                              data-help-id="action-confirm-ranked-replay-won"
                               className={`px-3 py-1 rounded text-xs font-semibold transition ${
                                 showConfirmationModal
                                   ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
@@ -355,6 +356,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                               {t('replay_i_won')}
                             </button>
                             <button
+                              data-help-id="action-confirm-ranked-replay-lost"
                               className={`px-3 py-1 rounded text-xs font-semibold transition ${
                                 showConfirmationModal
                                   ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
@@ -367,6 +369,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                               {t('replay_i_lost')}
                             </button>
                             <button
+                              data-help-id="action-cancel-ranked-replay"
                               className={`px-3 py-1 rounded text-xs font-semibold transition ${
                                 showConfirmationModal
                                   ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
