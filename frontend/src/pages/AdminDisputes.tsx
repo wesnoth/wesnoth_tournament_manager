@@ -46,6 +46,7 @@ const AdminDisputes: React.FC = () => {
   const {
     status: recalculationStatus,
     progress: recalculationProgress,
+    warnings: recalculationWarnings,
     trackJob: trackRecalculationJob,
     reset: resetRecalculation,
   } = useGlobalStatsRecalculation();
@@ -148,7 +149,7 @@ const AdminDisputes: React.FC = () => {
         <h1 className="text-3xl font-bold text-gray-800 mb-6">Manage Match Disputes</h1>
 
         {error && recalculationStatus === 'idle' && <p className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</p>}
-        <GlobalStatsRecalculationProgress status={recalculationStatus} progress={recalculationProgress} />
+        <GlobalStatsRecalculationProgress status={recalculationStatus} progress={recalculationProgress} warnings={recalculationWarnings} />
         {recalculationStatus === 'idle' && message && <p className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-4">{message}</p>}
 
         {disputes.length === 0 ? (

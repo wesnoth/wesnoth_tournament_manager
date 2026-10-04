@@ -6,9 +6,10 @@ import { adminMiddleware, authMiddleware, moderatorOrAdminMiddleware, AuthReques
 import { calculateNewRating, calculateTrend } from '../utils/elo.js';
 import { unlockAccount, lockoutRemainingSeconds } from '../services/accountLockout.js';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
-import { performGlobalStatsRecalculation } from './matches.js';
+import { performQueuedGlobalStatsRecalculation } from './matches.js';
 import {
   enqueueGlobalStatsRecalculation,
+  getActiveGlobalStatsRecalculationJobId,
   getGlobalStatsRecalculationJob,
   GlobalStatsRecalculationInProgressError,
 } from '../services/globalStatsRecalculationJobService.js';
@@ -456,20 +457,7 @@ router.post('/recalculate-all-stats', authMiddleware, async (req: AuthRequest, r
     const jobId = await enqueueGlobalStatsRecalculation({
       requestedBy: req.userId ?? null,
       reason: 'ADMIN_MANUAL_RECALCULATION',
-      execute: async (onProgress) => {
-        const recalcResult = await performGlobalStatsRecalculation(onProgress);
-        if (recalcResult.success) {
-          try {
-            await onProgress({ phase: 'calculating_player_of_month', current: 0, total: 1 });
-            const { calculatePlayerOfMonth } = await import('../jobs/playerOfMonthJob.js');
-            await calculatePlayerOfMonth();
-            await onProgress({ phase: 'calculating_player_of_month', current: 1, total: 1 });
-          } catch (error: any) {
-            console.error('⚠️  Warning: Failed to recalculate player of month:', error.message);
-          }
-        }
-        return recalcResult;
-      },
+      execute: performQueuedGlobalStatsRecalculation,
     });
 
     await auditStaffAction(req, 'GLOBAL_STATS_RECALCULATION_QUEUED', { job_id: jobId });
@@ -1719,6 +1707,17 @@ router.post('/calculate-player-of-month', authMiddleware, async (req: AuthReques
     const adminResult = await query('SELECT is_admin FROM users_extension WHERE id = ?', [req.userId]);
     if (adminResult.rows.length === 0 || !adminResult.rows[0].is_admin) {
       return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    // The ranking is derived from the statistics a global recalculation is
+    // rewriting; computing it mid-rewrite would publish a wrong result. This is
+    // also the manual recovery for the `player_of_month_failed` job warning.
+    const activeRecalculationJobId = await getActiveGlobalStatsRecalculationJobId();
+    if (activeRecalculationJobId) {
+      return res.status(409).json({
+        error: 'A global statistics recalculation is in progress. Calculate the player of the month after it completes.',
+        jobId: activeRecalculationJobId,
+      });
     }
 
     const { calculatePlayerOfMonth } = await import('../jobs/playerOfMonthJob.js');

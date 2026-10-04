@@ -306,6 +306,7 @@ export const adminService = {
     api.get('/admin/maintenance-logs', { params: limit ? { limit } : {} }),
   recalculateAllStats: () => api.post('/admin/recalculate-all-stats'),
   getRecalculateAllStatsStatus: (jobId: string) => api.get(`/admin/recalculate-all-stats/${jobId}`),
+  calculatePlayerOfMonth: () => api.post('/admin/calculate-player-of-month'),
   
   // Audit logs
   getAuditLogs: (params?: any) => api.get('/admin/audit-logs', { params }),

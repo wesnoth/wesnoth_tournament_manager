@@ -8,6 +8,8 @@ import { getUserLevel } from '../utils/auth.js';
 import {
   enqueueGlobalStatsRecalculation,
   getActiveGlobalStatsRecalculationJobId,
+  GlobalStatsRecalculationProgress,
+  RecalculationResult,
 } from '../services/globalStatsRecalculationJobService.js';
 import {
   calculateNewRating,
@@ -400,6 +402,36 @@ async function performGlobalStatsRecalculation(
       matchesProcessed: 0,
       usersUpdated: 0
     };
+  }
+}
+
+/**
+ * Executor for queued global recalculations: replay every match, then refresh
+ * the player of the month from the rewritten statistics.
+ *
+ * The player-of-month step is optional (maintainer decision, 2026-10-04): the
+ * main replay has already rewritten ELO and statistics correctly, so its
+ * failure must not turn the job into `failed`. It is reported instead as the
+ * `player_of_month_failed` warning, which the job service persists in
+ * `result_json` and in the outcome audit event. Recovery is the admin
+ * "recalculate player of the month" action or the monthly cron. The step is
+ * skipped when the main replay failed, because it would read inconsistent data.
+ */
+async function performQueuedGlobalStatsRecalculation(
+  onProgress: (progress: GlobalStatsRecalculationProgress) => Promise<void>
+): Promise<RecalculationResult> {
+  const recalcResult: RecalculationResult = await performGlobalStatsRecalculation(onProgress);
+  if (!recalcResult.success) return recalcResult;
+
+  try {
+    await onProgress({ phase: 'calculating_player_of_month', current: 0, total: 1 });
+    const { calculatePlayerOfMonth } = await import('../jobs/playerOfMonthJob.js');
+    await calculatePlayerOfMonth();
+    await onProgress({ phase: 'calculating_player_of_month', current: 1, total: 1 });
+    return recalcResult;
+  } catch (error) {
+    console.error('⚠️  Warning: Failed to recalculate player of month after global recalculation:', error);
+    return { ...recalcResult, warnings: [...(recalcResult.warnings ?? []), 'player_of_month_failed'] };
   }
 }
 
@@ -963,20 +995,7 @@ router.post('/admin/:id/dispute', moderatorOrAdminMiddleware, async (req: AuthRe
         recalcJobId = await enqueueGlobalStatsRecalculation({
           requestedBy: req.userId ?? null,
           reason: 'MATCH_DISPUTE_AWARDED_WIN',
-          execute: async (onProgress) => {
-            const recalcResult = await performGlobalStatsRecalculation(onProgress);
-            if (recalcResult.success) {
-              try {
-                await onProgress({ phase: 'calculating_player_of_month', current: 0, total: 1 });
-                const { calculatePlayerOfMonth } = await import('../jobs/playerOfMonthJob.js');
-                await calculatePlayerOfMonth();
-                await onProgress({ phase: 'calculating_player_of_month', current: 1, total: 1 });
-              } catch (error: any) {
-                console.error('⚠️  Warning: Failed to recalculate player of month after awarding dispute:', error.message);
-              }
-            }
-            return recalcResult;
-          },
+          execute: performQueuedGlobalStatsRecalculation,
         });
       } catch (error: any) {
         // Do not leave a corrected match without a scheduled recalculation.
@@ -2055,4 +2074,4 @@ router.post('/admin-discard-replay', authMiddleware, globalRecalculationMiddlewa
 });
 
 export default router;
-export { performGlobalStatsRecalculation };
+export { performGlobalStatsRecalculation, performQueuedGlobalStatsRecalculation };

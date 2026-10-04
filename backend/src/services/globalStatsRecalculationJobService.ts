@@ -9,11 +9,18 @@ export type GlobalStatsRecalculationProgress = {
   total: number;
 };
 
-type RecalculationResult = {
+export type RecalculationResult = {
   success: boolean;
   logs: string[];
   matchesProcessed: number;
   usersUpdated: number;
+  /**
+   * Machine-readable codes for optional follow-up steps that failed after the
+   * main recalculation succeeded (for example `player_of_month_failed`). They
+   * do not change the job outcome; they are persisted in `result_json` and in
+   * the outcome audit event so the failure stays visible beyond the server log.
+   */
+  warnings?: string[];
 };
 
 type RecalculationExecutor = (
@@ -149,6 +156,7 @@ const runGlobalStatsRecalculationJob = async (
         [phase, current, total, jobId]
       );
     });
+    const warnings = result.warnings ?? [];
 
     await query(
       `UPDATE global_stats_recalculation_jobs
@@ -160,7 +168,11 @@ const runGlobalStatsRecalculationJob = async (
         result.success ? 'completed' : 'failed',
         result.matchesProcessed,
         result.matchesProcessed,
-        JSON.stringify({ matchesProcessed: result.matchesProcessed, usersUpdated: result.usersUpdated }),
+        JSON.stringify({
+          matchesProcessed: result.matchesProcessed,
+          usersUpdated: result.usersUpdated,
+          ...(warnings.length > 0 ? { warnings } : {}),
+        }),
         jobId,
       ]
     );
@@ -174,6 +186,7 @@ const runGlobalStatsRecalculationJob = async (
         matches_processed: result.matchesProcessed,
         users_updated: result.usersUpdated,
         duration_seconds: Math.round((Date.now() - startedAt) / 1000),
+        ...(warnings.length > 0 ? { warnings } : {}),
       }
     );
   } catch (error) {

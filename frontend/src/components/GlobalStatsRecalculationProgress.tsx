@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import {
   RecalculationProgress,
   RecalculationStatus,
+  RecalculationWarning,
 } from '../hooks/useGlobalStatsRecalculation';
 
 const phases: Record<string, { index: number; key: string }> = {
@@ -19,14 +20,17 @@ const phaseCount = 5;
 interface Props {
   status: RecalculationStatus;
   progress: RecalculationProgress;
+  /** Warnings of a completed job; a non-empty list renders the completed panel as a warning. */
+  warnings?: RecalculationWarning[];
 }
 
 /** Render the single shared status panel for a global statistics recalculation. */
-const GlobalStatsRecalculationProgress: React.FC<Props> = ({ status, progress }) => {
+const GlobalStatsRecalculationProgress: React.FC<Props> = ({ status, progress, warnings = [] }) => {
   const { t } = useTranslation();
   if (status === 'idle') return null;
 
   const isRunning = status === 'running';
+  const completedWithWarnings = status === 'completed' && warnings.length > 0;
   const phase = phases[progress.phase] || phases.starting;
   const percentage = progress.total > 0
     ? Math.min(100, Math.round((progress.current / progress.total) * 100))
@@ -36,7 +40,9 @@ const GlobalStatsRecalculationProgress: React.FC<Props> = ({ status, progress })
     <div className={`mb-4 rounded-lg border px-4 py-3 ${
       isRunning
         ? 'border-purple-200 bg-purple-50 text-purple-900'
-        : status === 'completed'
+        : completedWithWarnings
+          ? 'border-yellow-400 bg-yellow-50 text-yellow-800'
+          : status === 'completed'
           ? 'border-green-400 bg-green-100 text-green-700'
           : 'border-red-400 bg-red-100 text-red-700'
     }`}>
@@ -52,7 +58,11 @@ const GlobalStatsRecalculationProgress: React.FC<Props> = ({ status, progress })
         </>
       ) : (
         <span className="font-semibold">
-          {status === 'completed'
+          {completedWithWarnings && warnings.includes('player_of_month_failed')
+            ? t('admin.recalculation_completed_player_of_month_failed')
+            : completedWithWarnings
+            ? t('admin.recalculation_completed_with_warnings')
+            : status === 'completed'
             ? t('admin.recalculation_completed', 'Global statistics recalculation completed')
             : t('admin.recalculation_failed', 'Global statistics recalculation failed')}
         </span>

@@ -41,9 +41,11 @@ const AdminUsers: React.FC = () => {
   const [actionType, setActionType] = useState('');
   const [searchNIC, setSearchNIC] = useState('');
   const [recalculatingStats, setRecalculatingStats] = useState(false);
+  const [calculatingPlayerOfMonth, setCalculatingPlayerOfMonth] = useState(false);
   const {
     status: recalculationStatus,
     progress: recalculationProgress,
+    warnings: recalculationWarnings,
     start: startRecalculation,
     reset: resetRecalculation,
   } = useGlobalStatsRecalculation();
@@ -249,6 +251,29 @@ const AdminUsers: React.FC = () => {
     }
   };
 
+  /**
+   * Recompute only the player of the month. This is the recovery action for a
+   * global recalculation that completed with the `player_of_month_failed`
+   * warning; the backend answers 409 while a global recalculation is running.
+   */
+  const handleCalculatePlayerOfMonth = async () => {
+    try {
+      setCalculatingPlayerOfMonth(true);
+      setError('');
+      setMessage('');
+      await adminService.calculatePlayerOfMonth();
+      resetRecalculation();
+      setMessage(t('admin.player_of_month_recalculated'));
+      setTimeout(() => setMessage(''), 5000);
+    } catch (err: any) {
+      setError(err?.response?.status === 409
+        ? t('admin.player_of_month_blocked_by_recalculation')
+        : t('admin.player_of_month_recalculation_failed'));
+    } finally {
+      setCalculatingPlayerOfMonth(false);
+    }
+  };
+
   if (loading) {
     return <MainLayout><div className="max-w-6xl mx-auto px-4 py-8"><p className="text-center text-gray-600">{t('loading')}</p></div></MainLayout>;
   }
@@ -259,7 +284,7 @@ const AdminUsers: React.FC = () => {
       <h1 className="text-3xl font-bold text-gray-800 mb-6">{t('admin_users_title')}</h1>
 
       {error && <p className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</p>}
-      <GlobalStatsRecalculationProgress status={recalculationStatus} progress={recalculationProgress} />
+      <GlobalStatsRecalculationProgress status={recalculationStatus} progress={recalculationProgress} warnings={recalculationWarnings} />
       {recalculationStatus === 'idle' && message && <p className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-4">{message}</p>}
 
       <section className="grid grid-cols-3 gap-4 mb-6">
@@ -286,6 +311,14 @@ const AdminUsers: React.FC = () => {
           disabled={recalculatingStats}
         >
           {recalculatingStats ? t('admin.recalculating') : t('admin.recalculate_all_stats')}
+        </button>
+        <button
+          data-help-id="action-admin-recalculate-player-of-month"
+          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 mr-3"
+          onClick={handleCalculatePlayerOfMonth}
+          disabled={calculatingPlayerOfMonth || recalculatingStats}
+        >
+          {calculatingPlayerOfMonth ? t('admin.recalculating') : t('admin.recalculate_player_of_month')}
         </button>
         <button
           className={`px-4 py-2 rounded-lg text-white font-semibold ${
