@@ -20,6 +20,15 @@ type RecalculationExecutor = (
   onProgress: (progress: GlobalStatsRecalculationProgress) => Promise<void>
 ) => Promise<RecalculationResult>;
 
+/**
+ * In-process reservation of the single allowed recalculation.
+ *
+ * Invariant: it is assigned synchronously, before the first `await` of an
+ * enqueue call, so two concurrent requests in this process can never both pass
+ * the check. Only the job that owns the reservation may clear it. The backend
+ * runs as a single instance, so this in-memory guard plus the persisted job row
+ * (which also covers jobs left by a previous process) is sufficient.
+ */
 let activeJobId: string | null = null;
 
 /**
@@ -46,14 +55,24 @@ const auditJobOutcome = async (
   });
 };
 
-export const getActiveGlobalStatsRecalculationJobId = async (): Promise<string | null> => {
-  if (activeJobId) return activeJobId;
+/** Oldest persisted job that has not reached a final state, if any. */
+const findPersistedActiveJobId = async (): Promise<string | null> => {
   const result = await query(
     `SELECT id FROM global_stats_recalculation_jobs
      WHERE status IN ('queued', 'running')
      ORDER BY created_at ASC LIMIT 1`
   );
   return result.rows[0]?.id || null;
+};
+
+export const getActiveGlobalStatsRecalculationJobId = async (): Promise<string | null> => {
+  if (activeJobId) return activeJobId;
+  return findPersistedActiveJobId();
+};
+
+/** Clear the reservation only when it still belongs to `jobId`. */
+const releaseReservation = (jobId: string): void => {
+  if (activeJobId === jobId) activeJobId = null;
 };
 
 export class GlobalStatsRecalculationInProgressError extends Error {
@@ -73,19 +92,30 @@ export const enqueueGlobalStatsRecalculation = async (options: {
   reason: string;
   execute: RecalculationExecutor;
 }): Promise<string> => {
-  const currentJobId = await getActiveGlobalStatsRecalculationJobId();
-  if (currentJobId) {
-    throw new GlobalStatsRecalculationInProgressError(currentJobId);
+  // Reserve before any await (see `activeJobId`); a concurrent call that runs
+  // while this one is waiting on the database sees the reservation and fails.
+  if (activeJobId) {
+    throw new GlobalStatsRecalculationInProgressError(activeJobId);
   }
-
   const jobId = uuidv4();
   activeJobId = jobId;
-  await query(
-    `INSERT INTO global_stats_recalculation_jobs
-      (id, requested_by, reason, status, phase)
-     VALUES (?, ?, ?, 'queued', 'queued')`,
-    [jobId, options.requestedBy, options.reason]
-  );
+
+  try {
+    const persistedJobId = await findPersistedActiveJobId();
+    if (persistedJobId) {
+      throw new GlobalStatsRecalculationInProgressError(persistedJobId);
+    }
+    await query(
+      `INSERT INTO global_stats_recalculation_jobs
+        (id, requested_by, reason, status, phase)
+       VALUES (?, ?, ?, 'queued', 'queued')`,
+      [jobId, options.requestedBy, options.reason]
+    );
+  } catch (error) {
+    // No worker was scheduled, so nothing else would ever release it.
+    releaseReservation(jobId);
+    throw error;
+  }
 
   setImmediate(() => {
     void runGlobalStatsRecalculationJob(
@@ -151,19 +181,28 @@ const runGlobalStatsRecalculationJob = async (
     // messages are persisted; internal details (SQL, stack-derived text) stay
     // in the server log.
     console.error(`Global stats recalculation job ${jobId} failed:`, error);
-    await query(
-      `UPDATE global_stats_recalculation_jobs
-       SET status = 'failed', phase = 'failed', error_message = ?, completed_at = CURRENT_TIMESTAMP
-       WHERE id = ?`,
-      [isClientSafeError(error) ? error.message : 'Internal error (see server log)', jobId]
-    );
-    // Same redaction as `error_message`: audit details are shown in the admin UI.
-    await auditJobOutcome('GLOBAL_STATS_RECALCULATION_FAILED', job, {
-      error: isClientSafeError(error) ? error.message : 'Internal error (see server log)',
-      duration_seconds: Math.round((Date.now() - startedAt) / 1000),
-    });
+    // This runs in a detached promise (`void` in enqueue), so a failure while
+    // recording the failure must be contained here: it would otherwise become
+    // an unhandled rejection. The row then stays `queued`/`running` until the
+    // next restart marks it interrupted; the in-process reservation is still
+    // released below, and the persisted check is what keeps blocking new jobs.
+    try {
+      await query(
+        `UPDATE global_stats_recalculation_jobs
+         SET status = 'failed', phase = 'failed', error_message = ?, completed_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [isClientSafeError(error) ? error.message : 'Internal error (see server log)', jobId]
+      );
+      // Same redaction as `error_message`: audit details are shown in the admin UI.
+      await auditJobOutcome('GLOBAL_STATS_RECALCULATION_FAILED', job, {
+        error: isClientSafeError(error) ? error.message : 'Internal error (see server log)',
+        duration_seconds: Math.round((Date.now() - startedAt) / 1000),
+      });
+    } catch (recordError) {
+      console.error(`Could not record the failure of recalculation job ${jobId}:`, recordError);
+    }
   } finally {
-    activeJobId = null;
+    releaseReservation(jobId);
   }
 };
 
