@@ -61,15 +61,14 @@
 
 - `[POST] /api/matches/preview-replay-base64` — Private — body: `{replayData: base64string}` — Parse replay file and extract match data (no upload stored).
 - `[POST] /api/matches/preview-replay` — Private — multipart: `replay` file — Parse replay (multipart form version; base64 version preferred).
-- `[POST] /api/matches/:id/confirm` — Private — body: `{action: 'confirm'|'dispute', comments?, rating?}` — Loser confirms or disputes a match.
+- `[POST] /api/matches/:id/confirm` — Private — body: `{action: 'confirm'|'dispute', comments?, rating?}` — A participant confirms or disputes a match. Either participant may dispute an open, not yet admin-reviewed result; a dispute never recalculates anything by itself.
 - `[GET] /api/matches/disputed/all` — Private (admin) — All disputed matches.
 - `[GET] /api/matches/pending/all` — Private (admin) — All pending/unconfirmed matches.
 - `[GET] /api/matches/pending/user` — Private — Pending matches for current user.
-- `[POST] /api/matches/admin/:id/dispute` — Private (admin) — body: `{action: 'validate'|'reject'}` — Resolve a disputed match.
+- `[POST] /api/matches/admin/:id/dispute` — Private (admin/moderator) — body: `{action: 'award'|'validate'|'reject'}` — Resolve a disputed match: invert the result (queues a global recalculation), annul it, or keep it.
 - `[GET] /api/matches/:matchId/replay/download` — Public — Download replay file for a match.
 - `[POST] /api/matches/:matchId/replay/download-count` — Public — Increment replay download count.
 - `[GET] /api/matches` — Private — query: `page, winner, loser, map, status, confirmed, faction` — List matches.
-- `[POST] /api/matches/:id/cancel-own` — Private — Cancel own pending match report.
 - `[POST] /api/matches/report-confidence-1-replay` — Private — body: `{replayId, winner_choice, comments?, rating?, tournament_match_id?}` — Player confirms result of a confidence=1 auto-detected replay.
 - `[POST] /api/matches/cancel-confidence-1-replay` — Private — body: `{replayId}` — Cancel a confidence=1 replay before reporting.
 - `[POST] /api/matches/admin-discard-replay` — Private (admin) — body: `{replayId}` — Admin discards a replay from the confirmation queue.
@@ -348,11 +347,6 @@ Admin validates a dispute (cancels the match and reverses ELO):
 - Calls `recalculateFactionMapStatistics()` → rebuilds `faction_map_statistics`.
 - Attempts to call `calculatePlayerOfMonth()` to refresh player-of-month data.
 - Match is re-opened for re-reporting.
-
-### `POST /api/matches/:id/cancel-own`
-Reporter cancels their own pending match:
-- Sets match status to `cancelled`.
-- Same full ELO cascade and `recalculatePlayerMatchStatistics()` as dispute validate.
 
 ### `POST /api/admin/recalculate-all-stats`
 Admin triggers manual full recalculation:

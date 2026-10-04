@@ -777,24 +777,54 @@ router.post('/:id/confirm', authMiddleware, globalRecalculationMiddleware, async
       );
       const updatedMatch = await query('SELECT loser_rating, winner_rating FROM matches WHERE id = ?', [id]);
       if (updatedMatch.rows[0]?.loser_rating && updatedMatch.rows[0]?.winner_rating) {
-        await query('UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', ['confirmed', id]);
+        // Only an open result becomes confirmed: a participant's comments or
+        // rating must not silently close a dispute opened by the other player
+        // (or reopen a cancelled match). Disputes are closed only by an admin.
+        await query(
+          `UPDATE matches SET status = 'confirmed', updated_at = CURRENT_TIMESTAMP
+           WHERE id = ? AND status IN ('reported', 'unconfirmed')`,
+          [id]
+        );
       }
       return res.json({ message: 'Match confirmed successfully with your comments and rating' });
     }
 
     if (action === 'dispute') {
-      if (!isLoser) return res.status(403).json({ error: 'Only the losing player can dispute this match' });
-      await query(
-        "UPDATE matches SET status = 'disputed', loser_comments = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        [comments || null, id]
+      // Either participant may dispute. The reported winner needs this too: a
+      // mistaken surrender makes the system record the real winner as loser,
+      // and the honest "winner" must be able to reopen the result. A dispute
+      // never changes ELO or statistics by itself; an admin or moderator
+      // resolves it (award = invert, validate = annul, reject = keep), and only
+      // that resolution may trigger a recalculation.
+      //
+      // Only open, never-reviewed results can be disputed: cancelled matches
+      // and matches an admin already ruled on are final. The conditional UPDATE
+      // makes the state check and the write atomic, so two concurrent disputes
+      // (or a dispute racing an admin decision) cannot both succeed.
+      const commentColumn = isWinner ? 'winner_comments' : 'loser_comments';
+      const disputeResult = await query(
+        `UPDATE matches
+         SET status = 'disputed', ${commentColumn} = ?, disputed_by = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?
+           AND status IN ('reported', 'unconfirmed', 'confirmed')
+           AND COALESCE(admin_reviewed, 0) = 0`,
+        [comments || null, req.userId, id]
       );
+      if (!disputeResult.rowCount) {
+        return res.status(409).json({ error: 'This match can no longer be disputed' });
+      }
       await logAuditEvent({
         event_type: 'ADMIN_ACTION',
         user_id: req.userId,
         username: req.username,
         ip_address: getUserIP(req),
         user_agent: getUserAgent(req),
-        details: { action: 'MATCH_DISPUTED', match_id: id },
+        details: {
+          action: 'MATCH_DISPUTED',
+          match_id: id,
+          disputed_as: isWinner ? 'winner' : 'loser',
+          previous_status: match.status,
+        },
       });
       return res.json({ message: 'Match disputed. Awaiting admin review.' });
     }
@@ -836,10 +866,12 @@ router.get('/disputed/all', moderatorOrAdminMiddleware, async (req: AuthRequest,
     const result = await query(
       `SELECT m.*,
               w.nickname as winner_nickname,
-              l.nickname as loser_nickname
+              l.nickname as loser_nickname,
+              d.nickname as disputed_by_nickname
        FROM matches m
        JOIN users_extension w ON m.winner_id = w.id
        JOIN users_extension l ON m.loser_id = l.id
+       LEFT JOIN users_extension d ON m.disputed_by = d.id
        WHERE m.status = 'disputed'
        ORDER BY m.updated_at DESC, m.id DESC
        LIMIT ? OFFSET ?`,
@@ -945,9 +977,11 @@ router.post('/admin/:id/dispute', moderatorOrAdminMiddleware, async (req: AuthRe
     }
 
     if (action === 'award') {
-      // Correct the result on the existing match row so replay identity and all
-      // foreign-key references remain intact. The disputed player is currently
-      // stored as loser_id because only that participant can open the dispute.
+      // Invert the result on the existing match row so replay identity and all
+      // foreign-key references remain intact. This swaps winner and loser
+      // regardless of who opened the dispute (`disputed_by`): either
+      // participant may dispute, so the action means "the reported result was
+      // backwards", not "the disputing player wins".
       const previousResult = {
         winner_id: match.winner_id,
         loser_id: match.loser_id,
@@ -1948,66 +1982,6 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
   } catch (error) {
     console.error('Error fetching matches:', error);
     res.status(500).json({ error: 'Failed to fetch matches' });
-  }
-});
-
-// Cancel own match (self-dispute auto-confirmation)
-// Reporter can cancel a match they reported if it hasn't been disputed yet
-router.post('/:id/cancel-own', authMiddleware, async (req: AuthRequest, res) => {
-  try {
-    const { id } = req.params;
-    const userId = req.userId;
-    
-    // Fetch the match
-    const matchResult = await query(
-      'SELECT * FROM matches WHERE id = ?',
-      [id]
-    );
-    
-    if (matchResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Match not found' });
-    }
-    
-    const match = matchResult.rows[0];
-    
-    // Verify user is the reporter (winner)
-    if (match.winner_id !== userId) {
-      return res.status(403).json({ error: 'Only the match reporter (winner) can cancel it' });
-    }
-    
-    // Match must not be in a final state already
-    if (!['pending', 'confirmed', 'unconfirmed'].includes(match.status)) {
-      return res.status(400).json({ error: `Match is already ${match.status}, cannot cancel` });
-    }
-    
-    console.log(`[SELF-CANCEL] Player ${userId} canceling their own match ${id}`);
-    
-    // STEP 1: Mark the match as cancelled
-    await query(
-      'UPDATE matches SET status = ?, admin_reviewed = true, admin_reviewed_at = CURRENT_TIMESTAMP, admin_reviewed_by = ? WHERE id = ?',
-      ['cancelled', userId, id]
-    );
-    
-    // STEP 2: Perform global stats recalculation
-    const recalcResult = await performGlobalStatsRecalculation();
-    
-    if (recalcResult.success) {
-      console.log(`Match ${id} self-cancelled by reporter ${userId}: Stats recalculated`);
-      res.json({ 
-        message: 'Match cancelled successfully. Stats have been recalculated.',
-        matchId: id
-      });
-    } else {
-      console.error(`Match ${id} cancelled but stats recalculation may have failed`);
-      res.json({ 
-        message: 'Match cancelled successfully.',
-        matchId: id,
-        warning: 'Stats recalculation encountered some issues'
-      });
-    }
-  } catch (error) {
-    console.error('Error cancelling match:', error);
-    res.status(500).json({ error: 'Failed to cancel match' });
   }
 });
 

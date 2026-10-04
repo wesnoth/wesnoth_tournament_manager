@@ -11,15 +11,18 @@ interface MatchDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onDownloadReplay?: (matchId: string | null, replayFilePath: string, tournamentGameId?: string, tournamentId?: string) => void;
-  onCancelSuccess?: () => void;
+  /** Called after the viewer successfully disputes the match. */
+  onDisputeSuccess?: () => void;
 }
 
-const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, onClose, onDownloadReplay, onCancelSuccess }) => {
+const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, onClose, onDownloadReplay, onDisputeSuccess }) => {
   const { t } = useTranslation();
   const { userId } = useAuthStore();
-  const [cancelLoading, setCancelLoading] = useState(false);
-  const [cancelError, setCancelError] = useState<string | null>(null);
-  const [cancelSuccess, setCancelSuccess] = useState(false);
+  const [disputeFormOpen, setDisputeFormOpen] = useState(false);
+  const [disputeComments, setDisputeComments] = useState('');
+  const [disputeLoading, setDisputeLoading] = useState(false);
+  const [disputeError, setDisputeError] = useState<string | null>(null);
+  const [disputeSuccess, setDisputeSuccess] = useState(false);
   
   if (!isOpen || !match) {
     return null;
@@ -28,9 +31,17 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
   const winnerEloChange = (match: any) => (match.winner_elo_after || 0) - (match.winner_elo_before || 0);
   const loserEloChange = (match: any) => (match.loser_elo_after || 0) - (match.loser_elo_before || 0);
 
-  // Check if current user is the reporter (winner) and match can be cancelled
-  const isReporter = match.winner_id === userId;
-  const canCancel = match.source_type === 'match' && isReporter && ['unconfirmed', 'confirmed'].includes(match.status);
+  // Either participant of a ranked match row may dispute an open result that no
+  // admin has reviewed yet (mirrors the backend check in POST /matches/:id/confirm).
+  // A dispute changes nothing by itself: an admin inverts, annuls, or keeps the
+  // result. This replaces the former self-cancel, which let a player trigger a
+  // global recalculation (e.g. the real winner surrendered by mistake and the
+  // reported "winner" wants the result reopened).
+  const isParticipant = !!userId && (match.winner_id === userId || match.loser_id === userId);
+  const canDispute = match.source_type === 'match'
+    && isParticipant
+    && ['reported', 'unconfirmed', 'confirmed'].includes(match.status)
+    && !match.admin_reviewed;
   const hasEloData = match.has_elo_data !== false;
   const isPendingTournamentReplay = String(match.source_type).startsWith('tournament_replay_confidence_1');
 
@@ -48,22 +59,24 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
     );
   };
 
-  const handleCancelReport = async () => {
+  const handleSubmitDispute = async () => {
     try {
-      setCancelLoading(true);
-      setCancelError(null);
-      await matchService.cancelOwnMatch(match.id);
-      setCancelSuccess(true);
+      setDisputeLoading(true);
+      setDisputeError(null);
+      await matchService.confirmMatch(match.id, { action: 'dispute', comments: disputeComments.trim() || null });
+      setDisputeSuccess(true);
       setTimeout(() => {
-        if (onCancelSuccess) {
-          onCancelSuccess();
+        if (onDisputeSuccess) {
+          onDisputeSuccess();
         }
         onClose();
       }, 1500);
     } catch (error: any) {
-      setCancelError(error?.response?.data?.error || 'Failed to cancel match report');
+      setDisputeError(error?.response?.status === 409
+        ? t('match_dispute_not_allowed')
+        : t('match_dispute_failed'));
     } finally {
-      setCancelLoading(false);
+      setDisputeLoading(false);
     }
   };
 
@@ -223,27 +236,52 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex gap-3 justify-center">
-          {canCancel && (
-            <button 
-              data-help-id="action-cancel-match-report"
-              className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
-                cancelSuccess 
-                  ? 'bg-green-500 text-white' 
-                  : cancelLoading
-                  ? 'bg-red-300 text-white cursor-not-allowed'
-                  : 'bg-red-500 hover:bg-red-600 text-white'
-              }`}
-              onClick={handleCancelReport}
-              disabled={cancelLoading || cancelSuccess}
-            >
-              {cancelLoading ? '⏳ Cancelling...' : cancelSuccess ? '✓ Report Cancelled' : '✗ Cancel Report'}
-            </button>
-          )}
-          {cancelError && (
-            <div className="text-red-600 text-sm self-center">
-              {cancelError}
+        {canDispute && disputeFormOpen && (
+          <div data-help-id="region-match-dispute-form" className="px-6 py-4 border-t border-gray-200 bg-red-50">
+            <p className="text-sm text-gray-700 mb-3">{t('match_dispute_description')}</p>
+            <textarea
+              data-help-id="field-match-dispute-comments"
+              value={disputeComments}
+              onChange={(e) => setDisputeComments(e.target.value)}
+              placeholder={t('match_dispute_comments_placeholder')}
+              rows={3}
+              maxLength={500}
+              disabled={disputeLoading || disputeSuccess}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-red-400 bg-white text-gray-800 disabled:opacity-50"
+            />
+            <div className="flex gap-3 justify-end mt-3">
+              <button
+                data-help-id="action-close-match-dispute-form"
+                className="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg font-semibold hover:bg-gray-400 disabled:opacity-50"
+                onClick={() => { setDisputeFormOpen(false); setDisputeError(null); }}
+                disabled={disputeLoading || disputeSuccess}
+              >
+                {t('match_dispute_back')}
+              </button>
+              <button
+                data-help-id="action-submit-match-dispute"
+                className={`px-4 py-2 rounded-lg font-semibold text-white disabled:cursor-not-allowed ${
+                  disputeSuccess ? 'bg-green-500' : 'bg-red-500 hover:bg-red-600 disabled:bg-red-300'
+                }`}
+                onClick={handleSubmitDispute}
+                disabled={disputeLoading || disputeSuccess}
+              >
+                {disputeLoading ? t('match_dispute_sending') : disputeSuccess ? t('match_dispute_success') : t('match_dispute_submit')}
+              </button>
             </div>
+            {disputeError && <p className="text-red-600 text-sm mt-2">{disputeError}</p>}
+          </div>
+        )}
+
+        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex gap-3 justify-center">
+          {canDispute && !disputeFormOpen && (
+            <button
+              data-help-id="action-dispute-match-result"
+              className="px-6 py-2 rounded-lg font-semibold transition-colors bg-red-500 hover:bg-red-600 text-white"
+              onClick={() => setDisputeFormOpen(true)}
+            >
+              {t('match_dispute_button')}
+            </button>
           )}
           <button 
             data-help-id="action-close-match-details"

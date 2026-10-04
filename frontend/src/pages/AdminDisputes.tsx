@@ -16,6 +16,11 @@ interface DisputedMatch {
   loser_faction?: string;
   winner_comments?: string | null;
   loser_comments?: string | null;
+  winner_id?: string;
+  loser_id?: string;
+  /** Participant who opened the dispute; NULL for disputes opened before this was recorded. */
+  disputed_by?: string | null;
+  disputed_by_nickname?: string | null;
   winner_rating?: number | null;
   loser_rating?: number | null;
   status: string;
@@ -247,11 +252,15 @@ const AdminDisputes: React.FC = () => {
                       <span className="font-semibold text-gray-800">Played:</span>
                       <span className="text-gray-900 font-medium">{formatDisputeDate(selectedDispute.created_at)}</span>
                     </div>
+                    <div className="flex justify-between">
+                      <span className="font-semibold text-gray-800">{t('dispute_opened_by')}</span>
+                      <span className="text-gray-900 font-medium">{selectedDispute.disputed_by_nickname || t('dispute_opened_by_unknown')}</span>
+                    </div>
                   </div>
                 </div>
 
                 <div className="bg-green-50 rounded-lg p-6 border-l-4 border-green-500">
-                  <h3 className="text-lg font-bold text-green-900 mb-4">Winner's Comments</h3>
+                  <h3 className="text-lg font-bold text-green-900 mb-4">Winner's Comments{selectedDispute.disputed_by && selectedDispute.disputed_by === selectedDispute.winner_id ? ' / Dispute Reason' : ''}</h3>
                   <p className="whitespace-pre-line break-words leading-relaxed text-gray-800">{selectedDispute.winner_comments || 'No comments provided'}</p>
                   {selectedDispute.winner_rating && (
                     <p className="text-sm text-green-700 mt-4 font-semibold">⭐ Match Rating: {selectedDispute.winner_rating}/5</p>
@@ -259,7 +268,8 @@ const AdminDisputes: React.FC = () => {
                 </div>
 
                 <div className="bg-red-50 rounded-lg p-6 border-l-4 border-red-500">
-                  <h3 className="text-lg font-bold text-red-900 mb-4">Loser's Comments / Dispute Reason</h3>
+                  {/* Disputes opened before `disputed_by` existed could only come from the loser. */}
+                  <h3 className="text-lg font-bold text-red-900 mb-4">Loser's Comments{!selectedDispute.disputed_by || selectedDispute.disputed_by === selectedDispute.loser_id ? ' / Dispute Reason' : ''}</h3>
                   <p className="whitespace-pre-line break-words leading-relaxed text-gray-800">{selectedDispute.loser_comments || 'No comments provided'}</p>
                   {selectedDispute.loser_rating && (
                     <p className="text-sm text-red-700 mt-4 font-semibold">⭐ Match Rating: {selectedDispute.loser_rating}/5</p>
@@ -296,12 +306,12 @@ const AdminDisputes: React.FC = () => {
                   className="px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold transition-colors shadow-md flex items-center gap-2"
                   disabled={processingId === selectedDispute.id}
                   onClick={() => {
-                    if (window.confirm(t('confirm_award_dispute_win'))) {
+                    if (window.confirm(t('confirm_award_dispute_win', { nickname: selectedDispute.loser_nickname }))) {
                       handleAwardDisputeWin(selectedDispute.id);
                     }
                   }}
                 >
-                  ✓ {t('award_dispute_win')}
+                  ✓ {t('award_dispute_win', { nickname: selectedDispute.loser_nickname })}
                 </button>
                 <button 
                   data-help-id="action-reject-dispute-admin"

@@ -442,7 +442,7 @@ const Matches: React.FC = () => {
         isOpen={matchDetailsModal.isOpen} 
         onClose={closeMatchDetails}
         onDownloadReplay={handleDownloadReplay}
-        onCancelSuccess={() => {
+        onDisputeSuccess={() => {
           // Refresh matches by resetting to page 1
           setCurrentPage(1);
           closeMatchDetails();

@@ -406,6 +406,7 @@ CREATE TABLE `matches` (
   `admin_reviewed` tinyint(1) DEFAULT 0,
   `admin_reviewed_at` datetime DEFAULT NULL,
   `admin_reviewed_by` char(36) DEFAULT NULL,
+  `disputed_by` char(36) DEFAULT NULL,
   `winner_elo_before` int(11) DEFAULT 1600,
   `winner_elo_after` int(11) DEFAULT 1600,
   `loser_elo_before` int(11) DEFAULT 1600,
