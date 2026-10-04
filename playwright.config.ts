@@ -30,6 +30,20 @@ export default defineConfig({
         storageState: 'e2e/.auth/user.json',
       },
       testMatch: /.*\.spec\.ts/,
+      // Replay-pipeline specs need the local stack and its forum tables.
+      testIgnore: /replay-pipeline\//,
+    },
+    {
+      // Real replay pipeline against the local stack (backend + frontend on
+      // localhost, MariaDB instance from localdatabase/). Public pages only,
+      // so no stored login. The replay fixtures share players (and their ELO),
+      // so run serially: npx playwright test --project=local-replays --workers=1
+      name: 'local-replays',
+      testMatch: /replay-pipeline\/.*\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: process.env.E2E_LOCAL_BASE_URL || 'http://localhost:5173',
+      },
     },
   ],
 });

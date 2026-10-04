@@ -47,6 +47,8 @@ Thumbs.db
 # reports remain local because they can contain session credentials.
 /e2e/*
 !/e2e/auth.setup.ts
+!/e2e/support/
+!/e2e/replay-pipeline/
 !/e2e/tournaments/
 /e2e/tournaments/*
 !/e2e/tournaments/ranked-elimination.spec.ts
