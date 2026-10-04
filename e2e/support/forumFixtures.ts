@@ -7,10 +7,25 @@ import { localStack, runSql, sqlLiteral } from './localStack';
 /** A side as recorded in the replay WML. */
 export interface ReplaySide {
   side: number;
+  /** Empty for a side without a player (wesnothd records USER_ID -1 for it). */
   nickname: string;
   /** Faction as wesnothd stores it for the Ranked era, e.g. "Ranked Undead". */
   faction: string;
 }
+
+/** One `wesnothd_game_content_info` row describing the era or the scenario. */
+export interface ContentRow {
+  id: string;
+  addonId: string;
+  addonVersion: string;
+  name: string;
+}
+
+/** Ranked era with the Ranked map picker, as recorded for the Ranked Classic Maps replays. */
+const rankedContent = {
+  era: { id: 'ranked_era', addonId: 'ranked_era', addonVersion: '1.0.4', name: 'Ranked Era' },
+  scenario: { id: 'ranked_classic_maps', addonId: 'ranked_map_picker', addonVersion: '1.0.4', name: 'Ranked Classic Maps' },
+};
 
 export interface InjectedGame {
   instanceUuid: string;
@@ -36,8 +51,9 @@ export function readReplaySides(replayFixture: string): ReplaySide[] {
     maxBuffer: 64 * 1024 * 1024,
   });
   // The first [side] blocks of the starting state carry current_player and
-  // faction_name; later occurrences (snapshots) repeat them, so keep the first
-  // occurrence per side number.
+  // faction; later occurrences (snapshots) repeat them, so keep the first
+  // occurrence per side number. A side without current_player is an empty
+  // seat (controller="null"), kept so the forum rows match production.
   const sides = new Map<number, ReplaySide>();
   for (const block of wml.split('[side]').slice(1)) {
     const body = block.split('[/side]')[0];
@@ -46,12 +62,14 @@ export function readReplaySides(replayFixture: string): ReplaySide[] {
     const side = Number(body.match(/^\s*side="?(\d+)"?\s*$/m)?.[1]);
     const nickname = body.match(/^\s*current_player="([^"]+)"/m)?.[1];
     const faction = body.match(/^\s*faction="([^"]+)"/m)?.[1];
-    if (side && nickname && faction && !sides.has(side)) {
-      sides.set(side, { side, nickname, faction });
+    if (side && faction && !sides.has(side)) {
+      sides.set(side, { side, nickname: nickname || '', faction });
     }
   }
   const ordered = [...sides.values()].sort((a, b) => a.side - b.side);
-  if (ordered.length < 2) throw new Error(`Could not read two sides from replay fixture ${replayFixture}`);
+  if (ordered.filter((s) => s.nickname).length < 2) {
+    throw new Error(`Could not read two player sides from replay fixture ${replayFixture}`);
+  }
   return ordered;
 }
 
@@ -73,7 +91,16 @@ export function readReplaySides(replayFixture: string): ReplaySide[] {
  * sync job compares it with a UTC checkpoint. The copied replay gets a unique
  * name that never contains `Turn_1_`, which the parser deletes.
  */
-export function injectLegacyGame(options: { replayFixture: string; gameName?: string }): InjectedGame {
+export function injectLegacyGame(options: {
+  replayFixture: string;
+  /** Forum GAME_NAME; for tournament games the tournament name or its `T<topic>` code. */
+  gameName?: string;
+  /**
+   * Era and scenario rows plus the Ranked add-on version; defaults to the
+   * Ranked era and Ranked map picker of the Ranked Classic Maps replays.
+   */
+  content?: { era: ContentRow; scenario: ContentRow; rankedAddonVersion?: string };
+}): InjectedGame {
   const instanceUuid = randomUUID();
   const gameId = 1;
   const sides = readReplaySides(options.replayFixture);
@@ -82,16 +109,17 @@ export function injectLegacyGame(options: { replayFixture: string; gameName?: st
   const gameName = options.gameName || `${sides[0].nickname}’s game`;
 
   const users = runSql(
-    `SELECT user_id, username FROM ${localStack.forumDb}.phpbb3_users WHERE username IN (${sides.map((s) => sqlLiteral(s.nickname)).join(', ')});`,
+    `SELECT user_id, username FROM ${localStack.forumDb}.phpbb3_users WHERE username IN (${sides.filter((s) => s.nickname).map((s) => sqlLiteral(s.nickname)).join(', ')});`,
   );
   const userIdByName = new Map(users.map((row) => [String(row.username).toLowerCase(), Number(row.user_id)]));
-  for (const side of sides) {
+  for (const side of sides.filter((s) => s.nickname)) {
     if (!userIdByName.has(side.nickname.toLowerCase())) {
       throw new Error(`Forum user ${side.nickname} does not exist in ${localStack.forumDb}.phpbb3_users`);
     }
   }
 
-  copyReplayFixture(options.replayFixture, replayName);
+  const content = options.content || rankedContent;
+  copyReplayFixture(options.replayFixture, replayName, options.gameName);
   const sql = [
     `USE ${localStack.forumDb};`,
     'START TRANSACTION;',
@@ -100,14 +128,19 @@ export function injectLegacyGame(options: { replayFixture: string; gameName?: st
      VALUES (${sqlLiteral(instanceUuid)}, ${gameId}, ${sqlLiteral(localStack.wesnothVersion)}, ${sqlLiteral(gameName)},
              UTC_TIMESTAMP() - INTERVAL 15 MINUTE, UTC_TIMESTAMP(), ${sqlLiteral(replayName)},
              b'0', b'0', b'1', b'0', b'1', NULL);`,
+    // Empty seats are recorded with USER_ID -1 and no name or client, as in
+    // production; the parse job ignores them (user_id != -1).
     ...sides.map((side) =>
       `INSERT INTO wesnothd_game_player_info (INSTANCE_UUID, GAME_ID, USER_ID, SIDE_NUMBER, IS_HOST, FACTION, CLIENT_VERSION, USER_NAME, LEADERS)
-       VALUES (${sqlLiteral(instanceUuid)}, ${gameId}, ${userIdByName.get(side.nickname.toLowerCase())}, ${side.side},
-               ${side.side === 1 ? "b'1'" : "b'0'"}, ${sqlLiteral(side.faction)}, '1.19.26+dev', ${sqlLiteral(side.nickname)}, '');`),
+       VALUES (${sqlLiteral(instanceUuid)}, ${gameId}, ${side.nickname ? userIdByName.get(side.nickname.toLowerCase()) : -1}, ${side.side},
+               ${side.side === 1 ? "b'1'" : "b'0'"}, ${sqlLiteral(side.faction)}, ${side.nickname ? "'1.19.26+dev'" : "''"},
+               ${sqlLiteral(side.nickname)}, '');`),
     `INSERT INTO wesnothd_game_content_info (INSTANCE_UUID, GAME_ID, TYPE, ID, ADDON_ID, ADDON_VERSION, NAME) VALUES
-       (${sqlLiteral(instanceUuid)}, ${gameId}, 'era', 'ranked_era', 'ranked_era', '1.0.4', 'Ranked Era'),
-       (${sqlLiteral(instanceUuid)}, ${gameId}, 'scenario', 'ranked_classic_maps', 'ranked_map_picker', '1.0.4', 'Ranked Classic Maps'),
-       (${sqlLiteral(instanceUuid)}, ${gameId}, 'modification', 'ranked', 'Ranked', '1.0.10', 'Ranked');`,
+       (${sqlLiteral(instanceUuid)}, ${gameId}, 'era', ${sqlLiteral(content.era.id)}, ${sqlLiteral(content.era.addonId)},
+        ${sqlLiteral(content.era.addonVersion)}, ${sqlLiteral(content.era.name)}),
+       (${sqlLiteral(instanceUuid)}, ${gameId}, 'scenario', ${sqlLiteral(content.scenario.id)}, ${sqlLiteral(content.scenario.addonId)},
+        ${sqlLiteral(content.scenario.addonVersion)}, ${sqlLiteral(content.scenario.name)}),
+       (${sqlLiteral(instanceUuid)}, ${gameId}, 'modification', 'ranked', 'Ranked', ${sqlLiteral(content.rankedAddonVersion || '1.0.10')}, 'Ranked');`,
     'COMMIT;',
   ].join('\n');
   runSql(sql);
@@ -115,8 +148,15 @@ export function injectLegacyGame(options: { replayFixture: string; gameName?: st
   return { instanceUuid, gameId, replayName, sides };
 }
 
-/** Copy a fixture replay into REPLAY_SAVE_PATH under the game's unique name. */
-function copyReplayFixture(sourceName: string, replayName: string): void {
+/**
+ * Copy a fixture replay into REPLAY_SAVE_PATH under the game's unique name.
+ *
+ * When a game name is given, the copy's `mp_game_title` and root/multiplayer
+ * `scenario` fields are rewritten to it, as wesnothd would record a game
+ * created with that name. The parser links by the forum GAME_NAME, so this
+ * only keeps the fixture internally consistent.
+ */
+function copyReplayFixture(sourceName: string, replayName: string, gameName?: string): void {
   const source = path.join(localStack.replayFixturesDir, sourceName);
   if (!fs.existsSync(source)) {
     throw new Error(`Replay fixture not found: ${source} (set E2E_REPLAY_FIXTURES_DIR)`);
@@ -125,7 +165,16 @@ function copyReplayFixture(sourceName: string, replayName: string): void {
     throw new Error(`REPLAY_SAVE_PATH not found: ${localStack.replaySavePath} (set E2E_REPLAY_SAVE_PATH)`);
   }
   const target = path.join(localStack.replaySavePath, replayName);
-  fs.copyFileSync(source, target);
+  if (gameName) {
+    const wml = execFileSync('bzcat', [source], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    const quoted = gameName.replace(/"/g, '""');
+    const renamed = wml
+      .replace(/^(\s*mp_game_title=)"[^"]*"/gm, `$1"${quoted}"`)
+      .replace(/^(\s*scenario=)"[^"]*"/gm, `$1"${quoted}"`);
+    fs.writeFileSync(target, execFileSync('bzip2', ['-c'], { input: renamed, maxBuffer: 64 * 1024 * 1024 }));
+  } else {
+    fs.copyFileSync(source, target);
+  }
   copiedReplays.add(target);
 }
 

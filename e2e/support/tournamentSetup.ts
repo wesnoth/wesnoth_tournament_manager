@@ -34,12 +34,21 @@ export async function createStartedSwissTournament(page: Page, options: {
   players: string[];
   /** Games per series; a best-of-3 between two players gives a second game after the first. */
   bestOf?: number;
+  /**
+   * Forum thread number. Its topic becomes the tournament's short game code
+   * (`T<number>`), the most robust way for a game to find its tournament.
+   */
+  forumTopicId?: number;
 }): Promise<string> {
   await loginAs(page, options.organizer);
   await page.goto('/my-tournaments');
   await page.locator('[data-help-id="action-open-create-tournament"]').click();
   await page.locator('[data-help-id="field-tournament-name"]').fill(options.name);
   await page.locator('[data-help-id="field-tournament-description"]').fill('# Replay pipeline E2E scenario');
+  if (options.forumTopicId) {
+    await page.locator('[data-help-id="field-tournament-forum-topic-url"]')
+      .fill(`https://forums.wesnoth.org/viewtopic.php?t=${options.forumTopicId}`);
+  }
   await page.locator(`[data-help-id="option-tournament-mode-${options.mode}"]`).check();
   await openSection(page, 'action-toggle-tournament-phase-configuration');
   page.once('dialog', (dialog) => dialog.accept());

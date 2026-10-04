@@ -9,8 +9,10 @@ import { createStartedSwissTournament, getPendingTournamentGames, getTournamentG
  * `tournament_unranked` (tournament result only, no match, no ELO).
  *
  * Each run creates a fresh two-player, one-round Swiss tournament played as a
- * best-of-3 series. The injected forum game is named after the tournament,
- * which is how the parser finds it:
+ * best-of-3 series. The injected forum game finds its tournament by one of the
+ * two supported links: the tournament name, or the more robust `T<topic>`
+ * code taken from the tournament's forum thread (forum_topic_id is unique,
+ * so each run uses its own topic number):
  * - game 1 uses a replay with a surrender (confidence 2) and must be
  *   integrated automatically;
  * - game 2 uses the surrender-free copy (confidence 1) and is confirmed by a
@@ -18,37 +20,71 @@ import { createStartedSwissTournament, getPendingTournamentGames, getTournamentG
  */
 const organizer = process.env.E2E_TOURNAMENT_ORGANIZER || 'Blair';
 
-const scenarios = [
+type Scenario = {
+  mode: 'ranked' | 'unranked';
+  fixture: string;
+  players: string[];
+  surrenderWinner: string;
+  manualWinner: string;
+  linkBy: 'name' | 'topic';
+  content?: Parameters<typeof injectLegacyGame>[0]['content'];
+};
+
+const scenarios: Scenario[] = [
   {
     // ranked_mode=yes, tournament_mode=yes (tournament_mode flipped in the copy).
-    mode: 'ranked' as const,
+    mode: 'ranked',
     fixture: 'Ranked_Classic_Maps_Turn_2_(1)__ranked-tournament',
     players: ['Haldiel', 'clmates'],
     surrenderWinner: 'clmates',
     manualWinner: 'Haldiel',
+    linkBy: 'name',
   },
   {
     // ranked_mode=no, tournament_mode=yes, as recorded by the local wesnothd.
-    mode: 'unranked' as const,
+    mode: 'unranked',
     fixture: 'Ranked_Classic_Maps_Turn_4_(1)__no-tournament',
     players: ['clmates', 'Caritas'],
     surrenderWinner: 'clmates',
     manualWinner: 'Caritas',
+    linkBy: 'name',
+  },
+  {
+    // Real 1.19.27 tournament replay (game "T60881"): default era, The Quality
+    // Tournament Maps, ranked_mode=no, tournament_mode=yes; momom2 wins when
+    // clmates surrenders; side 3 is an empty seat. Content rows mirror a
+    // production game of the same tournament: the scenario belongs to the
+    // Ranked add-on 1.0.15.
+    mode: 'unranked',
+    fixture: 'The_Quality_Tournament_Maps_Turn_22_(145)',
+    players: ['momom2', 'clmates'],
+    surrenderWinner: 'momom2',
+    manualWinner: 'clmates',
+    linkBy: 'topic',
+    content: {
+      era: { id: 'era_default', addonId: 'mainline', addonVersion: '1.19.27', name: 'Default' },
+      scenario: { id: 'tqt_maps', addonId: 'Ranked', addonVersion: '1.0.15', name: 'The Quality Tournament Maps' },
+      rankedAddonVersion: '1.0.15',
+    },
   },
 ];
 
 test.afterAll(cleanupInjectedReplays);
 
 for (const scenario of scenarios) {
-  test(`tournament ${scenario.mode} 1v1 games are integrated automatically or after confirmation`, async ({ page }) => {
+  test(`tournament ${scenario.mode} 1v1 games linked by ${scenario.linkBy} are integrated automatically or after confirmation`, async ({ page }) => {
     test.setTimeout(600_000);
-    const name = `e2e_replay_${scenario.mode}_${Date.now()}`;
+    const name = `e2e_replay_${scenario.mode}_${scenario.linkBy}_${Date.now()}`;
+    // A fresh topic number per run because forum_topic_id is unique.
+    const forumTopicId = scenario.linkBy === 'topic' ? 900_000 + (Date.now() % 99_000) : undefined;
+    const gameName = forumTopicId ? `T${forumTopicId}` : name;
     const tournamentId = await createStartedSwissTournament(page, {
       name,
       mode: scenario.mode,
       organizer,
       players: scenario.players,
       bestOf: 3,
+      forumTopicId,
     });
     const expectsElo = scenario.mode === 'ranked';
     const ratingsBefore = Object.fromEntries(scenario.players.map((nickname) => [nickname, getPlayerRating(nickname)]));
@@ -56,7 +92,7 @@ for (const scenario of scenarios) {
     // Game 1: surrender -> confidence 2, automatic.
     const [first] = getPendingTournamentGames(tournamentId);
     expect(first).toBeTruthy();
-    const injected1 = injectLegacyGame({ replayFixture: `${scenario.fixture}.bz2`, gameName: name });
+    const injected1 = injectLegacyGame({ replayFixture: `${scenario.fixture}.bz2`, gameName, content: scenario.content });
     const replay1 = await waitForReplayOutcome(injected1, (state) => state.parse_status !== 'new');
     expect(replay1, `game 1 replay: ${replay1.parse_status} ${replay1.parse_error_message}`).toMatchObject({
       parse_status: 'completed',
@@ -70,7 +106,7 @@ for (const scenario of scenarios) {
     // Game 2: no surrender -> confidence 1, a participant confirms.
     await expect.poll(() => getPendingTournamentGames(tournamentId).length, { timeout: 30_000 }).toBe(1);
     const [second] = getPendingTournamentGames(tournamentId);
-    const injected2 = injectLegacyGame({ replayFixture: `${scenario.fixture}_nosurrender.bz2`, gameName: name });
+    const injected2 = injectLegacyGame({ replayFixture: `${scenario.fixture}_nosurrender.bz2`, gameName, content: scenario.content });
     const replay2 = await waitForReplayOutcome(injected2, (state) => state.parse_status !== 'new');
     expect(replay2, `game 2 replay: ${replay2.parse_status} ${replay2.parse_error_message}`).toMatchObject({
       parse_status: 'parsed',
