@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { publishGroupStandings } from '../services/tournamentPhaseDiscordService.js';
+import { notifyTournamentFinished, publishGroupStandings } from '../services/tournamentPhaseDiscordService.js';
 import { v4 as uuidv4 } from 'uuid';
 import { authMiddleware, streamerMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { isTournamentOrganizer } from '../services/tournamentAuthorizationService.js';
@@ -10,7 +10,7 @@ import { findDirectPassPlacement, rebalanceRoundOneDirectPasses } from '../tourn
 import { getTournamentFormat, saveTournamentFormat } from '../tournament-engine/formatService.js';
 import type { TournamentFormatDefinition } from '../tournament-engine/types.js';
 import { pool, query } from '../config/database.js';
-import { recordPhaseGameResult, recalculateGroupStandings } from '../tournament-engine/competitionProgression.js';
+import { finalizeTournamentFromPhase, recordPhaseGameResult, recalculateGroupStandings } from '../tournament-engine/competitionProgression.js';
 import {
   compileNextPhaseCompetition,
   preparePhaseCompetition,
@@ -475,7 +475,29 @@ router.post('/:id/phases/:phaseId/advance', authMiddleware, async (req: AuthRequ
       return res.status(403).json({ error: 'Only tournament organizers can compile advancement' });
     }
     const compiled = await compileNextPhaseCompetition(req.params.id, req.params.phaseId);
-    return res.json({ compiled });
+    // Recovery for the post-commit follow-up of a game result (audit findings
+    // 3–4): when the last phase completed but finishing the tournament failed
+    // after the result was committed (TOURNAMENT_PROGRESSION_FAILED), there is
+    // no next phase to compile and the tournament stays in progress. Finishing
+    // is idempotent, so running it here completes the tournament safely.
+    let finalized = false;
+    if (!compiled) {
+      const tournament = await query(`SELECT status FROM tournaments WHERE id = ?`, [req.params.id]);
+      if (tournament.rows[0] && tournament.rows[0].status !== 'finished') {
+        await finalizeTournamentFromPhase(req.params.id, req.params.phaseId);
+        finalized = true;
+        await logAuditEvent({
+          event_type: 'ADMIN_ACTION',
+          user_id: req.userId,
+          username: req.username,
+          ip_address: getUserIP(req),
+          user_agent: getUserAgent(req),
+          details: { action: 'TOURNAMENT_FINALIZED_BY_ADVANCE', tournament_id: req.params.id, phase_id: req.params.phaseId },
+        });
+        await notifyTournamentFinished(req.params.id);
+      }
+    }
+    return res.json({ compiled, finalized });
   } catch (error: any) {
     return res.status(409).json({ error: clientErrorMessage(error, 'Failed to compile advancement', 'Compile tournament advancement error') });
   }
