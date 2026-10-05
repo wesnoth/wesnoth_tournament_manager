@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import type { PoolConnection } from 'mysql2/promise';
 import { pool } from '../config/database.js';
 import {
   notifyPhaseCompleted,
@@ -230,11 +231,299 @@ async function createSwissRoundPairings(connection: any, roundId: string, bestOf
   }
 }
 
+/** What a recorded game completed, used to run the post-commit follow-up. */
+export interface PhaseGameResultOutcome {
+  seriesCompleted: boolean;
+  completedRoundId: string | null;
+  completedPhaseId: string | null;
+}
+
 /**
- * Record one game and atomically progress its series, round, group, and phase.
+ * Record one game and progress its series, round, group, and phase inside the
+ * caller's transaction.
+ *
+ * Locks the tournament row first (serializing result recording with manual
+ * recalculation), then the game row, and refuses a game that is already
+ * completed, so two integrations of the same game can never both write.
  * Administrative actions award the series immediately through its required
  * winning score; the marked game remains presentation evidence, not a played
  * game for percentage tiebreakers.
+ *
+ * Any failure throws and the caller must roll back. Nothing here commits, and
+ * no notification or next-phase work runs: that is the caller's post-commit
+ * step (runPhaseGameResultFollowUp), so a rolled-back result never announces
+ * anything.
+ */
+export async function recordPhaseGameResultInTransaction(
+  connection: PoolConnection,
+  tournamentId: string,
+  gameId: string,
+  winnerEntryId: string,
+  matchId?: string | null,
+  organizerAction?: 'admin_award' | 'forfeit',
+  metadata?: PhaseGameResultMetadata | null,
+  confirmation?: PhaseGameConfirmation | null
+): Promise<PhaseGameResultOutcome> {
+  let completedPhaseId: string | null = null;
+  let completedRoundId: string | null = null;
+  let seriesCompleted = false;
+  // Serialize result recording and manual recalculation before reading standings.
+  await connection.execute(`SELECT id FROM tournaments WHERE id = ? FOR UPDATE`, [tournamentId]);
+  const [rows] = await connection.execute<any[]>(
+    `SELECT games.*, series.id AS series_id, series.wins_required, series.entry1_wins, series.entry2_wins,
+            rounds.id AS round_id, rounds.round_number, groups.id AS group_id,
+            phases.id AS phase_id, phases.format, phases.phase_order
+     FROM tournament_games games
+     JOIN tournament_series series ON series.id = games.series_id
+     JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+     JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+     JOIN tournament_phases phases ON phases.id = groups.phase_id
+     WHERE games.id = ? AND phases.tournament_id = ? FOR UPDATE`,
+    [gameId, tournamentId]
+  );
+  if (!rows.length) throw new Error('Tournament game not found');
+  const game = rows[0];
+  if (game.status === 'completed') throw new Error('Tournament game result is already recorded');
+  if (![game.entry1_id, game.entry2_id].includes(winnerEntryId)) throw new Error('Winner is not part of this game');
+  if (metadata) {
+    await connection.execute(
+      `UPDATE tournament_games
+       SET map = ?, winner_faction = ?, loser_faction = ?, winner_side = ?
+       WHERE id = ?`,
+      [metadata.map, metadata.winnerFaction, metadata.loserFaction, metadata.winnerSide, gameId]
+    );
+  }
+  const loserEntryId = winnerEntryId === game.entry1_id ? game.entry2_id : game.entry1_id;
+  await connection.execute(
+    `UPDATE tournament_games
+     SET winner_entry_id = ?, loser_entry_id = ?, match_id = ?, status = 'completed',
+         organizer_action = ?, played_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [winnerEntryId, loserEntryId, matchId || null, organizerAction || null, gameId]
+  );
+  if (confirmation) {
+    // The confidence-one form is submitted by either participant. Preserve
+    // the author's feedback on that participant's side of the game rather
+    // than treating every report as the winner's report.
+    const confirmationColumn = confirmation.entryId === winnerEntryId
+      ? 'winner'
+      : confirmation.entryId === loserEntryId
+        ? 'loser'
+        : null;
+    if (confirmationColumn) {
+      await connection.execute(
+        `UPDATE tournament_games
+         SET ${confirmationColumn}_comments = ?, ${confirmationColumn}_rating = ?,
+             confirmation_status = 'reported'
+         WHERE id = ?`,
+        [confirmation.comments || null, confirmation.rating, gameId]
+      );
+    }
+  }
+  const winColumn = winnerEntryId === game.entry1_id ? 'entry1_wins' : 'entry2_wins';
+  if (organizerAction) {
+    // An administrative award resolves the series without fabricating the
+    // unplayed games required by its best-of format. The series score is the
+    // authoritative competition result; this marked game is audit evidence
+    // and is deliberately excluded from game-percentage tiebreakers.
+    await connection.execute(
+      `UPDATE tournament_series
+       SET ${winColumn} = wins_required, status = 'in_progress',
+           started_at = COALESCE(started_at, CURRENT_TIMESTAMP)
+       WHERE id = ?`,
+      [game.series_id]
+    );
+  } else {
+    await connection.execute(
+      `UPDATE tournament_series SET ${winColumn} = ${winColumn} + 1, status = 'in_progress', started_at = COALESCE(started_at, CURRENT_TIMESTAMP) WHERE id = ?`,
+      [game.series_id]
+    );
+  }
+  const [seriesRows] = await connection.execute<any[]>(`SELECT * FROM tournament_series WHERE id = ?`, [game.series_id]);
+  const series = seriesRows[0];
+  const winnerWins = winnerEntryId === game.entry1_id ? series.entry1_wins : series.entry2_wins;
+  if (Number(winnerWins) >= Number(series.wins_required)) {
+    seriesCompleted = true;
+    await connection.execute(
+      `UPDATE tournament_series SET status = 'completed', winner_entry_id = ?, loser_entry_id = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      [winnerEntryId, loserEntryId, game.series_id]
+    );
+    const [scoringRows] = await connection.execute<any[]>(
+      `SELECT scoring.win_points, scoring.loss_points FROM tournament_phase_scoring scoring WHERE scoring.phase_id = ?`,
+      [game.phase_id]
+    );
+    const scoring = scoringRows[0] || { win_points: 1, loss_points: 0 };
+    await connection.execute(
+      `UPDATE tournament_phase_standings SET matches_played = matches_played + 1, wins = wins + 1, points = points + ? WHERE group_id = ? AND entry_id = ?`,
+      [scoring.win_points, game.group_id, winnerEntryId]
+    );
+    await connection.execute(
+      `UPDATE tournament_phase_standings SET matches_played = matches_played + 1, losses = losses + 1, points = points + ? WHERE group_id = ? AND entry_id = ?`,
+      [scoring.loss_points, game.group_id, loserEntryId]
+    );
+    await connection.execute(
+      `UPDATE tournament_series_slots SET resolved_entry_id = ?, resolved_at = CURRENT_TIMESTAMP WHERE source_series_id = ? AND source_outcome = 'winner'`,
+      [winnerEntryId, game.series_id]
+    );
+    await connection.execute(
+      `UPDATE tournament_series_slots SET resolved_entry_id = ?, resolved_at = CURRENT_TIMESTAMP WHERE source_series_id = ? AND source_outcome = 'loser'`,
+      [loserEntryId, game.series_id]
+    );
+    const [readyRows] = await connection.execute<any[]>(
+      `SELECT target.id,
+              MAX(CASE WHEN slots.slot_number = 1 THEN slots.resolved_entry_id END) AS entry1_id,
+              MAX(CASE WHEN slots.slot_number = 2 THEN slots.resolved_entry_id END) AS entry2_id
+       FROM tournament_series target JOIN tournament_series_slots slots ON slots.series_id = target.id
+       WHERE target.status = 'pending' AND EXISTS (SELECT 1 FROM tournament_series_slots source WHERE source.series_id = target.id AND source.source_series_id = ?)
+       GROUP BY target.id`,
+      [game.series_id]
+    );
+    for (const ready of readyRows) {
+      if (!ready.entry1_id || !ready.entry2_id) continue;
+      await connection.execute(`UPDATE tournament_series SET status = 'ready' WHERE id = ?`, [ready.id]);
+      await connection.execute(
+        `INSERT IGNORE INTO tournament_games (id, series_id, game_number, entry1_id, entry2_id, status) VALUES (?, ?, 1, ?, ?, 'pending')`,
+        [randomUUID(), ready.id, ready.entry1_id, ready.entry2_id]
+      );
+    }
+  } else {
+    await connection.execute(
+      `INSERT INTO tournament_games (id, series_id, game_number, entry1_id, entry2_id, status)
+       SELECT ?, id, ? , ?, ?, 'pending' FROM tournament_series WHERE id = ?`,
+      [randomUUID(), Number(game.game_number) + 1, game.entry1_id, game.entry2_id, game.series_id]
+    );
+  }
+
+  if (seriesCompleted) {
+    const [remainingRows] = await connection.execute<any[]>(
+      `SELECT COUNT(*) AS count FROM tournament_series WHERE round_id = ? AND status NOT IN ('completed', 'cancelled')`,
+      [game.round_id]
+    );
+    if (Number(remainingRows[0].count) === 0) {
+      completedRoundId = game.round_id;
+      await connection.execute(`UPDATE tournament_phase_rounds SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?`, [game.round_id]);
+      await recalculateTiebreakers(connection, game.group_id);
+      await rankGroup(connection, game.group_id, false);
+      const [nextRounds] = await connection.execute<any[]>(
+        `SELECT id, best_of FROM tournament_phase_rounds WHERE group_id = ? AND round_number = ? AND status = 'pending'`,
+        [game.group_id, Number(game.round_number) + 1]
+      );
+      if (nextRounds.length) {
+        if (game.format === 'swiss') {
+          await createSwissRoundPairings(connection, nextRounds[0].id, nextRounds[0].best_of, game.group_id);
+        }
+        // Elimination games are compiled in advance and Swiss games are
+        // paired only after the preceding standings are final. Activate only
+        // pending rounds: open leagues may have already finished the next
+        // round, and its status and start time must remain unchanged.
+        await connection.execute(
+          `UPDATE tournament_phase_rounds
+           SET status = 'in_progress', starts_at = CURRENT_TIMESTAMP
+           WHERE id = ? AND status = 'pending'`,
+          [nextRounds[0].id]
+        );
+      }
+      // Open league rounds can finish in any order. Check all rounds after
+      // every completion, even when a higher numbered round exists.
+      const [groupRemaining] = await connection.execute<any[]>(
+        `SELECT COUNT(*) AS count FROM tournament_phase_rounds WHERE group_id = ? AND status NOT IN ('completed', 'cancelled')`,
+        [game.group_id]
+      );
+      if (Number(groupRemaining[0].count) === 0) {
+        await rankGroup(connection, game.group_id, true);
+        await connection.execute(`UPDATE tournament_phase_groups SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?`, [game.group_id]);
+      }
+      const [phaseRemaining] = await connection.execute<any[]>(
+        `SELECT COUNT(*) AS count FROM tournament_phase_groups WHERE phase_id = ? AND status NOT IN ('completed', 'cancelled')`,
+        [game.phase_id]
+      );
+      if (Number(phaseRemaining[0].count) === 0) {
+        completedPhaseId = game.phase_id;
+        await connection.execute(`UPDATE tournament_phases SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?`, [game.phase_id]);
+      }
+    }
+  }
+  return { seriesCompleted, completedRoundId, completedPhaseId };
+}
+
+/**
+ * Write the final results and mark the tournament finished after its last
+ * phase completed. Idempotent: results are upserted and finishing an already
+ * finished tournament is harmless, so the organizer's advance action can run
+ * it again to recover from an earlier failure (audit findings 3–4, plan
+ * item 1).
+ */
+export async function finalizeTournamentFromPhase(tournamentId: string, completedPhaseId: string): Promise<void> {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [finalRows] = await connection.execute<any[]>(
+      `SELECT standings.entry_id, standings.rank_position, groups.id AS group_id
+       FROM tournament_phase_standings standings
+       JOIN tournament_phase_groups groups ON groups.id = standings.group_id
+       JOIN tournament_phases phases ON phases.id = groups.phase_id
+       WHERE phases.id = ? ORDER BY groups.group_order, standings.rank_position`,
+      [completedPhaseId]
+    );
+    const [bronzeRows] = await connection.execute<any[]>(
+      `SELECT COUNT(*) AS count FROM tournament_series series
+       JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+       JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+       WHERE groups.phase_id = ? AND series.series_role = 'third_place'`,
+      [completedPhaseId]
+    );
+    const hasThirdPlace = Number(bronzeRows[0].count) === 1;
+    for (const row of finalRows) {
+      await connection.execute(
+        `INSERT INTO tournament_results (tournament_id, entry_id, placement, placement_label, is_champion, determined_by_group_id)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE placement = VALUES(placement), placement_label = VALUES(placement_label), is_champion = VALUES(is_champion)`,
+        [tournamentId, row.entry_id, row.rank_position,
+          row.rank_position === 1 ? 'Champion' : row.rank_position === 2 ? 'Runner-up' : hasThirdPlace && row.rank_position === 3 ? 'Third place' : null,
+          row.rank_position === 1 ? 1 : 0, row.group_id]
+      );
+    }
+    await connection.execute(`UPDATE tournaments SET status = 'finished', finished_at = COALESCE(finished_at, CURRENT_TIMESTAMP) WHERE id = ?`, [tournamentId]);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+/**
+ * Post-commit work after a game result: standings and phase notifications,
+ * next-phase compilation, and tournament completion when there is no next
+ * phase. Runs outside the result transaction; the recorded result is already
+ * durable, so a failure here must not undo or repeat it. Callers that
+ * integrate replays audit such failures; the organizer's advance action is
+ * the recovery path.
+ */
+export async function runPhaseGameResultFollowUp(
+  tournamentId: string,
+  outcome: PhaseGameResultOutcome
+): Promise<{ phaseCompleted: boolean; tournamentCompleted: boolean }> {
+  let tournamentCompleted = false;
+  if (outcome.completedRoundId) await notifyRoundStandings(tournamentId, outcome.completedRoundId);
+  if (outcome.completedPhaseId) {
+    await notifyPhaseCompleted(tournamentId, outcome.completedPhaseId);
+    const hasNext = await compileNextPhaseCompetition(tournamentId, outcome.completedPhaseId);
+    if (!hasNext) {
+      await finalizeTournamentFromPhase(tournamentId, outcome.completedPhaseId);
+      tournamentCompleted = true;
+      await notifyTournamentFinished(tournamentId);
+    }
+  }
+  return { phaseCompleted: outcome.completedPhaseId !== null, tournamentCompleted };
+}
+
+/**
+ * Record one game and atomically progress its series, round, group, and
+ * phase in a transaction of its own, then run the post-commit follow-up.
+ * Used by organizer and admin actions; replay integration composes the two
+ * steps itself inside a wider transaction (replayResultService).
  */
 export async function recordPhaseGameResult(
   tournamentId: string,
@@ -246,188 +535,12 @@ export async function recordPhaseGameResult(
   confirmation?: PhaseGameConfirmation | null
 ): Promise<{ seriesCompleted: boolean; phaseCompleted: boolean; tournamentCompleted: boolean }> {
   const connection = await pool.getConnection();
-  let completedPhaseId: string | null = null;
-  let completedRoundId: string | null = null;
-  let tournamentCompleted = false;
-  let seriesCompleted = false;
+  let outcome: PhaseGameResultOutcome;
   try {
     await connection.beginTransaction();
-    // Serialize result recording and manual recalculation before reading standings.
-    await connection.execute(`SELECT id FROM tournaments WHERE id = ? FOR UPDATE`, [tournamentId]);
-    const [rows] = await connection.execute<any[]>(
-      `SELECT games.*, series.id AS series_id, series.wins_required, series.entry1_wins, series.entry2_wins,
-              rounds.id AS round_id, rounds.round_number, groups.id AS group_id,
-              phases.id AS phase_id, phases.format, phases.phase_order
-       FROM tournament_games games
-       JOIN tournament_series series ON series.id = games.series_id
-       JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
-       JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
-       JOIN tournament_phases phases ON phases.id = groups.phase_id
-       WHERE games.id = ? AND phases.tournament_id = ? FOR UPDATE`,
-      [gameId, tournamentId]
+    outcome = await recordPhaseGameResultInTransaction(
+      connection, tournamentId, gameId, winnerEntryId, matchId, organizerAction, metadata, confirmation
     );
-    if (!rows.length) throw new Error('Tournament game not found');
-    const game = rows[0];
-    if (game.status === 'completed') throw new Error('Tournament game result is already recorded');
-    if (![game.entry1_id, game.entry2_id].includes(winnerEntryId)) throw new Error('Winner is not part of this game');
-    if (metadata) {
-      await connection.execute(
-        `UPDATE tournament_games
-         SET map = ?, winner_faction = ?, loser_faction = ?, winner_side = ?
-         WHERE id = ?`,
-        [metadata.map, metadata.winnerFaction, metadata.loserFaction, metadata.winnerSide, gameId]
-      );
-    }
-    const loserEntryId = winnerEntryId === game.entry1_id ? game.entry2_id : game.entry1_id;
-    await connection.execute(
-      `UPDATE tournament_games
-       SET winner_entry_id = ?, loser_entry_id = ?, match_id = ?, status = 'completed',
-           organizer_action = ?, played_at = CURRENT_TIMESTAMP
-       WHERE id = ?`,
-      [winnerEntryId, loserEntryId, matchId || null, organizerAction || null, gameId]
-    );
-    if (confirmation) {
-      // The confidence-one form is submitted by either participant. Preserve
-      // the author's feedback on that participant's side of the game rather
-      // than treating every report as the winner's report.
-      const confirmationColumn = confirmation.entryId === winnerEntryId
-        ? 'winner'
-        : confirmation.entryId === loserEntryId
-          ? 'loser'
-          : null;
-      if (confirmationColumn) {
-        await connection.execute(
-          `UPDATE tournament_games
-           SET ${confirmationColumn}_comments = ?, ${confirmationColumn}_rating = ?,
-               confirmation_status = 'reported'
-           WHERE id = ?`,
-          [confirmation.comments || null, confirmation.rating, gameId]
-        );
-      }
-    }
-    const winColumn = winnerEntryId === game.entry1_id ? 'entry1_wins' : 'entry2_wins';
-    if (organizerAction) {
-      // An administrative award resolves the series without fabricating the
-      // unplayed games required by its best-of format. The series score is the
-      // authoritative competition result; this marked game is audit evidence
-      // and is deliberately excluded from game-percentage tiebreakers.
-      await connection.execute(
-        `UPDATE tournament_series
-         SET ${winColumn} = wins_required, status = 'in_progress',
-             started_at = COALESCE(started_at, CURRENT_TIMESTAMP)
-         WHERE id = ?`,
-        [game.series_id]
-      );
-    } else {
-      await connection.execute(
-        `UPDATE tournament_series SET ${winColumn} = ${winColumn} + 1, status = 'in_progress', started_at = COALESCE(started_at, CURRENT_TIMESTAMP) WHERE id = ?`,
-        [game.series_id]
-      );
-    }
-    const [seriesRows] = await connection.execute<any[]>(`SELECT * FROM tournament_series WHERE id = ?`, [game.series_id]);
-    const series = seriesRows[0];
-    const winnerWins = winnerEntryId === game.entry1_id ? series.entry1_wins : series.entry2_wins;
-    if (Number(winnerWins) >= Number(series.wins_required)) {
-      seriesCompleted = true;
-      await connection.execute(
-        `UPDATE tournament_series SET status = 'completed', winner_entry_id = ?, loser_entry_id = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?`,
-        [winnerEntryId, loserEntryId, game.series_id]
-      );
-      const [scoringRows] = await connection.execute<any[]>(
-        `SELECT scoring.win_points, scoring.loss_points FROM tournament_phase_scoring scoring WHERE scoring.phase_id = ?`,
-        [game.phase_id]
-      );
-      const scoring = scoringRows[0] || { win_points: 1, loss_points: 0 };
-      await connection.execute(
-        `UPDATE tournament_phase_standings SET matches_played = matches_played + 1, wins = wins + 1, points = points + ? WHERE group_id = ? AND entry_id = ?`,
-        [scoring.win_points, game.group_id, winnerEntryId]
-      );
-      await connection.execute(
-        `UPDATE tournament_phase_standings SET matches_played = matches_played + 1, losses = losses + 1, points = points + ? WHERE group_id = ? AND entry_id = ?`,
-        [scoring.loss_points, game.group_id, loserEntryId]
-      );
-      await connection.execute(
-        `UPDATE tournament_series_slots SET resolved_entry_id = ?, resolved_at = CURRENT_TIMESTAMP WHERE source_series_id = ? AND source_outcome = 'winner'`,
-        [winnerEntryId, game.series_id]
-      );
-      await connection.execute(
-        `UPDATE tournament_series_slots SET resolved_entry_id = ?, resolved_at = CURRENT_TIMESTAMP WHERE source_series_id = ? AND source_outcome = 'loser'`,
-        [loserEntryId, game.series_id]
-      );
-      const [readyRows] = await connection.execute<any[]>(
-        `SELECT target.id,
-                MAX(CASE WHEN slots.slot_number = 1 THEN slots.resolved_entry_id END) AS entry1_id,
-                MAX(CASE WHEN slots.slot_number = 2 THEN slots.resolved_entry_id END) AS entry2_id
-         FROM tournament_series target JOIN tournament_series_slots slots ON slots.series_id = target.id
-         WHERE target.status = 'pending' AND EXISTS (SELECT 1 FROM tournament_series_slots source WHERE source.series_id = target.id AND source.source_series_id = ?)
-         GROUP BY target.id`,
-        [game.series_id]
-      );
-      for (const ready of readyRows) {
-        if (!ready.entry1_id || !ready.entry2_id) continue;
-        await connection.execute(`UPDATE tournament_series SET status = 'ready' WHERE id = ?`, [ready.id]);
-        await connection.execute(
-          `INSERT IGNORE INTO tournament_games (id, series_id, game_number, entry1_id, entry2_id, status) VALUES (?, ?, 1, ?, ?, 'pending')`,
-          [randomUUID(), ready.id, ready.entry1_id, ready.entry2_id]
-        );
-      }
-    } else {
-      await connection.execute(
-        `INSERT INTO tournament_games (id, series_id, game_number, entry1_id, entry2_id, status)
-         SELECT ?, id, ? , ?, ?, 'pending' FROM tournament_series WHERE id = ?`,
-        [randomUUID(), Number(game.game_number) + 1, game.entry1_id, game.entry2_id, game.series_id]
-      );
-    }
-
-    if (seriesCompleted) {
-      const [remainingRows] = await connection.execute<any[]>(
-        `SELECT COUNT(*) AS count FROM tournament_series WHERE round_id = ? AND status NOT IN ('completed', 'cancelled')`,
-        [game.round_id]
-      );
-      if (Number(remainingRows[0].count) === 0) {
-        completedRoundId = game.round_id;
-        await connection.execute(`UPDATE tournament_phase_rounds SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?`, [game.round_id]);
-        await recalculateTiebreakers(connection, game.group_id);
-        await rankGroup(connection, game.group_id, false);
-        const [nextRounds] = await connection.execute<any[]>(
-          `SELECT id, best_of FROM tournament_phase_rounds WHERE group_id = ? AND round_number = ? AND status = 'pending'`,
-          [game.group_id, Number(game.round_number) + 1]
-        );
-        if (nextRounds.length) {
-          if (game.format === 'swiss') {
-            await createSwissRoundPairings(connection, nextRounds[0].id, nextRounds[0].best_of, game.group_id);
-          }
-          // Elimination games are compiled in advance and Swiss games are
-          // paired only after the preceding standings are final. Activate only
-          // pending rounds: open leagues may have already finished the next
-          // round, and its status and start time must remain unchanged.
-          await connection.execute(
-            `UPDATE tournament_phase_rounds
-             SET status = 'in_progress', starts_at = CURRENT_TIMESTAMP
-             WHERE id = ? AND status = 'pending'`,
-            [nextRounds[0].id]
-          );
-        }
-        // Open league rounds can finish in any order. Check all rounds after
-        // every completion, even when a higher numbered round exists.
-        const [groupRemaining] = await connection.execute<any[]>(
-          `SELECT COUNT(*) AS count FROM tournament_phase_rounds WHERE group_id = ? AND status NOT IN ('completed', 'cancelled')`,
-          [game.group_id]
-        );
-        if (Number(groupRemaining[0].count) === 0) {
-          await rankGroup(connection, game.group_id, true);
-          await connection.execute(`UPDATE tournament_phase_groups SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?`, [game.group_id]);
-        }
-        const [phaseRemaining] = await connection.execute<any[]>(
-          `SELECT COUNT(*) AS count FROM tournament_phase_groups WHERE phase_id = ? AND status NOT IN ('completed', 'cancelled')`,
-          [game.phase_id]
-        );
-        if (Number(phaseRemaining[0].count) === 0) {
-          completedPhaseId = game.phase_id;
-          await connection.execute(`UPDATE tournament_phases SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?`, [game.phase_id]);
-        }
-      }
-    }
     await connection.commit();
   } catch (error) {
     await connection.rollback();
@@ -435,54 +548,8 @@ export async function recordPhaseGameResult(
   } finally {
     connection.release();
   }
-
-  if (completedRoundId) await notifyRoundStandings(tournamentId, completedRoundId);
-  if (completedPhaseId) {
-    await notifyPhaseCompleted(tournamentId, completedPhaseId);
-    const hasNext = await compileNextPhaseCompetition(tournamentId, completedPhaseId);
-    if (!hasNext) {
-      const finalConnection = await pool.getConnection();
-      try {
-        await finalConnection.beginTransaction();
-        const [finalRows] = await finalConnection.execute<any[]>(
-          `SELECT standings.entry_id, standings.rank_position, groups.id AS group_id
-           FROM tournament_phase_standings standings
-           JOIN tournament_phase_groups groups ON groups.id = standings.group_id
-           JOIN tournament_phases phases ON phases.id = groups.phase_id
-           WHERE phases.id = ? ORDER BY groups.group_order, standings.rank_position`,
-          [completedPhaseId]
-        );
-        const [bronzeRows] = await finalConnection.execute<any[]>(
-          `SELECT COUNT(*) AS count FROM tournament_series series
-           JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
-           JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
-           WHERE groups.phase_id = ? AND series.series_role = 'third_place'`,
-          [completedPhaseId]
-        );
-        const hasThirdPlace = Number(bronzeRows[0].count) === 1;
-        for (const row of finalRows) {
-          await finalConnection.execute(
-            `INSERT INTO tournament_results (tournament_id, entry_id, placement, placement_label, is_champion, determined_by_group_id)
-             VALUES (?, ?, ?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE placement = VALUES(placement), placement_label = VALUES(placement_label), is_champion = VALUES(is_champion)`,
-            [tournamentId, row.entry_id, row.rank_position,
-              row.rank_position === 1 ? 'Champion' : row.rank_position === 2 ? 'Runner-up' : hasThirdPlace && row.rank_position === 3 ? 'Third place' : null,
-              row.rank_position === 1 ? 1 : 0, row.group_id]
-          );
-        }
-        await finalConnection.execute(`UPDATE tournaments SET status = 'finished', finished_at = CURRENT_TIMESTAMP WHERE id = ?`, [tournamentId]);
-        await finalConnection.commit();
-        tournamentCompleted = true;
-      } catch (error) {
-        await finalConnection.rollback();
-        throw error;
-      } finally {
-        finalConnection.release();
-      }
-      await notifyTournamentFinished(tournamentId);
-    }
-  }
-  return { seriesCompleted, phaseCompleted: completedPhaseId !== null, tournamentCompleted };
+  const followUp = await runPhaseGameResultFollowUp(tournamentId, outcome);
+  return { seriesCompleted: outcome.seriesCompleted, ...followUp };
 }
 
 /**
