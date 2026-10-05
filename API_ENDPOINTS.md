@@ -69,7 +69,6 @@
 - `[GET] /api/matches/:matchId/replay/download` — Public — Download replay file for a match.
 - `[POST] /api/matches/:matchId/replay/download-count` — Public — Increment replay download count.
 - `[GET] /api/matches` — Private — query: `page, winner, loser, map, status, confirmed, faction` — List matches.
-- `[POST] /api/matches/report-confidence-1-replay` — Private — body: `{replayId, winner_choice, comments?, rating?, tournament_match_id?}` — Player confirms result of a confidence=1 auto-detected replay.
 - `[POST] /api/matches/cancel-confidence-1-replay` — Private — body: `{replayId}` — Cancel a confidence=1 replay before reporting.
 - `[POST] /api/matches/admin-discard-replay` — Private (admin) — body: `{replayId}` — Admin discards a replay from the confirmation queue.
 
@@ -187,10 +186,10 @@ P2P proposal creation, counter-proposal, and update operations share a rolling p
 
 ## Replays Routes
 
-> These endpoints are used internally for the admin replay confirmation workflow. Direct replay processing uses `POST /api/matches/admin-discard-replay` and `POST /api/matches/report-confidence-1-replay`.
+> Participants confirm confidence=1 replays with `POST /api/replays/:replayId/confirm-winner`; admins discard pending replays with `POST /api/matches/admin-discard-replay`.
 
 - `[GET] /api/replays/pending-confirmation` — Private (admin) — List replays pending manual confirmation.
-- `[POST] /api/replays/:replayId/confirm-winner` — Private (admin) — body: `{winner_id}` — Confirm winner of a replay.
+- `[POST] /api/replays/:replayId/confirm-winner` — Private (participant) — body: `{iWon, comments?, rating?}` — Confirm the result of a confidence=1 replay. Returns 409 when the replay was already confirmed (the other player may dispute it).
 - `[POST] /api/replays/:replayId/discard` — Private (admin) — Discard a replay.
 
 ---
@@ -314,23 +313,20 @@ Initialized in `backend/src/jobs/scheduler.ts`, started automatically on server 
 
 These are the backend-internal service calls triggered by key endpoints (not visible from the frontend API surface).
 
-### Match creation (auto, via replay pipeline)
-`ParseNewReplaysRefactored.execute()` → `createMatch()` in `matchCreationService`:
-- Reads ELO for both players from `users_extension`.
-- Calculates new ELO via `calculateNewRating()` (FIDE formula in `utils/elo.ts`).
-- Inserts row into `matches` table.
-- Updates `users_extension` for winner: `elo_rating`, `matches_played`, `total_wins`, `trend`, `level`.
-- Updates `users_extension` for loser: `elo_rating`, `matches_played`, `total_losses`, `trend`, `level`.
-- If `linkedTournamentRoundMatchId` is set: calls `updateTournamentRoundMatch()` → updates `tournament_round_matches.player1_wins/player2_wins/status/winner_id`.
+### Match creation (`matchCreationService`)
+`createMatchInTransaction()` runs inside the replay integration transaction:
+- Locks both players' `users_extension` rows (ascending id) and computes the new ELO with `calculateNewRating()` (FIDE formula in `utils/elo.ts`).
+- Inserts the `matches` row and updates both players' rating, counters, trend, and level.
 - **Does NOT** call `updateFactionMapStatistics` — faction/map stats are rebuilt by the nightly cron or by explicit admin recalculation.
 
-### `POST /api/matches/report-confidence-1-replay`
-Player confirms winner of a confidence=1 replay:
-- Validates replay exists and caller is a participant.
-- Reads ELO, calculates new ratings inline.
-- Inserts into `matches`, updates both players' `users_extension` rows.
-- Calls `updateFactionMapStatistics(map, winnerFaction, loserFaction, side)` → increments counters in `faction_map_statistics`.
-- If `tournament_match_id` provided: updates `tournament_round_matches` and checks `checkAndCompleteRound()`.
+`createMatch()` wraps the same writes in a transaction of its own for callers outside replay integration (test simulations).
+
+### Replay result integration (`replayResultService`)
+Both the parse job (confidence=2) and `POST /api/replays/:replayId/confirm-winner` (confidence=1) integrate a replay in one transaction:
+- Locks the replay row and re-checks its state, so a replay is integrated once; a concurrent confirmation gets 409.
+- Locks the tournament and its game, then both users, and writes the global match and ELO (ranked modes), the tournament game result, and the replay as `completed`.
+- On any failure nothing is kept: the replay keeps no `match_id` and can be reprocessed from the admin panel.
+- Tournament follow-up (notifications, next phase, completion) runs after the commit; a failure there is audited as `TOURNAMENT_PROGRESSION_FAILED` and recovered with the organizer's advance action.
 
 ### `POST /api/matches/:id/confirm` (action: 'confirm')
 Loser (or winner) rates and acknowledges the match:
@@ -393,15 +389,12 @@ tournament.replays (parse_status='new')
         ▼
     replayRankedParser (WML parse, bz2 decompress)
         │
-        ├── confidence=2 → matchCreationService.createMatch()
-        │         → INSERT matches + UPDATE users_extension (ELO)
-        │         → UPDATE tournament_round_matches (if tournament)
+        ├── confidence=2 → replayResultService.integrateReplayResult()
+        │         → one transaction: match + ELO, tournament game result, replay completed
         │
         └── confidence=1 → replay marked as pending
                   │ (player sees it in Matches / TournamentDetail UI)
                   ▼
-        POST /api/matches/report-confidence-1-replay
-                  → INSERT matches + UPDATE users_extension (ELO)
-                  → updateFactionMapStatistics()
-                  → UPDATE tournament_round_matches (if tournament)
+        POST /api/replays/:replayId/confirm-winner
+                  → replayResultService.integrateReplayResult() (same transaction)
 ```

@@ -26,7 +26,6 @@ import {
   updatePlayerElo
 } from '../services/statisticsCalculator.js';
 import { validateAndCorrectFactions } from '../services/replayConfirmationService.js';
-import { phaseGameDisplayMetadata, recordPhaseGameResult } from '../tournament-engine/competitionProgression.js';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
 import { globalRecalculationMiddleware } from '../services/systemPauseService.js';
 import multer from 'multer';
@@ -1432,96 +1431,10 @@ function extractMatchDataFromReplay(parseSummary: any, replayUrl: string, winner
   }
 }
 
-// ============================================================================
-// POST endpoint to report a confidence=1 replay (unparsed match)
-// User says "I won" or "I lost" to help determine the winner
-// ============================================================================
-// Report the winner of a confidence-one replay linked to a phase-engine game.
-router.post('/report-confidence-1-replay', authMiddleware, globalRecalculationMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const { replayId, winner_choice } = req.body;
-    const userId = req.userId;
-    if (!userId) return res.status(401).json({ error: 'User not authenticated' });
-    if (!replayId) return res.status(400).json({ error: 'Missing replayId in request body' });
-    if (!['I won', 'I lost'].includes(winner_choice)) {
-      return res.status(400).json({ error: 'winner_choice must be "I won" or "I lost"' });
-    }
-
-    const replayResult = await query(
-      `SELECT id, parse_summary, integration_confidence, parsed, tournament_game_id, tournament_id
-       FROM replays
-       WHERE id = ? AND integration_confidence = 1 AND parsed = 1
-         AND parse_status NOT IN ('rejected', 'due')`,
-      [replayId]
-    );
-    const replay = replayResult.rows?.[0];
-    if (!replay) return res.status(404).json({ error: 'Replay not found or not a confidence=1 replay' });
-    if (!replay.tournament_game_id || !replay.tournament_id) {
-      return res.status(410).json({ error: 'Only phase-engine tournament replays can be confirmed here' });
-    }
-
-    const parseSummary = typeof replay.parse_summary === 'string'
-      ? JSON.parse(replay.parse_summary)
-      : (replay.parse_summary || {});
-    const userResult = await query('SELECT nickname FROM users_extension WHERE id = ?', [userId]);
-    const nickname = userResult.rows?.[0]?.nickname?.toLowerCase();
-    const forumPlayers = parseSummary.forumPlayers || [];
-    if (!nickname || !forumPlayers.some((player: any) => player?.user_name?.toLowerCase() === nickname)) {
-      return res.status(403).json({ error: 'You are not a participant in this replay' });
-    }
-
-    const gameResult = await query(
-      `SELECT games.entry1_id, games.entry2_id,
-              entry1.team_id AS entry1_team_id, entry2.team_id AS entry2_team_id,
-              participant1.user_id AS entry1_user_id, participant2.user_id AS entry2_user_id
-       FROM tournament_games games
-       JOIN tournament_entries entry1 ON entry1.id = games.entry1_id
-       JOIN tournament_entries entry2 ON entry2.id = games.entry2_id
-       LEFT JOIN tournament_participants participant1 ON participant1.id = entry1.participant_id
-       LEFT JOIN tournament_participants participant2 ON participant2.id = entry2.participant_id
-       WHERE games.id = ? AND games.status = 'pending'`,
-      [replay.tournament_game_id]
-    );
-    const game = gameResult.rows?.[0];
-    if (!game) return res.status(404).json({ error: 'Pending tournament game not found' });
-
-    const membership = await query(
-      `SELECT team_id FROM tournament_participants
-       WHERE tournament_id = ? AND user_id = ? AND participation_status = 'accepted'`,
-      [replay.tournament_id, userId]
-    );
-    const teamId = membership.rows?.[0]?.team_id || null;
-    const userEntryId = game.entry1_user_id === userId
-      || (teamId !== null && game.entry1_team_id !== null && game.entry1_team_id === teamId)
-      ? game.entry1_id
-      : game.entry2_user_id === userId
-        || (teamId !== null && game.entry2_team_id !== null && game.entry2_team_id === teamId)
-        ? game.entry2_id
-        : null;
-    if (!userEntryId) return res.status(403).json({ error: 'You are not a participant in this tournament game' });
-
-    const winnerEntryId = winner_choice === 'I won'
-      ? userEntryId
-      : userEntryId === game.entry1_id ? game.entry2_id : game.entry1_id;
-    const progression = await recordPhaseGameResult(
-      replay.tournament_id,
-      replay.tournament_game_id,
-      winnerEntryId,
-      null,
-      undefined,
-      phaseGameDisplayMetadata(parseSummary)
-    );
-    await query(
-      `UPDATE replays SET parse_status = 'completed', need_integration = 0, updated_at = NOW() WHERE id = ?`,
-      [replayId]
-    );
-    return res.json({ success: true, status: 'completed', replay_id: replayId, progression });
-  } catch (error) {
-    console.error('❌ Error reporting confidence-1 replay:', error);
-    return res.status(500).json({ error: 'Failed to report replay' });
-  }
-});
-
+// Discard a pending confidence-one replay before it is confirmed. Confirmation
+// itself goes through POST /replays/:replayId/confirm-winner (the former
+// report-confidence-1-replay route was removed: it had no frontend caller and
+// bypassed the transactional replay integration).
 router.post('/cancel-confidence-1-replay', authMiddleware, globalRecalculationMiddleware, async (req: AuthRequest, res) => {
   try {
     const { replayId } = req.body;

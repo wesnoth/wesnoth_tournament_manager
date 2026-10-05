@@ -11,9 +11,13 @@
 import express from 'express';
 import { query } from '../config/database.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
-import { createMatch } from '../services/matchCreationService.js';
+import {
+  integrateReplayResult,
+  ReplayAlreadyIntegratedError,
+  ReplayResultDataError,
+} from '../services/replayResultService.js';
 import { validateAndCorrectFactions } from '../services/replayConfirmationService.js';
-import { phaseGameDisplayMetadata, recordPhaseGameResult } from '../tournament-engine/competitionProgression.js';
+import { phaseGameDisplayMetadata } from '../tournament-engine/competitionProgression.js';
 import { globalRecalculationMiddleware } from '../services/systemPauseService.js';
 
 const router = express.Router();
@@ -120,6 +124,11 @@ router.post('/:replayId/confirm-winner', authMiddleware, globalRecalculationMidd
 
     const replay = replayRows[0];
 
+    // A completed replay was confirmed by someone else first: that is a
+    // conflict the other player resolves through a dispute, not a bad request.
+    if (replay.parse_status === 'completed') {
+      return res.status(409).json({ error: 'This replay result has already been confirmed' });
+    }
     if (replay.parse_status !== 'parsed' || replay.integration_confidence !== 1) {
       return res.status(400).json({
         error: 'Replay is not awaiting confirmation (wrong parse_status or confidence)',
@@ -214,33 +223,26 @@ router.post('/:replayId/confirm-winner', authMiddleware, globalRecalculationMidd
     winnerFaction = factionsResult.winnerFaction;
     loserFaction = factionsResult.loserFaction;
 
-    const result = summary.matchType === 'tournament_unranked'
-      ? { success: true, matchId: undefined }
-      : await createMatch({
-          winnerId:                     winnerDbRow.id,
-          loserId:                      loserDbRow.id,
-          winnerFaction,
-          loserFaction,
-          map,
-          winnerSide:                   winnerForumData?.side_number ?? 1,
-          replayRowId:                  replay.id,
-          replayFilePath,
-          matchType:                    summary.matchType || 'ranked',
-          linkedTournamentId:           summary.linkedTournamentId || null,
-          linkedTournamentGameId:       summary.linkedTournamentGameId || null,
-          gameId:                       replay.game_id,
-          wesnothVersion:               replay.wesnoth_version,
-          instanceUuid:                 replay.instance_uuid,
-        });
+    const matchInput = summary.matchType === 'tournament_unranked' ? null : {
+      winnerId:                     winnerDbRow.id,
+      loserId:                      loserDbRow.id,
+      winnerFaction,
+      loserFaction,
+      map,
+      winnerSide:                   winnerForumData?.side_number ?? 1,
+      replayRowId:                  replay.id,
+      replayFilePath,
+      matchType:                    summary.matchType || 'ranked',
+      linkedTournamentId:           summary.linkedTournamentId || null,
+      linkedTournamentGameId:       summary.linkedTournamentGameId || null,
+      gameId:                       replay.game_id,
+      wesnothVersion:               replay.wesnoth_version,
+      instanceUuid:                 replay.instance_uuid,
+    };
 
-    if (!result.success) {
-      // result.error may carry raw driver text (SQL state, duplicate key values,
-      // index names), so it stays in the server log and the client gets a
-      // stable generic message.
-      console.error('[CONFIRM-WINNER] Match creation failed:', result.error);
-      return res.status(500).json({ error: 'Failed to create match' });
-    }
-
+    // Resolve the tournament entries before the transaction. This read is
+    // only a mapping step: the service re-locks and re-checks the game.
+    let tournamentInput: Parameters<typeof integrateReplayResult>[0]['tournament'] = null;
     if (summary.linkedTournamentId && summary.linkedTournamentGameId) {
       const gameResult = await query(
         `SELECT games.entry1_id, games.entry2_id,
@@ -280,35 +282,46 @@ router.post('/:replayId/confirm-winner', authMiddleware, globalRecalculationMidd
           ? game.entry2_id
           : null;
       if (!winnerEntryId) return res.status(400).json({ error: 'Could not map winner to tournament entry' });
-      await recordPhaseGameResult(
-        summary.linkedTournamentId,
-        summary.linkedTournamentGameId,
+      tournamentInput = {
+        tournamentId: summary.linkedTournamentId,
+        gameId: summary.linkedTournamentGameId,
         winnerEntryId,
-        result.matchId,
-        undefined,
-        phaseGameDisplayMetadata(summary),
-        {
+        metadata: phaseGameDisplayMetadata(summary),
+        confirmation: {
           entryId: iWon ? winnerEntryId : (winnerEntryId === game.entry1_id ? game.entry2_id : game.entry1_id),
           comments: comments || null,
           rating,
-        }
-      );
+        },
+      };
     }
 
-    // Keep the replay lifecycle consistent with automatic integration. The
-    // parse status records that processing finished, while match_id is the
-    // association used by pending-replay lists to hide a replay that already
-    // produced a global match. Tournament-unranked games intentionally have
-    // no global match row, so their match_id remains NULL.
-    await query(
-      `UPDATE replays
-       SET parse_status = 'completed', parsed = 1, need_integration = 0,
-           match_id = ?, updated_at = NOW()
-       WHERE id = ?`,
-      [result.matchId || null, replayId]
-    );
+    // One transaction for the match, ELO, tournament result, and replay
+    // status (audit findings 3–4). A concurrent confirmation of the same
+    // replay is refused with 409 instead of hitting a unique index; when two
+    // players claim contradictory results, the first one wins and the other
+    // may open a dispute (maintainer decision, 2026-10-05).
+    let integration;
+    try {
+      integration = await integrateReplayResult({
+        replayId,
+        expectedStatus: 'parsed',
+        match: matchInput,
+        tournament: tournamentInput,
+      });
+    } catch (error) {
+      if (error instanceof ReplayAlreadyIntegratedError) {
+        return res.status(409).json({ error: 'This replay result has already been confirmed' });
+      }
+      if (error instanceof ReplayResultDataError) {
+        // The message is a fixed domain text from the service, safe to show.
+        console.error('[CONFIRM-WINNER] Replay result rejected:', error.message);
+        return res.status(400).json({ error: error.message });
+      }
+      throw error;
+    }
+    const result = { matchId: integration.matchId ?? undefined };
 
-    console.log(`✅ [CONFIRM-WINNER] Match ${result.matchId} created by player ${nickname}`);
+    console.log(`✅ [CONFIRM-WINNER] Replay ${replayId} confirmed by player ${nickname}${result.matchId ? ` (match ${result.matchId})` : ''}`);
 
     res.json({
       status: 'success',

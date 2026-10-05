@@ -21,13 +21,14 @@ import { query } from '../config/database.js';
 import { queryForum, getCompetitiveGameData } from '../config/forumDatabase.js';
 import ReplayParser from '../services/replayParser.js';
 import { parseRankedReplay, ParsedRankedReplay } from '../utils/replayRankedParser.js';
-import { createMatch } from '../services/matchCreationService.js';
+import type { CreateMatchInput } from '../services/matchCreationService.js';
+import { integrateReplayResult, ReplayResultDataError } from '../services/replayResultService.js';
 import { checkForumBanlist } from '../services/phpbbAuth.js';
 import { queryPhpbb } from '../config/phpbbDatabase.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { parseTournamentCode } from '../tournament-engine/forumTopic.js';
-import { phaseGameDisplayMetadata, recordPhaseGameResult } from '../tournament-engine/competitionProgression.js';
+import { phaseGameDisplayMetadata } from '../tournament-engine/competitionProgression.js';
 import { shouldPauseReplayProcessing } from '../services/systemPauseService.js';
 
 /** Resolve an active tournament by explicit forum code first, then by its exact name. */
@@ -291,109 +292,56 @@ export class ParseNewReplaysRefactorized {
             continue;
           }
 
-          // Create match (only if confidence=2)
-          let matchCreateResult;
-
+          // Integrate the result (confidence 2) in one transaction: match and
+          // ELO, tournament game result, and the replay row (audit findings
+          // 3–4). On any failure nothing is kept, so the replay never holds a
+          // match_id and stays reprocessable from the admin panel.
           const isTournamentMatch = parseSummary.matchType === 'tournament_ranked' ||
             parseSummary.matchType === 'tournament_unranked';
-          if (isTournamentMatch && (!parseSummary.linkedTournamentId || !parseSummary.linkedTournamentGameId)) {
-            throw new Error(
+          if (isTournamentMatch && (!parseSummary.linkedTournamentId || !parseSummary.linkedTournamentGameId || !parseSummary.linkedWinnerEntryId)) {
+            throw new ReplayResultDataError(
               `Tournament match has incomplete linkage: tournament_id=${parseSummary.linkedTournamentId ?? 'NULL'}, ` +
               `tournament_game_id=${parseSummary.linkedTournamentGameId ?? 'NULL'}`
             );
           }
 
-          if (parseSummary.matchType === 'tournament_unranked' && parseSummary.linkedTournamentGameId) {
-            const metadata = phaseGameDisplayMetadata(parseSummary);
-            await query(
-              `UPDATE tournament_games
-               SET map = ?, winner_faction = ?, loser_faction = ?, winner_side = ?
-               WHERE id = ? AND status = 'pending'`,
-              [metadata.map, metadata.winnerFaction, metadata.loserFaction, metadata.winnerSide, parseSummary.linkedTournamentGameId]
-            );
-            await recordPhaseGameResult(
-              parseSummary.linkedTournamentId!,
-              parseSummary.linkedTournamentGameId,
-              parseSummary.linkedWinnerEntryId!,
-              null,
-              undefined,
-              metadata
-            );
-            // Automatic replay detection records the game result, but it
-            // must not impersonate the winner's Inform Match action.
-            await query(
-              `UPDATE tournament_games SET confirmation_status = 'unconfirmed' WHERE id = ?`,
-              [parseSummary.linkedTournamentGameId]
-            );
-            matchCreateResult = { success: true, matchId: null };
-          } else if (parseSummary.matchType === 'tournament_unranked') {
-            // New-model tournament games are completed through tournament_games.
-            // linkToTournament() rejects a tournament replay that cannot be linked
-            // to a pending game, so reaching this branch indicates inconsistent data.
-            throw new Error('Tournament replay has no linked tournament_game');
-          } else {
-            matchCreateResult = await this.createMatchFromParseSummary(replay, parseSummary);
-            if (matchCreateResult.success && parseSummary.linkedTournamentGameId) {
-              const metadata = phaseGameDisplayMetadata(parseSummary);
-              await query(
-                `UPDATE tournament_games
-                 SET map = ?, winner_faction = ?, loser_faction = ?, winner_side = ?
-                 WHERE id = ? AND status = 'pending'`,
-                [metadata.map, metadata.winnerFaction, metadata.loserFaction, metadata.winnerSide, parseSummary.linkedTournamentGameId]
-              );
-              await recordPhaseGameResult(
-                parseSummary.linkedTournamentId!,
-                parseSummary.linkedTournamentGameId,
-                parseSummary.linkedWinnerEntryId!,
-                matchCreateResult.matchId,
-                undefined,
-                metadata
-              );
-              // Keep the completed game awaiting the winner's explicit
-              // report; the loser can then confirm or dispute it.
-              await query(
-                `UPDATE tournament_games SET confirmation_status = 'unconfirmed' WHERE id = ?`,
-                [parseSummary.linkedTournamentGameId]
-              );
-            }
-          }
+          const integration = await integrateReplayResult({
+            replayId: replay.id,
+            expectedStatus: 'new',
+            // Tournament unranked and team games have no global match row.
+            match: parseSummary.matchType === 'tournament_unranked'
+              ? null
+              : await this.buildMatchInputFromParseSummary(replay, parseSummary),
+            tournament: isTournamentMatch ? {
+              tournamentId: parseSummary.linkedTournamentId!,
+              gameId: parseSummary.linkedTournamentGameId!,
+              winnerEntryId: parseSummary.linkedWinnerEntryId!,
+              metadata: phaseGameDisplayMetadata(parseSummary),
+              // Automatic detection must not impersonate the winner's report.
+              markUnconfirmed: true,
+            } : null,
+            completion: {
+              integrationConfidence: parseSummary.confidenceLevel,
+              tournamentLinkMethod: parseSummary.tournamentLinkMethod,
+              parseSummary: JSON.stringify(parseSummary),
+            },
+          });
 
-          if (matchCreateResult.success) {
-            console.log(`✅ [PARSE] Match created: ID ${matchCreateResult.matchId}`);
-            // For unranked tournament matches, match_id stays NULL (no entry in matches table)
-            const replayMatchId = parseSummary.matchType === 'tournament_unranked' ? null : matchCreateResult.matchId;
-            console.log(
-              `🔗 [PARSE] Persisting replay linkage: match_id=${replayMatchId ?? 'NULL'}, ` +
-              `tournament_id=${parseSummary.linkedTournamentId ?? 'NULL'}, ` +
-              `tournament_game_id=${parseSummary.linkedTournamentGameId ?? 'NULL'}`
-            );
-            await query(
-              `UPDATE replays SET parse_status = 'completed', parsed = 1, integration_confidence = ?,
-               tournament_id = ?, tournament_game_id = ?,
-               tournament_link_method = ?, tournament_linked_at = CURRENT_TIMESTAMP,
-               match_id = ?, parse_error_message = NULL, parse_summary = ? WHERE id = ?`,
-              [parseSummary.confidenceLevel, parseSummary.linkedTournamentId,
-                parseSummary.linkedTournamentGameId, parseSummary.tournamentLinkMethod,
-                replayMatchId, JSON.stringify(parseSummary), replay.id]
-            );
-            
-            // Update last integration timestamp
-            await query(
-              `UPDATE system_settings SET setting_value = ?, updated_at = NOW() 
-               WHERE setting_key = 'replay_last_integration_timestamp'`,
-              [new Date().toISOString()]
-            );
-            
-            parsedCount++;
-            matchCount++;
-          } else {
-            console.error(`❌ [PARSE] Failed to create match:`, matchCreateResult.error);
-            await query(
-              `UPDATE replays SET parse_status = 'error', parsed = 1, parse_error_message = ?, parse_summary = ? WHERE id = ?`,
-              [matchCreateResult.error, JSON.stringify(parseSummary), replay.id]
-            );
-            errorCount++;
-          }
+          console.log(
+            `✅ [PARSE] Replay integrated: match_id=${integration.matchId ?? 'NULL'}, ` +
+            `tournament_id=${parseSummary.linkedTournamentId ?? 'NULL'}, ` +
+            `tournament_game_id=${parseSummary.linkedTournamentGameId ?? 'NULL'}`
+          );
+
+          // Update last integration timestamp
+          await query(
+            `UPDATE system_settings SET setting_value = ?, updated_at = NOW() 
+             WHERE setting_key = 'replay_last_integration_timestamp'`,
+            [new Date().toISOString()]
+          );
+
+          parsedCount++;
+          matchCount++;
 
         } catch (replayError) {
           const errorMsg = (replayError as any)?.message || String(replayError);
@@ -420,9 +368,15 @@ export class ParseNewReplaysRefactorized {
               );
             }
           } else {
-            // Other errors
+            // Data errors and transient failures that persisted after the
+            // service's retries both end as `error`: nothing was integrated
+            // (the transaction rolled back), match_id stays NULL, and the
+            // admin Reprocess action can retry once the cause is fixed. The
+            // condition keeps a replay that did complete (for example after
+            // an uncertain commit, or a concurrent confirmation) untouched.
             await query(
-              `UPDATE replays SET parse_status = 'error', parsed = 1, parse_error_message = ? WHERE id = ?`,
+              `UPDATE replays SET parse_status = 'error', parsed = 1, parse_error_message = ?
+               WHERE id = ? AND parse_status <> 'completed'`,
               [errorMsg, replay.id]
             );
           }
@@ -1114,12 +1068,19 @@ export class ParseNewReplaysRefactorized {
    * Create match in database from ParseSummary.
    * Resolves player identities then delegates to the shared matchCreationService.
    */
-  private async createMatchFromParseSummary(
+  /**
+   * Resolve the global match input (players, factions, map, replay URL) for a
+   * replay. Pure resolution: the write happens in integrateReplayResult.
+   *
+   * @throws ReplayResultDataError when players cannot be resolved; the replay
+   *   then ends as `error` and can be reprocessed from the admin panel.
+   */
+  private async buildMatchInputFromParseSummary(
     replay: UnparsedReplay,
     parseSummary: ParseSummary
-  ): Promise<{ success: boolean; matchId?: string; error?: string }> {
+  ): Promise<CreateMatchInput> {
     if (parseSummary.forumPlayers.length < 2 || !parseSummary.replayVictory) {
-      return { success: false, error: 'Insufficient data: missing forum players or replay victory' };
+      throw new ReplayResultDataError('Insufficient data: missing forum players or replay victory');
     }
 
     const winnerName = parseSummary.replayVictory.winner_name;
@@ -1133,20 +1094,18 @@ export class ParseNewReplaysRefactorized {
     );
 
     if (!winnerForumData || !loserForumData) {
-      return {
-        success: false,
-        error: `Players not found in forum data: winner=${winnerName} (found=${!!winnerForumData}), loser=${loserName} (found=${!!loserForumData})`
-      };
+      throw new ReplayResultDataError(
+        `Players not found in forum data: winner=${winnerName} (found=${!!winnerForumData}), loser=${loserName} (found=${!!loserForumData})`
+      );
     }
 
     const winnerUserData = await this.getUserDataByNickname(winnerName);
     const loserUserData  = await this.getUserDataByNickname(loserName);
 
     if (!winnerUserData || !loserUserData) {
-      return {
-        success: false,
-        error: `User not found in users_extension: winner=${winnerName} (found=${!!winnerUserData}), loser=${loserName} (found=${!!loserUserData})`
-      };
+      throw new ReplayResultDataError(
+        `User not found in users_extension: winner=${winnerName} (found=${!!winnerUserData}), loser=${loserName} (found=${!!loserUserData})`
+      );
     }
 
     const winnerFaction = parseSummary.resolvedFactions[`side${winnerForumData.side_number}`] || 'Unknown';
@@ -1163,7 +1122,7 @@ export class ParseNewReplaysRefactorized {
 
     console.log(`\n📝 Creating match: ${winnerName} beat ${loserName} | Map: ${map} | Confidence: ${parseSummary.confidenceLevel}`);
 
-    return createMatch({
+    return {
       winnerId:                       winnerUserData.id,
       loserId:                        loserUserData.id,
       winnerFaction,
@@ -1178,7 +1137,7 @@ export class ParseNewReplaysRefactorized {
       gameId:                         replay.game_id,
       wesnothVersion:                 replay.wesnoth_version,
       instanceUuid:                   replay.instance_uuid,
-    });
+    };
   }
 
   /**
