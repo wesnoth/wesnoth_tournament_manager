@@ -46,3 +46,37 @@ export async function confirmTogether(
     return response.status();
   }));
 }
+
+export interface RankedConfirmationClick extends ConfirmationClick {
+  /** Replay file name shown in the player's /matches pending list. */
+  replayName: string;
+}
+
+/**
+ * Confirm standalone ranked replays from /matches at the same moment, one
+ * browser per click. Unlike confirmTogether, each click may target a
+ * different replay, which is how players racing on a shared opponent behave.
+ *
+ * @returns the HTTP status of each confirm-winner request, in click order.
+ */
+export async function confirmRankedTogether(browser: Browser, clicks: RankedConfirmationClick[]): Promise<number[]> {
+  const pages = await Promise.all(clicks.map(async (click) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await loginAs(page, click.nickname);
+    await page.goto('/matches');
+    const row = page.locator('tr').filter({ hasText: click.replayName });
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    await row.locator(`[data-help-id="${click.choice}"]`).click();
+    await expect(page.locator('[data-help-id="action-submit-replay-confirmation"]')).toBeEnabled();
+    return page;
+  }));
+  return Promise.all(pages.map(async (page) => {
+    const [response] = await Promise.all([
+      page.waitForResponse((r) => r.url().includes('/confirm-winner')),
+      page.locator('[data-help-id="action-submit-replay-confirmation"]').click(),
+    ]);
+    await page.context().close();
+    return response.status();
+  }));
+}
