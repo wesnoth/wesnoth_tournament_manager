@@ -1439,6 +1439,14 @@ export async function getBalanceEventIntervalImpact(
     side2_wins: number;
   };
 
+  /**
+   * Cumulative state at a boundary date: the latest stored snapshot on or
+   * before it. Boundaries are not always stored dates: the last event's
+   * after-boundary is the latest match date, usually today, and today is
+   * never snapshotted because the daily job writes a date once it is over
+   * (audit finding 25). Reading the latest earlier snapshot gives the state
+   * through the last complete day; a date before any snapshot reads as empty.
+   */
   const readSnapshot = async (date: string): Promise<Map<string, Aggregate>> => {
     const result = await query(
       `SELECT
@@ -1450,7 +1458,9 @@ export async function getBalanceEventIntervalImpact(
       JOIN game_maps gm ON gm.id = h.map_id
       JOIN factions f1 ON f1.id = h.faction_id
       JOIN factions f2 ON f2.id = h.opponent_faction_id
-      WHERE h.snapshot_date = ?`,
+      WHERE h.snapshot_date = (
+        SELECT MAX(latest.snapshot_date) FROM faction_map_statistics_history latest WHERE latest.snapshot_date <= ?
+      )`,
       [date]
     );
     const number = (value: unknown): number => Number(value) || 0;
