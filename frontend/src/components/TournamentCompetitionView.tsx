@@ -21,6 +21,8 @@ interface Props {
   showOnlyMine?: boolean;
   showPhasesGroups?: boolean;
   refreshKey?: number;
+  /** Tournament status; decides whether a completed last phase still needs finishing. */
+  tournamentStatus?: string;
 }
 
 // Bracket spacing assumes equal-height match cards. Each later round doubles
@@ -172,6 +174,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
   showOnlyMine = false,
   showPhasesGroups = true,
   refreshKey = 0,
+  tournamentStatus,
 }) => {
   const { t } = useTranslation();
   const [phases, setPhases] = useState<any[]>([]);
@@ -181,6 +184,12 @@ const TournamentCompetitionView: React.FC<Props> = ({
   const [error, setError] = useState('');
   const [groupAction, setGroupAction] = useState<string | null>(null);
   const [groupFeedback, setGroupFeedback] = useState<{ id: string; text: string; failed: boolean } | null>(null);
+  const [advancingPhaseId, setAdvancingPhaseId] = useState<string | null>(null);
+  const [phaseFeedback, setPhaseFeedback] = useState<{ id: string; text: string; failed: boolean } | null>(null);
+  // Phases whose retry succeeded. The tournament status comes from the parent
+  // page and is not reloaded with this view, so a finished tournament would
+  // otherwise keep showing the retry until the page is refreshed.
+  const [advancedPhaseIds, setAdvancedPhaseIds] = useState<string[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedReplay, setSelectedReplay] = useState<any | null>(null);
   const [selectedGameConfirmation, setSelectedGameConfirmation] = useState<{ game: any; action: 'report' | 'respond' } | null>(null);
@@ -470,6 +479,47 @@ const TournamentCompetitionView: React.FC<Props> = ({
     }
   };
 
+  /**
+   * Whether a completed phase was left without its follow-up. A game result
+   * commits first and then, outside that transaction, compiles the next phase
+   * or finishes the tournament (audit findings 3–4). If that step fails, the
+   * next phase stays `draft` (it is compiled automatically otherwise) or, for
+   * the last phase, the tournament is not `finished`. Only then is the
+   * organizer's retry shown; the advance endpoint is idempotent either way.
+   */
+  const needsAdvancement = (phase: any): boolean => {
+    if (phase.phase_status !== 'completed' || advancedPhaseIds.includes(phase.phase_id)) return false;
+    const nextPhase = phases.find(candidate => Number(candidate.phase_order) === Number(phase.phase_order) + 1);
+    if (nextPhase) return nextPhase.phase_status === 'draft';
+    return Boolean(tournamentStatus) && tournamentStatus !== 'finished';
+  };
+
+  const retryPhaseAdvancement = async (phaseId: string) => {
+    setAdvancingPhaseId(phaseId);
+    setPhaseFeedback(null);
+    try {
+      const response = await api.post(`/tournaments/${tournamentId}/phases/${phaseId}/advance`);
+      setPhaseFeedback({ id: phaseId, failed: false, text: response.data?.finalized
+        ? t('tournaments.tournament_finished_by_advance')
+        : t('tournaments.phase_advancement_completed') });
+      setAdvancedPhaseIds(current => [...current, phaseId]);
+      setReloadKey(value => value + 1);
+    } catch (advanceError: any) {
+      setPhaseFeedback({ id: phaseId, failed: true, text: advanceError.response?.data?.error || t('tournaments.phase_advancement_failed') });
+    } finally {
+      setAdvancingPhaseId(null);
+    }
+  };
+
+  const renderPhaseAdvancement = (phase: any) => canManage && needsAdvancement(phase) && <button
+    type="button" data-help-id="action-retry-phase-advancement" disabled={advancingPhaseId !== null}
+    onClick={() => void retryPhaseAdvancement(phase.phase_id)}
+    className="px-3 py-1 bg-orange-600 text-white rounded disabled:opacity-50"
+  >{t('tournaments.btn_retry_phase_advancement')}</button>;
+
+  const renderPhaseFeedback = (phase: any) => phaseFeedback && phaseFeedback.id === phase.phase_id
+    && <p role="status" className={`mb-3 text-sm ${phaseFeedback.failed ? 'text-red-700' : 'text-green-700'}`}>{phaseFeedback.text}</p>;
+
   if (error) return <p className="text-red-600">{error}</p>;
   return <div data-help-id="region-tournament-competition" className="space-y-6">
     {showPhasesGroups && phases.map(phase => {
@@ -486,7 +536,9 @@ const TournamentCompetitionView: React.FC<Props> = ({
             {canManage && phase.phase_status === 'ready' && <button data-help-id="action-start-tournament-phase" type="button" onClick={async () => {
               try { await api.post(`/tournaments/${tournamentId}/phases/${phase.phase_id}/start`); setReloadKey(value => value + 1); } catch (startError: any) { setError(startError.response?.data?.error || 'Failed to start phase'); }
             }} className="px-3 py-1 bg-green-600 text-white rounded">Start phase</button>}
+            {renderPhaseAdvancement(phase)}
           </div>
+          {renderPhaseFeedback(phase)}
           {groups.length === 0 ? <p className="text-sm text-gray-600">No group standings are available yet.</p> : <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
             {groups.map(group => <article key={group.id} data-help-id="region-tournament-standings-group" className="overflow-hidden rounded-lg border border-blue-200 bg-blue-50 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-200 bg-blue-100 px-4 py-3">
@@ -522,7 +574,9 @@ const TournamentCompetitionView: React.FC<Props> = ({
           {canManage && phase.phase_status === 'ready' && <button data-help-id="action-start-tournament-phase" type="button" onClick={async () => {
             try { await api.post(`/tournaments/${tournamentId}/phases/${phase.phase_id}/start`); setReloadKey(value => value + 1); } catch (startError: any) { setError(startError.response?.data?.error || 'Failed to start phase'); }
           }} className="px-3 py-1 bg-green-600 text-white rounded">Start phase</button>}
+          {renderPhaseAdvancement(phase)}
         </div>
+        {renderPhaseFeedback(phase)}
         {bracketGroups.length === 0 ? <p className="text-sm text-gray-600">No elimination bracket is configured yet.</p> : <div className="space-y-5">
           {bracketGroups.map(groupName => {
             const groupSeries = displaySeries.filter(item => item.group_name === groupName);

@@ -3589,6 +3589,7 @@ const handleDownloadReplay = async (matchId: string | null, replayFilePath: stri
             showOnlyMine={competitionShowOnlyMine}
             showPhasesGroups={competitionShowPhasesGroups}
             refreshKey={tabRefreshKey}
+            tournamentStatus={tournament.status}
           />
         </div>
       )}
