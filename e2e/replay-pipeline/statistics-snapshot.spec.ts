@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { faultHits, installFault, removeFault } from '../support/faultInjection';
 import { localStack, runSql, sqlLiteral } from '../support/localStack';
@@ -101,4 +103,71 @@ test('concurrent creators of one date write it once', async ({ page }) => {
   } finally {
     deleteSnapshot(date);
   }
+});
+
+/** Every UTC day from `first` to `last`, inclusive, as YYYY-MM-DD. */
+function daysBetween(first: string, last: string): string[] {
+  const days: string[] = [];
+  for (const day = new Date(`${first}T00:00:00Z`); day.toISOString().slice(0, 10) <= last; day.setUTCDate(day.getUTCDate() + 1)) {
+    days.push(day.toISOString().slice(0, 10));
+  }
+  return days;
+}
+
+/**
+ * Run the read-only history check against the local stack and return its
+ * summary line; it exits 1 when a date has duplicated or missing rows.
+ */
+function runHistoryCheck(): string {
+  const output = execFileSync('npx', ['tsx', 'src/scripts/checkSnapshotHistory.ts'], {
+    cwd: path.resolve(__dirname, '../../backend'),
+    env: { ...process.env, NODE_ENV: 'development', DB_PORT: process.env.E2E_DB_PORT || '3308' },
+    encoding: 'utf8',
+  });
+  return output.trim().split('\n').pop() || '';
+}
+
+test('the full rebuild regenerates every day up to yesterday and removes stale dates', async ({ page }) => {
+  test.setTimeout(300_000);
+  // A stale future date (an early snapshot that must not survive) and a
+  // broken past date (half its rows deleted) that the rebuild must repair.
+  await loginAs(page, 'clmates');
+  expect((await backfill(page, '2099-12-27')).status).toBe(200);
+  const [{ day: brokenDay }] = runSql(
+    `SELECT DATE_FORMAT(MAX(snapshot_date), '%Y-%m-%d') AS day FROM ${db}.faction_map_statistics_history WHERE snapshot_date < UTC_DATE();`,
+  ) as Array<{ day: string }>;
+  if (brokenDay) {
+    runSql(`DELETE FROM ${db}.faction_map_statistics_history WHERE snapshot_date = ${sqlLiteral(brokenDay)} LIMIT 100;`);
+  }
+
+  await page.goto('/admin/balance-events');
+  const [queued] = await Promise.all([
+    page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/admin/recalculate-snapshots')),
+    page.locator('[data-help-id="action-recalculate-balance-snapshots"]').click(),
+  ]);
+  expect(queued.status()).toBe(202);
+  await expect(page.locator('.bg-green-100')).toBeVisible({ timeout: 240_000 });
+
+  // Expected dates: every day from the first match to yesterday, plus event
+  // boundaries up to yesterday.
+  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const [{ first, latest }] = runSql(
+    `SELECT DATE_FORMAT(MIN(created_at), '%Y-%m-%d') AS first, DATE_FORMAT(MAX(created_at), '%Y-%m-%d') AS latest
+     FROM ${db}.matches WHERE status <> 'cancelled';`,
+  ) as Array<{ first: string; latest: string }>;
+  const eventDays = runSql(
+    `SELECT DATE_FORMAT(event_date, '%Y-%m-%d') AS day FROM ${db}.balance_events ORDER BY event_date;`,
+  ).map((row) => String(row.day));
+  // A boundary before the first match has no rows, so it is never stored.
+  const boundaries = [...eventDays, eventDays.length ? latest : null]
+    .filter((d): d is string => Boolean(d) && d! >= first && d! <= yesterday);
+  const expectedDates = [...new Set([...daysBetween(first, yesterday), ...boundaries])].sort();
+  const storedDates = runSql(
+    `SELECT DISTINCT DATE_FORMAT(snapshot_date, '%Y-%m-%d') AS day FROM ${db}.faction_map_statistics_history ORDER BY day;`,
+  ).map((row) => String(row.day));
+  expect(storedDates).toEqual(expectedDates);
+  expect(storedDates).not.toContain('2099-12-27');
+
+  // Every stored date matches the matches it covers, including the repaired one.
+  expect(runHistoryCheck()).toMatch(/0 with duplicated or missing rows/);
 });
