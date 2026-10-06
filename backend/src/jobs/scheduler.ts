@@ -82,7 +82,7 @@ export async function autoDiscardUnconfirmedReplays(): Promise<void> {
 /**
  * Initialize all scheduled jobs
  * Runs at specific times in UTC:
- * - 00:30 UTC: Daily balance snapshot
+ * - 00:30 UTC: Daily balance snapshot of the previous UTC day
  * - 00:45 UTC: Player statistics recalculation
  * - 01:00 UTC: Check and mark inactive players
  * - 01:30 UTC on 1st: Calculate player of the month
@@ -97,11 +97,18 @@ export const initializeScheduledJobs = (): void => {
   try {
     console.log('⏰ Initializing scheduled jobs...');
 
-    // Schedule daily balance snapshot at 00:30 UTC
+    // Schedule daily balance snapshot at 00:30 UTC. It snapshots the
+    // previous UTC day, which is complete by now: a snapshot for a date must
+    // include every match of that date, and a date is never rewritten once it
+    // exists (a balance-event boundary on that date reuses it). Snapshotting
+    // the current date at 00:30 would freeze it with only its first half hour
+    // (audit finding 25).
     cron.schedule('30 0 * * *', async () => {
       try {
         console.log('⏰ [CRON] Running daily balance snapshot...');
-        await createFactionMapStatisticsSnapshot();
+        const previousUtcDay = new Date();
+        previousUtcDay.setUTCDate(previousUtcDay.getUTCDate() - 1);
+        await createFactionMapStatisticsSnapshot(previousUtcDay);
         console.log('✅ [CRON] Daily balance snapshot completed');
       } catch (error) {
         console.error('❌ [CRON] Failed to create daily snapshot:', error);
@@ -237,7 +244,7 @@ export const initializeScheduledJobs = (): void => {
     });
     
     console.log('✅ Scheduled jobs initialized:');
-    console.log('   - Balance snapshot: Daily at 00:30 UTC');
+    console.log('   - Balance snapshot: Daily at 00:30 UTC (previous UTC day)');
     console.log('   - Player statistics recalculation: Daily at 00:45 UTC');
     console.log('   - Inactive players check: Daily at 01:00 UTC');
     console.log('   - Player of month: 1st of month at 01:30 UTC');

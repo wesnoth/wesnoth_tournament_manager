@@ -10,8 +10,9 @@
  * For every stored snapshot date it rebuilds the expected rows with the same
  * aggregation the creator uses (buildFactionMapSnapshotEntries), limited to
  * the matches that existed when the date was written: a snapshot is taken
- * when it is created (the daily job runs at 00:30 UTC of the date it labels),
- * so matches played later that day belong to the next date. It compares the
+ * when it is created, and daily snapshots written before audit finding 25
+ * were taken at 00:30 UTC of the date they label, so matches played later
+ * that day belong to the next date. It compares the
  * rows by key (map, faction, opponent faction, side):
  *   - duplicated keys: two creators wrote the same date. Definitive.
  *   - missing keys: rows the current data expects but the date lacks. This is

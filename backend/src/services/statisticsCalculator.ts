@@ -293,9 +293,11 @@ type SnapshotReader = (sql: string, params: unknown[]) => Promise<any[]>;
  *
  * @param asOfStoredSnapshot only for checking a stored date: also exclude
  *   matches created after that date's snapshot was written. A snapshot is
- *   taken when it is created, not at the end of its date (the daily job runs
- *   at 00:30 UTC of the date it labels), so later matches of the same day
- *   are expected to be absent and must not be reported as missing rows.
+ *   taken when it is created, not at the end of its date: daily snapshots
+ *   written before audit finding 25 were taken at 00:30 UTC of the date they
+ *   label, and a balance-event boundary may be created during its own date,
+ *   so later matches of the same day are expected to be absent and must not
+ *   be reported as missing rows.
  *   The earliest row timestamp is used; a match created in the milliseconds
  *   between the aggregation read and the insert would still be reported.
  */
