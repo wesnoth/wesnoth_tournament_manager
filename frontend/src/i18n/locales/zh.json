@@ -710,6 +710,8 @@
   "ranking_wins": "胜利",
   "rated": "已评级",
   "recalculate_snapshots": "重新计算快照",
+  "balance_history_rebuild_progress": "正在重建平衡历史：{{current}}/{{total}} 个日期",
+  "balance_history_rebuild_done": "平衡历史已重建：{{dates}} 个日期，{{rows}} 行。",
   "recalculate_snapshots_tooltip": "为平衡事件分析生成历史快照",
   "recalculating": "正在重新计算...",
   "recent_balance_events": "最近的平衡事件",

@@ -203,7 +203,7 @@ All admin routes require `is_admin = 1` in `users_extension`.
 - `statisticsService.*` from `services/statisticsService.ts`:
   - `GET /api/statistics/history/events`, `POST /api/statistics/history/events`, `PUT /api/statistics/history/events/:id`.
   - `GET /api/public/factions`, `GET /api/public/maps`.
-  - `POST /api/admin/recalculate-snapshots` — recalculate all statistics snapshots.
+  - `POST /api/admin/recalculate-snapshots` — queue a background rebuild of the statistics snapshot history (`GET .../:jobId` for progress).
 
 ---
 

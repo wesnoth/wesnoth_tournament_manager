@@ -4,6 +4,7 @@ import { initializeScheduledJobs, autoDiscardUnconfirmedReplays } from './jobs/s
 import { runMigrations } from './services/migrationRunner.js';
 import { avatarManifestService } from './services/avatarManifestService.js';
 import { recoverInterruptedGlobalStatsRecalculationJobs } from './services/globalStatsRecalculationJobService.js';
+import { recoverInterruptedBalanceHistoryRebuildJobs } from './services/balanceHistoryRebuildJobService.js';
 import { invalidateNonAdminTokensIfMaintenanceIsActive } from './services/systemPauseService.js';
 
 // Port configuration - 7100 for test, 8100 for production
@@ -53,6 +54,7 @@ const startServer = async () => {
     await invalidateNonAdminTokensIfMaintenanceIsActive();
 
     await recoverInterruptedGlobalStatsRecalculationJobs();
+    await recoverInterruptedBalanceHistoryRebuildJobs();
 
     // Generate/regenerate avatar manifest from PNG files
     console.log('📦 Generating avatar manifest...');

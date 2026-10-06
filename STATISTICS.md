@@ -28,9 +28,9 @@ All non-cancelled rows in `matches` are eligible for ranked statistics. The `mat
 
 Minimum-game thresholds are display and sample-size criteria, not snapshot criteria. Recalculating snapshots always processes all eligible non-cancelled matches. A tab may apply a minimum after aggregation, and live aggregate endpoints may apply the same threshold in SQL. Changing the threshold must not change historical snapshot contents.
 
-Balance-history snapshots are cumulative: a snapshot for a date includes eligible, non-cancelled matches with `DATE(created_at)` on or before that date. The scheduler creates the normal daily snapshot for the previous UTC day, once that day is complete. The administrator's full recalculation clears and rebuilds the historical snapshot table from `matches`, so it is also the repair path for corrected historical data.
+Balance-history snapshots are cumulative: a snapshot for a date includes eligible, non-cancelled matches with `DATE(created_at)` on or before that date. The scheduler creates the normal daily snapshot for the previous UTC day, once that day is complete. The administrator's full recalculation regenerates the whole history from `matches`: every day from the first match to the previous UTC day, plus the balance-event boundaries, replacing each date atomically and removing dates outside that set. It never empties the history while it runs, so it is also the repair path for corrected historical data. It runs in the background, and its progress and outcome are recorded.
 
-Each snapshot date is published all-or-nothing: creators of the same date are serialized, and a failed write leaves no rows, so a retry rebuilds the date instead of accepting partial history. The read-only `check:snapshot-history` backend script lists stored dates with duplicated or missing rows; repair them by deleting the date and backfilling it, or with the full recalculation.
+Each snapshot date is published all-or-nothing: creators of the same date are serialized, and a failed write leaves no rows, so a retry rebuilds the date instead of accepting partial history. The read-only `check:snapshot-history` backend script lists stored dates with duplicated or missing rows; the full recalculation repairs them.
 
 ### Balance-event date boundaries
 
@@ -39,17 +39,19 @@ Balance-event analysis uses the event dates as chronological boundaries. Event d
 - `before` is the interval after the previous event and through `E`'s date. If there is no previous event, it starts at the earliest available statistics date.
 - `after` starts on the day after `E` and ends on the next event's date. If there is no next event, it ends on the latest available non-cancelled match date.
 
+The state at a boundary is read from the latest stored snapshot on or before it, because today and later dates are not snapshotted yet. Periods therefore extend through the last complete day.
+
 For example, with events `F` on day 31 and `M` on day 60, `F` compares days 1–31 against days 32–60, while `M` compares days 32–60 against days 61–365. The same matches are never included in both sides of one event comparison, and adjacent event comparisons use the same shared interval.
 
 The implementation obtains these intervals by subtracting cumulative snapshots: the current event boundary minus the previous event boundary gives `before`, and the next boundary minus the current event boundary gives `after`. The `snapshot_before_date` and `snapshot_after_date` columns on `balance_events` record the dates materialized by the maintenance process; the event-date ordering and cumulative snapshot contents define the analytical interval.
 
 ## Balance events
 
-Administrators record buffs, nerfs, reworks, hotfixes, and general balance changes. Public statistics users can select an event to compare the interval since the previous event with the interval until the next event. The administrator maintenance action can clear and rebuild the event boundary snapshots when historical data needs correction.
+Administrators record buffs, nerfs, reworks, hotfixes, and general balance changes. Public statistics users can select an event to compare the interval since the previous event with the interval until the next event. The administrator maintenance action rebuilds the history, including the event boundary snapshots, when historical data needs correction.
 
 Balance-event creation, editing, and full historical recalculation are administrator-only operations. Regular users cannot request arbitrary snapshot generation. The rebuild reads application match, faction, map, and event data and writes derived rows to `faction_map_statistics_history`; it does not write to forum database tables.
 
-The scheduled statistics job creates the normal daily cumulative snapshot. The protected administrator recalculation clears the event snapshot markers and historical snapshot rows before rebuilding all required event boundaries. This operation is the supported correction path when historical match data or event metadata has been repaired.
+The scheduled statistics job creates the normal daily cumulative snapshot. The protected administrator recalculation regenerates every daily date and event boundary and resets the event snapshot markers to the boundary dates that exist. This operation is the supported correction path when historical match data or event metadata has been repaired.
 
 ## Player statistics
 

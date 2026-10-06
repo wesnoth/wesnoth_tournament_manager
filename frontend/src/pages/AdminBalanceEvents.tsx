@@ -57,6 +57,7 @@ const AdminBalanceEvents: React.FC = () => {
   const [recalculatingSnapshots, setRecalculatingSnapshots] = useState(false);
   const [snapshotSuccess, setSnapshotSuccess] = useState('');
   const [snapshotError, setSnapshotError] = useState('');
+  const [snapshotProgress, setSnapshotProgress] = useState<{ current: number; total: number } | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
 
@@ -173,27 +174,52 @@ const AdminBalanceEvents: React.FC = () => {
     setSuccess('');
   };
 
+  /**
+   * Queue the full balance history rebuild and follow it until it ends.
+   *
+   * The rebuild runs as a background job (202 + job id) because it rewrites
+   * every daily snapshot date. When one is already running, the 409 carries
+   * its id, so a click after a page reload follows that job instead of
+   * failing. Polling every 2 s is enough for a job that takes seconds to
+   * minutes; the job row is the source of truth, not this component.
+   */
   const handleRecalculateSnapshots = async () => {
     setRecalculatingSnapshots(true);
     setSnapshotError('');
     setSnapshotSuccess('');
+    setSnapshotProgress(null);
 
     try {
-      const response = await api.post('/admin/recalculate-snapshots', {
-        eventId: null,
-        recreateAll: true
-      });
-      
-      const { totalSnapshotsCreated } = response.data;
-      
-      setSnapshotSuccess(
-        t('snapshots_recalculated_success') || 
-        `Historical snapshots recalculated successfully.\nSnapshots created: ${totalSnapshotsCreated}`
-      );
+      let jobId: string;
+      try {
+        const response = await api.post('/admin/recalculate-snapshots');
+        jobId = response.data.jobId;
+      } catch (queueError: any) {
+        if (queueError.response?.status !== 409 || !queueError.response?.data?.jobId) throw queueError;
+        jobId = queueError.response.data.jobId;
+      }
+
+      for (;;) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const { data: job } = await api.get(`/admin/recalculate-snapshots/${jobId}`);
+        setSnapshotProgress({ current: job.progress_current, total: job.progress_total });
+        if (job.status === 'completed') {
+          setSnapshotSuccess(t('balance_history_rebuild_done', {
+            dates: job.result_json?.dates_rebuilt ?? 0,
+            rows: job.result_json?.snapshots_created ?? 0,
+          }));
+          break;
+        }
+        if (job.status === 'failed') {
+          setSnapshotError(job.error_message || t('error_recalculating_snapshots'));
+          break;
+        }
+      }
     } catch (err: any) {
       setSnapshotError(err.response?.data?.error || t('error_recalculating_snapshots') || 'Error recalculating snapshots');
     } finally {
       setRecalculatingSnapshots(false);
+      setSnapshotProgress(null);
     }
   };
 
@@ -229,6 +255,11 @@ const AdminBalanceEvents: React.FC = () => {
               : t('recalculate_snapshots') || 'Recalculate Snapshots'
             }
           </button>
+          {snapshotProgress && snapshotProgress.total > 0 && (
+            <p role="status" className="mt-2 text-sm text-gray-700">
+              {t('balance_history_rebuild_progress', { current: snapshotProgress.current, total: snapshotProgress.total })}
+            </p>
+          )}
         </div>
 
         {snapshotSuccess && <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-4">{snapshotSuccess}</div>}

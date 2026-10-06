@@ -710,6 +710,8 @@
   "ranking_wins": "Победы",
   "rated": "Классифицирован",
   "recalculate_snapshots": "Пересчитать снимки",
+  "balance_history_rebuild_progress": "Перестройка истории баланса: {{current}}/{{total}} дат",
+  "balance_history_rebuild_done": "История баланса перестроена: {{dates}} дат, {{rows}} строк.",
   "recalculate_snapshots_tooltip": "Создавайте исторические снимки для анализа событий баланса",
   "recalculating": "Пересчитывается...",
   "recent_balance_events": "Недавние события баланса",

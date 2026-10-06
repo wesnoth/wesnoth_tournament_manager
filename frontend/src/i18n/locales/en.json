@@ -735,6 +735,8 @@
   "ranking_wins": "Wins",
   "rated": "Rated",
   "recalculate_snapshots": "Recalculate Snapshots",
+  "balance_history_rebuild_progress": "Rebuilding balance history: {{current}}/{{total}} dates",
+  "balance_history_rebuild_done": "Balance history rebuilt: {{dates}} dates, {{rows}} rows.",
   "recalculate_snapshots_tooltip": "Generate historical snapshots for balance event analysis",
   "recalculating": "Recalculating...",
   "recent_balance_events": "Recent Balance Events",

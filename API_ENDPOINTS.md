@@ -229,7 +229,8 @@ P2P proposal creation, counter-proposal, and update operations share a rolling p
 
 ### Statistics & Debug
 - `[POST] /api/admin/recalculate-all-stats` — Private (admin) — Recalculate all player statistics.
-- `[POST] /api/admin/recalculate-snapshots` — Private (admin) — Clear and rebuild the complete cumulative balance snapshot history; maintenance/recovery operation.
+- `[POST] /api/admin/recalculate-snapshots` — Private (admin) — Queue a background rebuild of the complete cumulative balance snapshot history; maintenance/recovery operation.
+- `[GET] /api/admin/recalculate-snapshots/:jobId` — Private (admin) — Progress and result of a balance history rebuild.
 - `[GET] /api/admin/player-of-month` — Private (admin) — Get player of the month data.
 - `[POST] /api/admin/calculate-player-of-month` — Private (admin) — Recalculate player of the month.
 
@@ -352,8 +353,8 @@ Admin triggers manual full recalculation:
 - `calculatePlayerOfMonth()`.
 
 ### `POST /api/admin/recalculate-snapshots`
-- Calls `recalculateBalanceEventSnapshots(recreateAll?)` from `statisticsCalculator`.
-- Rebuilds `faction_map_statistics_history` snapshots anchored to balance events.
+- Queues a background job (`202` with `jobId`; `409` with the running `jobId` when one is active) that rebuilds `faction_map_statistics_history`: every day from the first match to the previous UTC day plus the balance-event boundaries.
+- Progress is read with `GET /api/admin/recalculate-snapshots/:jobId`; the request and the outcome are audited.
 
 ### `POST /api/tournaments` (create tournament)
 - Inserts tournament into DB.

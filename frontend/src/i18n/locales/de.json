@@ -710,6 +710,8 @@
   "ranking_wins": "Siege",
   "rated": "Bewertet",
   "recalculate_snapshots": "Snapshots neu berechnen",
+  "balance_history_rebuild_progress": "Balance-Verlauf wird neu aufgebaut: {{current}}/{{total}} Tage",
+  "balance_history_rebuild_done": "Balance-Verlauf neu aufgebaut: {{dates}} Tage, {{rows}} Zeilen.",
   "recalculate_snapshots_tooltip": "Generieren Sie historische Snapshots für die Balance-Event-Analyse",
   "recalculating": "Wird neu berechnet...",
   "recent_balance_events": "Aktuelle Balance-Events",

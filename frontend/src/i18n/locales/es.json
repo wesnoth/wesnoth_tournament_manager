@@ -725,6 +725,8 @@
   "ranking_wins": "Victorias",
   "rated": "Clasificado",
   "recalculate_snapshots": "Recalcular Snapshots",
+  "balance_history_rebuild_progress": "Reconstruyendo la historia de balance: {{current}}/{{total}} fechas",
+  "balance_history_rebuild_done": "Historia de balance reconstruida: {{dates}} fechas, {{rows}} filas.",
   "recalculate_snapshots_tooltip": "Generar snapshots históricos para análisis de eventos de balance",
   "recalculating": "Recalculando...",
   "recent_balance_events": "Eventos de Balance Recientes",

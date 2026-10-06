@@ -9,6 +9,7 @@
  * - Team member validation checks
  */
 
+import type { PoolConnection } from 'mysql2/promise';
 import { pool, query } from '../config/database.js';
 import { randomUUID } from 'crypto';
 
@@ -241,32 +242,6 @@ async function getBalanceEventBoundaryDates(eventId: string): Promise<BalanceEve
   return { eventDate, previousEventDate, nextBoundaryDate };
 }
 
-/**
- * Create the cumulative snapshot immediately before a balance event.
- * The date is derived from the event, and the snapshot is rebuilt from all
- * eligible matches recorded up to that date.
- */
-export async function createBalanceEventBeforeSnapshot(
-  eventId: string
-): Promise<number> {
-  try {
-    const { eventDate } = await getBalanceEventBoundaryDates(eventId);
-    const snapshotResult = await createFactionMapStatisticsSnapshot(new Date(`${eventDate}T00:00:00Z`));
-
-    await query(
-      `UPDATE balance_events
-       SET snapshot_before_date = ?
-       WHERE id = ?`,
-      [eventDate, eventId]
-    );
-
-    return snapshotResult.snapshots_created;
-  } catch (error) {
-    console.error('Error creating balance event before snapshot:', error);
-    throw error;
-  }
-}
-
 /** One row of a faction/map statistics snapshot, before it is stored. */
 export interface FactionMapSnapshotEntry {
   map_id: string;
@@ -329,8 +304,27 @@ export async function buildFactionMapSnapshotEntries(
   );
 
   const aggregated = new Map<string, FactionMapSnapshotEntry>();
-  const addEntry = (mapId: string, factionId: string, opponentFactionId: string, factionSide: number, isWin: boolean) => {
-    const key = `${mapId}|${factionId}|${opponentFactionId}|${factionSide}`;
+  for (const row of rows) addMatchToSnapshot(aggregated, row);
+  return [...aggregated.values()];
+}
+
+/** Columns of one match that a snapshot aggregates. */
+interface SnapshotMatchRow {
+  map_id: string;
+  winner_faction_id: string;
+  loser_faction_id: string;
+  winner_side: number | null;
+}
+
+/**
+ * Add one match to a snapshot under construction: one row per side, keyed by
+ * map, faction, opponent faction, and the side that faction played.
+ * A missing winner side counts as side 1; side 0 marks a loser whose side is
+ * unknown (winner side outside 1/2).
+ */
+function addMatchToSnapshot(aggregated: Map<string, FactionMapSnapshotEntry>, row: SnapshotMatchRow): void {
+  const addEntry = (factionId: string, opponentFactionId: string, factionSide: number, isWin: boolean) => {
+    const key = `${row.map_id}|${factionId}|${opponentFactionId}|${factionSide}`;
     const entry = aggregated.get(key);
     if (entry) {
       entry.total_games += 1;
@@ -339,7 +333,7 @@ export async function buildFactionMapSnapshotEntries(
       return;
     }
     aggregated.set(key, {
-      map_id: mapId,
+      map_id: row.map_id,
       faction_id: factionId,
       opponent_faction_id: opponentFactionId,
       faction_side: factionSide,
@@ -348,15 +342,74 @@ export async function buildFactionMapSnapshotEntries(
       losses: isWin ? 0 : 1,
     });
   };
+  const winnerSide = row.winner_side ?? 1;
+  const loserSide = winnerSide === 1 ? 2 : winnerSide === 2 ? 1 : 0;
+  addEntry(row.winner_faction_id, row.loser_faction_id, winnerSide, true);
+  addEntry(row.loser_faction_id, row.winner_faction_id, loserSide, false);
+}
 
-  for (const row of rows) {
-    const winnerSide = row.winner_side ?? 1;
-    // Side 0 marks a loser whose side is unknown (winner side outside 1/2).
-    const loserSide = winnerSide === 1 ? 2 : winnerSide === 2 ? 1 : 0;
-    addEntry(row.map_id, row.winner_faction_id, row.loser_faction_id, winnerSide, true);
-    addEntry(row.map_id, row.loser_faction_id, row.winner_faction_id, loserSide, false);
+/**
+ * Insert a date's snapshot rows on the caller's connection and transaction,
+ * in batches of SNAPSHOT_INSERT_BATCH_SIZE.
+ */
+async function insertSnapshotRows(
+  connection: PoolConnection,
+  dateStr: string,
+  entries: FactionMapSnapshotEntry[]
+): Promise<void> {
+  for (let offset = 0; offset < entries.length; offset += SNAPSHOT_INSERT_BATCH_SIZE) {
+    const batch = entries.slice(offset, offset + SNAPSHOT_INSERT_BATCH_SIZE);
+    const values: unknown[] = [];
+    for (const entry of batch) {
+      const winrate = Math.round((entry.wins / entry.total_games) * 10000) / 100;
+      const sampleSizeCategory = entry.total_games < 10 ? 'small' : entry.total_games < 50 ? 'medium' : 'large';
+      const confidenceLevel = entry.total_games < 10 ? 25.0 : entry.total_games < 30 ? 50.0 : entry.total_games < 50 ? 75.0 : 95.0;
+      values.push(randomUUID(), dateStr, entry.map_id, entry.faction_id, entry.opponent_faction_id,
+        entry.faction_side, entry.total_games, entry.wins, entry.losses,
+        winrate, sampleSizeCategory, confidenceLevel);
+    }
+    await connection.query(
+      `INSERT INTO faction_map_statistics_history (
+        id, snapshot_date, snapshot_timestamp, map_id, faction_id,
+        opponent_faction_id, faction_side, total_games, wins, losses,
+        winrate, sample_size_category, confidence_level
+      ) VALUES ${batch.map(() => '(?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
+      values
+    );
   }
-  return [...aggregated.values()];
+}
+
+/**
+ * Run `work` holding the date's named snapshot lock on a dedicated
+ * connection. The lock is session-scoped, so it is taken and released on the
+ * same connection; a connection whose release fails is destroyed instead of
+ * returning to the pool, where another request would silently hold the lock.
+ *
+ * @throws SnapshotLockTimeoutError when the lock is not granted in time.
+ */
+async function withSnapshotDateLock<T>(dateStr: string, work: (connection: PoolConnection) => Promise<T>): Promise<T> {
+  const lockName = `fms_snapshot:${dateStr}`;
+  const connection = await pool.getConnection();
+  let lockHeld = false;
+  let releaseFailed = false;
+  try {
+    const [lockRows] = await connection.query<any[]>(
+      'SELECT GET_LOCK(?, ?) AS acquired', [lockName, SNAPSHOT_LOCK_TIMEOUT_SECONDS]
+    );
+    // 1 = acquired, 0 = timed out, NULL = error.
+    if (Number(lockRows[0]?.acquired) !== 1) throw new SnapshotLockTimeoutError(dateStr);
+    lockHeld = true;
+    return await work(connection);
+  } finally {
+    if (lockHeld) {
+      await connection.query('SELECT RELEASE_LOCK(?)', [lockName]).catch((releaseError) => {
+        releaseFailed = true;
+        console.error(`Error releasing statistics snapshot lock ${lockName}:`, releaseError);
+      });
+    }
+    if (releaseFailed) connection.destroy();
+    else connection.release();
+  }
 }
 
 /** How long a creator waits for another creator of the same date to finish. */
@@ -376,9 +429,10 @@ export class SnapshotLockTimeoutError extends Error {
  * Create a cumulative faction/map statistics snapshot for a date
  * (audit finding 20).
  *
- * Callers: the daily scheduler, balance-event before/after snapshots (also
- * from the admin rebuild), and the admin backfill endpoint. A date is either
- * absent or complete, never partial or duplicated:
+ * Callers: the daily scheduler and the admin backfill endpoint; the full
+ * rebuild replaces dates instead (rebuildFactionMapStatisticsHistory) under
+ * the same lock. A date is either absent or complete, never partial or
+ * duplicated:
  *   - A named lock per date (`GET_LOCK('fms_snapshot:<date>')`) serializes
  *     concurrent creators of the same date. Without it, two creators could
  *     both see no rows and both insert a full set, duplicating the date.
@@ -388,7 +442,8 @@ export class SnapshotLockTimeoutError extends Error {
  *     back entirely, so a retry rebuilds it instead of mistaking a partial
  *     date for a complete one.
  * The lock is session-scoped, so it is taken and released on one dedicated
- * connection; MariaDB also releases it if that connection dies. Dates
+ * connection (withSnapshotDateLock); MariaDB also releases it if that
+ * connection dies. Dates
  * written partially before this fix are listed by the read-only
  * `check:snapshot-history` script.
  *
@@ -399,73 +454,32 @@ export async function createFactionMapStatisticsSnapshot(
   snapshotDate: Date = new Date()
 ): Promise<{ snapshots_created: number; snapshots_skipped: number }> {
   const dateStr = snapshotDate.toISOString().split('T')[0];
-  const lockName = `fms_snapshot:${dateStr}`;
-  const connection = await pool.getConnection();
-  let lockHeld = false;
-  let releaseFailed = false;
   try {
-    const [lockRows] = await connection.query<any[]>(
-      'SELECT GET_LOCK(?, ?) AS acquired', [lockName, SNAPSHOT_LOCK_TIMEOUT_SECONDS]
-    );
-    // 1 = acquired, 0 = timed out, NULL = error.
-    if (Number(lockRows[0]?.acquired) !== 1) throw new SnapshotLockTimeoutError(dateStr);
-    lockHeld = true;
-
-    const [existingRows] = await connection.query<any[]>(
-      'SELECT COUNT(*) AS count FROM faction_map_statistics_history WHERE snapshot_date = ?', [dateStr]
-    );
-    const existing = Number(existingRows[0].count);
-    if (existing > 0) {
-      return { snapshots_created: 0, snapshots_skipped: existing };
-    }
-
-    const entries = await buildFactionMapSnapshotEntries(
-      dateStr, async (sql, params) => (await connection.query<any[]>(sql, params))[0]
-    );
-
-    await connection.beginTransaction();
-    try {
-      for (let offset = 0; offset < entries.length; offset += SNAPSHOT_INSERT_BATCH_SIZE) {
-        const batch = entries.slice(offset, offset + SNAPSHOT_INSERT_BATCH_SIZE);
-        const values: unknown[] = [];
-        for (const entry of batch) {
-          const winrate = Math.round((entry.wins / entry.total_games) * 10000) / 100;
-          const sampleSizeCategory = entry.total_games < 10 ? 'small' : entry.total_games < 50 ? 'medium' : 'large';
-          const confidenceLevel = entry.total_games < 10 ? 25.0 : entry.total_games < 30 ? 50.0 : entry.total_games < 50 ? 75.0 : 95.0;
-          values.push(randomUUID(), dateStr, entry.map_id, entry.faction_id, entry.opponent_faction_id,
-            entry.faction_side, entry.total_games, entry.wins, entry.losses,
-            winrate, sampleSizeCategory, confidenceLevel);
-        }
-        await connection.query(
-          `INSERT INTO faction_map_statistics_history (
-            id, snapshot_date, snapshot_timestamp, map_id, faction_id,
-            opponent_faction_id, faction_side, total_games, wins, losses,
-            winrate, sample_size_category, confidence_level
-          ) VALUES ${batch.map(() => '(?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
-          values
-        );
+    return await withSnapshotDateLock(dateStr, async (connection) => {
+      const [existingRows] = await connection.query<any[]>(
+        'SELECT COUNT(*) AS count FROM faction_map_statistics_history WHERE snapshot_date = ?', [dateStr]
+      );
+      const existing = Number(existingRows[0].count);
+      if (existing > 0) {
+        return { snapshots_created: 0, snapshots_skipped: existing };
       }
-      await connection.commit();
-    } catch (insertError) {
-      await connection.rollback().catch(() => undefined);
-      throw insertError;
-    }
 
-    return { snapshots_created: entries.length, snapshots_skipped: 0 };
+      const entries = await buildFactionMapSnapshotEntries(
+        dateStr, async (sql, params) => (await connection.query<any[]>(sql, params))[0]
+      );
+      await connection.beginTransaction();
+      try {
+        await insertSnapshotRows(connection, dateStr, entries);
+        await connection.commit();
+      } catch (insertError) {
+        await connection.rollback().catch(() => undefined);
+        throw insertError;
+      }
+      return { snapshots_created: entries.length, snapshots_skipped: 0 };
+    });
   } catch (error) {
     console.error('Error creating faction/map statistics snapshot:', error);
     throw error;
-  } finally {
-    if (lockHeld) {
-      await connection.query('SELECT RELEASE_LOCK(?)', [lockName]).catch((releaseError) => {
-        releaseFailed = true;
-        console.error(`Error releasing statistics snapshot lock ${lockName}:`, releaseError);
-      });
-    }
-    // A connection that may still hold the lock must not return to the pool:
-    // another request reusing it would silently hold the date's lock.
-    if (releaseFailed) connection.destroy();
-    else connection.release();
   }
 }
 
@@ -1160,28 +1174,6 @@ export async function getTournamentSnapshot(
   return result.rows[0] as any;
 }
 
-export async function createBalanceEventAfterSnapshot(
-  eventId: string
-): Promise<number> {
-  try {
-    const { nextBoundaryDate } = await getBalanceEventBoundaryDates(eventId);
-    const snapshotResult = await createFactionMapStatisticsSnapshot(new Date(`${nextBoundaryDate}T00:00:00Z`));
-
-    // Update balance_events to record snapshot date
-    await query(
-      `UPDATE balance_events
-       SET snapshot_after_date = ?
-       WHERE id = ?`,
-      [nextBoundaryDate, eventId]
-    );
-
-    return snapshotResult.snapshots_created;
-  } catch (error) {
-    console.error('Error creating balance event after snapshot:', error);
-    throw error;
-  }
-}
-
 /**
  * Get balance event impact computed directly from matches.
  * Uses event_date as the dividing line: matches before vs matches after.
@@ -1564,85 +1556,177 @@ export class BalanceSnapshotRecalculationInProgressError extends Error {
 }
 
 /**
- * In-process guard for `recalculateBalanceEventSnapshots`. The backend runs as a
+ * In-process guard of the balance history rebuild. The backend runs as a
  * single instance, so a module flag is enough to serialize runs; it is set
  * synchronously before the first `await`, so two requests cannot both pass it.
  */
 let balanceSnapshotRecalculationRunning = false;
 
 /**
- * Recalculate balance event snapshots and impacts.
- *
- * With `recreateAll`, the snapshot dates are cleared and the history table is
- * truncated first, so every event is rebuilt; this is not transactional
- * (`TRUNCATE` autocommits), which is why concurrent runs are rejected: a second
- * run would truncate rows the first one is still writing.
- *
- * A failure on one event does not stop the others. The result reports
- * `balance_events_total` and `failed_event_ids` so the caller can treat a
- * partial rebuild as a failure instead of a success with a lower count.
- *
- * @throws BalanceSnapshotRecalculationInProgressError when another run is active.
+ * Reserve the balance history rebuild for one run, synchronously.
+ * @throws BalanceSnapshotRecalculationInProgressError when a run is active.
  */
-export async function recalculateBalanceEventSnapshots(recreateAll: boolean = false): Promise<{
-  balance_events_total: number;
-  balance_events_updated: number;
-  failed_event_ids: string[];
-  snapshots_created: number;
-}> {
-  if (balanceSnapshotRecalculationRunning) {
-    throw new BalanceSnapshotRecalculationInProgressError();
-  }
+export function reserveBalanceHistoryRebuild(): void {
+  if (balanceSnapshotRecalculationRunning) throw new BalanceSnapshotRecalculationInProgressError();
   balanceSnapshotRecalculationRunning = true;
-  try {
-    if (recreateAll) {
-      // Clear all snapshot dates so every event is reprocessed
-      await query(`UPDATE balance_events SET snapshot_before_date = NULL, snapshot_after_date = NULL`);
-      // Clear the history table so createFactionMapStatisticsSnapshot won't skip existing dates
-      await query(`TRUNCATE TABLE faction_map_statistics_history`);
+}
+
+/** Release the reservation taken by reserveBalanceHistoryRebuild. */
+export function releaseBalanceHistoryRebuild(): void {
+  balanceSnapshotRecalculationRunning = false;
+}
+
+export interface BalanceHistoryRebuildResult {
+  /** Dates written (daily range plus balance-event boundaries). */
+  dates_rebuilt: number;
+  /** Rows written across all dates. */
+  snapshots_created: number;
+  /** Stored dates outside the target set that were removed. */
+  stale_dates_removed: number;
+  /** Balance events whose snapshot markers were updated. */
+  balance_events_updated: number;
+}
+
+const toUtcDateString = (value: Date): string => value.toISOString().split('T')[0];
+
+/** The previous UTC day: the latest date whose matches are all recorded. */
+function previousUtcDayString(now = new Date()): string {
+  const day = new Date(now);
+  day.setUTCDate(day.getUTCDate() - 1);
+  return toUtcDateString(day);
+}
+
+/**
+ * Rebuild the whole faction/map statistics history from matches
+ * (maintainer requirement, 2026-10-07: the full recalculation regenerates
+ * everything; audit findings 20 and 25).
+ *
+ * Target dates are every day from the first non-cancelled match to the
+ * previous UTC day, plus each balance event's boundary dates (its event date
+ * and its next boundary) when they are not later than that day. Today and
+ * later dates are never written: a date is complete only once it is over,
+ * and the daily job writes yesterday at 00:30 UTC.
+ *
+ * Each target date is replaced atomically (delete and insert in one
+ * transaction, under the same per-date lock as every other creator), so the
+ * history is never emptied while the rebuild runs, and a failure leaves every
+ * date either in its previous complete state or rebuilt; rerunning finishes
+ * the job. Stored dates outside the target set are removed afterwards, and
+ * the balance-event markers (`snapshot_before_date`, `snapshot_after_date`)
+ * are set to the boundary dates that exist, or NULL for a boundary that is
+ * not over yet.
+ *
+ * Matches are read once and accumulated day by day, so the cost grows with
+ * matches plus written rows, not with dates times matches. Callers must hold
+ * the reservation (reserveBalanceHistoryRebuild).
+ *
+ * @param onProgress called after each date with the dates done and the total.
+ */
+export async function rebuildFactionMapStatisticsHistory(
+  onProgress?: (current: number, total: number) => Promise<void>
+): Promise<BalanceHistoryRebuildResult> {
+  const lastCompleteDay = previousUtcDayString();
+
+  // DATE_FORMAT keeps dates as text, avoiding client time zone shifts.
+  const matches = (await query(
+    `SELECT DATE_FORMAT(m.created_at, '%Y-%m-%d') AS match_day,
+            gm.id AS map_id, f_w.id AS winner_faction_id, f_l.id AS loser_faction_id, m.winner_side
+     FROM matches m
+     JOIN game_maps gm ON gm.name = m.map
+     JOIN factions f_w ON f_w.name = m.winner_faction
+     JOIN factions f_l ON f_l.name = m.loser_faction
+     WHERE m.status != 'cancelled'
+       AND m.created_at IS NOT NULL
+       AND DATE(m.created_at) <= ?
+     ORDER BY m.created_at ASC`,
+    [lastCompleteDay]
+  )).rows as Array<SnapshotMatchRow & { match_day: string }>;
+
+  // Event boundaries, computed like getBalanceEventBoundaryDates: an event's
+  // after-boundary is the next event's date or, for the last event, the
+  // latest match date.
+  const events = (await query(
+    `SELECT id, DATE_FORMAT(event_date, '%Y-%m-%d') AS event_day FROM balance_events ORDER BY event_date ASC`
+  )).rows as Array<{ id: string; event_day: string }>;
+  const latestMatchDay = (await query(
+    `SELECT DATE_FORMAT(MAX(created_at), '%Y-%m-%d') AS latest FROM matches WHERE status != 'cancelled'`
+  )).rows[0]?.latest as string | null;
+  const eventBoundaries = events.map((event, index) => ({
+    id: event.id,
+    before: event.event_day,
+    after: events[index + 1]?.event_day ?? latestMatchDay ?? event.event_day,
+  }));
+
+  const targetDates = new Set<string>();
+  if (matches.length > 0) {
+    const day = new Date(`${matches[0].match_day}T00:00:00Z`);
+    for (let current = toUtcDateString(day); current <= lastCompleteDay; current = toUtcDateString(day)) {
+      targetDates.add(current);
+      day.setUTCDate(day.getUTCDate() + 1);
     }
-
-    // Get all balance events without snapshots (after optional clear above, this picks up all).
-    // The date columns are selected so an event that already has one side's
-    // snapshot only gets the missing side rebuilt.
-    const eventsResult = await query(
-      `SELECT id, snapshot_before_date, snapshot_after_date FROM balance_events
-       WHERE snapshot_before_date IS NULL OR snapshot_after_date IS NULL`
-    );
-
-    let eventsUpdated = 0;
-    let snapshotsCreated = 0;
-    const failedEventIds: string[] = [];
-
-    for (const event of eventsResult.rows) {
-      try {
-        if (!event.snapshot_before_date) {
-          const beforeCount = await createBalanceEventBeforeSnapshot(event.id);
-          snapshotsCreated += beforeCount;
-        }
-        if (!event.snapshot_after_date) {
-          const afterCount = await createBalanceEventAfterSnapshot(event.id);
-          snapshotsCreated += afterCount;
-        }
-        eventsUpdated++;
-      } catch (e) {
-        console.error(`Error processing balance event ${event.id}:`, e);
-        failedEventIds.push(event.id);
-      }
-    }
-
-    return {
-      balance_events_total: eventsResult.rows.length,
-      balance_events_updated: eventsUpdated,
-      failed_event_ids: failedEventIds,
-      snapshots_created: snapshotsCreated
-    };
-  } catch (error) {
-    console.error('Error recalculating balance event snapshots:', error);
-    throw error;
-  } finally {
-    balanceSnapshotRecalculationRunning = false;
   }
+  for (const boundary of eventBoundaries) {
+    if (boundary.before <= lastCompleteDay) targetDates.add(boundary.before);
+    if (boundary.after <= lastCompleteDay) targetDates.add(boundary.after);
+  }
+  const orderedDates = [...targetDates].sort();
+
+  const aggregated = new Map<string, FactionMapSnapshotEntry>();
+  let matchIndex = 0;
+  let rowsWritten = 0;
+  for (const [index, date] of orderedDates.entries()) {
+    while (matchIndex < matches.length && matches[matchIndex].match_day <= date) {
+      addMatchToSnapshot(aggregated, matches[matchIndex]);
+      matchIndex += 1;
+    }
+    // Copies, because the accumulator keeps growing for later dates.
+    const entries = [...aggregated.values()].map((entry) => ({ ...entry }));
+    await withSnapshotDateLock(date, async (connection) => {
+      await connection.beginTransaction();
+      try {
+        await connection.query('DELETE FROM faction_map_statistics_history WHERE snapshot_date = ?', [date]);
+        await insertSnapshotRows(connection, date, entries);
+        await connection.commit();
+      } catch (writeError) {
+        await connection.rollback().catch(() => undefined);
+        throw writeError;
+      }
+    });
+    rowsWritten += entries.length;
+    if (onProgress) await onProgress(index + 1, orderedDates.length);
+  }
+
+  // Remove dates the target set no longer contains: days before the first
+  // match, early snapshots of today or later, or boundaries of deleted events.
+  const storedDates = (await query(
+    `SELECT DISTINCT DATE_FORMAT(snapshot_date, '%Y-%m-%d') AS day FROM faction_map_statistics_history`
+  )).rows.map((row: any) => String(row.day));
+  let staleRemoved = 0;
+  for (const date of storedDates) {
+    if (targetDates.has(date)) continue;
+    await withSnapshotDateLock(date, async (connection) => {
+      await connection.query('DELETE FROM faction_map_statistics_history WHERE snapshot_date = ?', [date]);
+    });
+    staleRemoved += 1;
+  }
+
+  for (const boundary of eventBoundaries) {
+    await query(
+      `UPDATE balance_events SET snapshot_before_date = ?, snapshot_after_date = ? WHERE id = ?`,
+      [
+        boundary.before <= lastCompleteDay ? boundary.before : null,
+        boundary.after <= lastCompleteDay ? boundary.after : null,
+        boundary.id,
+      ]
+    );
+  }
+
+  return {
+    dates_rebuilt: orderedDates.length,
+    snapshots_created: rowsWritten,
+    stale_dates_removed: staleRemoved,
+    balance_events_updated: eventBoundaries.length,
+  };
 }
 /**
  * CRITICAL: Recalculate player ELO from match records
@@ -1758,7 +1842,6 @@ export default {
   calculateTeamSwissTiebreakers,
   checkTeamMemberCount,
   checkTeamMemberPositions,
-  createBalanceEventBeforeSnapshot,
   createFactionMapStatisticsSnapshot,
   getBalanceTrend,
   recalculatePlayerMatchStatistics,
@@ -1771,10 +1854,9 @@ export default {
   calculateFactionWinrates,
   updateLeagueRankings,
   getTournamentSnapshot,
-  createBalanceEventAfterSnapshot,
   getBalanceEventForwardImpact,
   getBalanceEventSnapshotImpact,
   getBalanceEventIntervalImpact,
-  recalculateBalanceEventSnapshots,
+  rebuildFactionMapStatisticsHistory,
   recalculatePlayerEloSequential
 };

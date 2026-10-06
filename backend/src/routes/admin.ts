@@ -15,6 +15,12 @@ import {
 } from '../services/globalStatsRecalculationJobService.js';
 import { isTournamentOrganizer } from '../services/tournamentAuthorizationService.js';
 import { isClientSafeError } from '../utils/clientError.js';
+import {
+  BalanceSnapshotRecalculationInProgressError,
+  enqueueBalanceHistoryRebuild,
+  getActiveBalanceHistoryRebuildJobId,
+  getBalanceHistoryRebuildJob,
+} from '../services/balanceHistoryRebuildJobService.js';
 import { getSystemPauseStatus, globalRecalculationMiddleware, invalidateNonAdminTokens } from '../services/systemPauseService.js';
 
 const router = Router();
@@ -1586,80 +1592,55 @@ router.delete('/factions/:factionId', authMiddleware, async (req: AuthRequest, r
   }
 });
 
-// ===== RECALCULATE BALANCE EVENT SNAPSHOTS =====
-// Rejected with 409 while a global stats recalculation job runs: snapshots are
-// copies of the live faction/map statistics, which that job is rewriting.
+// ===== REBUILD BALANCE HISTORY =====
+// Queue a full rebuild of the faction/map statistics history: every day from
+// the first match to yesterday plus the balance-event boundaries (see
+// rebuildFactionMapStatisticsHistory). It runs in the background because its
+// duration grows with the history; the request is audited here and the job
+// audits its outcome. Rejected with 409 while a global stats recalculation
+// runs, since that job is rewriting match-derived data.
 router.post('/recalculate-snapshots', authMiddleware, globalRecalculationMiddleware, async (req: AuthRequest, res) => {
   try {
-    // Check if user is admin
     const userResult = await query('SELECT is_admin FROM users_extension WHERE id = ?', [req.userId]);
     if (userResult.rows.length === 0 || !userResult.rows[0].is_admin) {
       return res.status(403).json({ error: 'Only admins can access this resource' });
     }
 
-    const { recreateAll } = req.body;
-
-    // A full rebuild is deliberately explicit because it truncates historical
-    // derived rows and recreates them from matches. The run is synchronous, so
-    // it gets a single audit event with its outcome: success with the counts,
-    // or failure, because a failed full rebuild can leave the history partially
-    // truncated and an auditor must be able to see that it happened.
-    console.log('Starting balance event snapshots recalculation', { recreateAll });
-    const startedAt = Date.now();
-
-    // Call TypeScript function to recalculate snapshots
-    const { recalculateBalanceEventSnapshots, BalanceSnapshotRecalculationInProgressError } =
-      await import('../services/statisticsCalculator.js');
-    let tsResult: Awaited<ReturnType<typeof recalculateBalanceEventSnapshots>>;
+    let jobId: string;
     try {
-      tsResult = await recalculateBalanceEventSnapshots(recreateAll === true);
-    } catch (recalcError) {
-      // A rejected concurrent request changed nothing, so it is not audited as a failed run.
-      if (recalcError instanceof BalanceSnapshotRecalculationInProgressError) {
-        return res.status(409).json({ code: 'BALANCE_SNAPSHOT_RECALCULATION_IN_PROGRESS', error: recalcError.message });
+      jobId = await enqueueBalanceHistoryRebuild(req.userId ?? null);
+    } catch (enqueueError) {
+      if (enqueueError instanceof BalanceSnapshotRecalculationInProgressError) {
+        // A rejected concurrent request changed nothing, so it is not audited.
+        return res.status(409).json({
+          code: 'BALANCE_SNAPSHOT_RECALCULATION_IN_PROGRESS',
+          error: enqueueError.message,
+          jobId: await getActiveBalanceHistoryRebuildJobId(),
+        });
       }
-      // Audit details are shown in the admin UI, so internal error text is redacted.
-      await auditStaffAction(req, 'BALANCE_SNAPSHOTS_RECALCULATION_FAILED', {
-        recreate_all: recreateAll === true,
-        error: isClientSafeError(recalcError) ? recalcError.message : 'Internal error (see server log)',
-        duration_seconds: Math.round((Date.now() - startedAt) / 1000),
-      });
-      throw recalcError;
+      throw enqueueError;
     }
-
-    // Per-event failures do not abort the service loop, so a run that skipped
-    // any event is reported and audited as failed: its history is incomplete.
-    const failedCount = tsResult.failed_event_ids.length;
-    await auditStaffAction(req, failedCount > 0 ? 'BALANCE_SNAPSHOTS_RECALCULATION_FAILED' : 'BALANCE_SNAPSHOTS_RECALCULATED', {
-      recreate_all: recreateAll === true,
-      events_total: tsResult.balance_events_total,
-      events_processed: tsResult.balance_events_updated,
-      failed_event_ids: tsResult.failed_event_ids,
-      snapshots_created: tsResult.snapshots_created,
-      duration_seconds: Math.round((Date.now() - startedAt) / 1000),
-    });
-
-    if (failedCount > 0) {
-      return res.status(500).json({
-        error: `Balance snapshots were rebuilt for ${tsResult.balance_events_updated} of ${tsResult.balance_events_total} events; ${failedCount} failed (see server log)`,
-        totalEventsProcessed: tsResult.balance_events_updated,
-        totalSnapshotsCreated: tsResult.snapshots_created,
-        failedEventIds: tsResult.failed_event_ids,
-      });
-    }
-
-    res.json({
-      success: true,
-      message: 'Balance event snapshots recalculated successfully',
-      totalEventsProcessed: tsResult.balance_events_updated,
-      totalSnapshotsCreated: tsResult.snapshots_created,
-      recreatedAll: recreateAll
-    });
+    await auditStaffAction(req, 'BALANCE_HISTORY_REBUILD_QUEUED', { job_id: jobId });
+    res.status(202).json({ message: 'Balance history rebuild queued', jobId, status: 'queued' });
   } catch (error) {
-    console.error('🔴 ERROR recalculating balance event snapshots:', error);
-    res.status(500).json({
-      error: 'Failed to recalculate balance event snapshots'
-    });
+    console.error('🔴 ERROR queuing balance history rebuild:', error);
+    res.status(500).json({ error: 'Failed to queue the balance history rebuild' });
+  }
+});
+
+// Progress and result of a balance history rebuild.
+router.get('/recalculate-snapshots/:jobId', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const userResult = await query('SELECT is_admin FROM users_extension WHERE id = ?', [req.userId]);
+    if (userResult.rows.length === 0 || !userResult.rows[0].is_admin) {
+      return res.status(403).json({ error: 'Only admins can access this resource' });
+    }
+    const job = await getBalanceHistoryRebuildJob(req.params.jobId);
+    if (!job) return res.status(404).json({ error: 'Rebuild job not found' });
+    res.json(job);
+  } catch (error) {
+    console.error('Error reading balance history rebuild job:', error);
+    res.status(500).json({ error: 'Failed to read the rebuild job' });
   }
 });
 
