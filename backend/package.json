@@ -18,7 +18,8 @@
     "migrate": "node scripts/migrate.js",
     "test:group-progression": "node scripts/test-group-progression.cjs",
     "hash-test-password": "node scripts/hash-test-mode-password.mjs",
-    "test:tournament-engine": "node dist/tournament-engine/tournamentEngine.selftest.js"
+    "test:tournament-engine": "node dist/tournament-engine/tournamentEngine.selftest.js",
+    "check:snapshot-history": "node dist/scripts/checkSnapshotHistory.js"
   },
   "dependencies": {
     "archiver": "^8.0.0",

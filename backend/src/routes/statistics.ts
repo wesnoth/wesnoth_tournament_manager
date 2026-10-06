@@ -9,6 +9,7 @@ import {
   getBalanceEventSnapshotImpact,
   getBalanceEventIntervalImpact,
   createFactionMapStatisticsSnapshot,
+  SnapshotLockTimeoutError,
 } from '../services/statisticsCalculator.js';
 import {
   getGlobalStatisticsFromCache,
@@ -623,8 +624,9 @@ router.post('/history/snapshot', authMiddleware, adminMiddleware, async (req: Au
       return res.status(400).json({ error: 'Missing required field: date' });
     }
     
-    // A failed backfill is audited too: it may have written part of the day's
-    // snapshot rows before failing. Internal error text is redacted because
+    // A failed backfill is audited too. The date's rows are written in one
+    // transaction, so a failure leaves nothing behind and the backfill can be
+    // retried (audit finding 20). Internal error text is redacted because
     // audit details are shown in the admin UI.
     let snapshotResult: Awaited<ReturnType<typeof createFactionMapStatisticsSnapshot>>;
     try {
@@ -662,6 +664,10 @@ router.post('/history/snapshot', authMiddleware, adminMiddleware, async (req: Au
       date: snapshotDate
     });
   } catch (error) {
+    if (error instanceof SnapshotLockTimeoutError) {
+      // Another creator (daily job, balance rebuild) still holds the date.
+      return res.status(409).json({ error: error.message });
+    }
     console.error('Error creating snapshot:', error);
     res.status(500).json({ error: 'Failed to create snapshot' });
   }

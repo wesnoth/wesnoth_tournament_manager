@@ -30,6 +30,8 @@ Minimum-game thresholds are display and sample-size criteria, not snapshot crite
 
 Balance-history snapshots are cumulative: a snapshot for a date includes eligible, non-cancelled matches with `DATE(created_at)` on or before that date. The scheduler creates the normal daily snapshot. The administrator's full recalculation clears and rebuilds the historical snapshot table from `matches`, so it is also the repair path for corrected historical data.
 
+Each snapshot date is published all-or-nothing: creators of the same date are serialized, and a failed write leaves no rows, so a retry rebuilds the date instead of accepting partial history. The read-only `check:snapshot-history` backend script lists stored dates with duplicated or missing rows; repair them by deleting the date and backfilling it, or with the full recalculation.
+
 ### Balance-event date boundaries
 
 Balance-event analysis uses the event dates as chronological boundaries. Event dates must be unique. For an event `E`:

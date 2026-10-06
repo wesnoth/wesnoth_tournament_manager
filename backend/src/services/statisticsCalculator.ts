@@ -9,7 +9,7 @@
  * - Team member validation checks
  */
 
-import { query } from '../config/database.js';
+import { pool, query } from '../config/database.js';
 import { randomUUID } from 'crypto';
 
 // ============================================================================
@@ -267,114 +267,188 @@ export async function createBalanceEventBeforeSnapshot(
   }
 }
 
+/** One row of a faction/map statistics snapshot, before it is stored. */
+export interface FactionMapSnapshotEntry {
+  map_id: string;
+  faction_id: string;
+  opponent_faction_id: string;
+  faction_side: number;
+  total_games: number;
+  wins: number;
+  losses: number;
+}
+
+/** Minimal executor shared by the pool wrapper and a dedicated connection. */
+type SnapshotReader = (sql: string, params: unknown[]) => Promise<any[]>;
+
 /**
- * Create a cumulative faction/map statistics snapshot for a date.
- * The scheduled job uses this for normal daily history; administrators may
- * also call it through the protected backfill endpoint when correcting data.
+ * Aggregate the snapshot rows for a date from the matches played up to it.
+ *
+ * The snapshot is cumulative: it covers every non-cancelled match created on
+ * or before the date. Reading the current aggregate table instead would make
+ * every historical snapshot identical to today. Each match yields one row per
+ * side, keyed by map, faction, opponent faction, and the side that faction
+ * played. Shared with the read-only history check, so both always agree on
+ * what a complete snapshot contains.
+ */
+export async function buildFactionMapSnapshotEntries(
+  dateStr: string,
+  read: SnapshotReader = async (sql, params) => (await query(sql, params)).rows
+): Promise<FactionMapSnapshotEntry[]> {
+  const rows = await read(
+    `SELECT
+       gm.id AS map_id,
+       f_w.id AS winner_faction_id,
+       f_l.id AS loser_faction_id,
+       m.winner_side
+     FROM matches m
+     JOIN game_maps gm ON gm.name = m.map
+     JOIN factions f_w ON f_w.name = m.winner_faction
+     JOIN factions f_l ON f_l.name = m.loser_faction
+     WHERE m.status != 'cancelled'
+       AND m.created_at IS NOT NULL
+       AND DATE(m.created_at) <= ?`,
+    [dateStr]
+  );
+
+  const aggregated = new Map<string, FactionMapSnapshotEntry>();
+  const addEntry = (mapId: string, factionId: string, opponentFactionId: string, factionSide: number, isWin: boolean) => {
+    const key = `${mapId}|${factionId}|${opponentFactionId}|${factionSide}`;
+    const entry = aggregated.get(key);
+    if (entry) {
+      entry.total_games += 1;
+      if (isWin) entry.wins += 1;
+      else entry.losses += 1;
+      return;
+    }
+    aggregated.set(key, {
+      map_id: mapId,
+      faction_id: factionId,
+      opponent_faction_id: opponentFactionId,
+      faction_side: factionSide,
+      total_games: 1,
+      wins: isWin ? 1 : 0,
+      losses: isWin ? 0 : 1,
+    });
+  };
+
+  for (const row of rows) {
+    const winnerSide = row.winner_side ?? 1;
+    // Side 0 marks a loser whose side is unknown (winner side outside 1/2).
+    const loserSide = winnerSide === 1 ? 2 : winnerSide === 2 ? 1 : 0;
+    addEntry(row.map_id, row.winner_faction_id, row.loser_faction_id, winnerSide, true);
+    addEntry(row.map_id, row.loser_faction_id, row.winner_faction_id, loserSide, false);
+  }
+  return [...aggregated.values()];
+}
+
+/** How long a creator waits for another creator of the same date to finish. */
+const SNAPSHOT_LOCK_TIMEOUT_SECONDS = 60;
+/** Rows per INSERT statement; keeps statements small for large histories. */
+const SNAPSHOT_INSERT_BATCH_SIZE = 500;
+
+/** The date's snapshot is being created elsewhere and the wait timed out. */
+export class SnapshotLockTimeoutError extends Error {
+  constructor(dateStr: string) {
+    super(`The statistics snapshot for ${dateStr} is being created by another process`);
+    this.name = 'SnapshotLockTimeoutError';
+  }
+}
+
+/**
+ * Create a cumulative faction/map statistics snapshot for a date
+ * (audit finding 20).
+ *
+ * Callers: the daily scheduler, balance-event before/after snapshots (also
+ * from the admin rebuild), and the admin backfill endpoint. A date is either
+ * absent or complete, never partial or duplicated:
+ *   - A named lock per date (`GET_LOCK('fms_snapshot:<date>')`) serializes
+ *     concurrent creators of the same date. Without it, two creators could
+ *     both see no rows and both insert a full set, duplicating the date.
+ *   - The existence check runs inside the lock, so the second creator sees
+ *     the first one's committed rows and skips.
+ *   - All rows are inserted in one transaction. A failure rolls the date
+ *     back entirely, so a retry rebuilds it instead of mistaking a partial
+ *     date for a complete one.
+ * The lock is session-scoped, so it is taken and released on one dedicated
+ * connection; MariaDB also releases it if that connection dies. Dates
+ * written partially before this fix are listed by the read-only
+ * `check:snapshot-history` script.
+ *
+ * @throws SnapshotLockTimeoutError when another creator holds the date's lock
+ *   for longer than SNAPSHOT_LOCK_TIMEOUT_SECONDS.
  */
 export async function createFactionMapStatisticsSnapshot(
   snapshotDate: Date = new Date()
 ): Promise<{ snapshots_created: number; snapshots_skipped: number }> {
+  const dateStr = snapshotDate.toISOString().split('T')[0];
+  const lockName = `fms_snapshot:${dateStr}`;
+  const connection = await pool.getConnection();
+  let lockHeld = false;
+  let releaseFailed = false;
   try {
-    const dateStr = snapshotDate.toISOString().split('T')[0];
-
-    // Check if snapshot already exists for this date
-    const existingResult = await query(
-      `SELECT COUNT(*) as count FROM faction_map_statistics_history WHERE snapshot_date = ?`,
-      [dateStr]
+    const [lockRows] = await connection.query<any[]>(
+      'SELECT GET_LOCK(?, ?) AS acquired', [lockName, SNAPSHOT_LOCK_TIMEOUT_SECONDS]
     );
-    
-    if (existingResult.rows[0].count > 0) {
-      // Snapshot already exists, skip
-      return {
-        snapshots_created: 0,
-        snapshots_skipped: existingResult.rows[0].count
-      };
+    // 1 = acquired, 0 = timed out, NULL = error.
+    if (Number(lockRows[0]?.acquired) !== 1) throw new SnapshotLockTimeoutError(dateStr);
+    lockHeld = true;
+
+    const [existingRows] = await connection.query<any[]>(
+      'SELECT COUNT(*) AS count FROM faction_map_statistics_history WHERE snapshot_date = ?', [dateStr]
+    );
+    const existing = Number(existingRows[0].count);
+    if (existing > 0) {
+      return { snapshots_created: 0, snapshots_skipped: existing };
     }
 
-    // Build the snapshot from matches up to the requested date. Reading the current
-    // aggregate table here would make every historical snapshot identical to today.
-    const matchesResult = await query(
-      `SELECT
-         gm.id AS map_id,
-         f_w.id AS winner_faction_id,
-         f_l.id AS loser_faction_id,
-         m.winner_side
-       FROM matches m
-       JOIN game_maps gm ON gm.name = m.map
-       JOIN factions f_w ON f_w.name = m.winner_faction
-       JOIN factions f_l ON f_l.name = m.loser_faction
-       WHERE m.status != 'cancelled'
-         AND m.created_at IS NOT NULL
-         AND DATE(m.created_at) <= ?`,
-      [dateStr]
+    const entries = await buildFactionMapSnapshotEntries(
+      dateStr, async (sql, params) => (await connection.query<any[]>(sql, params))[0]
     );
 
-    type SnapshotEntry = {
-      map_id: string;
-      faction_id: string;
-      opponent_faction_id: string;
-      faction_side: number;
-      total_games: number;
-      wins: number;
-      losses: number;
-    };
-
-    const aggregated = new Map<string, SnapshotEntry>();
-    const addEntry = (mapId: string, factionId: string, opponentFactionId: string, factionSide: number, isWin: boolean) => {
-      const key = `${mapId}|${factionId}|${opponentFactionId}|${factionSide}`;
-      const entry = aggregated.get(key);
-      if (entry) {
-        entry.total_games += 1;
-        if (isWin) entry.wins += 1;
-        else entry.losses += 1;
-        return;
+    await connection.beginTransaction();
+    try {
+      for (let offset = 0; offset < entries.length; offset += SNAPSHOT_INSERT_BATCH_SIZE) {
+        const batch = entries.slice(offset, offset + SNAPSHOT_INSERT_BATCH_SIZE);
+        const values: unknown[] = [];
+        for (const entry of batch) {
+          const winrate = Math.round((entry.wins / entry.total_games) * 10000) / 100;
+          const sampleSizeCategory = entry.total_games < 10 ? 'small' : entry.total_games < 50 ? 'medium' : 'large';
+          const confidenceLevel = entry.total_games < 10 ? 25.0 : entry.total_games < 30 ? 50.0 : entry.total_games < 50 ? 75.0 : 95.0;
+          values.push(randomUUID(), dateStr, entry.map_id, entry.faction_id, entry.opponent_faction_id,
+            entry.faction_side, entry.total_games, entry.wins, entry.losses,
+            winrate, sampleSizeCategory, confidenceLevel);
+        }
+        await connection.query(
+          `INSERT INTO faction_map_statistics_history (
+            id, snapshot_date, snapshot_timestamp, map_id, faction_id,
+            opponent_faction_id, faction_side, total_games, wins, losses,
+            winrate, sample_size_category, confidence_level
+          ) VALUES ${batch.map(() => '(?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
+          values
+        );
       }
-      aggregated.set(key, {
-        map_id: mapId,
-        faction_id: factionId,
-        opponent_faction_id: opponentFactionId,
-        faction_side: factionSide,
-        total_games: 1,
-        wins: isWin ? 1 : 0,
-        losses: isWin ? 0 : 1,
-      });
-    };
-
-    for (const row of matchesResult.rows) {
-      const winnerSide = row.winner_side ?? 1;
-      const loserSide = winnerSide === 1 ? 2 : winnerSide === 2 ? 1 : 0;
-      addEntry(row.map_id, row.winner_faction_id, row.loser_faction_id, winnerSide, true);
-      addEntry(row.map_id, row.loser_faction_id, row.winner_faction_id, loserSide, false);
+      await connection.commit();
+    } catch (insertError) {
+      await connection.rollback().catch(() => undefined);
+      throw insertError;
     }
 
-    const { randomUUID } = await import('crypto');
-    let snapshotsCreated = 0;
-    for (const entry of aggregated.values()) {
-      const winrate = Math.round((entry.wins / entry.total_games) * 10000) / 100;
-      const sampleSizeCategory = entry.total_games < 10 ? 'small' : entry.total_games < 50 ? 'medium' : 'large';
-      const confidenceLevel = entry.total_games < 10 ? 25.0 : entry.total_games < 30 ? 50.0 : entry.total_games < 50 ? 75.0 : 95.0;
-
-      await query(
-        `INSERT INTO faction_map_statistics_history (
-          id, snapshot_date, snapshot_timestamp, map_id, faction_id,
-          opponent_faction_id, faction_side, total_games, wins, losses,
-          winrate, sample_size_category, confidence_level
-        ) VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [randomUUID(), dateStr, entry.map_id, entry.faction_id, entry.opponent_faction_id,
-          entry.faction_side, entry.total_games, entry.wins, entry.losses,
-          winrate, sampleSizeCategory, confidenceLevel]
-      );
-      snapshotsCreated += 1;
-    }
-
-    return {
-      snapshots_created: snapshotsCreated,
-      snapshots_skipped: 0
-    };
+    return { snapshots_created: entries.length, snapshots_skipped: 0 };
   } catch (error) {
     console.error('Error creating faction/map statistics snapshot:', error);
     throw error;
+  } finally {
+    if (lockHeld) {
+      await connection.query('SELECT RELEASE_LOCK(?)', [lockName]).catch((releaseError) => {
+        releaseFailed = true;
+        console.error(`Error releasing statistics snapshot lock ${lockName}:`, releaseError);
+      });
+    }
+    // A connection that may still hold the lock must not return to the pool:
+    // another request reusing it would silently hold the date's lock.
+    if (releaseFailed) connection.destroy();
+    else connection.release();
   }
 }
 
