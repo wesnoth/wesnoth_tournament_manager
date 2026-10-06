@@ -217,6 +217,9 @@ export class ParseNewReplaysRefactorized {
       console.log(`📊 [PARSE] Found ${unparsedReplays.length} unparsed replays`);
 
       for (const replay of unparsedReplays) {
+        // Kept outside the try so a failed integration can still store what
+        // was read from the replay (see the error branch below).
+        let parseSummary: ParseSummary | null = null;
         try {
           console.log(`\n🎬 [PARSE] Processing: ${replay.game_name} (Replay ${replay.game_id})`);
 
@@ -245,7 +248,7 @@ export class ParseNewReplaysRefactorized {
           }
 
           const adminOverrides = this.readAdminOverrides(replay.reprocess_overrides);
-          const parseSummary = await this.parseReplayForumFirst(replay, adminOverrides);
+          parseSummary = await this.parseReplayForumFirst(replay, adminOverrides);
           // Consume the one-shot override before continuing. The parsed
           // summary written by each outcome below is the durable result.
           if (adminOverrides) {
@@ -374,10 +377,18 @@ export class ParseNewReplaysRefactorized {
             // admin Reprocess action can retry once the cause is fixed. The
             // condition keeps a replay that did complete (for example after
             // an uncertain commit, or a concurrent confirmation) untouched.
+            //
+            // The parse summary is stored here because the integration
+            // transaction that would have written it rolled back. The admin
+            // Reprocess form pre-fills its ranked/tournament overrides from
+            // it; without it a ranked replay would be reprocessed as
+            // unranked by default and end rejected. A failure before parsing
+            // keeps any earlier summary (COALESCE).
             await query(
-              `UPDATE replays SET parse_status = 'error', parsed = 1, parse_error_message = ?
+              `UPDATE replays SET parse_status = 'error', parsed = 1, parse_error_message = ?,
+                      parse_summary = COALESCE(?, parse_summary)
                WHERE id = ? AND parse_status <> 'completed'`,
-              [errorMsg, replay.id]
+              [errorMsg, parseSummary ? JSON.stringify(parseSummary) : null, replay.id]
             );
           }
 
