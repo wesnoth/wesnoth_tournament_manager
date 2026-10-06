@@ -25,6 +25,8 @@ export const localStack = {
    */
   replayFixturesDir: process.env.E2E_REPLAY_FIXTURES_DIR
     || '/home/clmates/programación/localdatabase/replay-fixtures',
+  /** Backend API base URL, for admin endpoints that have no UI flow. */
+  apiUrl: process.env.E2E_API_URL || 'http://localhost:7100/api',
   /** Must match a version accepted by the backend's WESNOTH_VERSION filter. */
   wesnothVersion: process.env.E2E_WESNOTH_VERSION || '1.19-dev',
 };

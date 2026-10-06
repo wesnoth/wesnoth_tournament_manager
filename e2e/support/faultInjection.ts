@@ -21,17 +21,21 @@ import { localStack, runSql, sqlLiteral } from './localStack';
 export interface FaultOptions {
   /** Unique fault name; also the trigger suffix (letters, digits, underscore). */
   name: string;
-  /** Table whose `BEFORE UPDATE` trigger raises the error. */
-  table: 'replays' | 'users_extension' | 'tournaments';
-  /** SQL condition over OLD/NEW that selects the targeted update. */
+  /** Table whose `BEFORE <event>` trigger raises the error. */
+  table: 'replays' | 'users_extension' | 'tournaments' | 'faction_map_statistics_history';
+  /** Statement that fires the trigger; default UPDATE. INSERT triggers have no OLD row. */
+  event?: 'UPDATE' | 'INSERT';
+  /** SQL condition over OLD/NEW that selects the targeted row. */
   when: string;
   /**
    * Error number to raise. 1213 (deadlock) is retried by the replay result
    * service; the default 1644 (user-defined signal) is a permanent failure.
    */
   errno?: number;
-  /** Fail only the first N matching updates; later ones pass. Default: always. */
+  /** Fail only the first N matching rows; later ones pass. Default: always. */
   failTimes?: number;
+  /** Let the first N matching rows pass before failing; default 0. */
+  skipFirst?: number;
 }
 
 const counterTable = `${localStack.tournamentDb}.e2e_fault_hits`;
@@ -49,17 +53,18 @@ export function installFault(options: FaultOptions): void {
   const errno = options.errno ?? 1644;
   const sqlState = errno === 1213 ? '40001' : '45000';
   const failTimes = options.failTimes ?? 1_000_000;
+  const skipFirst = options.skipFirst ?? 0;
   removeFault(options.name);
   runSql([
     `CREATE TABLE IF NOT EXISTS ${counterTable} (name VARCHAR(64) PRIMARY KEY, hits INT NOT NULL) ENGINE=MyISAM;`,
     `DELETE FROM ${counterTable} WHERE name = ${sqlLiteral(options.name)};`,
     'DELIMITER //',
-    `CREATE TRIGGER ${triggerName(options.name)} BEFORE UPDATE ON ${localStack.tournamentDb}.${options.table} FOR EACH ROW
+    `CREATE TRIGGER ${triggerName(options.name)} BEFORE ${options.event ?? 'UPDATE'} ON ${localStack.tournamentDb}.${options.table} FOR EACH ROW
      BEGIN
        IF ${options.when} THEN
          INSERT INTO ${counterTable} (name, hits) VALUES (${sqlLiteral(options.name)}, 1)
            ON DUPLICATE KEY UPDATE hits = hits + 1;
-         IF (SELECT hits FROM ${counterTable} WHERE name = ${sqlLiteral(options.name)}) <= ${failTimes} THEN
+         IF (SELECT hits FROM ${counterTable} WHERE name = ${sqlLiteral(options.name)}) BETWEEN ${skipFirst + 1} AND ${skipFirst + failTimes} THEN
            SIGNAL SQLSTATE '${sqlState}' SET MYSQL_ERRNO = ${errno}, MESSAGE_TEXT = 'E2E injected failure';
          END IF;
        END IF;
