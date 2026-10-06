@@ -290,11 +290,25 @@ type SnapshotReader = (sql: string, params: unknown[]) => Promise<any[]>;
  * side, keyed by map, faction, opponent faction, and the side that faction
  * played. Shared with the read-only history check, so both always agree on
  * what a complete snapshot contains.
+ *
+ * @param asOfStoredSnapshot only for checking a stored date: also exclude
+ *   matches created after that date's snapshot was written. A snapshot is
+ *   taken when it is created, not at the end of its date (the daily job runs
+ *   at 00:30 UTC of the date it labels), so later matches of the same day
+ *   are expected to be absent and must not be reported as missing rows.
+ *   The earliest row timestamp is used; a match created in the milliseconds
+ *   between the aggregation read and the insert would still be reported.
  */
 export async function buildFactionMapSnapshotEntries(
   dateStr: string,
-  read: SnapshotReader = async (sql, params) => (await query(sql, params)).rows
+  read: SnapshotReader = async (sql, params) => (await query(sql, params)).rows,
+  asOfStoredSnapshot = false
 ): Promise<FactionMapSnapshotEntry[]> {
+  // Both timestamps are written by the database server, so they compare in
+  // the server's own time zone without any client conversion.
+  const asOfCondition = asOfStoredSnapshot
+    ? `AND m.created_at <= (SELECT MIN(h.snapshot_timestamp) FROM faction_map_statistics_history h WHERE h.snapshot_date = ?)`
+    : '';
   const rows = await read(
     `SELECT
        gm.id AS map_id,
@@ -307,8 +321,9 @@ export async function buildFactionMapSnapshotEntries(
      JOIN factions f_l ON f_l.name = m.loser_faction
      WHERE m.status != 'cancelled'
        AND m.created_at IS NOT NULL
-       AND DATE(m.created_at) <= ?`,
-    [dateStr]
+       AND DATE(m.created_at) <= ?
+       ${asOfCondition}`,
+    asOfStoredSnapshot ? [dateStr, dateStr] : [dateStr]
   );
 
   const aggregated = new Map<string, FactionMapSnapshotEntry>();

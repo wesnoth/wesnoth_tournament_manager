@@ -8,8 +8,11 @@
  * writes.
  *
  * For every stored snapshot date it rebuilds the expected rows with the same
- * aggregation the creator uses (buildFactionMapSnapshotEntries) and compares
- * them by key (map, faction, opponent faction, side):
+ * aggregation the creator uses (buildFactionMapSnapshotEntries), limited to
+ * the matches that existed when the date was written: a snapshot is taken
+ * when it is created (the daily job runs at 00:30 UTC of the date it labels),
+ * so matches played later that day belong to the next date. It compares the
+ * rows by key (map, faction, opponent faction, side):
  *   - duplicated keys: two creators wrote the same date. Definitive.
  *   - missing keys: rows the current data expects but the date lacks. This is
  *     the signature of a partial write, but a match whose map or faction was
@@ -45,7 +48,9 @@ async function checkDate(date: string): Promise<DateReport> {
      FROM faction_map_statistics_history WHERE snapshot_date = ?`,
     [date]
   )).rows;
-  const expected = await buildFactionMapSnapshotEntries(date);
+  const expected = await buildFactionMapSnapshotEntries(
+    date, async (sql, params) => (await query(sql, params)).rows, true
+  );
 
   const storedByKey = new Map<string, number[]>();
   for (const row of stored) {
