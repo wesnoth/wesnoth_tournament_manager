@@ -84,14 +84,16 @@ const AdminTournaments: React.FC = () => {
   };
 
   if (loading) {
-    return <MainLayout><div className="max-w-6xl mx-auto px-4 py-8"><p>{t('loading')}</p></div></MainLayout>;
+    return <MainLayout><div className="w-full px-4 py-8"><p>{t('loading')}</p></div></MainLayout>;
   }
 
 
   return (
     <MainLayout>
       <div className="w-full min-h-screen px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200">
-        <div className="max-w-6xl mx-auto mb-8">
+        {/* Full width like My Tournaments: the admin table has more columns,
+            including the delete action, and must not need horizontal scroll. */}
+        <div className="mb-8">
           <div className="flex justify-between items-center">
             <h1 className="text-4xl font-bold text-gray-800">{t('sidebar.manage_tournaments')}</h1>
             <button
@@ -104,7 +106,7 @@ const AdminTournaments: React.FC = () => {
           </div>
         </div>
         
-        <div className="max-w-6xl mx-auto">
+        <div>
           <TournamentList
             title=""
             tournaments={tournaments}
