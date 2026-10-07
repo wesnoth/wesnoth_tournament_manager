@@ -375,11 +375,6 @@
   "filter_status": "Status",
   "filter_type": "Tournament Type",
   "filter_winner": "Winner",
-  "footer": {
-    "disclaimer_affiliation": "wesnoth.playranked.org and the Wesnoth Tournament Manager application are independent projects and are not affiliated, endorsed, or sponsored by wesnoth.org, the Wesnoth forums, the Wesnoth Discord servers, or any official Wesnoth project.\n\nThis project is licensed under the GNU Affero General Public License v3 (AGPL-3.0-or-later) and aims to provide an independent, open-source platform to organize and manage competitive Wesnoth tournaments. Users who access this service via network have the right to access the complete source code.\n\nAll trademarks, logos, and images associated with Battle for Wesnoth are the property of their respective owners. This site and application are intended for fan and community use only, and do not claim ownership or official association with the original game.",
-    "disclaimer_assets": "Unit icons and graphics © The Battle for Wesnoth project, used under CC BY-SA 3.0."
-  },
-  "footer_disclaimer": "Legal Notice",
   "games": "Games",
   "general_balance_change": "General Balance Change",
   "global_statistics": "Site Statistics",

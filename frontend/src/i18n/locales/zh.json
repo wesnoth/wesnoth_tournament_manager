@@ -375,11 +375,6 @@
   "filter_status": "状态",
   "filter_type": "锦标赛类型",
   "filter_winner": "获胜者",
-  "footer": {
-    "disclaimer_affiliation": "wesnoth.playranked.org 和 Wesnoth 锦标赛管理器应用程序是独立项目，与 wesnoth.org、Wesnoth 论坛、Wesnoth Discord 服务器或任何官方 Wesnoth 项目无关联、未获得认可或赞助。\n\n该项目在 GNU Affero 通用公共许可证 v3 (AGPL-3.0-or-later) 下获得许可，是一个独立的开源平台，旨在组织和管理竞争性的 Wesnoth 锦标赛。通过网络访问此服务的用户有权访问完整源代码。\n\n与 Battle for Wesnoth 相关的所有商标、徽标和图像均为其各自所有者的财产。本网站和应用程序仅供粉丝和社区使用，不声称与原始游戏有任何所有权或官方关联。",
-    "disclaimer_assets": "单位图标和图形 © Battle for Wesnoth 项目，在 CC BY-SA 3.0 下使用。"
-  },
-  "footer_disclaimer": "法律声明",
   "games": "游戏",
   "general_balance_change": "常规平衡变化",
   "global_statistics": "站点统计",
