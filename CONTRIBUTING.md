@@ -136,70 +136,11 @@ Open an Issue and include:
 [Ideas on how to implement it]
 ```
 
-## 🏗️ Overall Architecture
+## 🏗️ Architecture and Development Setup
 
-### Backend
-
-```
-backend/
-├── src/
-│   ├── server.ts          # Entry point
-│   ├── app.ts             # Express configuration
-│   ├── routes/            # API routes
-│   ├── middleware/        # Middleware (auth, CORS, etc.)
-│   ├── services/          # Business logic
-│   ├── utils/             # Helper functions
-│   ├── types/             # TypeScript interfaces
-│   └── config/            # Configuration
-├── migrations/            # DB migrations
-└── package.json
-
-Key: Database (MariaDB) via app configuration
-```
-
-### Frontend
-
-```
-frontend/
-├── src/
-│   ├── main.tsx           # Entry point
-│   ├── App.tsx            # Root component
-│   ├── pages/             # Pages (routes)
-│   ├── components/        # Reusable components
-│   ├── services/          # API calls (axios)
-│   ├── store/             # Zustand stores
-│   ├── utils/             # Helper functions
-│   ├── styles/            # CSS modules
-│   ├── locales/           # i18n translations
-│   └── types/             # TypeScript interfaces
-├── public/
-│   └── wesnoth-avatars/   # Avatar images and manifest
-└── package.json
-
-Key: React 18 + Vite + React Router + i18next
-```
-
-## 🚀 Development Setup
-
-```bash
-# Clone
-git clone https://github.com/your-username/wesnoth_tournament_manager.git
-
-# Backend
-cd backend
-npm ci
-cp .env.example .env
-# Edit .env with your values
-npm run dev
-
-# Frontend (in another terminal)
-cd frontend
-npm ci
-npm run dev
-```
-
-Frontend: http://localhost:5173
-Backend: http://localhost:3000
+- [ARCHITECTURE.md](ARCHITECTURE.md) describes the components, the rules that must not change silently, and the release workflow.
+- [README.md](README.md) explains how to run the backend and frontend locally.
+- Feature behavior for players and staff is documented in the in-app wiki.
 
 ## ✅ Pre-push Checklist
 
@@ -213,6 +154,7 @@ Backend: http://localhost:3000
 
 ## 📚 Important Documentation
 
+- [ARCHITECTURE.md](ARCHITECTURE.md) - Components, rules, and release workflow
 - [TESTING.md](TESTING.md) - Verification baseline and integration-test constraints
 - [AGENTS.md](AGENTS.md) - Repository engineering policies
 - [LICENSE](LICENSE) - Full AGPL-3.0 text

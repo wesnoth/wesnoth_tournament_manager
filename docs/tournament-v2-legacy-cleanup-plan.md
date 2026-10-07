@@ -63,15 +63,11 @@ The API client still exposes version 1 methods for tournament rounds, standings,
 
 ### Migration tooling and documentation
 
-`backend/src/migrations/` contains an obsolete PostgreSQL-style migration set, while the active runner reads `backend/migrations/`. `backend/src/scripts/migrate.ts` is an unused alternative runner. The backend package script also refers to `scripts/migrate.js`, which does not exist.
+`backend/src/migrations/` contains an obsolete PostgreSQL-style migration set, while the active runner reads `backend/migrations/`. The unused alternative runner `backend/src/scripts/migrate.ts` and the broken `migrate` package script were removed on 2026-10-08.
 
 Do not delete the SQL history under `backend/migrations/`. Fresh installations and upgrades need the complete active migration chain, including the migration that removes the old competition tables.
 
-The following documentation is stale and must be corrected when the relevant cleanup lands:
-
-- `README.md` still describes version 1 tournament tables and queries.
-- `docs/tournament-phase-engine.md` still says the legacy tables remain present.
-- `DB_SCHEMA.md` still includes version 1 relationships and aggregate fields.
+The documentation was consolidated on 2026-10-08: `README.md` no longer describes version 1 tables, and `DB_SCHEMA.md` and `docs/tournament-phase-engine.md` were removed. When the legacy tables are dropped, update the sentence in `ARCHITECTURE.md` (Tournaments) that says they still exist for history.
 
 ## Fields that require a product decision
 
@@ -208,7 +204,7 @@ Use one self-contained MariaDB migration under `backend/migrations/` to remove o
 
 Handle `matches_faction_fix_backup_20260429` in a separate migration or operational task after confirming that its backup is no longer required.
 
-Update `backend/src/config/schema.sql` and `DB_SCHEMA.md` in the same change. Use unqualified table names, preserve the required UUID collations on retained relationships, and validate the migration with the database schema reviewer.
+Update `backend/src/config/schema.sql` in the same change. Use unqualified table names, preserve the required UUID collations on retained relationships, and validate the migration with the database schema reviewer.
 
 ### 5. Consolidate mixed fields
 
