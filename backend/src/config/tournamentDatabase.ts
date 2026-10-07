@@ -1,33 +1,16 @@
-import mysql from 'mysql2/promise';
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { pool } from './database.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const envFile = process.env.NODE_ENV ? `.env.${process.env.NODE_ENV}` : '.env';
-const envPath = path.resolve(__dirname, '../../', envFile);
-
-dotenv.config({ path: envPath });
-
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME || 'wesnoth_db',
-  port: parseInt(process.env.DB_PORT || '3306'),
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-});
-
+/**
+ * Run a statement on the tournament database and return mysql2's raw
+ * result (rows for a SELECT, a ResultSetHeader for a write).
+ *
+ * Kept for its callers' result shape. It used to open a second pool against
+ * the same database, without the main pool's UTC timezone and utf8mb4
+ * charset settings; it now shares the single pool from database.ts
+ * (audit finding 11).
+ */
 export const queryTournament = async (sql: string, values?: any[]) => {
-  const connection = await pool.getConnection();
-  try {
-    const [results] = await connection.execute(sql, values || []);
-    return results;
-  } finally {
-    connection.release();
-  }
+  const [results] = await pool.execute(sql, values || []);
+  return results;
 };
 
-export default pool;
