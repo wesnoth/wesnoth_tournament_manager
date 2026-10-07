@@ -434,8 +434,7 @@ CREATE TABLE `matches` (
   KEY `idx_created_at` (`created_at`),
   KEY `idx_auto_reported` (`auto_reported`),
   KEY `idx_replay_id` (`replay_id`),
-  CONSTRAINT `fk_matches_replay` FOREIGN KEY (`replay_id`) REFERENCES `replays` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `fk_matches_replay_id` FOREIGN KEY (`replay_id`) REFERENCES `replays` (`id`) ON DELETE SET NULL
+  CONSTRAINT `fk_matches_replay` FOREIGN KEY (`replay_id`) REFERENCES `replays` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
