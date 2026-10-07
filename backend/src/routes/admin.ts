@@ -34,7 +34,7 @@ const REPLACED_PLAYERS_TEAM_ID = '00000000-0000-0000-0000-000000000001';
 router.get('/users/all', moderatorOrAdminMiddleware, async (req: AuthRequest, res) => {
   try {
     const result = await query(
-      `SELECT id, nickname, language, discord_id, is_admin, is_streamer, is_active, is_blocked, is_rated, elo_rating, enable_ranked, matches_played, total_wins, total_losses, created_at, updated_at, locked_until
+      `SELECT id, nickname, language, discord_id, is_admin, is_streamer, is_active, is_blocked, is_rated, elo_rating, level, enable_ranked, matches_played, total_wins, total_losses, created_at, updated_at, locked_until
        FROM users_extension 
        WHERE id != '00000000-0000-0000-0000-000000000000'
        ORDER BY created_at DESC`
