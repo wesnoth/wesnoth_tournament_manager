@@ -518,11 +518,15 @@ test('a direct pass enters a played semifinal and leaves a third-place match', a
   let name = process.env.E2E_DIRECT_PASS_NAME || `codex_single_group_semifinal_${Date.now()}`;
   const players = (await findRealPlayers(page, true, 8)).filter(nickname => nickname !== organizer).slice(0, 7);
   expect(players).toHaveLength(7);
+  // Logging in as other real players needs TEST_MODE on TEST and its shared
+  // password, which is never stored in the repository.
+  const playerPassword = process.env.E2E_PLAYER_PASSWORD;
+  if (!playerPassword) throw new Error('E2E_PLAYER_PASSWORD (the TEST_MODE shared password) is required');
   const loginAs = async (username: string) => {
     await page.getByRole('button', { name: 'Logout' }).click();
     await page.goto('/login');
     await page.getByPlaceholder(/Wesnoth Forum Username/i).fill(username);
-    await page.getByPlaceholder(/password/i).fill('password');
+    await page.getByPlaceholder(/password/i).fill(playerPassword);
     await page.getByRole('button', { name: /log in|login/i }).click();
     await page.waitForURL(url => !url.pathname.endsWith('/login'));
   };

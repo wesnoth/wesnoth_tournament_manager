@@ -36,6 +36,6 @@ The replay-pipeline suite (`e2e/replay-pipeline`, Playwright project `local-repl
 npm run verify:e2e
 ```
 
-The tournament suite (`e2e/tournaments`, Playwright project `chromium`) runs against the deployed TEST site only, because it uses the tournament simulation tools that production does not expose. Scenarios run sequentially, authenticate through `E2E_USERNAME`/`E2E_PASSWORD` or interactively, pick real players from `/players`, and treat browser-visible results as the acceptance source; database inspection only helps diagnose failures.
+The tournament suite (`e2e/tournaments`, Playwright project `chromium`) runs against the deployed TEST site only, because it uses the tournament simulation tools that production does not expose. Scenarios run sequentially, authenticate through `E2E_USERNAME`/`E2E_PASSWORD` or interactively (scenarios that log in as other players also need `E2E_PLAYER_PASSWORD`, the `TEST_MODE` shared password, which is never committed), pick real players from `/players`, and treat browser-visible results as the acceptance source; database inspection only helps diagnose failures.
 
 The local replay suite needs these backend overrides besides the database ports: `WESNOTH_VERSION` matching the fixtures, `TOURNAMENT_SIMULATION=on`, `TOURNAMENT_CREATION_RATE_LIMIT_MAX=100`, and `RATE_LIMIT_LOGIN_MAX=1000` (see `e2e/support/localStack.ts`).

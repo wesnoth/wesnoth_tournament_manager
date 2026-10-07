@@ -61,38 +61,33 @@ const trustProxy = resolveTrustProxy(process.env.TRUST_PROXY);
 app.set('trust proxy', trustProxy);
 console.log(`ℹ️  TRUST_PROXY: ${JSON.stringify(trustProxy)}`);
 
-// CORS configuration - allow Cloudflare Pages and custom domains
-const allowedOrigins = [
-  'https://wesnoth-tournament-manager.pages.dev',       // Cloudflare Pages (production)
-  'https://main.wesnoth-tournament-manager.pages.dev',  // Cloudflare Pages preview (main branch)
-  'https://wesnoth.playranked.org',                     // PlayRanked custom domain
-  'https://tournament.wesnoth.org',                     // Nginx reverse proxy (production)
-  'https://tournament-test.wesnoth.org',                // Test environment
-  'http://localhost:3000',                              // Local backend
-  'http://localhost:5173'                               // Local frontend (Vite)
-];
+/**
+ * CORS: exact origins only. Production and TEST serve the frontend and the
+ * API from the same host behind the reverse proxy, so cross-origin requests
+ * come only from the local Vite dev server. Origins are compared exactly; a
+ * substring check (as the former Cloudflare Pages setup used) would also
+ * accept hosts such as tournament.wesnoth.org.example.com.
+ */
+const allowedOrigins = new Set([
+  'https://tournament.wesnoth.org',
+  'https://tournament-test.wesnoth.org',
+  'http://localhost:5173',
+]);
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) {
-      // Allow requests with no origin (like mobile apps or curl requests)
-      callback(null, true);
-    } else if (allowedOrigins.includes(origin)) {
-      // Exact match
-      callback(null, true);
-    } else if (origin.endsWith('.wesnoth-tournament-manager.pages.dev') || origin.includes('wesnoth-tournament-manager.pages.dev')) {
-      // Allow all subdomains of wesnoth-tournament-manager.pages.dev (main, PR previews, etc.)
-      callback(null, true);
-    } else if (origin.includes('tournament.wesnoth.org')) {
-      // Allow requests from tournament.wesnoth.org (for Cloudflare preview deployments)
+    // Requests without an Origin header (curl, server-to-server, same-origin
+    // navigation) are not subject to CORS.
+    if (!origin || allowedOrigins.has(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
-  // Let cross-origin frontends (Cloudflare Pages) read the stale-session signal
-  // set by optionalAuthMiddleware; browsers hide non-safelisted headers otherwise.
+  // Let a cross-origin frontend (the local dev server) read the stale-session
+  // signal set by optionalAuthMiddleware; browsers hide non-safelisted headers
+  // otherwise.
   exposedHeaders: ['X-Session-Rejected'],
 }));
 

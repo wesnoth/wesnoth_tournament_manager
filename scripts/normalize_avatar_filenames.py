@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Normalize avatar filenames to lowercase for Cloudflare compatibility.
+Normalize avatar filenames to lowercase so they resolve on case-sensitive web servers.
 This script:
 1. Renames physical PNG files to lowercase
 2. Updates manifest.json to reference lowercase filenames
