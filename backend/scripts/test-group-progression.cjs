@@ -8,6 +8,21 @@ const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../src/tournament-engine/competitionProgression.ts'), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
 
+/**
+ * Load a pure tournament-engine module (no imports of its own) as real code.
+ * Pure helpers such as pairingAlgorithms are executed for real instead of
+ * stubbed, so the scenarios cover them; anything that reaches the database,
+ * Discord, or another module stays an explicit stub below.
+ */
+function loadPureModule(relativePath) {
+  const moduleSource = fs.readFileSync(path.join(__dirname, '../src/tournament-engine', relativePath), 'utf8');
+  const moduleCode = ts.transpileModule(moduleSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const moduleExports = {};
+  vm.runInNewContext(moduleCode, { exports: moduleExports, require: name => assert.fail(`Pure module ${relativePath} must not import ${name}`) });
+  return moduleExports;
+}
+const pairingAlgorithms = loadPureModule('pairingAlgorithms.ts');
+
 async function scenario(order, otherGroupActive) {
   const rounds = [1, 2, 3].map(number => ({ id: String(number), status: 'in_progress', seriesStatus: 'ready' }));
   let current;
@@ -36,6 +51,9 @@ async function scenario(order, otherGroupActive) {
       if (sql.startsWith('SELECT entry_id, matches_played, points')) return [[{ entry_id: 'a', points: 1, matches_played: 1 }, { entry_id: 'b', points: 0, matches_played: 1 }]];
       if (sql.startsWith('SELECT series.id,') || sql.startsWith('SELECT games.entry1_id')) return [[]];
       if (sql.startsWith('SELECT standings.entry_id')) return [[{ entry_id: 'a' }, { entry_id: 'b' }]];
+      // Final and third-place series only exist in elimination groups; this
+      // round-robin group has none, so ranking keeps the standings order.
+      if (sql.startsWith('SELECT series.series_role')) return [[]];
       if (sql.startsWith('SELECT id, best_of FROM tournament_phase_rounds')) {
         const next = rounds.find(round => Number(round.id) === args[1]);
         return [[...(next && (!sql.includes("status = 'pending'") || next.status === 'pending') ? [next] : [])]];
@@ -63,6 +81,7 @@ async function scenario(order, otherGroupActive) {
       notifyTournamentFinished: async () => assert.fail('Tournament closed prematurely'),
     },
     './competitionCompiler.js': { compileNextPhaseCompetition: async () => { phasesCompiled++; return true; } },
+    './pairingAlgorithms.js': pairingAlgorithms,
   };
   vm.runInNewContext(compiled, { exports, require: name => {
     assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
