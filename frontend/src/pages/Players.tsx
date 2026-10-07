@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { publicService } from '../services/api';
+import { getLevelTranslationKey } from '../utils/levelTranslation';
 import UserBadge from '../components/UserBadge';
 import PlayerLink from '../components/PlayerLink';
 
@@ -8,6 +9,8 @@ interface PlayerStats {
   id: string;
   nickname: string;
   elo_rating: number;
+  /** Level identifier (novice … master), translated for display. */
+  level?: string;
   global_ranking_position?: number | null;
   is_rated: boolean;
   is_streamer: boolean;
@@ -137,6 +140,7 @@ const Players: React.FC = () => {
             id: user.id,
             nickname: user.nickname,
             elo_rating: user.elo_rating || 1200,
+            level: user.level,
             global_ranking_position: user.global_ranking_position,
             is_rated: user.is_rated || false,
             is_streamer: user.is_streamer || false,
@@ -383,6 +387,7 @@ const Players: React.FC = () => {
                   {t('label_elo')}
                   {sortColumn === 'elo_rating' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                 </th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">{t('label_level')}</th>
                 <th data-help-id="action-sort-players-by-status" className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700" onClick={() => handleSort('is_rated')} style={{cursor:'pointer'}}>
                   {t('label_status')}
                   {sortColumn === 'is_rated' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
@@ -437,6 +442,7 @@ const Players: React.FC = () => {
                 <td className="px-4 py-3 text-gray-700">
                   <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded">{player.elo_rating}</span>
                 </td>
+                <td className="px-4 py-3 text-gray-700">{t(getLevelTranslationKey(player.level))}</td>
                 <td className="px-4 py-3 text-gray-700">
                   <span className={`text-xs rounded-full px-2 py-1 ${player.is_rated ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
                     {player.is_rated ? t('players_status_rated') : t('players_status_unrated')}

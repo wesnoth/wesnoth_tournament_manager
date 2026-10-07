@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { userService } from '../services/api';
+import { getLevelTranslationKey } from '../utils/levelTranslation';
 import UserBadge from '../components/UserBadge';
 import PlayerLink from '../components/PlayerLink';
 
@@ -8,6 +9,8 @@ interface PlayerStats {
   id: string;
   nickname: string;
   elo_rating: number;
+  /** Level identifier (novice … master), translated for display. */
+  level?: string;
   global_ranking_position?: number | null;
   is_rated: boolean;
   matches_played: number;
@@ -125,6 +128,7 @@ const Rankings: React.FC = () => {
             id: player.id,
             nickname: player.nickname,
             elo_rating: player.elo_rating,
+            level: player.level,
             global_ranking_position: player.global_ranking_position,
             is_rated: player.is_rated,
             matches_played: totalMatches,
@@ -316,6 +320,7 @@ const Rankings: React.FC = () => {
                   {t('label_elo')}
                   {sortColumn === 'elo_rating' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                 </th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">{t('label_level')}</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-300 transition-colors" onClick={() => handleSort('matches_played')}>
                   {t('label_total')}
                   {sortColumn === 'matches_played' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
@@ -365,6 +370,7 @@ const Rankings: React.FC = () => {
                   <td className="px-4 py-3 text-gray-700">
                     <span className="font-bold">{player.elo_rating}</span>
                   </td>
+                  <td className="px-4 py-3 text-gray-700">{t(getLevelTranslationKey(player.level))}</td>
                   <td className="px-4 py-3 text-gray-700">{player.matches_played}</td>
                   <td className="px-4 py-3 text-gray-700">
                     <span className="text-green-600 font-semibold">{player.total_wins}</span>
