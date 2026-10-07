@@ -73,6 +73,13 @@ export interface ParsedRankedReplay {
     loser_faction?: string;
     reason: 'victory_conditions' | 'surrender' | 'timeout' | 'unknown';
     confidence_level: 1 | 2; // 2=auto-confirm (global ranked), 1=pending (tournament or invalid assets)
+    /**
+     * Sides of the winning and the defeated alliance when a surrender decided
+     * the game (one element each in a 1v1). winner_side/loser_side name one
+     * representative of each; team games must use these lists.
+     */
+    winner_sides?: number[];
+    loser_sides?: number[];
   };
   
   // Surrender details if applicable
@@ -155,7 +162,8 @@ export async function parseRankedReplay(
       players, 
       surrenders, 
       addon,
-      options?.forumPlayers
+      options?.forumPlayers,
+      teams
     );
 
     const result: ParsedRankedReplay = {
@@ -995,8 +1003,15 @@ function extractLeaderkills(wml: WmlNode): LeaderkillEvent[] {
     const commandArray = Array.isArray(commands) ? commands : [commands];
     const leaderkills: LeaderkillEvent[] = [];
 
-    // Scan from the end — leaderkill commands appear near the final turns
-    for (let i = commandArray.length - 1; i >= Math.max(0, commandArray.length - 50); i--) {
+    // Scan every command: after the game ends players keep chatting and
+    // observers join or leave, so the synced variable can be far from the end.
+    // Only a synced input counts; the event definitions present in every
+    // replay's scenario and snapshots are not commands. Note that the Ranked
+    // add-on's `last breath` event checks for zero remaining leaders while the
+    // dying leader is still on the map, so it rarely syncs a winner; replay
+    // attacks carry no combat results either. A reliable leaderkill outcome
+    // needs the server-side result recording (maintainer's wesnothd work).
+    for (let i = commandArray.length - 1; i >= 0; i--) {
       const command = commandArray[i];
       if (command.dependent !== 'yes') continue;
 
@@ -1031,6 +1046,82 @@ function extractLeaderkills(wml: WmlNode): LeaderkillEvent[] {
 }
 
 /**
+ * Decide the game from confirmed surrenders, alliance by alliance
+ * (maintainer rule, 2026-10-07).
+ *
+ * Players are grouped by their WML `team_name` (a side without one is its own
+ * alliance, as in most 1v1 games). An alliance is defeated when every one of
+ * its players has a confirmed surrender. The game is decided only when at
+ * least one alliance is defeated and exactly one alliance still has a player
+ * who did not surrender; that alliance wins with confidence 2.
+ *
+ * Everything else stays undecided (null → confidence 1, a player confirms):
+ * for example one player of each team surrenders and the game is finished
+ * without a further surrender, or a player leaves without surrendering
+ * (leaving is not a surrender). Surrenders are attributed to sides by
+ * nickname (see extractSurrenders), so a teammate taking control of a side
+ * does not move a surrender to the wrong alliance. The previous logic took
+ * the first surrender and declared "the other side" the winner, which in a
+ * 2v2 could be the surrendering player's teammate.
+ *
+ * Forum player rows are the authority for nicknames, sides, and factions;
+ * a forum faction of "Custom" falls back to the faction read from the WML.
+ */
+function resolveSurrenderVictory(
+  players: Array<{ side: number; name: string; faction?: string }>,
+  surrenders: SurrenderEvent[],
+  forumPlayers: Array<{ side_number: number; user_name: string; faction: string }> | undefined,
+  teams: Record<number, string>
+): ParsedRankedReplay['victory'] | null {
+  const confirmedSides = new Set(surrenders.filter(s => s.confirmed).map(s => s.side));
+  if (confirmedSides.size === 0) return null;
+
+  const participants = (forumPlayers && forumPlayers.length > 0
+    ? forumPlayers.map(p => {
+        const wmlFaction = players.find(wml => wml.side === Number(p.side_number))?.faction;
+        return {
+          side: Number(p.side_number),
+          name: p.user_name,
+          faction: p.faction && p.faction !== 'Custom' ? p.faction : wmlFaction,
+        };
+      })
+    : players
+  ).filter(p => p.name);
+
+  const alliances = new Map<string, typeof participants>();
+  for (const participant of participants) {
+    const alliance = teams[participant.side] || `side:${participant.side}`;
+    alliances.set(alliance, [...(alliances.get(alliance) || []), participant]);
+  }
+  if (alliances.size < 2) return null;
+
+  const defeated = [...alliances.values()].filter(members => members.every(m => confirmedSides.has(m.side)));
+  const standing = [...alliances.values()].filter(members => members.some(m => !confirmedSides.has(m.side)));
+  if (defeated.length === 0 || standing.length !== 1) {
+    console.log(`   [SURRENDER] Surrenders do not defeat every alliance but one (${defeated.length} defeated, ${standing.length} standing) → undecided`);
+    return null;
+  }
+
+  const winners = standing[0];
+  const losers = defeated.flat();
+  const winner = winners[0];
+  const loser = losers[0];
+  console.log(`   [SURRENDER] ${winners.map(w => w.name).join(' & ')} win: ${losers.map(l => l.name).join(' & ')} surrendered`);
+  return {
+    winner_side: winner.side,
+    loser_side: loser.side,
+    winner_name: winner.name || `Player${winner.side}`,
+    loser_name: loser.name || `Player${loser.side}`,
+    winner_faction: winner.faction,
+    loser_faction: loser.faction,
+    winner_sides: winners.map(w => w.side),
+    loser_sides: losers.map(l => l.side),
+    reason: 'surrender',
+    confidence_level: 2,
+  };
+}
+
+/**
  * Determine victory from WML data
  * Checks for:
  * 1. Confirmed surrenders (clarity dictates surrender = loss)
@@ -1046,78 +1137,23 @@ async function determineVictory(
     side_number: number;
     user_name: string;
     faction: string;
-  }>
+  }>,
+  teams: Record<number, string> = {}
 ): Promise<ParsedRankedReplay['victory']> {
   try {
-    // Check for confirmed surrenders first (forum is source of truth for side ↔ nickname mapping)
-    for (const surrender of surrenders) {
-      if (surrender.confirmed) {
-        const loserSide = surrender.side;
-        
-        // Get information from forum if available (forum is ALWAYS source of truth)
-        let loserName: string | undefined;
-        let winnerName: string | undefined;
-        let loserFaction: string | undefined;
-        let winnerFaction: string | undefined;
-        
-        if (forumPlayers && forumPlayers.length > 0) {
-          // Use forum as source of truth for side mapping
-          const loserData = forumPlayers.find(p => p.side_number === loserSide);
-          const winnerData = forumPlayers.find(p => p.side_number !== loserSide);
-          
-          if (loserData && winnerData) {
-            loserName = loserData.user_name;
-            winnerName = winnerData.user_name;
-            
-            // Use faction from forum first, fallback to WML if "Custom"
-            const loserWml = players.find(p => p.side === loserSide);
-            const winnerWml = players.find(p => p.side !== loserSide);
-            
-            loserFaction = (loserData.faction !== 'Custom' && loserData.faction) ? loserData.faction : loserWml?.faction;
-            winnerFaction = (winnerData.faction !== 'Custom' && winnerData.faction) ? winnerData.faction : winnerWml?.faction;
-            
-            // Show which source we're using
-            if (loserData.faction === 'Custom') {
-              console.log(`   [SURRENDER] Side ${loserSide} (${loserName}): forum='Custom' → using WML: ${loserFaction}`);
-            } else {
-              console.log(`   [SURRENDER] Side ${loserSide} (${loserName}): ${loserFaction} (from forum)`);
-            }
-            
-            return {
-              winner_side: winnerData.side_number,
-              loser_side: loserData.side_number,
-              winner_name: winnerName || `Player${winnerData.side_number}`,
-              loser_name: loserName || `Player${loserData.side_number}`,
-              winner_faction: winnerFaction,
-              loser_faction: loserFaction,
-              reason: 'surrender',
-              confidence_level: 2  // Clear victory by surrender
-            };
-          }
-        }
-        
-        // Fallback to parsed replay data if forum lookup failed
-        const loser = players.find(p => p.side === loserSide);
-        const winner = players.find(p => p.side !== loserSide);
-        
-        if (winner && loser) {
-          return {
-            winner_side: winner.side,
-            loser_side: loser.side,
-            winner_name: winner.name || `Player${winner.side}`,
-            loser_name: loser.name || `Player${loser.side}`,
-            winner_faction: winner.faction,
-            loser_faction: loser.faction,
-            reason: 'surrender',
-            confidence_level: 2  // Clear victory by surrender
-          };
-        }
-      }
-    }
+    const surrenderVictory = resolveSurrenderVictory(players, surrenders, forumPlayers, teams);
+    if (surrenderVictory) return surrenderVictory;
 
     // No clear victory found (no surrenders)
     // Check for leaderkill victory pattern
-    const leaderkills = extractLeaderkills(wml);
+    // The Ranked add-on's leaderkill event only compares side 1 with side 2,
+    // so it says nothing about alliances: it is used for 1v1 games only. (In
+    // practice it rarely fires, see extractLeaderkills; leaderkill games
+    // usually stay at confidence 1.)
+    const humanSides = new Set(
+      (forumPlayers && forumPlayers.length > 0 ? forumPlayers.map(p => Number(p.side_number)) : players.map(p => p.side))
+    );
+    const leaderkills = humanSides.size === 2 ? extractLeaderkills(wml) : [];
     if (leaderkills.length > 0) {
       const winnerSide = leaderkills[leaderkills.length - 1].winner_side; // use last one
       const loserSide = winnerSide === 1 ? 2 : 1;

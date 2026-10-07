@@ -11,6 +11,15 @@ This document is a high-level overview of replay discovery, parsing, confirmatio
 5. Player confirmation routes create the final match and update tournament progression when the parser cannot determine the result with sufficient confidence.
 6. The daily scheduler marks old, unconfirmed replays as `due`; due replays remain downloadable but cannot be confirmed.
 
+## Automatic integration policy
+
+A replay is integrated without player confirmation (confidence 2) only when its outcome is explicit:
+
+- 1v1: the opponent's confirmed surrender.
+- Team games: every player of one alliance has a confirmed surrender while exactly one alliance still has a player, and those alliances are exactly the two tournament teams. One surrender on each side, a player leaving without surrendering, or any team mismatch leaves the result for a player to confirm.
+
+The replay WML does not record leaderkill reliably: attacks carry no combat results, and the Ranked add-on's leaderkill event rarely records a winner. When it does, in a 1v1 game, that recorded winner is used; otherwise leaderkill games stay at confidence 1 until the game server records results itself. Ranked and tournament-ranked games must have exactly two players; others are rejected.
+
 ## Data ownership
 
 Replay records, parse summaries, and participant records are stored in the tournament database. The forum database is an external read-only source for game metadata and replay availability.

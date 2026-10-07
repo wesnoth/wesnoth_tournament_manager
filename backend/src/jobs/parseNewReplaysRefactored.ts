@@ -946,6 +946,18 @@ export class ParseNewReplaysRefactorized {
       }
     }
 
+    // ======== RANKED IS 1V1 ========
+    // Ranked and tournament ranked games are 1v1 only: a match row and the
+    // ELO update model exactly one winner and one loser. A Ranked add-on game
+    // with more players (ranked_mode on a 4p map) would otherwise become a
+    // match between two of its players, chosen by side order.
+    if ((parseSummary.matchType === 'ranked' || parseSummary.matchType === 'tournament_ranked')
+        && parseSummary.forumPlayers.length !== 2) {
+      console.log(`   ❌ Ranked games are 1v1, found ${parseSummary.forumPlayers.length} players → REJECTED`);
+      parseSummary.matchType = 'rejected';
+      return parseSummary;
+    }
+
     // ======== VALIDATE AND RESOLVE FACTIONS AND MAP ========
     // Only ranked matches and ranked tournaments enforce the ranked asset catalogs.
     // Unranked and team tournament assets are informational labels for organizers.
@@ -1211,11 +1223,17 @@ export class ParseNewReplaysRefactorized {
         if (winningTeamId === game.team1_id) parseSummary.linkedWinnerEntryId = game.entry1_id;
         if (winningTeamId === game.team2_id) parseSummary.linkedWinnerEntryId = game.entry2_id;
       }
-      // The new competitive tables contain the server-side team outcome. The
-      // legacy path remains conservative because WML alone cannot map a side
-      // to a tournament team reliably.
+      // The new competitive tables contain the server-side team outcome. On
+      // the legacy path a surrender outcome is accepted only when its
+      // alliances match the two tournament teams exactly; anything else is
+      // confirmed by a player.
       if (parseSummary.replayVictory?.reason !== 'competitive_game_status') {
-        parseSummary.confidenceLevel = 1;
+        const winnerTeamId = this.resolveTeamSurrenderWinner(parseSummary, [game.team1_id, game.team2_id]);
+        if (winnerTeamId) {
+          parseSummary.linkedWinnerEntryId = winnerTeamId === game.team1_id ? game.entry1_id : game.entry2_id;
+        } else {
+          parseSummary.confidenceLevel = 1;
+        }
       }
       return true;
     }
@@ -1476,6 +1494,7 @@ export class ParseNewReplaysRefactorized {
     const teams = Array.from(teamIds) as string[];
     const team1 = teams[0];
     const team2 = teams[1];
+    let linkedGame: { id: string; entry1_id: string; entry2_id: string; team1_id: string; team2_id: string } | null = null;
 
     console.log(`   ✅ [TEAM TOURNAMENT] Teams identified: ${team1} vs ${team2}`);
 
@@ -1486,7 +1505,8 @@ export class ParseNewReplaysRefactorized {
 
     if (Number(tournament.competition_model_version) === 2) {
       const phaseGames = await query(
-        `SELECT games.id
+        `SELECT games.id, games.entry1_id, games.entry2_id,
+                entry1.team_id AS team1_id, entry2.team_id AS team2_id
          FROM tournament_games games
          JOIN tournament_series series ON series.id = games.series_id
          JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
@@ -1501,12 +1521,11 @@ export class ParseNewReplaysRefactorized {
         [tournament.id, team1, team2, team2, team1]
       );
       if (phaseGames.rows.length !== 1) return false;
+      const game = phaseGames.rows[0];
+      linkedGame = game;
       parseSummary.linkedTournamentId = tournament.id;
-      parseSummary.linkedTournamentGameId = phaseGames.rows[0].id;
+      parseSummary.linkedTournamentGameId = game.id;
       parseSummary.tournamentLinkMethod = 'participants';
-      if (parseSummary.replayVictory?.reason !== 'competitive_game_status') {
-        parseSummary.confidenceLevel = 1;
-      }
     }
 
     // Enrich parseSummary with detected team information
@@ -1593,7 +1612,51 @@ export class ParseNewReplaysRefactorized {
       console.log(`   [TEAM TOURNAMENT] Team "${teamName}" (${teamWmlName}): members=${playerNicknames.join(', ')}, sides=${playerSides.join(',')}, factions=${playerFactions.join(',')}`);
     }
 
+    // Same rule as the explicit-game path, applied once detectedTeams holds
+    // each tournament team's sides.
+    if (linkedGame && parseSummary.replayVictory?.reason !== 'competitive_game_status') {
+      const winnerTeamId = this.resolveTeamSurrenderWinner(parseSummary, [linkedGame.team1_id, linkedGame.team2_id]);
+      if (winnerTeamId) {
+        parseSummary.linkedWinnerEntryId = winnerTeamId === linkedGame.team1_id ? linkedGame.entry1_id : linkedGame.entry2_id;
+      } else {
+        parseSummary.confidenceLevel = 1;
+      }
+    }
+
     return true;
+  }
+
+  /**
+   * The tournament team that won a team game by surrender, or null.
+   *
+   * The parser decides team games alliance by alliance (a whole alliance
+   * surrendered, exactly one alliance still standing) and reports the sides
+   * of both. Here that outcome is trusted only if the alliances are exactly
+   * the two tournament teams: every forum player belongs to one alliance,
+   * the winning alliance's sides are exactly one team's sides, and the
+   * defeated sides are exactly the other's. A substitute, a missing member,
+   * or players outside both teams make the result undecided (confidence 1,
+   * confirmed by a player), so a mismatch can never award the wrong team.
+   */
+  private resolveTeamSurrenderWinner(parseSummary: ParseSummary, teamIds: Array<string | null>): string | null {
+    const victory = parseSummary.replayVictory;
+    if (victory?.reason !== 'surrender' || parseSummary.confidenceLevel !== 2) return null;
+    const winnerSides: number[] | undefined = victory.winner_sides;
+    const loserSides: number[] | undefined = victory.loser_sides;
+    if (!winnerSides?.length || !loserSides?.length) return null;
+
+    const key = (sides: Array<number | string>) => sides.map(Number).sort((a, b) => a - b).join(',');
+    if (key([...winnerSides, ...loserSides]) !== key(parseSummary.forumPlayers.map(player => player.side_number))) {
+      return null;
+    }
+    const [firstId, secondId] = teamIds;
+    const first = firstId ? parseSummary.detectedTeams?.[firstId] : undefined;
+    const second = secondId ? parseSummary.detectedTeams?.[secondId] : undefined;
+    if (!first || !second) return null;
+
+    if (key(first.sides) === key(winnerSides) && key(second.sides) === key(loserSides)) return firstId;
+    if (key(second.sides) === key(winnerSides) && key(first.sides) === key(loserSides)) return secondId;
+    return null;
   }
 
   /**
