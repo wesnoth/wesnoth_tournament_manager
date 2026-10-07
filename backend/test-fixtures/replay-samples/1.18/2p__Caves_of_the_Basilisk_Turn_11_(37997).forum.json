@@ -1,0 +1,75 @@
+{
+  "game_info": {
+    "INSTANCE_UUID": "8cddb066-a651-11f1-b301-0ee77816ca01",
+    "GAME_ID": 37997,
+    "INSTANCE_VERSION": "1.18",
+    "GAME_NAME": "Ladder",
+    "START_TIME": "2026-10-05 19:24:03",
+    "END_TIME": "2026-10-05 19:59:39",
+    "REPLAY_NAME": "2p__Caves_of_the_Basilisk_Turn_11_(37997).bz2",
+    "OOS": 0,
+    "RELOAD": 0
+  },
+  "content_info": [
+    {
+      "TYPE": "era",
+      "ID": "ladder_test_era",
+      "ADDON_ID": "Ladder_Era",
+      "ADDON_VERSION": "1.2.1",
+      "NAME": "Ladder Era"
+    },
+    {
+      "TYPE": "modification",
+      "ID": "ranked",
+      "ADDON_ID": "Ranked",
+      "ADDON_VERSION": "1.0.6",
+      "NAME": "Ranked"
+    },
+    {
+      "TYPE": "modification",
+      "ID": "Rav_Color_Mod",
+      "ADDON_ID": "Color_Modification",
+      "ADDON_VERSION": "1.2.5",
+      "NAME": "Color Changer"
+    },
+    {
+      "TYPE": "scenario",
+      "ID": "multiplayer_Basilisk_Ladder_Random",
+      "ADDON_ID": "Ladder_Era",
+      "ADDON_VERSION": "1.2.1",
+      "NAME": "2p — Caves of the Basilisk"
+    }
+  ],
+  "player_info": [
+    {
+      "USER_ID": 127793,
+      "SIDE_NUMBER": 1,
+      "IS_HOST": 1,
+      "FACTION": "Custom",
+      "CLIENT_VERSION": "1.18.4",
+      "CLIENT_SOURCE": "itch",
+      "USER_NAME": "Haldiel",
+      "LEADERS": "L_Drake Warrior Ladder_1"
+    },
+    {
+      "USER_ID": 100337,
+      "SIDE_NUMBER": 2,
+      "IS_HOST": 0,
+      "FACTION": "Custom",
+      "CLIENT_VERSION": "1.18.8",
+      "CLIENT_SOURCE": "Linux repository",
+      "USER_NAME": "clmates",
+      "LEADERS": "L_Swordsman"
+    },
+    {
+      "USER_ID": -1,
+      "SIDE_NUMBER": 3,
+      "IS_HOST": 0,
+      "FACTION": "Ladder Knalgan Alliance",
+      "CLIENT_VERSION": "",
+      "CLIENT_SOURCE": "",
+      "USER_NAME": "",
+      "LEADERS": "null"
+    }
+  ]
+}

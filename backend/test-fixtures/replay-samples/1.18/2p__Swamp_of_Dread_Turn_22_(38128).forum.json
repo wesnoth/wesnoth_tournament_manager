@@ -1,0 +1,58 @@
+{
+  "game_info": {
+    "INSTANCE_UUID": "8cddb066-a651-11f1-b301-0ee77816ca01",
+    "GAME_ID": 38128,
+    "INSTANCE_VERSION": "1.18",
+    "GAME_NAME": "Ranked and/or Ladder",
+    "START_TIME": "2026-10-05 22:37:20",
+    "END_TIME": "2026-10-05 23:59:17",
+    "REPLAY_NAME": "2p__Swamp_of_Dread_Turn_22_(38128).bz2",
+    "OOS": 0,
+    "RELOAD": 1
+  },
+  "content_info": [
+    {
+      "TYPE": "era",
+      "ID": "ladder_test_era",
+      "ADDON_ID": "Ladder_Era",
+      "ADDON_VERSION": "1.2.1",
+      "NAME": "Ladder Era"
+    },
+    {
+      "TYPE": "modification",
+      "ID": "ranked",
+      "ADDON_ID": "Ranked",
+      "ADDON_VERSION": "1.0.10",
+      "NAME": "Ranked"
+    },
+    {
+      "TYPE": "scenario",
+      "ID": "multiplayer_Swamp_of_Dread_Ladder_Random",
+      "ADDON_ID": "Ladder_Era",
+      "ADDON_VERSION": "1.2.1",
+      "NAME": "2p — Swamp of Dread"
+    }
+  ],
+  "player_info": [
+    {
+      "USER_ID": 223781,
+      "SIDE_NUMBER": 1,
+      "IS_HOST": 1,
+      "FACTION": "Custom",
+      "CLIENT_VERSION": "1.18.8",
+      "CLIENT_SOURCE": "Flatpak",
+      "USER_NAME": "leymano9c",
+      "LEADERS": "L_Bone Shooter"
+    },
+    {
+      "USER_ID": 127793,
+      "SIDE_NUMBER": 2,
+      "IS_HOST": 0,
+      "FACTION": "Custom",
+      "CLIENT_VERSION": "1.18.4",
+      "CLIENT_SOURCE": "itch",
+      "USER_NAME": "Haldiel",
+      "LEADERS": "L_Drake Thrasher Ladder_1"
+    }
+  ]
+}

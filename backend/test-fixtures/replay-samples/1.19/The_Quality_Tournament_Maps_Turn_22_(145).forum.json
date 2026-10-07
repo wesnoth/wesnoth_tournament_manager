@@ -1,0 +1,75 @@
+{
+  "game_info": {
+    "INSTANCE_UUID": "b2ac21c5-9b9c-11f1-b301-0ee77816ca01",
+    "GAME_ID": 145,
+    "INSTANCE_VERSION": "1.19",
+    "GAME_NAME": "T60881",
+    "START_TIME": "2026-09-05 19:40:35",
+    "END_TIME": "2026-09-05 20:49:17",
+    "REPLAY_NAME": "The_Quality_Tournament_Maps_Turn_22_(145).bz2",
+    "OOS": 0,
+    "RELOAD": 0
+  },
+  "content_info": [
+    {
+      "TYPE": "era",
+      "ID": "era_default",
+      "ADDON_ID": "mainline",
+      "ADDON_VERSION": "1.19.27",
+      "NAME": "Default"
+    },
+    {
+      "TYPE": "modification",
+      "ID": "plan_unit_advance",
+      "ADDON_ID": "mainline",
+      "ADDON_VERSION": "1.19.27",
+      "NAME": "Plan Unit Advance"
+    },
+    {
+      "TYPE": "modification",
+      "ID": "ranked",
+      "ADDON_ID": "Ranked",
+      "ADDON_VERSION": "1.0.13",
+      "NAME": "Ranked"
+    },
+    {
+      "TYPE": "scenario",
+      "ID": "tqt_maps",
+      "ADDON_ID": "Ranked",
+      "ADDON_VERSION": "1.0.13",
+      "NAME": "The Quality Tournament Maps"
+    }
+  ],
+  "player_info": [
+    {
+      "USER_ID": 169571,
+      "SIDE_NUMBER": 1,
+      "IS_HOST": 0,
+      "FACTION": "Rebels",
+      "CLIENT_VERSION": "1.19.27",
+      "CLIENT_SOURCE": "Steam",
+      "USER_NAME": "momom2",
+      "LEADERS": "Elvish Marksman"
+    },
+    {
+      "USER_ID": 100337,
+      "SIDE_NUMBER": 2,
+      "IS_HOST": 1,
+      "FACTION": "Northerners",
+      "CLIENT_VERSION": "1.19.27",
+      "CLIENT_SOURCE": "Default",
+      "USER_NAME": "clmates",
+      "LEADERS": "Troll Rocklobber"
+    },
+    {
+      "USER_ID": -1,
+      "SIDE_NUMBER": 3,
+      "IS_HOST": 0,
+      "FACTION": "Knalgan Alliance",
+      "CLIENT_VERSION": "",
+      "CLIENT_SOURCE": "",
+      "USER_NAME": "",
+      "LEADERS": ""
+    }
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "game_info": {
+    "INSTANCE_UUID": "2990cd99-36b1-11f1-921a-0ee77816ca01",
+    "GAME_ID": 27645,
+    "INSTANCE_VERSION": "1.18",
+    "GAME_NAME": "Isars Cross Tournament#1",
+    "START_TIME": "2026-04-17 21:40:22",
+    "END_TIME": "2026-04-17 22:18:19",
+    "REPLAY_NAME": "4p__Isars_Cross_Turn_11_(27645).bz2",
+    "OOS": 0,
+    "RELOAD": 0
+  },
+  "content_info": [
+    {
+      "TYPE": "era",
+      "ID": "ladder_era",
+      "ADDON_ID": "Ladder_Era",
+      "ADDON_VERSION": "1.2.1",
+      "NAME": "Ladder Era"
+    },
+    {
+      "TYPE": "modification",
+      "ID": "plan_unit_advance",
+      "ADDON_ID": "mainline",
+      "ADDON_VERSION": "1.18.7",
+      "NAME": "Plan Unit Advance"
+    },
+    {
+      "TYPE": "modification",
+      "ID": "ranked",
+      "ADDON_ID": "Ranked",
+      "ADDON_VERSION": "1.0.6",
+      "NAME": "Ranked"
+    },
+    {
+      "TYPE": "scenario",
+      "ID": "multiplayer_Isars_Cross",
+      "ADDON_ID": "mainline",
+      "ADDON_VERSION": "1.18.7",
+      "NAME": "4p — Isar’s Cross"
+    }
+  ],
+  "player_info": [
+    {
+      "USER_ID": 127629,
+      "SIDE_NUMBER": 1,
+      "IS_HOST": 0,
+      "FACTION": "Ladder Rebels",
+      "CLIENT_VERSION": "1.18.4",
+      "CLIENT_SOURCE": "Flatpak",
+      "USER_NAME": "NanRoig",
+      "LEADERS": "L_Elvish Ranger"
+    },
+    {
+      "USER_ID": 100337,
+      "SIDE_NUMBER": 2,
+      "IS_HOST": 1,
+      "FACTION": "Ladder Drakes",
+      "CLIENT_VERSION": "1.18.7",
+      "CLIENT_SOURCE": "SourceForge",
+      "USER_NAME": "clmates",
+      "LEADERS": "L_Drake Warrior Ladder_1"
+    },
+    {
+      "USER_ID": 223835,
+      "SIDE_NUMBER": 3,
+      "IS_HOST": 0,
+      "FACTION": "Ladder Undead",
+      "CLIENT_VERSION": "1.18.7",
+      "CLIENT_SOURCE": "Steam",
+      "USER_NAME": "KhorneflakesBA",
+      "LEADERS": "L_Revenant"
+    },
+    {
+      "USER_ID": 125055,
+      "SIDE_NUMBER": 4,
+      "IS_HOST": 0,
+      "FACTION": "Ladder Northerners",
+      "CLIENT_VERSION": "1.18.7",
+      "CLIENT_SOURCE": "Steam",
+      "USER_NAME": "Danniel_BR",
+      "LEADERS": "L_Orcish Warrior"
+    }
+  ]
+}
