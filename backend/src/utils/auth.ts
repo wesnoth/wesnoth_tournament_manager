@@ -90,10 +90,20 @@ export const calculateELO = (currentELO: number, opponentELO: number, won: boole
   return Math.round(K * (score - expected));
 };
 
-export const getUserLevel = (eloRating: number): string => {
-  if (eloRating < 1400) return 'Novato';
-  if (eloRating < 1600) return 'Iniciado';
-  if (eloRating < 1800) return 'Veterano';
-  if (eloRating < 2000) return 'Experto';
-  return 'Maestro';
+/**
+ * Player level band for a rating. Each band starts at its lower bound.
+ *
+ * The value is a stable English identifier stored in users_extension.level
+ * and in the matches *_level_* columns; the frontend translates it into every
+ * language, Spanish included (levelTranslation.ts). Stored values were Spanish
+ * words until migration 20261008_120000 normalized them.
+ */
+export type PlayerLevel = 'novice' | 'initiated' | 'veteran' | 'expert' | 'master';
+
+export const getUserLevel = (eloRating: number): PlayerLevel => {
+  if (eloRating < 1400) return 'novice';
+  if (eloRating < 1600) return 'initiated';
+  if (eloRating < 1800) return 'veteran';
+  if (eloRating < 2000) return 'expert';
+  return 'master';
 };

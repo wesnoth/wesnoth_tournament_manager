@@ -154,7 +154,7 @@ async function performGlobalStatsRecalculation(
         total_wins: 0,
         total_losses: 0,
         trend: '-',
-        level: 'Novato'
+        level: 'novice'
       });
     }
 
@@ -168,10 +168,10 @@ async function performGlobalStatsRecalculation(
 
       // Ensure both users exist in state map
       if (!userStates.has(winnerId)) {
-        userStates.set(winnerId, { elo_rating: defaultElo, ranking_pos: 1, is_global_ranked: true, last_match_date: null, matches_played: 0, total_wins: 0, total_losses: 0, trend: '-', level: 'Novato' });
+        userStates.set(winnerId, { elo_rating: defaultElo, ranking_pos: 1, is_global_ranked: true, last_match_date: null, matches_played: 0, total_wins: 0, total_losses: 0, trend: '-', level: 'novice' });
       }
       if (!userStates.has(loserId)) {
-        userStates.set(loserId, { elo_rating: defaultElo, ranking_pos: 1, is_global_ranked: true, last_match_date: null, matches_played: 0, total_wins: 0, total_losses: 0, trend: '-', level: 'Novato' });
+        userStates.set(loserId, { elo_rating: defaultElo, ranking_pos: 1, is_global_ranked: true, last_match_date: null, matches_played: 0, total_wins: 0, total_losses: 0, trend: '-', level: 'novice' });
       }
 
       const winner = userStates.get(winnerId)!;

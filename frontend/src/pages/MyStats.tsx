@@ -77,7 +77,7 @@ const MyStats: React.FC = () => {
         </div>
         <div className="info-group">
           <label>Level:</label>
-          <p>{t(getLevelTranslationKey(stats.level || 'Novato'))}</p>
+          <p>{t(getLevelTranslationKey(stats.level))}</p>
         </div>
       </section>
 

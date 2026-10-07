@@ -7,6 +7,7 @@ import MainLayout from '../components/MainLayout';
 import PlayerLink from '../components/PlayerLink';
 import GlobalStatsRecalculationProgress from '../components/GlobalStatsRecalculationProgress';
 import { useGlobalStatsRecalculation } from '../hooks/useGlobalStatsRecalculation';
+import { getLevelTranslationKey } from '../utils/levelTranslation';
 
 interface ManagedUser {
   id: string;
@@ -438,7 +439,7 @@ const AdminUsers: React.FC = () => {
                    />
                  </td>
                   <td className="px-4 py-3 text-gray-700">{user.elo_rating || 1200}</td>
-                  <td className="px-4 py-3 text-gray-700">{user.level || t('level_novice')}</td>
+                  <td className="px-4 py-3 text-gray-700">{t(getLevelTranslationKey(user.level))}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
                       user.is_blocked ? 'bg-red-100 text-red-800' : user.is_active ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'

@@ -230,7 +230,7 @@ Application-level user profile. One record per forum user who has interacted wit
 | `language` | varchar(2) | `'en'` | Preferred UI language |
 | `discord_id` | varchar(255) | NULL | Optional Discord user ID |
 | `elo_rating` | int | 1400 | Current ELO rating |
-| `level` | varchar(50) | `'novato'` | Skill level label |
+| `level` | varchar(50) | `'novice'` | Skill level identifier (`novice`, `initiated`, `veteran`, `expert`, `master`), translated by the frontend |
 | `is_active` | tinyint(1) | 0 | 1 = active in the app |
 | `is_blocked` | tinyint(1) | 0 | 1 = blocked from the app (admin/moderator action; does not affect forum account) |
 | `is_admin` | tinyint(1) | 0 | 1 = site administrator (independent from forum admin/moderator status) |
@@ -285,10 +285,10 @@ Direct (non-tournament) ranked matches between two players.
 | `winner_elo_after` | int | Winner ELO after the match |
 | `loser_elo_before` | int | Loser ELO before the match |
 | `loser_elo_after` | int | Loser ELO after the match |
-| `winner_level_before` | varchar(50) | Winner level label before the match |
-| `winner_level_after` | varchar(50) | Winner level label after the match |
-| `loser_level_before` | varchar(50) | Loser level label before the match |
-| `loser_level_after` | varchar(50) | Loser level label after the match |
+| `winner_level_before` | varchar(50) | Winner level identifier before the match |
+| `winner_level_after` | varchar(50) | Winner level identifier after the match |
+| `loser_level_before` | varchar(50) | Loser level identifier before the match |
+| `loser_level_after` | varchar(50) | Loser level identifier after the match |
 | `replay_downloads` | int | Download counter |
 | `winner_ranking_pos` | int | Winner global ranking position at match time |
 | `winner_ranking_change` | int | Winner ranking position delta |
