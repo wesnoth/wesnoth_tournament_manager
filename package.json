@@ -5,7 +5,9 @@
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "test:e2e": "playwright test",
-    "test:e2e:list": "playwright test --list"
+    "test:e2e:list": "playwright test --list",
+    "verify": "bash scripts/verify.sh",
+    "verify:e2e": "playwright test --project=local-replays --workers=1"
   },
   "devDependencies": {
     "@playwright/test": "1.60.0"

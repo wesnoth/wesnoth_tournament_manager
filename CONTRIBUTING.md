@@ -205,7 +205,7 @@ Backend: http://localhost:3000
 
 - [ ] Code follows project style
 - [ ] Commit messages are clear
-- [ ] Builds and TypeScript checks pass; integration tests follow [TESTING.md](TESTING.md)
+- [ ] `npm run verify` passes (the pre-push hook runs it; see [TESTING.md](TESTING.md)); integration tests follow [TESTING.md](TESTING.md)
 - [ ] No unnecessary console.log() calls
 - [ ] No unused dependencies
 - [ ] Documentation updated

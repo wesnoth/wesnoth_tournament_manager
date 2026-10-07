@@ -1,0 +1,6 @@
+#!/bin/sh
+# Versioned pre-push hook (audit finding 13): run the local verification
+# before anything leaves this clone. Enable once per clone with
+#   git config core.hooksPath .githooks
+# and skip in an emergency with `git push --no-verify`.
+cd "$(git rev-parse --show-toplevel)" && exec bash scripts/verify.sh
