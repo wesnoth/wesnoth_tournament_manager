@@ -171,7 +171,12 @@ export async function createMatch(input: CreateMatchInput): Promise<CreateMatchR
   }
 }
 
-function resolveRated(currentlyRated: boolean, newElo: number, matchesPlayed: number): boolean {
+/**
+ * Whether a player is rated after a match. A rated player drops out below
+ * 1400; an unrated player becomes rated once they reach 10 matches with at
+ * least 1400. Exported for its unit tests (matchCreationService.test.ts).
+ */
+export function resolveRated(currentlyRated: boolean, newElo: number, matchesPlayed: number): boolean {
   if (currentlyRated && newElo < 1400) return false;
   if (!currentlyRated && matchesPlayed >= 10 && newElo >= 1400) return true;
   return currentlyRated;

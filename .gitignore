@@ -5,6 +5,7 @@ venv/
 
 # Build outputs
 backend/dist/
+backend/.verify-dist/
 backend/build/
 frontend/dist/
 frontend/build/

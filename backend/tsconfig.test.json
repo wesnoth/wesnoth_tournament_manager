@@ -1,0 +1,9 @@
+{
+  // Compiles the application together with its unit tests (*.test.ts), which
+  // the production tsconfig.json excludes so they never ship in dist/. Used
+  // by the repository's verify script with --outDir pointing to a scratch
+  // directory; the tests run with Node's built-in runner (node --test).
+  "extends": "./tsconfig.json",
+  "include": ["src/**/*"],
+  "exclude": ["node_modules"]
+}
