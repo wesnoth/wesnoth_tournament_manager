@@ -9,6 +9,12 @@ import { execFileSync } from 'node:child_process';
  * Both local instances expose the same database names, so only the container
  * selects which one is used; the backend under test must point to the same
  * instance (DB_PORT / PHPBB_DB_PORT) and to the same REPLAY_SAVE_PATH.
+ *
+ * Backend overrides the suite needs besides those: WESNOTH_VERSION matching
+ * `wesnothVersion` below, TOURNAMENT_SIMULATION=on (team helpers),
+ * TOURNAMENT_CREATION_RATE_LIMIT_MAX=100 (one tournament per scenario), and
+ * RATE_LIMIT_LOGIN_MAX=1000 (the full suite logs in well over the development
+ * default of 50 per 15 minutes from one address).
  */
 export const localStack = {
   /** Docker container of the MariaDB instance the backend is using. */

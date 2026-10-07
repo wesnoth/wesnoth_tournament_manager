@@ -77,17 +77,19 @@ for (const variant of [
 test('tournament team 2v2: simultaneous confirmations from opposite teams keep a single result', async ({ page, browser }) => {
   test.setTimeout(600_000);
   const name = `e2e_concurrent_team_${Date.now()}`;
-  // Real 1.18.7 team replay: south-west NanRoig + Danniel_BR beat north-east
-  // clmates + KhorneflakesBA (both surrender). Team games are always
-  // confidence 1 because a 2v2 winner cannot be read reliably from the WML.
-  const winners = 'NanRoig & Danniel_BR';
+  // Real 1.18.7 team replay without any surrender: south-west turkish001 +
+  // Olosta against north-east KhorneflakesBA + clmates. No alliance
+  // surrendered as a whole, so the result stays at confidence 1 and players
+  // confirm it (a whole-team surrender is integrated automatically, see
+  // tournament-team.spec.ts). The confirmations decide the winner here.
+  const winners = 'turkish001 & Olosta';
   const losers = 'clmates & KhorneflakesBA';
   const tournamentId = await createStartedTeamTournament(page, {
     name,
     organizer: 'clmates',
     teams: [
       { name: losers, members: ['clmates', 'KhorneflakesBA'] },
-      { name: winners, members: ['NanRoig', 'Danniel_BR'] },
+      { name: winners, members: ['turkish001', 'Olosta'] },
     ],
   });
   const [pending] = getPendingTeamGames(tournamentId);
@@ -95,7 +97,7 @@ test('tournament team 2v2: simultaneous confirmations from opposite teams keep a
   // Forum rows mirror a production game of this tournament (2026-04): Ladder
   // era add-on, Ranked 1.0.6, mainline scenario; factions come from the WML.
   const game = injectLegacyGame({
-    replayFixture: '4p__Isars_Cross_Turn_8_(27635).bz2',
+    replayFixture: '4p__Isars_Cross_Turn_13_(14753).bz2',
     gameName: name,
     content: {
       era: { id: 'ladder_era', addonId: 'Ladder_Era', addonVersion: '1.2.1', name: 'Ladder Era' },
@@ -107,10 +109,10 @@ test('tournament team 2v2: simultaneous confirmations from opposite teams keep a
   expect(parsed).toMatchObject({ parse_status: 'parsed', integration_confidence: '1', tournament_game_id: pending.gameId });
 
   const statuses = await confirmTogether(browser, `/tournament/${tournamentId}`, [
-    { nickname: 'NanRoig', choice: 'action-confirm-confidence-one-replay-won' },
+    { nickname: 'Olosta', choice: 'action-confirm-confidence-one-replay-won' },
     { nickname: 'clmates', choice: 'action-confirm-confidence-one-replay-lost' },
   ], [winners, losers]);
-  console.log(`confirm-winner statuses (NanRoig, clmates): ${statuses.join(', ')}`);
+  console.log(`confirm-winner statuses (Olosta, clmates): ${statuses.join(', ')}`);
 
   const result = getTournamentGame(pending.gameId);
   expect(result.status).toBe('completed');

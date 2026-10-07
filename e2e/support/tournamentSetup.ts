@@ -199,6 +199,12 @@ export async function createStartedTeamTournament(page: Page, options: {
   organizer: string;
   teams: Array<{ name: string; members: [string, string] }>;
 }): Promise<string> {
+  // A forum user gets an application profile on first login, and the
+  // simulation panel only finds users with a profile, so every member logs in
+  // once first (players who never used the site, such as replay opponents).
+  for (const member of options.teams.flatMap((team) => team.members)) {
+    await loginAs(page, member);
+  }
   await loginAs(page, options.organizer);
   await page.goto('/my-tournaments');
   await page.locator('[data-help-id="action-open-create-tournament"]').click();
