@@ -3,10 +3,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { pool, query } from '../config/database.js';
 import { queryPhpbb } from '../config/phpbbDatabase.js';
 import { adminMiddleware, authMiddleware, moderatorOrAdminMiddleware, AuthRequest } from '../middleware/auth.js';
-import { calculateNewRating, calculateTrend } from '../utils/elo.js';
 import { unlockAccount, lockoutRemainingSeconds } from '../services/accountLockout.js';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
-import { performQueuedGlobalStatsRecalculation } from './matches.js';
+import { performQueuedGlobalStatsRecalculation } from '../services/globalRecalculationService.js';
 import {
   enqueueGlobalStatsRecalculation,
   getActiveGlobalStatsRecalculationJobId,
@@ -14,7 +13,6 @@ import {
   GlobalStatsRecalculationInProgressError,
 } from '../services/globalStatsRecalculationJobService.js';
 import { isTournamentOrganizer } from '../services/tournamentAuthorizationService.js';
-import { isClientSafeError } from '../utils/clientError.js';
 import {
   BalanceSnapshotRecalculationInProgressError,
   enqueueBalanceHistoryRebuild,
@@ -24,9 +22,6 @@ import {
 import { getSystemPauseStatus, globalRecalculationMiddleware, invalidateNonAdminTokens } from '../services/systemPauseService.js';
 
 const router = Router();
-
-// Reserved team ID for replaced/inactive players
-const REPLACED_PLAYERS_TEAM_ID = '00000000-0000-0000-0000-000000000001';
 
 // List users for the shared Manage Users page. Moderators need read access so
 // they can act on eligible accounts, while mutation endpoints enforce their

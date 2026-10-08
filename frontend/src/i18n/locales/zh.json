@@ -255,6 +255,7 @@
   "confirm_award_dispute_win": "反转结果，使 {{nickname}} 获胜？所有 ELO、排名和统计数据都将重新计算。",
   "dispute_award_success": "争议已解决，胜利已成功判定",
   "dispute_award_queued": "争议已解决。胜利已判定，统计数据重新计算已加入队列。",
+  "dispute_validate_queued": "争议已确认。比赛已取消，统计数据重新计算已加入队列。",
   "error_name_description_required": "名称、描述和锦标赛类型为必填项",
   "error_recalculating_snapshots": "重新计算快照出错",
   "error_updating_balance_event": "更新平衡事件出错",

@@ -255,6 +255,7 @@
   "confirm_award_dispute_win": "Ergebnis umkehren, sodass {{nickname}} gewinnt? ELO, Rangliste und alle Statistiken werden neu berechnet.",
   "dispute_award_success": "Streitfall gelöst und Sieg erfolgreich vergeben",
   "dispute_award_queued": "Streitfall gelöst. Der Sieg wurde vergeben und die Neuberechnung der Statistiken wurde in die Warteschlange gestellt.",
+  "dispute_validate_queued": "Streitfall bestätigt. Das Spiel wurde annulliert und die Neuberechnung der Statistiken wurde in die Warteschlange gestellt.",
   "error_name_description_required": "Name, Beschreibung und Turniertyp sind erforderlich",
   "error_recalculating_snapshots": "Fehler beim Neu berechnen der Snapshots",
   "error_updating_balance_event": "Fehler beim Aktualisieren des Balance-Events",

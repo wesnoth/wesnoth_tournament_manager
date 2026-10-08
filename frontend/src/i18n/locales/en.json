@@ -255,6 +255,7 @@
   "confirm_award_dispute_win": "Invert the result so that {{nickname}} wins? All ELO, ranking, and statistics will be recalculated.",
   "dispute_award_success": "Dispute resolved and win awarded successfully",
   "dispute_award_queued": "Dispute resolved. The win was awarded and statistics recalculation was queued.",
+  "dispute_validate_queued": "Dispute validated. The match was cancelled and statistics recalculation was queued.",
   "error_name_description_required": "Name, description and tournament type are required",
   "error_recalculating_snapshots": "Error recalculating snapshots",
   "error_updating_balance_event": "Error updating balance event",

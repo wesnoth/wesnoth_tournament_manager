@@ -88,9 +88,14 @@ const AdminDisputes: React.FC = () => {
     setError('');
     try {
       const response = await matchService.validateDispute(matchId);
-      setMessage(response.data?.message || 'Dispute validated');
+      setMessage(t('dispute_validate_queued'));
       setSelectedDispute(null);
       fetchDisputes();
+
+      const jobId = response.data?.recalculationJobId;
+      if (jobId) {
+        await trackRecalculationJob(jobId);
+      }
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'Failed to validate dispute');
     } finally {

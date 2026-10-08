@@ -13,6 +13,9 @@ export type RecalculationResult = {
   success: boolean;
   logs: string[];
   matchesProcessed: number;
+  /** Match rows whose stored rating columns differed from the replay and were rewritten. */
+  matchesUpdated: number;
+  /** Users whose stored rating columns differed from the replay and were rewritten. */
   usersUpdated: number;
   /**
    * Machine-readable codes for optional follow-up steps that failed after the
@@ -170,6 +173,7 @@ const runGlobalStatsRecalculationJob = async (
         result.matchesProcessed,
         JSON.stringify({
           matchesProcessed: result.matchesProcessed,
+          matchesUpdated: result.matchesUpdated,
           usersUpdated: result.usersUpdated,
           ...(warnings.length > 0 ? { warnings } : {}),
         }),
@@ -184,6 +188,7 @@ const runGlobalStatsRecalculationJob = async (
       job,
       {
         matches_processed: result.matchesProcessed,
+        matches_updated: result.matchesUpdated,
         users_updated: result.usersUpdated,
         duration_seconds: Math.round((Date.now() - startedAt) / 1000),
         ...(warnings.length > 0 ? { warnings } : {}),

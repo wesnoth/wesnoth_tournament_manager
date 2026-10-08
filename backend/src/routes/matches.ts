@@ -4,421 +4,17 @@ import { query } from '../config/database.js';
 import { authMiddleware, moderatorOrAdminMiddleware, streamerMiddleware, AuthRequest } from '../middleware/auth.js';
 import { isTournamentOrganizer } from '../services/tournamentAuthorizationService.js';
 import { checkUserIsForumModerator } from '../services/phpbbAuth.js';
-import { getUserLevel } from '../utils/auth.js';
 import {
   enqueueGlobalStatsRecalculation,
   getActiveGlobalStatsRecalculationJobId,
-  GlobalStatsRecalculationProgress,
-  RecalculationResult,
 } from '../services/globalStatsRecalculationJobService.js';
-import {
-  calculateNewRating,
-  calculateInitialRating,
-  shouldPlayerBeRated,
-  calculateTrend,
-  getKFactorWithReason,
-  getPlayerRankingPosition,
-} from '../utils/elo.js';
-import {
-  updateFactionMapStatistics,
-  recalculatePlayerMatchStatistics,
-  recalculateFactionMapStatistics,
-  updatePlayerElo
-} from '../services/statisticsCalculator.js';
-import { validateAndCorrectFactions } from '../services/replayConfirmationService.js';
+import { performQueuedGlobalStatsRecalculation } from '../services/globalRecalculationService.js';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
 import { globalRecalculationMiddleware } from '../services/systemPauseService.js';
-import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const router = Router();
 
 console.log('🔧 Registering match routes');
-
-// Create uploads directory if it doesn't exist
-const uploadsDir = path.join(__dirname, '..', '..', 'uploads', 'replays');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-  console.log(`✅ Created uploads directory: ${uploadsDir}`);
-}
-
-/**
- * Normalize map names for consistent comparison
- * Handles special characters, smart quotes, and whitespace
- * - Converts smart quotes (', ', ", ") to standard quotes (' and ")
- * - Trims whitespace
- * - Lowercases for comparison
- * @param mapName - The map name to normalize
- * @returns Normalized map name suitable for comparison
- */
-function normalizeMapName(mapName: string | null | undefined): string {
-  if (!mapName) return '';
-  
-  // Use Unicode escape sequences to handle all quote variants
-  return mapName
-    // U+2018 (') and U+2019 (') - Left and right single quotation marks
-    .replace(/[\u2018\u2019]/g, "'")
-    // U+201C (") and U+201D (") - Left and right double quotation marks  
-    .replace(/[\u201C\u201D]/g, '"')
-    // U+201E („) and U+201F (‟) - Double low-9 quotation mark
-    .replace(/[\u201E\u201F]/g, '"')
-    // U+2039 (‹) and U+203A (›) - Single-pointing angle quotation marks
-    .replace(/[\u2039\u203A]/g, "'")
-    // U+2035 (`) and U+2032 (′) - Grave accent and prime
-    .replace(/[\u2035\u2032]/g, "'")
-    // U+201A (‚) - Single low-9 quotation mark
-    .replace(/[\u201A]/g, "'")
-    .trim()
-    .toLowerCase();
-}
-
-// Helper function to recalculate all stats (used by both admin and player self-cancel)
-// This does a FULL replay of all non-cancelled matches to recalculate ELO correctly
-async function performGlobalStatsRecalculation(
-  onProgress?: (progress: { phase: string; current: number; total: number }) => Promise<void>
-) {
-  const logs: string[] = [];
-  const isDebugEnabled = process.env.BACKEND_DEBUG_LOGS === 'true';
-  let recalculationHadErrors = false;
-  
-  try {
-    const startMsg = '🔄 Starting full stats recalculation with match replay';
-    if (isDebugEnabled) {
-      logs.push(startMsg);
-      console.log(startMsg);
-    }
-
-    // STEP 1: Disable both triggers to prevent automatic stats updates during this process
-    try {
-      await query('DROP TRIGGER IF EXISTS trg_update_faction_map_stats');
-      await query('DROP TRIGGER IF EXISTS trg_update_player_match_stats');
-      const msg = 'Disabled triggers for stats recalculation';
-      if (isDebugEnabled) {
-        logs.push(msg);
-        console.log(msg);
-      }
-    } catch (error) {
-      if (isDebugEnabled) console.warn('Warning: Failed to disable triggers:', error);
-    }
-
-    const defaultElo = 1400; // FIDE standard baseline for new users
-
-    // STEP 2: Get ALL non-cancelled matches in chronological order (including 'reported')
-    const allNonCancelledMatches = await query(
-      `SELECT m.id, m.winner_id, m.loser_id, m.created_at
-       FROM matches m
-       WHERE m.status != 'cancelled'
-       ORDER BY m.created_at ASC, m.id ASC`
-    );
-    if (onProgress) await onProgress({ phase: 'replaying_matches', current: 0, total: allNonCancelledMatches.rows.length });
-
-    // STEP 3: Initialize all users with baseline ELO and zero stats
-    const userStates = new Map<string, {
-      elo_rating: number;
-      ranking_pos: number;
-      is_global_ranked: boolean;
-      last_match_date: Date | null;
-      matches_played: number;
-      total_wins: number;
-      total_losses: number;
-      trend: string;
-      level: string;
-    }>();
-
-    const allUsersResult = await query('SELECT id, is_active, is_blocked FROM users_extension');
-    for (const userRow of allUsersResult.rows) {
-      userStates.set(userRow.id, {
-        elo_rating: defaultElo,
-        ranking_pos: 1,
-        is_global_ranked: !Boolean(userRow.is_blocked),
-        last_match_date: null,
-        matches_played: 0,
-        total_wins: 0,
-        total_losses: 0,
-        trend: '-',
-        level: 'novice'
-      });
-    }
-
-    // STEP 4: Replay ALL non-cancelled matches chronologically to rebuild correct stats
-    let matchProcessedCount = 0;
-    let debugSampleLogs: string[] = [];
-
-    for (const matchRow of allNonCancelledMatches.rows) {
-      const winnerId = matchRow.winner_id;
-      const loserId = matchRow.loser_id;
-
-      // Ensure both users exist in state map
-      if (!userStates.has(winnerId)) {
-        userStates.set(winnerId, { elo_rating: defaultElo, ranking_pos: 1, is_global_ranked: true, last_match_date: null, matches_played: 0, total_wins: 0, total_losses: 0, trend: '-', level: 'novice' });
-      }
-      if (!userStates.has(loserId)) {
-        userStates.set(loserId, { elo_rating: defaultElo, ranking_pos: 1, is_global_ranked: true, last_match_date: null, matches_played: 0, total_wins: 0, total_losses: 0, trend: '-', level: 'novice' });
-      }
-
-      const winner = userStates.get(winnerId)!;
-      const loser = userStates.get(loserId)!;
-
-      // Store before values. Global ranking includes every non-blocked player,
-      // including inactive and unrated players.
-      const getGlobalRankingPosition = (playerId: string, playerElo: number): number =>
-        1 + Array.from(userStates.entries()).filter(([otherId, other]) =>
-          other.is_global_ranked && otherId !== playerId &&
-          (other.elo_rating > playerElo || (other.elo_rating === playerElo && otherId < playerId))
-        ).length;
-
-      const winnerEloBefore = winner.elo_rating;
-      const loserEloBefore = loser.elo_rating;
-      const winnerRankingPosBefore = getGlobalRankingPosition(winnerId, winnerEloBefore);
-      const loserRankingPosBefore = getGlobalRankingPosition(loserId, loserEloBefore);
-      const winnerMatchesBeforeCalc = winner.matches_played;
-      const loserMatchesBeforeCalc = loser.matches_played;
-
-      // Calculate new ratings
-      const winnerNewRating = calculateNewRating(winner.elo_rating, loser.elo_rating, 'win', winner.matches_played);
-      const loserNewRating = calculateNewRating(loser.elo_rating, winner.elo_rating, 'loss', loser.matches_played);
-      
-      // Get K-factor info for debugging (from elo.ts)
-      const winnerKInfo = getKFactorWithReason(winner.elo_rating, winner.matches_played);
-      const loserKInfo = getKFactorWithReason(loser.elo_rating, loser.matches_played);
-
-      // Calculate levels based on ELO BEFORE and AFTER (not from previous state)
-      const winnerLevelBefore = getUserLevel(winnerEloBefore);
-      const loserLevelBefore = getUserLevel(loserEloBefore);
-      const winnerLevelAfter = getUserLevel(winnerNewRating);
-      const loserLevelAfter = getUserLevel(loserNewRating);
-
-      // Update stats
-      winner.elo_rating = winnerNewRating;
-      loser.elo_rating = loserNewRating;
-      const matchDate = new Date(matchRow.created_at);
-      winner.last_match_date = matchDate;
-      loser.last_match_date = matchDate;
-      winner.matches_played++;
-      loser.matches_played++;
-      winner.total_wins++;
-      loser.total_losses++;
-      winner.trend = calculateTrend(winner.trend, true);
-      loser.trend = calculateTrend(loser.trend, false);
-      
-      // Update levels in state for next iteration
-      winner.level = winnerLevelAfter;
-      loser.level = loserLevelAfter;
-
-      // Calculate global ranking positions after both players have received
-      // their new ratings. Equal ELO values use UUID order as a stable tie-break.
-      const winnerRankingPosAfter = getGlobalRankingPosition(winnerId, winnerNewRating);
-      const loserRankingPosAfter = getGlobalRankingPosition(loserId, loserNewRating);
-
-      // Calculate ranking changes
-      const winnerRankingChange = winnerRankingPosBefore - winnerRankingPosAfter;
-      const loserRankingChange = loserRankingPosBefore - loserRankingPosAfter;
-
-      // Update ranking positions in state
-      winner.ranking_pos = winnerRankingPosAfter;
-      loser.ranking_pos = loserRankingPosAfter;
-
-      // Calculate ELO changes for both players
-      const winnerEloChange = winnerNewRating - winnerEloBefore;
-      const loserEloChange = loserNewRating - loserEloBefore;
-
-      // DEBUG: Log sample matches (first 3, last 3, and every 10th)
-      if (isDebugEnabled && (matchProcessedCount < 3 || matchProcessedCount % 10 === 0 || matchProcessedCount === allNonCancelledMatches.rows.length - 1)) {
-        const debugLog = `
-🎮 MATCH #${matchProcessedCount + 1}/${allNonCancelledMatches.rows.length} (${matchRow.created_at})
-   WINNER: ${winnerId.substring(0, 8)}...
-     - ELO: ${winnerEloBefore} | Matches played: ${winnerMatchesBeforeCalc}
-     - K-factor: ${winnerKInfo.k} (${winnerKInfo.reason})
-     - New ELO: ${winnerNewRating} | Change: ${winnerEloChange > 0 ? '+' : ''}${winnerEloChange}
-     - Level: ${winnerLevelBefore} → ${winnerLevelAfter}
-   
-   LOSER: ${loserId.substring(0, 8)}...
-     - ELO: ${loserEloBefore} | Matches played: ${loserMatchesBeforeCalc}
-     - K-factor: ${loserKInfo.k} (${loserKInfo.reason})
-     - New ELO: ${loserNewRating} | Change: ${loserEloChange > 0 ? '+' : ''}${loserEloChange}
-     - Level: ${loserLevelBefore} → ${loserLevelAfter}
-   
-   ✅ Winner +${winnerEloChange}, Loser ${loserEloChange} (balance: ${winnerEloChange + loserEloChange})`;
-        debugSampleLogs.push(debugLog);
-      }
-
-      // Update the match record with correct before/after ELO values and levels
-      await query(
-        `UPDATE matches 
-         SET winner_elo_before = ?, winner_elo_after = ?, 
-             loser_elo_before = ?, loser_elo_after = ?,
-             winner_level_before = ?, winner_level_after = ?,
-             loser_level_before = ?, loser_level_after = ?,
-             winner_ranking_pos = ?, winner_ranking_change = ?,
-             loser_ranking_pos = ?, loser_ranking_change = ?,
-             elo_change = ?
-         WHERE id = ?`,
-        [winnerEloBefore, winnerNewRating, loserEloBefore, loserNewRating, winnerLevelBefore, winnerLevelAfter, loserLevelBefore, loserLevelAfter, winnerRankingPosAfter, winnerRankingChange, loserRankingPosAfter, loserRankingChange, winnerEloChange, matchRow.id]
-      );
-
-      matchProcessedCount++;
-      if (onProgress && (matchProcessedCount === allNonCancelledMatches.rows.length || matchProcessedCount % 10 === 0)) {
-        await onProgress({ phase: 'replaying_matches', current: matchProcessedCount, total: allNonCancelledMatches.rows.length });
-      }
-    }
-
-    const finalMsg = `✅ Replayed ${allNonCancelledMatches.rows.length} matches with FIDE ELO recalculation`;
-    if (isDebugEnabled) {
-      logs.push(finalMsg);
-      console.log(finalMsg);
-      logs.push('📊 DEBUG SAMPLE LOGS (first 3, every 10th, and last):');
-      debugSampleLogs.forEach(log => {
-        logs.push(log);
-        console.log(log);
-      });
-    }
-
-    // STEP 5: Update all users in the database with their recalculated stats
-    let usersUpdatedCount = 0;
-    if (onProgress) await onProgress({ phase: 'updating_users', current: 0, total: userStates.size });
-    for (const [userId, stats] of userStates.entries()) {
-      // Rebuild rated status from replayed history instead of preserving a
-      // stale flag. This keeps cancellations and imported test data consistent
-      // with the documented eligibility rule.
-      const isRated = shouldPlayerBeRated(stats.matches_played, stats.elo_rating);
-      
-      await query(
-        `UPDATE users_extension 
-         SET elo_rating = ?, 
-             matches_played = ?,
-             total_wins = ?,
-             total_losses = ?,
-             trend = ?,
-             level = ?,
-             is_rated = ?,
-             is_active = ?,
-             last_match_date = ?,
-             updated_at = CURRENT_TIMESTAMP 
-         WHERE id = ?`,
-        [
-          stats.elo_rating,
-          stats.matches_played,
-          stats.total_wins,
-          stats.total_losses,
-          stats.trend,
-          stats.level,
-          isRated,
-          stats.last_match_date && stats.last_match_date >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) ? 1 : 0,
-          stats.last_match_date,
-          userId,
-        ]
-      );
-      usersUpdatedCount++;
-      if (onProgress && (usersUpdatedCount === userStates.size || usersUpdatedCount % 10 === 0)) {
-        await onProgress({ phase: 'updating_users', current: usersUpdatedCount, total: userStates.size });
-      }
-    }
-
-    // STEP 6: Re-enable both triggers
-    // Note: With TypeScript services, triggers are replaced by direct service calls
-    try {
-      // Drop old triggers if they exist
-      await query('DROP TRIGGER IF EXISTS trg_update_player_match_stats');
-      await query('DROP TRIGGER IF EXISTS trg_update_faction_map_stats');
-      const msg = '✓ Triggers cleaned up (replaced by TypeScript services)';
-      if (isDebugEnabled) {
-        logs.push(msg);
-        console.log(msg);
-      }
-    } catch (error) {
-      if (isDebugEnabled) console.error('Warning: Failed to drop triggers:', error);
-    }
-
-    // STEP 7: Recalculate derived statistics in separately observable phases.
-    try {
-      const playerResult = await recalculatePlayerMatchStatistics(async (current, total) => {
-        if (onProgress) await onProgress({ phase: 'recalculating_player_statistics', current, total });
-      });
-      const msg = `✓ Recalculated ${playerResult.records_updated} player match statistics`;
-      logs.push(msg);
-      if (isDebugEnabled) console.log(msg);
-    } catch (error) {
-      recalculationHadErrors = true;
-      const msg = `✗ Error recalculating player match statistics: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      logs.push(msg);
-      console.error(msg);
-    }
-
-    try {
-      const factionResult = await recalculateFactionMapStatistics(async (current, total) => {
-        if (onProgress) await onProgress({ phase: 'recalculating_faction_statistics', current, total });
-      });
-      const msg = `✓ Recalculated ${factionResult.records_updated} faction/map statistics`;
-      logs.push(msg);
-      if (isDebugEnabled) console.log(msg);
-
-      // Manage snapshots
-      const snapshotResult = await query('SELECT COUNT(*) FROM faction_map_statistics_history');
-      const snapshotMsg = '🟢 Snapshots managed';
-      if (isDebugEnabled) {
-        logs.push(snapshotMsg);
-        console.log(snapshotMsg);
-      }
-    } catch (error) {
-      recalculationHadErrors = true;
-      const msg = `✗ Error recalculating faction/map statistics: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      logs.push(msg);
-      console.error(msg);
-    }
-
-    return { 
-      success: !recalculationHadErrors,
-      logs,
-      matchesProcessed: matchProcessedCount,
-      usersUpdated: usersUpdatedCount
-    };
-  } catch (error) {
-    console.error('Error in performGlobalStatsRecalculation:', error);
-    if (isDebugEnabled) {
-      logs.push(`❌ ERROR: ${error instanceof Error ? error.message : String(error)}`);
-    }
-    return { 
-      success: false, 
-      logs,
-      matchesProcessed: 0,
-      usersUpdated: 0
-    };
-  }
-}
-
-/**
- * Executor for queued global recalculations: replay every match, then refresh
- * the player of the month from the rewritten statistics.
- *
- * The player-of-month step is optional (maintainer decision, 2026-10-04): the
- * main replay has already rewritten ELO and statistics correctly, so its
- * failure must not turn the job into `failed`. It is reported instead as the
- * `player_of_month_failed` warning, which the job service persists in
- * `result_json` and in the outcome audit event. Recovery is the admin
- * "recalculate player of the month" action or the monthly cron. The step is
- * skipped when the main replay failed, because it would read inconsistent data.
- */
-async function performQueuedGlobalStatsRecalculation(
-  onProgress: (progress: GlobalStatsRecalculationProgress) => Promise<void>
-): Promise<RecalculationResult> {
-  const recalcResult: RecalculationResult = await performGlobalStatsRecalculation(onProgress);
-  if (!recalcResult.success) return recalcResult;
-
-  try {
-    await onProgress({ phase: 'calculating_player_of_month', current: 0, total: 1 });
-    const { calculatePlayerOfMonth } = await import('../jobs/playerOfMonthJob.js');
-    await calculatePlayerOfMonth();
-    await onProgress({ phase: 'calculating_player_of_month', current: 1, total: 1 });
-    return recalcResult;
-  } catch (error) {
-    console.error('⚠️  Warning: Failed to recalculate player of month after global recalculation:', error);
-    return { ...recalcResult, warnings: [...(recalcResult.warnings ?? []), 'player_of_month_failed'] };
-  }
-}
 
 // Confirm/dispute match - MUST be BEFORE generic /:id routes
 router.post('/:id/confirm', authMiddleware, globalRecalculationMiddleware, async (req: AuthRequest, res: Response) => {
@@ -752,238 +348,65 @@ router.post('/admin/:id/dispute', moderatorOrAdminMiddleware, async (req: AuthRe
     }
 
     if (action === 'validate') {
-      // Admin validates the dispute - the match is invalid and must be cancelled.
-      // Targeted cascade: only reprocesses matches involving the directly affected players
-      // and any players who played against them (or their transitive chain) afterwards.
-
-      console.log(`Starting targeted cascade recalculation for cancelled match ${id} (winner: ${match.winner_id}, loser: ${match.loser_id})`);
-
-      // STEP 1: Cancel the disputed match
-      await query(
-        `UPDATE matches SET status = 'cancelled', admin_reviewed = ?, admin_reviewed_at = NOW(), admin_reviewed_by = ? WHERE id = ?`,
-        [true, req.userId, id]
-      );
-
-      const directWinnerId: string = match.winner_id;
-      const directLoserId: string = match.loser_id;
-      const cancelledAt = new Date(match.created_at);
-
-      // ELO is applied for any match that is not cancelled/disputed/rejected.
-      // 'reported', 'unconfirmed', and 'confirmed' all have ELO applied.
-      // ELO is applied to all matches except cancelled ones.
-      const ELO_STATUS_FILTER = `status != 'cancelled'`;
-
-      // Counts ELO-applied matches for a player before a given date, excluding one match id
-      const countMatchesBefore = async (userId: string, beforeDate: Date, excludeMatchId: string): Promise<number> => {
-        const result = await query(
-          `SELECT COUNT(*) as cnt FROM matches
-           WHERE (winner_id = ? OR loser_id = ?) AND ${ELO_STATUS_FILTER}
-             AND created_at < ? AND id != ?`,
-          [userId, userId, beforeDate, excludeMatchId]
-        );
-        return Number(result.rows[0]?.cnt ?? 0);
+      // The dispute is upheld: the match is invalid and is cancelled (never
+      // deleted). Cancelling changes the rating history of both players and,
+      // transitively, of everyone who played them afterwards, so the ratings
+      // are rebuilt by the global recalculation (full-replay principle)
+      // instead of a partial cascade.
+      const previousReview = {
+        status: match.status,
+        admin_reviewed: match.admin_reviewed,
+        admin_reviewed_at: match.admin_reviewed_at,
+        admin_reviewed_by: match.admin_reviewed_by,
       };
-
-      // STEP 2: Initialize affected player set with ELO restored to their pre-cancelled-match values
-      interface PlayerState { elo: number; matches_played: number; nickname: string; }
-      const affectedPlayers = new Map<string, PlayerState>();
-
-      // Resolve nicknames for logging
-      const nicknameCache = new Map<string, string>();
-      const getNickname = async (userId: string): Promise<string> => {
-        if (nicknameCache.has(userId)) return nicknameCache.get(userId)!;
-        const r = await query(`SELECT nickname FROM users_extension WHERE id = ?`, [userId]);
-        const nick = r.rows[0]?.nickname ?? userId.substring(0, 8);
-        nicknameCache.set(userId, nick);
-        return nick;
-      };
-
-      const winnerNick = await getNickname(directWinnerId);
-      const loserNick  = await getNickname(directLoserId);
-      const winnerMatchesBefore = await countMatchesBefore(directWinnerId, cancelledAt, id);
-      const loserMatchesBefore  = await countMatchesBefore(directLoserId,  cancelledAt, id);
-
-      affectedPlayers.set(directWinnerId, {
-        elo: Number(match.winner_elo_before) || 1400,
-        matches_played: winnerMatchesBefore,
-        nickname: winnerNick
-      });
-      affectedPlayers.set(directLoserId, {
-        elo: Number(match.loser_elo_before) || 1400,
-        matches_played: loserMatchesBefore,
-        nickname: loserNick
-      });
-
-      console.log(`🎯 [CASCADE] Cancelled match: ${winnerNick} (ELO ${match.winner_elo_before}→restored) vs ${loserNick} (ELO ${match.loser_elo_before}→restored)`);
-      console.log(`🎯 [CASCADE] Initial affected players: ${winnerNick} (ELO=${match.winner_elo_before}, matches_before=${winnerMatchesBefore}), ${loserNick} (ELO=${match.loser_elo_before}, matches_before=${loserMatchesBefore})`);
-
-      // STEP 3: Load all ELO-applied matches that happened AFTER the cancelled one
-      const subsequentMatches = await query(
-        `SELECT id, winner_id, loser_id, winner_elo_before, loser_elo_before, created_at
-         FROM matches
-         WHERE ${ELO_STATUS_FILTER} AND created_at > ?
-         ORDER BY created_at ASC, id ASC`,
-        [cancelledAt]
+      const cancelled = await query(
+        `UPDATE matches
+         SET status = 'cancelled', admin_reviewed = true, admin_reviewed_at = CURRENT_TIMESTAMP,
+             admin_reviewed_by = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND status = 'disputed'`,
+        [req.userId, id]
       );
+      if (cancelled.rowCount === 0) {
+        return res.status(409).json({ error: 'Match is no longer disputed' });
+      }
 
-      console.log(`🎯 [CASCADE] Found ${subsequentMatches.rows.length} subsequent ELO-applied matches to scan`);
-
-      // STEP 4: Cascade forward — skip matches where neither player is affected
-      let matchesRecalculated = 0;
-      for (const m of subsequentMatches.rows) {
-        const mWinnerId: string = m.winner_id;
-        const mLoserId:  string = m.loser_id;
-        const winnerAffected = affectedPlayers.has(mWinnerId);
-        const loserAffected  = affectedPlayers.has(mLoserId);
-
-        if (!winnerAffected && !loserAffected) {
-          if (process.env.BACKEND_DEBUG_LOGS === 'true') {
-            const wn = await getNickname(mWinnerId);
-            const ln = await getNickname(mLoserId);
-            console.log(`   ⏭️  [CASCADE] Skip match ${m.id.substring(0,8)} (${wn} vs ${ln}) — neither player affected`);
-          }
-          continue;
-        }
-
-        const mCreatedAt = new Date(m.created_at);
-        const mWinnerNick = await getNickname(mWinnerId);
-        const mLoserNick  = await getNickname(mLoserId);
-
-        // Add newcomers using their elo_before from the (still-original) match record
-        if (!winnerAffected) {
-          const mBefore = await countMatchesBefore(mWinnerId, mCreatedAt, m.id);
-          affectedPlayers.set(mWinnerId, { elo: Number(m.winner_elo_before) || 1400, matches_played: mBefore, nickname: mWinnerNick });
-          console.log(`   ➕ [CASCADE] Added ${mWinnerNick} to affected set (ELO=${m.winner_elo_before}, matches_before=${mBefore})`);
-        }
-        if (!loserAffected) {
-          const mBefore = await countMatchesBefore(mLoserId, mCreatedAt, m.id);
-          affectedPlayers.set(mLoserId, { elo: Number(m.loser_elo_before) || 1400, matches_played: mBefore, nickname: mLoserNick });
-          console.log(`   ➕ [CASCADE] Added ${mLoserNick} to affected set (ELO=${m.loser_elo_before}, matches_before=${mBefore})`);
-        }
-
-        const winnerState = affectedPlayers.get(mWinnerId)!;
-        const loserState  = affectedPlayers.get(mLoserId)!;
-
-        const winnerEloBefore = winnerState.elo;
-        const loserEloBefore  = loserState.elo;
-
-        const winnerNewElo = calculateNewRating(winnerEloBefore, loserEloBefore, 'win',  winnerState.matches_played);
-        const loserNewElo  = calculateNewRating(loserEloBefore,  winnerEloBefore, 'loss', loserState.matches_played);
-
-        const eloChange = winnerNewElo - winnerEloBefore;
-
-        console.log(`   🎮 [CASCADE] Match ${m.id.substring(0,8)}: ${mWinnerNick} ${winnerEloBefore}→${winnerNewElo} (+${eloChange}) | ${mLoserNick} ${loserEloBefore}→${loserNewElo} (${loserNewElo - loserEloBefore})`);
-
+      let recalcJobId: string;
+      try {
+        recalcJobId = await enqueueGlobalStatsRecalculation({
+          requestedBy: req.userId ?? null,
+          reason: 'MATCH_DISPUTE_VALIDATED',
+          execute: performQueuedGlobalStatsRecalculation,
+        });
+      } catch (error: any) {
+        // Do not leave a cancelled match without a scheduled recalculation.
         await query(
           `UPDATE matches
-           SET winner_elo_before = ?, winner_elo_after = ?,
-               loser_elo_before  = ?, loser_elo_after  = ?,
-               winner_level_before = ?, winner_level_after = ?,
-               loser_level_before  = ?, loser_level_after  = ?,
-               elo_change = ?
+           SET status = ?, admin_reviewed = ?, admin_reviewed_at = ?, admin_reviewed_by = ?,
+               updated_at = CURRENT_TIMESTAMP
            WHERE id = ?`,
-          [
-            winnerEloBefore, winnerNewElo,
-            loserEloBefore,  loserNewElo,
-            getUserLevel(winnerEloBefore), getUserLevel(winnerNewElo),
-            getUserLevel(loserEloBefore),  getUserLevel(loserNewElo),
-            eloChange, m.id
-          ]
+          [previousReview.status, previousReview.admin_reviewed, previousReview.admin_reviewed_at,
+            previousReview.admin_reviewed_by, id]
         );
-
-        winnerState.elo = winnerNewElo;
-        winnerState.matches_played++;
-        loserState.elo  = loserNewElo;
-        loserState.matches_played++;
-
-        matchesRecalculated++;
+        const inProgress = error.name === 'GlobalStatsRecalculationInProgressError';
+        if (!inProgress) console.error('Could not schedule statistics recalculation:', error);
+        return res.status(inProgress ? 409 : 500).json({
+          error: inProgress ? error.message : 'Could not schedule statistics recalculation',
+          jobId: error.jobId,
+        });
       }
 
-      console.log(`🎯 [CASCADE] Cascade complete. Recalculated ${matchesRecalculated} matches. Affected players (${affectedPlayers.size}):`);
-      for (const [uid, s] of affectedPlayers.entries()) {
-        console.log(`   👤 ${s.nickname} → final ELO=${s.elo}`);
-      }
-
-      // STEP 5: Final stats update for all affected players
-      for (const [userId, state] of affectedPlayers.entries()) {
-        const winsResult = await query(
-          `SELECT COUNT(*) as cnt FROM matches WHERE winner_id = ? AND ${ELO_STATUS_FILTER}`,
-          [userId]
-        );
-        const lossesResult = await query(
-          `SELECT COUNT(*) as cnt FROM matches WHERE loser_id = ? AND ${ELO_STATUS_FILTER}`,
-          [userId]
-        );
-        // Fetch last 10 matches in chronological order (oldest→newest) to build trend
-        const trendResult = await query(
-          `SELECT winner_id FROM (
-             SELECT winner_id, created_at FROM matches
-             WHERE (winner_id = ? OR loser_id = ?) AND ${ELO_STATUS_FILTER}
-             ORDER BY created_at DESC LIMIT 10
-           ) sub ORDER BY created_at ASC`,
-          [userId, userId]
-        );
-
-        const totalWins   = Number(winsResult.rows[0]?.cnt   ?? 0);
-        const totalLosses = Number(lossesResult.rows[0]?.cnt ?? 0);
-        const matchesPlayed = totalWins + totalLosses;
-
-        let trend = '-';
-        for (const row of trendResult.rows) {
-          trend = calculateTrend(trend, row.winner_id === userId);
-        }
-
-        const isRated = shouldPlayerBeRated(matchesPlayed, state.elo);
-        const level   = getUserLevel(state.elo);
-
-        console.log(`   💾 [CASCADE] Updating ${state.nickname}: ELO=${state.elo}, W=${totalWins}, L=${totalLosses}, trend=${trend}, level=${level}, rated=${isRated}`);
-
-        await query(
-          `UPDATE users_extension
-           SET elo_rating = ?, matches_played = ?, total_wins = ?, total_losses = ?,
-               trend = ?, level = ?, is_rated = ?, updated_at = NOW()
-           WHERE id = ?`,
-          [state.elo, matchesPlayed, totalWins, totalLosses, trend, level, isRated, userId]
-        );
-      }
-
-      // STEP 6: Recalculate faction/map balance statistics
-      try {
-        const factionResult = await recalculateFactionMapStatistics();
-        console.log(`✓ Recalculated ${factionResult.records_updated} faction/map statistics`);
-      } catch (error: any) {
-        console.error('✗ Error with faction/map statistics recalculation:', error);
-      }
-
-      // STEP 7: Recalculate player of month if match is from a previous calendar month
-      try {
-        const now = new Date();
-        const matchDate = new Date(match.created_at);
-        const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        if (matchDate < currentMonthStart) {
-          const { calculatePlayerOfMonth } = await import('../jobs/playerOfMonthJob.js');
-          console.log('🎯 Recalculating player of month after dispute validation...');
-          await calculatePlayerOfMonth();
-          console.log('✅ Player of month recalculated after dispute validation');
-        }
-      } catch (error: any) {
-        console.error('⚠️  Warning: Failed to recalculate player of month after dispute:', error.message);
-      }
-
-      console.log(`Match ${id} dispute validated by admin ${req.userId}: Cancelled, cascade recalculated ${matchesRecalculated} subsequent matches, updated ${affectedPlayers.size} affected players`);
       await logAuditEvent({
         event_type: 'ADMIN_ACTION',
         user_id: req.userId,
         username: req.username,
         ip_address: getUserIP(req),
         user_agent: getUserAgent(req),
-        details: { action: 'MATCH_DISPUTE_VALIDATED', match_id: id, matches_recalculated: matchesRecalculated, affected_players: affectedPlayers.size },
+        details: { action: 'MATCH_DISPUTE_VALIDATED', match_id: id },
       });
-      res.json({
-        message: 'Dispute validated. Match cancelled, ELO recalculated for all affected players, and reopened for re-reporting.',
-        reopened: false,
-        affectedPlayers: affectedPlayers.size,
-        matchesRecalculated
+      return res.json({
+        message: 'Dispute validated. The match was cancelled and global statistics recalculation was queued.',
+        recalculationJobId: recalcJobId,
+        recalculationStatus: 'queued',
       });
     } else if (action === 'reject') {
       // Reject dispute - the dispute is not valid, match was correct
@@ -1043,61 +466,6 @@ router.post('/:matchId/replay/download-count', async (req: AuthRequest, res) => 
     res.status(500).json({ error: 'Failed to increment download count' });
   }
 });
-
-// Helper function to extract map, faction, and replay URL data from replay
-function extractMatchDataFromReplay(parseSummary: any, replayUrl: string, winnerName: string, loserName: string): {
-  map: string | null;
-  winnerFaction: string | null;
-  loserFaction: string | null;
-  replayFilePathForDb: string | null;
-} {
-  try {
-    const forumMap = parseSummary?.forumMap || null;
-    let winnerFaction: string | null = null;
-    let loserFaction: string | null = null;
-
-    const detectedTeams = parseSummary?.detectedTeams;
-    
-    // If detectedTeams is available (team tournament), get factions from there
-    if (detectedTeams && typeof detectedTeams === 'object') {
-      // Find which team the winner belongs to
-      let winnerTeam: any = null;
-      let loserTeam: any = null;
-      
-      // Check each team to see if winner/loser player is in their members
-      Object.values(detectedTeams).forEach((team: any) => {
-        if (team.members && Array.isArray(team.members) && team.members.includes(winnerName)) {
-          winnerTeam = team;
-        }
-        if (team.members && Array.isArray(team.members) && team.members.includes(loserName)) {
-          loserTeam = team;
-        }
-      });
-      
-      if (winnerTeam && winnerTeam.factions && Array.isArray(winnerTeam.factions)) {
-        winnerFaction = winnerTeam.factions.join(', ');
-      }
-      
-      if (loserTeam && loserTeam.factions && Array.isArray(loserTeam.factions)) {
-        loserFaction = loserTeam.factions.join(', ');
-      }
-    } else {
-      // Single player tournament or non-team mode
-      winnerFaction = parseSummary?.replayVictory?.winner_faction || null;
-      loserFaction = parseSummary?.replayVictory?.loser_faction || null;
-    }
-
-    return {
-      map: forumMap,
-      winnerFaction,
-      loserFaction,
-      replayFilePathForDb: replayUrl || null,
-    };
-  } catch (error) {
-    console.error('❌ Error extracting match data from replay:', error);
-    return { map: null, winnerFaction: null, loserFaction: null, replayFilePathForDb: null };
-  }
-}
 
 // Discard a pending confidence-one replay before it is confirmed. Confirmation
 // itself goes through POST /replays/:replayId/confirm-winner (the former
@@ -1343,7 +711,6 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
     // but only played games with a replay URL belong in match histories.
     let whereConditions: string[] = ["TRIM(COALESCE(m.replay_file_path, '')) <> ''"];
     let params: any[] = [];
-    let paramCount = 1;
 
     if (playerFilter) {
       whereConditions.push(`(w.nickname LIKE ? OR l.nickname LIKE ?)`);
@@ -1382,7 +749,6 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
                         ${whereClause}`;
     const countResult = await query(countQuery, params);
     const total = parseInt(countResult.rows[0].total);
-    const totalPages = Math.ceil(total / limit);
 
     // Get matches for current page with filters
     params.push(limit);
@@ -1629,4 +995,3 @@ router.post('/admin-discard-replay', authMiddleware, globalRecalculationMiddlewa
 });
 
 export default router;
-export { performGlobalStatsRecalculation, performQueuedGlobalStatsRecalculation };

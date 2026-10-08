@@ -38,7 +38,7 @@ Authorization is enforced by the backend. Hidden frontend controls are a conveni
 
 There are four modes: ranked (1v1), tournament ranked (1v1), tournament unranked (1v1), and tournament team games (2v2, unranked). Ranked and tournament-ranked games create a row in `matches` and update both players' ELO; unranked tournament and team games record only the tournament result.
 
-`matches` is the source of truth for ranked history. The global recalculation replays every non-cancelled match in order and rewrites ratings, levels, ranking positions, and derived statistics. This full replay is a design principle: it keeps the rewritten history faithful and allows the rating model to change (for example to Glicko-2) by replaying with a new formula. Player levels are stored as English identifiers and translated by the frontend.
+`matches` is the source of truth for ranked history. The global recalculation replays every non-cancelled match in order and rewrites ratings, levels, ranking positions, and derived statistics. This full replay is a design principle: it keeps the rewritten history faithful and allows the rating model to change (for example to Glicko-2) by replaying with a new formula. Corrections that change past results (a validated or inverted dispute) queue this recalculation instead of patching ratings locally; it always replays everything but writes only the rows that change, in one transaction. Player levels are stored as English identifiers and translated by the frontend.
 
 ## Replay pipeline
 

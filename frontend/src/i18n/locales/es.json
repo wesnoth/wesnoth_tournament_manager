@@ -255,6 +255,7 @@
   "confirm_award_dispute_win": "¿Invertir el resultado para que gane {{nickname}}? Se recalcularán todo el ELO, el ranking y las estadísticas.",
   "dispute_award_success": "Disputa resuelta y victoria otorgada correctamente",
   "dispute_award_queued": "Disputa resuelta. La victoria fue otorgada y el recálculo de estadísticas quedó en cola.",
+  "dispute_validate_queued": "Disputa validada. La partida se anuló y el recálculo de estadísticas quedó en cola.",
   "error_name_description_required": "Nombre, descripción y tipo de torneo son obligatorios",
   "error_recalculating_snapshots": "Error al recalcular snapshots",
   "error_updating_balance_event": "Error actualizando evento de balance",

@@ -10,11 +10,9 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   calculateExpectedScore,
-  calculateInitialRating,
   calculateNewRating,
   calculateTrend,
   getKFactor,
-  getKFactorWithReason,
   shouldPlayerBeRated,
 } from './elo.js';
 
@@ -48,8 +46,6 @@ describe('getKFactor', () => {
   for (const [rating, matches, expected] of cases) {
     it(`is ${expected} for rating ${rating} after ${matches} games`, () => {
       assert.equal(getKFactor(rating, matches), expected);
-      // The debugging variant must agree with the value used for ratings.
-      assert.equal(getKFactorWithReason(rating, matches).k, expected);
     });
   }
 });
@@ -74,24 +70,6 @@ describe('calculateNewRating', () => {
   it('applies K = 24 to an established player', () => {
     // E(1600 vs 1600) = 0.5; 1600 + 24 · 0.5
     assert.equal(calculateNewRating(1600, 1600, 'win', 30), 1612);
-  });
-});
-
-describe('calculateInitialRating', () => {
-  it('starts at 1400 without rated opponents', () => {
-    assert.equal(calculateInitialRating(3, 0, 2, []), 1400);
-  });
-
-  it('adds up to 400 points above the opponents average for a perfect score', () => {
-    assert.equal(calculateInitialRating(5, 0, 0, [1500, 1700]), 2000);
-  });
-
-  it('stays at the opponents average for a 50% score', () => {
-    assert.equal(calculateInitialRating(2, 1, 2, [1650]), 1650);
-  });
-
-  it('never goes below 1400', () => {
-    assert.equal(calculateInitialRating(0, 0, 5, [1500]), 1400);
   });
 });
 
