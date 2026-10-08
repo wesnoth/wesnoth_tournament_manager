@@ -6,7 +6,8 @@
  */
 
 import { pool } from '../config/database.js';
-import { calculateNewRating, calculateTrend, getPlayerRankingPosition } from '../utils/elo.js';
+import { calculateTrend, getPlayerRankingPosition } from '../utils/elo.js';
+import { activeRatingModel } from './rating/ratingModel.js';
 import { getUserLevel } from '../utils/auth.js';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -57,6 +58,33 @@ export interface SqlExecutor {
 }
 
 /**
+ * Global position of `player` at its rating after a game, with the opponent
+ * also at its new rating.
+ *
+ * Same rule as `getPlayerRankingPosition` and the global recalculation:
+ * 1 + non-blocked players with a higher rating, or an equal rating and a
+ * lower id. Both players of the game are excluded from the stored-row count
+ * (their rows still hold the ratings before the game) and the opponent is
+ * compared with its new rating instead.
+ */
+export async function getRankingPositionAfterGame(
+  txQuery: (sql: string, values?: any[]) => Promise<{ rows: any[] }>,
+  player: { id: string; rating: number },
+  opponent: { id: string; rating: number; isBlocked: boolean }
+): Promise<number> {
+  const result = await txQuery(
+    `SELECT COUNT(*) AS higher_count
+     FROM users_extension
+     WHERE is_blocked = false AND id NOT IN (?, ?)
+       AND (elo_rating > ? OR (elo_rating = ? AND id < ?))`,
+    [player.id, opponent.id, player.rating, player.rating, player.id]
+  );
+  const opponentAhead = !opponent.isBlocked
+    && (opponent.rating > player.rating || (opponent.rating === player.rating && opponent.id < player.id));
+  return Number(result.rows[0]?.higher_count ?? 0) + (opponentAhead ? 1 : 0) + 1;
+}
+
+/**
  * Create a global match record and update the two players' ratings inside
  * the caller's transaction (audit finding 4).
  *
@@ -75,7 +103,7 @@ export interface SqlExecutor {
 export async function createMatchInTransaction(connection: SqlExecutor, input: CreateMatchInput): Promise<string> {
   const [first, second] = [input.winnerId, input.loserId].sort();
   const [lockedRows] = await connection.execute(
-    `SELECT id, elo_rating, level, matches_played, is_rated, trend
+    `SELECT id, elo_rating, level, matches_played, is_rated, is_blocked, trend
      FROM users_extension WHERE id IN (?, ?) ORDER BY id FOR UPDATE`,
     [first, second]
   );
@@ -92,10 +120,23 @@ export async function createMatchInTransaction(connection: SqlExecutor, input: C
   };
   const winnerPosBefore = await getPlayerRankingPosition(txQuery, input.winnerId, winner.elo_rating);
   const loserPosBefore = await getPlayerRankingPosition(txQuery, input.loserId, loser.elo_rating);
-  const winnerNewRating = calculateNewRating(winner.elo_rating, loser.elo_rating, 'win', winner.matches_played);
-  const loserNewRating = calculateNewRating(loser.elo_rating, winner.elo_rating, 'loss', loser.matches_played);
-  const winnerPosAfter = await getPlayerRankingPosition(txQuery, input.winnerId, winnerNewRating);
-  const loserPosAfter = await getPlayerRankingPosition(txQuery, input.loserId, loserNewRating);
+  const next = activeRatingModel.applyResult(
+    { rating: winner.elo_rating, matchesPlayed: winner.matches_played },
+    { rating: loser.elo_rating, matchesPlayed: loser.matches_played },
+    { playedAt: new Date() }
+  );
+  const winnerNewRating = activeRatingModel.displayRating(next.winner);
+  const loserNewRating = activeRatingModel.displayRating(next.loser);
+  // "After" positions see both players at their new rating, as the global
+  // recalculation does; the stored rows still hold the old ratings here.
+  const winnerPosAfter = await getRankingPositionAfterGame(
+    txQuery, { id: winner.id, rating: winnerNewRating },
+    { id: loser.id, rating: loserNewRating, isBlocked: Boolean(loser.is_blocked) }
+  );
+  const loserPosAfter = await getRankingPositionAfterGame(
+    txQuery, { id: loser.id, rating: loserNewRating },
+    { id: winner.id, rating: winnerNewRating, isBlocked: Boolean(winner.is_blocked) }
+  );
   const winnerRankingChange = winnerPosBefore - winnerPosAfter;
   const loserRankingChange = loserPosBefore - loserPosAfter;
   const winnerTrend = calculateTrend(winner.trend || '-', true);
