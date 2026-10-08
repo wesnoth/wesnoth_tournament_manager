@@ -29,8 +29,14 @@ const pool: Pool = mysql.createPool({
   console.error('Unexpected error on idle client', err);
 });
 
-interface QueryResult {
-  rows: any[];
+/**
+ * Result of `query`. `T` is the row shape of a SELECT; it defaults to `any`
+ * so untyped call sites keep compiling. The type is a promise made by the
+ * caller about its own column list, not a runtime check: name it after the
+ * selected columns (see `types/dbRows.ts`), not after the whole table.
+ */
+interface QueryResult<T = any> {
+  rows: T[];
   rowCount?: number;
 }
 
@@ -48,7 +54,7 @@ interface QueryResult {
  * `rows` holds the result set of a SELECT (empty for writes); `rowCount` is
  * the affected rows of a write, or the number of rows returned.
  */
-const query = async (sql: string, values?: any[]): Promise<QueryResult> => {
+const query = async <T = any>(sql: string, values?: any[]): Promise<QueryResult<T>> => {
   const [results] = await pool.execute<any>(sql, values || []);
   if (Array.isArray(results)) return { rows: results, rowCount: results.length };
   return { rows: [], rowCount: (results as ResultSetHeader).affectedRows || 0 };
