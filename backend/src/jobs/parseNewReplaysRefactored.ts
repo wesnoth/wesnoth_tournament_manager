@@ -30,6 +30,8 @@ import * as path from 'path';
 import { parseTournamentCode } from '../tournament-engine/forumTopic.js';
 import { phaseGameDisplayMetadata } from '../tournament-engine/competitionProgression.js';
 import { shouldPauseReplayProcessing } from '../services/systemPauseService.js';
+import { resolveWinnerEntryId } from '../services/tournamentWinnerEntry.js';
+import type { TournamentGameEntriesRow } from '../types/dbRows.js';
 
 /** Resolve an active tournament by explicit forum code first, then by its exact name. */
 async function findTournamentForGameName(gameName: string, modes: string[]): Promise<any | null> {
@@ -1181,7 +1183,7 @@ export class ParseNewReplaysRefactorized {
 
     // Team entries have no participant_id, therefore participant joins must be
     // optional. The entry team IDs are sufficient for team tournaments.
-    const result = await query(
+    const result = await query<TournamentGameEntriesRow>(
       `SELECT games.id, games.entry1_id, games.entry2_id,
               entry1.participant_id AS participant1_id, entry2.participant_id AS participant2_id,
               entry1.team_id AS team1_id, entry2.team_id AS team2_id,
@@ -1199,7 +1201,7 @@ export class ParseNewReplaysRefactorized {
        LIMIT 1`,
       [parseSummary.forumTournamentGameId, tournament.id]
     );
-    const game = (result as any).rows?.[0];
+    const game = result.rows[0];
 
     if (!game) {
       console.log(`   ❌ [TOURNAMENT LINK] Explicit tournament_game not found or not pending`);
@@ -1209,6 +1211,11 @@ export class ParseNewReplaysRefactorized {
     parseSummary.linkedTournamentId = tournament.id;
     parseSummary.linkedTournamentGameId = game.id;
     parseSummary.tournamentLinkMethod = 'tournament_game';
+    const gameEntries = {
+      entry1Id: game.entry1_id, entry2Id: game.entry2_id,
+      entry1UserId: game.user1_id, entry2UserId: game.user2_id,
+      entry1TeamId: game.team1_id, entry2TeamId: game.team2_id,
+    };
 
     if (tournament.tournament_mode === 'team' || game.team1_id || game.team2_id) {
       await this.populateTeamReplayMetadata(parseSummary, tournament, [game.team1_id, game.team2_id]);
@@ -1220,8 +1227,8 @@ export class ParseNewReplaysRefactorized {
           ? Object.keys(winningPlayer).find(key => ['tournament_team_id', 'team_id'].includes(key.toLowerCase()))
           : undefined;
         const winningTeamId = teamKey ? winningPlayer[teamKey] : null;
-        if (winningTeamId === game.team1_id) parseSummary.linkedWinnerEntryId = game.entry1_id;
-        if (winningTeamId === game.team2_id) parseSummary.linkedWinnerEntryId = game.entry2_id;
+        const winnerEntryId = resolveWinnerEntryId(gameEntries, { teamId: winningTeamId });
+        if (winnerEntryId) parseSummary.linkedWinnerEntryId = winnerEntryId;
       }
       // The new competitive tables contain the server-side team outcome. On
       // the legacy path a surrender outcome is accepted only when its
@@ -1229,8 +1236,9 @@ export class ParseNewReplaysRefactorized {
       // confirmed by a player.
       if (parseSummary.replayVictory?.reason !== 'competitive_game_status') {
         const winnerTeamId = this.resolveTeamSurrenderWinner(parseSummary, [game.team1_id, game.team2_id]);
-        if (winnerTeamId) {
-          parseSummary.linkedWinnerEntryId = winnerTeamId === game.team1_id ? game.entry1_id : game.entry2_id;
+        const winnerEntryId = winnerTeamId ? resolveWinnerEntryId(gameEntries, { teamId: winnerTeamId }) : null;
+        if (winnerEntryId) {
+          parseSummary.linkedWinnerEntryId = winnerEntryId;
         } else {
           parseSummary.confidenceLevel = 1;
         }
@@ -1245,14 +1253,12 @@ export class ParseNewReplaysRefactorized {
       return false;
     }
 
-    if (winner.id === game.user1_id) {
-      parseSummary.linkedWinnerEntryId = game.entry1_id;
-    } else if (winner.id === game.user2_id) {
-      parseSummary.linkedWinnerEntryId = game.entry2_id;
-    } else {
+    const winnerEntryId = resolveWinnerEntryId(gameEntries, { userId: winner.id });
+    if (!winnerEntryId) {
       console.log(`   ❌ [TOURNAMENT LINK] Replay winner is not in explicit tournament_game`);
       return false;
     }
+    parseSummary.linkedWinnerEntryId = winnerEntryId;
 
     console.log(`   ✅ [TOURNAMENT LINK] Linked explicitly to tournament_game id=${game.id}`);
     return true;
@@ -1421,7 +1427,15 @@ export class ParseNewReplaysRefactorized {
     parseSummary.linkedTournamentId = tournament.id;
     parseSummary.linkedTournamentGameId = game.id;
     parseSummary.tournamentLinkMethod = 'participants';
-    parseSummary.linkedWinnerEntryId = game.user1_id === winnerUser.id ? game.entry1_id : game.entry2_id;
+    const winnerEntryId = resolveWinnerEntryId({
+      entry1Id: game.entry1_id, entry2Id: game.entry2_id,
+      entry1UserId: game.user1_id, entry2UserId: game.user2_id,
+    }, { userId: winnerUser.id });
+    if (!winnerEntryId) {
+      console.log(`   ❌ [TOURNAMENT LINK] Replay winner is not in the resolved tournament_game`);
+      return false;
+    }
+    parseSummary.linkedWinnerEntryId = winnerEntryId;
     return true;
   }
 
@@ -1616,8 +1630,14 @@ export class ParseNewReplaysRefactorized {
     // each tournament team's sides.
     if (linkedGame && parseSummary.replayVictory?.reason !== 'competitive_game_status') {
       const winnerTeamId = this.resolveTeamSurrenderWinner(parseSummary, [linkedGame.team1_id, linkedGame.team2_id]);
-      if (winnerTeamId) {
-        parseSummary.linkedWinnerEntryId = winnerTeamId === linkedGame.team1_id ? linkedGame.entry1_id : linkedGame.entry2_id;
+      const winnerEntryId = winnerTeamId
+        ? resolveWinnerEntryId({
+          entry1Id: linkedGame.entry1_id, entry2Id: linkedGame.entry2_id,
+          entry1TeamId: linkedGame.team1_id, entry2TeamId: linkedGame.team2_id,
+        }, { teamId: winnerTeamId })
+        : null;
+      if (winnerEntryId) {
+        parseSummary.linkedWinnerEntryId = winnerEntryId;
       } else {
         parseSummary.confidenceLevel = 1;
       }

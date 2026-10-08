@@ -19,6 +19,7 @@ import {
 import { validateAndCorrectFactions } from '../services/replayConfirmationService.js';
 import { phaseGameDisplayMetadata } from '../tournament-engine/competitionProgression.js';
 import { globalRecalculationMiddleware } from '../services/systemPauseService.js';
+import { opponentEntryId, resolveWinnerEntryId } from '../services/tournamentWinnerEntry.js';
 
 const router = express.Router();
 
@@ -270,17 +271,15 @@ router.post('/:replayId/confirm-winner', authMiddleware, globalRecalculationMidd
           game.entry1_team_id, game.entry2_team_id]
       );
       const winnerParticipantRow = winnerParticipant.rows?.[0];
-      const winnerEntryId = winnerParticipantRow?.id === game.entry1_participant_id
-        || (winnerParticipantRow?.team_id !== null
-          && game.entry1_team_id !== null
-          && winnerParticipantRow?.team_id === game.entry1_team_id)
-        ? game.entry1_id
-          : winnerParticipantRow?.id === game.entry2_participant_id
-          || (winnerParticipantRow?.team_id !== null
-            && game.entry2_team_id !== null
-            && winnerParticipantRow?.team_id === game.entry2_team_id)
-          ? game.entry2_id
-          : null;
+      const gameEntries = {
+        entry1Id: game.entry1_id, entry2Id: game.entry2_id,
+        entry1ParticipantId: game.entry1_participant_id, entry2ParticipantId: game.entry2_participant_id,
+        entry1TeamId: game.entry1_team_id, entry2TeamId: game.entry2_team_id,
+      };
+      const winnerEntryId = resolveWinnerEntryId(gameEntries, {
+        participantId: winnerParticipantRow?.id,
+        teamId: winnerParticipantRow?.team_id,
+      });
       if (!winnerEntryId) return res.status(400).json({ error: 'Could not map winner to tournament entry' });
       tournamentInput = {
         tournamentId: summary.linkedTournamentId,
@@ -288,7 +287,7 @@ router.post('/:replayId/confirm-winner', authMiddleware, globalRecalculationMidd
         winnerEntryId,
         metadata: phaseGameDisplayMetadata(summary),
         confirmation: {
-          entryId: iWon ? winnerEntryId : (winnerEntryId === game.entry1_id ? game.entry2_id : game.entry1_id),
+          entryId: iWon ? winnerEntryId : opponentEntryId(gameEntries, winnerEntryId)!,
           comments: comments || null,
           rating,
         },
