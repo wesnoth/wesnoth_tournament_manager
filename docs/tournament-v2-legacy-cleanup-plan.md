@@ -53,15 +53,15 @@ Their associated indexes are also candidates for removal:
 
 The application still contains HTTP compatibility handlers that return `410 Gone` for removed tournament and scheduling routes. These handlers are useful only while old clients or saved links may still call them. Remove them after endpoint telemetry shows an agreed period with no relevant traffic.
 
-The old `GET /:id/ranking` implementation remains in the tournament router but is intercepted by the compatibility layer, so it is unreachable through the mounted application. It can be deleted with the other retired backend routes.
+The old `GET /:id/ranking` implementation, unreachable behind the compatibility layer, was deleted on 2026-10-10.
 
 ### Frontend compatibility code
 
-Removed on 2026-10-09, after confirming that no version 1 tournaments remain: the version 1 API client methods, the round-match and single-match scheduling client paths, and the hidden version 1 tabs, state, actions, modals, and rendering branches of `TournamentDetail`. The page now always loads the phase format and renders only the participants, `TournamentCompetitionView`, and `TournamentOverallStandings` views. Splitting `TournamentDetail` into smaller components is still pending.
+Removed on 2026-10-09, after confirming that no version 1 tournaments remain: the version 1 API client methods, the round-match and single-match scheduling client paths, and the hidden version 1 tabs, state, actions, modals, and rendering branches of `TournamentDetail`. The page now always loads the phase format and renders only the participants, `TournamentCompetitionView`, and `TournamentOverallStandings` views. On 2026-10-10 `TournamentDetail` was split into panel components. `TournamentForm` still renders the version 1 round fields when no phase format is set; they go with the summary fields in step 5.
 
 ### Migration tooling and documentation
 
-`backend/src/migrations/` contains an obsolete PostgreSQL-style migration set, while the active runner reads `backend/migrations/`. The unused alternative runner `backend/src/scripts/migrate.ts` and the broken `migrate` package script were removed on 2026-10-08.
+The obsolete PostgreSQL-style migration set in `backend/src/migrations/` was removed on 2026-10-10; the active runner reads `backend/migrations/`. The unused alternative runner `backend/src/scripts/migrate.ts` and the broken `migrate` package script were removed on 2026-10-08.
 
 Do not delete the SQL history under `backend/migrations/`. Fresh installations and upgrades need the complete active migration chain, including the migration that removes the old competition tables.
 
@@ -71,7 +71,7 @@ The documentation was consolidated on 2026-10-08: `README.md` no longer describe
 
 These fields are mixed with active version 2 behavior and are not safe first-pass deletions:
 
-- `competition_model_version` still selects validation, compilation, API, event, test, and frontend paths. Its schema default is still version 1, while saving a phase format changes the tournament to version 2.
+- `competition_model_version` still selects validation, compilation, API, event, and test paths in the backend. Since 2026-10-10 its schema default is version 2 and creation always stores a phase graph.
 - `tournament_type`, `general_rounds`, `final_rounds`, format fields, `total_rounds`, and `current_round` still feed UI, API, notifications, or summaries even where the phase graph contains equivalent information.
 - `auto_progress` is consumed by the compiler. `auto_advance_round` remains exposed through UI and API paths, and current writes keep the two concepts aligned.
 - Participant and team aggregates such as tournament wins, losses, points, OMP, GWP, OGP, and current round have no identified version 2 writer. Hidden version 1 UI still reads some of them.
@@ -164,6 +164,8 @@ Collect server access metrics for the old routes that currently return `410 Gone
 
 ### 1. Close the version 2 creation contract
 
+Done on 2026-10-10: creation requires a valid `format_definition`, validates it before writing, and commits the tournament, organizers, allowed assets, and phase graph in one transaction. Migration `20261009_120000` sets the default to version 2. The integration-test item below remains open.
+
 - Require a valid phase `format_definition` in the tournament creation API.
 - Create the root tournament and its phase graph atomically.
 - Change the database and application defaults to version 2 only after the atomic path exists.
@@ -174,7 +176,7 @@ This release establishes that new data cannot recreate the legacy state after cl
 
 ### 2. Remove frontend version 1 behavior
 
-Done on 2026-10-09 except the `TournamentDetail` split. This was delivered before step 1, so a tournament created through the API without a phase format would show empty version 2 views; the frontend creation flow always sends a format.
+Done (2026-10-09 removal, 2026-10-10 split).
 
 - Delete the unused API client methods.
 - Remove the hidden version 1 tabs, state, actions, and modals from `TournamentDetail`.

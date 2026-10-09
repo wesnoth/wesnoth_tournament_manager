@@ -1885,26 +1885,6 @@ router.post('/:tournamentId/participants/:participantId/reject', authMiddleware,
   }
 });
 
-// Get tournament ranking
-router.get('/:id/ranking', async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const result = await query(
-      `SELECT tp.*, u.nickname, u.elo_rating 
-       FROM tournament_participants tp
-       LEFT JOIN users_extension u ON tp.user_id = u.id
-       WHERE tp.tournament_id = ?
-       ORDER BY tp.tournament_points DESC, tp.tournament_wins DESC, u.elo_rating DESC`,
-      [id]
-    );
-
-    res.json(result.rows);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch tournament ranking' });
-  }
-});
-
 // Close registration and prepare tournament
 router.post('/:id/close-registration', authMiddleware, async (req: AuthRequest, res) => {
   try {
