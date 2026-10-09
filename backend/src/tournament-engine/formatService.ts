@@ -46,94 +46,27 @@ async function insertSettings(connection: PoolConnection, phase: PhaseDefinition
   }
 }
 
-/** Atomically replace a configurable tournament's declarative phase graph. */
-export async function saveTournamentFormat(tournamentId: string, definition: TournamentFormatDefinition): Promise<void> {
+/**
+ * Throw a 400-mapped error (`issues` lists the problems) when the definition
+ * is not a valid phase graph. Callers validate before writing anything.
+ */
+export function assertValidTournamentFormat(definition: TournamentFormatDefinition): void {
   const validation = validateTournamentFormat(definition);
   if (!validation.valid) {
     const error = new Error('Tournament format is invalid') as Error & { issues?: unknown };
     error.issues = validation.issues;
     throw error;
   }
+}
+
+/** Atomically replace a configurable tournament's declarative phase graph. */
+export async function saveTournamentFormat(tournamentId: string, definition: TournamentFormatDefinition): Promise<void> {
+  assertValidTournamentFormat(definition);
 
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
-    const [tournaments] = await connection.execute<any[]>(
-      `SELECT status, tournament_mode FROM tournaments WHERE id = ? FOR UPDATE`,
-      [tournamentId]
-    );
-    if (tournaments.length === 0) throw new Error('Tournament not found');
-    if (!['registration_open', 'registration_closed'].includes(tournaments[0].status)) {
-      throw new Error('Tournament format can only be edited before preparation');
-    }
-
-    // Direct nominations live on tournament-owned participants/teams and must
-    // not be orphaned when an organizer replaces the declarative phase graph.
-    const nextDirectCapacities = new Map<string, { capacity: number; isLaterPhase: boolean }>();
-    for (const phase of definition.phases) {
-      for (const group of phase.groups) nextDirectCapacities.set(group.id, {
-        capacity: group.direct_advancement_slots || 0,
-        isLaterPhase: phase.order > 1,
-      });
-    }
-    const [existingNominations] = await connection.execute<any[]>(
-      `SELECT direct_group_id AS group_id, COUNT(*) AS nomination_count FROM (
-         SELECT direct_group_id FROM tournament_participants WHERE tournament_id = ? AND direct_group_id IS NOT NULL
-         UNION ALL
-         SELECT direct_group_id FROM tournament_teams WHERE tournament_id = ? AND direct_group_id IS NOT NULL
-       ) nominations GROUP BY direct_group_id`, [tournamentId, tournamentId]);
-    for (const nomination of existingNominations) {
-      const target = nextDirectCapacities.get(nomination.group_id);
-      if (!target?.isLaterPhase || target.capacity < Number(nomination.nomination_count)) {
-        throw new Error('Remove or reassign existing direct passes before removing their target group or reducing its capacity');
-      }
-    }
-
-    await connection.execute(`DELETE FROM tournament_phases WHERE tournament_id = ?`, [tournamentId]);
-    for (const phase of [...definition.phases].sort((a, b) => a.order - b.order)) {
-      await connection.execute(
-        `INSERT INTO tournament_phases
-           (id, tournament_id, phase_order, name, description, format, assignment_method,
-            default_best_of, status, auto_start)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?)`,
-        [phase.id, tournamentId, phase.order, phase.name.trim(), phase.description?.trim() || null,
-          phase.format, phase.assignment_method, phase.default_best_of, phase.auto_start ? 1 : 0]
-      );
-      await insertSettings(connection, phase);
-      for (const group of [...phase.groups].sort((a, b) => a.order - b.order)) {
-        await connection.execute(
-          `INSERT INTO tournament_phase_groups
-             (id, phase_id, group_order, name, advance_count, direct_advancement_slots, status)
-           VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
-          [group.id, phase.id, group.order, group.name.trim(), group.advance_count ?? null,
-            group.direct_advancement_slots ?? 0]
-        );
-        for (const [seedIndex, sourceId] of (group.entry_ids || []).entries()) {
-          const entityColumn = phase.assignment_method === 'manual'
-            ? (tournaments[0].tournament_mode === 'team' ? 'team_id' : 'participant_id')
-            : null;
-          if (!entityColumn) continue;
-          await connection.execute(
-            `INSERT INTO tournament_phase_entry_assignments
-               (id, group_id, ${entityColumn}, group_seed)
-             VALUES (UUID(), ?, ?, ?)`,
-            [group.id, sourceId, seedIndex + 1]
-          );
-        }
-      }
-    }
-    for (const rule of definition.advancement_rules || []) {
-      await connection.execute(
-        `INSERT INTO tournament_advancement_rules
-           (id, source_group_id, source_rank, target_group_id, target_seed)
-         VALUES (?, ?, ?, ?, ?)`,
-        [rule.id, rule.source_group_id, rule.source_rank, rule.target_group_id, rule.target_seed]
-      );
-    }
-    await connection.execute(
-      `UPDATE tournaments SET competition_model_version = 2, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      [tournamentId]
-    );
+    await writeTournamentFormat(connection, tournamentId, definition);
     await connection.commit();
   } catch (error) {
     await connection.rollback();
@@ -141,6 +74,95 @@ export async function saveTournamentFormat(tournamentId: string, definition: Tou
   } finally {
     connection.release();
   }
+}
+
+/**
+ * Replace the phase graph inside the caller's transaction and mark the
+ * tournament as a phase-engine (version 2) tournament. The definition must
+ * already be validated. Tournament creation calls this in its own transaction
+ * so a tournament is never stored without its graph.
+ */
+export async function writeTournamentFormat(
+  connection: PoolConnection,
+  tournamentId: string,
+  definition: TournamentFormatDefinition
+): Promise<void> {
+  const [tournaments] = await connection.execute<any[]>(
+    `SELECT status, tournament_mode FROM tournaments WHERE id = ? FOR UPDATE`,
+    [tournamentId]
+  );
+  if (tournaments.length === 0) throw new Error('Tournament not found');
+  if (!['registration_open', 'registration_closed'].includes(tournaments[0].status)) {
+    throw new Error('Tournament format can only be edited before preparation');
+  }
+
+  // Direct nominations live on tournament-owned participants/teams and must
+  // not be orphaned when an organizer replaces the declarative phase graph.
+  const nextDirectCapacities = new Map<string, { capacity: number; isLaterPhase: boolean }>();
+  for (const phase of definition.phases) {
+    for (const group of phase.groups) nextDirectCapacities.set(group.id, {
+      capacity: group.direct_advancement_slots || 0,
+      isLaterPhase: phase.order > 1,
+    });
+  }
+  const [existingNominations] = await connection.execute<any[]>(
+    `SELECT direct_group_id AS group_id, COUNT(*) AS nomination_count FROM (
+       SELECT direct_group_id FROM tournament_participants WHERE tournament_id = ? AND direct_group_id IS NOT NULL
+       UNION ALL
+       SELECT direct_group_id FROM tournament_teams WHERE tournament_id = ? AND direct_group_id IS NOT NULL
+     ) nominations GROUP BY direct_group_id`, [tournamentId, tournamentId]);
+  for (const nomination of existingNominations) {
+    const target = nextDirectCapacities.get(nomination.group_id);
+    if (!target?.isLaterPhase || target.capacity < Number(nomination.nomination_count)) {
+      throw new Error('Remove or reassign existing direct passes before removing their target group or reducing its capacity');
+    }
+  }
+
+  await connection.execute(`DELETE FROM tournament_phases WHERE tournament_id = ?`, [tournamentId]);
+  for (const phase of [...definition.phases].sort((a, b) => a.order - b.order)) {
+    await connection.execute(
+      `INSERT INTO tournament_phases
+         (id, tournament_id, phase_order, name, description, format, assignment_method,
+          default_best_of, status, auto_start)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?)`,
+      [phase.id, tournamentId, phase.order, phase.name.trim(), phase.description?.trim() || null,
+        phase.format, phase.assignment_method, phase.default_best_of, phase.auto_start ? 1 : 0]
+    );
+    await insertSettings(connection, phase);
+    for (const group of [...phase.groups].sort((a, b) => a.order - b.order)) {
+      await connection.execute(
+        `INSERT INTO tournament_phase_groups
+           (id, phase_id, group_order, name, advance_count, direct_advancement_slots, status)
+         VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
+        [group.id, phase.id, group.order, group.name.trim(), group.advance_count ?? null,
+          group.direct_advancement_slots ?? 0]
+      );
+      for (const [seedIndex, sourceId] of (group.entry_ids || []).entries()) {
+        const entityColumn = phase.assignment_method === 'manual'
+          ? (tournaments[0].tournament_mode === 'team' ? 'team_id' : 'participant_id')
+          : null;
+        if (!entityColumn) continue;
+        await connection.execute(
+          `INSERT INTO tournament_phase_entry_assignments
+             (id, group_id, ${entityColumn}, group_seed)
+           VALUES (UUID(), ?, ?, ?)`,
+          [group.id, sourceId, seedIndex + 1]
+        );
+      }
+    }
+  }
+  for (const rule of definition.advancement_rules || []) {
+    await connection.execute(
+      `INSERT INTO tournament_advancement_rules
+         (id, source_group_id, source_rank, target_group_id, target_seed)
+       VALUES (?, ?, ?, ?, ?)`,
+      [rule.id, rule.source_group_id, rule.source_rank, rule.target_group_id, rule.target_seed]
+    );
+  }
+  await connection.execute(
+    `UPDATE tournaments SET competition_model_version = 2, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    [tournamentId]
+  );
 }
 
 /** Return the declarative graph in the same shape accepted by the write endpoint. */

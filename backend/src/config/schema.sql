@@ -906,7 +906,7 @@ CREATE TABLE `tournaments` (
   `name` varchar(255) NOT NULL,
   `description` text NOT NULL,
   `forum_topic_id` bigint(20) unsigned DEFAULT NULL,
-  `competition_model_version` smallint(6) NOT NULL DEFAULT 1,
+  `competition_model_version` smallint(6) NOT NULL DEFAULT 2,
   `rules_template_id` char(36) DEFAULT NULL,
   `rules_content` longtext DEFAULT NULL,
   `creator_id` char(36) NOT NULL,

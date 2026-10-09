@@ -10,7 +10,7 @@ import { checkUserIsForumModerator } from '../services/phpbbAuth.js';
 import { isTournamentOrganizer } from '../services/tournamentAuthorizationService.js';
 import { preparePhaseCompetition, startPhaseCompetition } from '../tournament-engine/competitionCompiler.js';
 import { parseForumTopicUrl } from '../tournament-engine/forumTopic.js';
-import { saveTournamentFormat } from '../tournament-engine/formatService.js';
+import { assertValidTournamentFormat, saveTournamentFormat, writeTournamentFormat } from '../tournament-engine/formatService.js';
 import type { TournamentFormatDefinition } from '../tournament-engine/types.js';
 import { consumeUserActionRateLimit } from '../services/userActionRateLimitService.js';
 import { sendUserActionRateLimitError } from '../utils/userActionRateLimitResponse.js';
@@ -219,7 +219,6 @@ async function generateSafeTeamId(): Promise<string> {
 }
 
 router.post('/', authMiddleware, async (req: AuthRequest, res) => {
-  let tournamentId: string | null = null;
   try {
     const { 
       name, 
@@ -375,6 +374,14 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       }
     }
 
+    // Every tournament runs on the phase engine, so the phase graph is part of
+    // creation: a tournament without one would be stored as an unusable
+    // version 1 root row. It is validated here, before anything is written.
+    if (!format_definition || typeof format_definition !== 'object') {
+      return res.status(400).json({ error: 'A phase format (format_definition) is required' });
+    }
+    assertValidTournamentFormat(format_definition as TournamentFormatDefinition);
+
     // Validate tournament type-specific configurations
     // (already validated tournamentTypeLower is declared above)
     
@@ -424,7 +431,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     // If elimination without max_participants, total_rounds will be calculated during close-registration
 
     // Generate UUID for tournament
-    tournamentId = randomUUID();
+    const tournamentId = randomUUID();
 
     // Quota consumption and tournament insertion share one transaction so a
     // failed insert cannot consume capacity from the rolling user rate limit.
@@ -474,62 +481,58 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
          VALUES (?, ?, 1, ?, ?, CURRENT_TIMESTAMP)`,
         [randomUUID(), tournamentId, resolvedRulesContent, req.userId]
       );
-      await creationConnection.commit();
-    } catch (error) {
-      await creationConnection.rollback();
-      throw error;
-    } finally {
-      creationConnection.release();
-    }
+      // Organizers, allowed assets, and the phase graph commit with the
+      // tournament row: a failure at any step leaves no tournament behind.
+      await creationConnection.execute(
+        `INSERT IGNORE INTO tournament_organizers (tournament_id, user_id, created_by)
+         VALUES (?, ?, ?)`,
+        [tournamentId, req.userId, req.userId]
+      );
 
-    // Ensure creator is registered as organizer (for multi-organizer model)
-    await query(
-      `INSERT IGNORE INTO tournament_organizers (tournament_id, user_id, created_by)
-       VALUES (?, ?, ?)`,
-      [tournamentId, req.userId, req.userId]
-    );
-
-    // Optional co-organizers (full organizer permissions)
-    if (Array.isArray(organizer_ids) && organizer_ids.length > 0) {
-      const coOrganizerIds = [...new Set(organizer_ids)]
-        .filter((id: any) => typeof id === 'string' && id.trim().length > 0)
-        .filter((id: string) => id !== req.userId);
-
+      // Optional co-organizers (full organizer permissions); unknown ids are skipped.
+      const coOrganizerIds = Array.isArray(organizer_ids)
+        ? [...new Set(organizer_ids)]
+          .filter((id: any): id is string => typeof id === 'string' && id.trim().length > 0)
+          .filter((id: string) => id !== req.userId)
+        : [];
       if (coOrganizerIds.length > 0) {
         const placeholders = coOrganizerIds.map(() => '?').join(', ');
-        const existingUsers = await query(
+        const [existingUsers] = await creationConnection.execute<any[]>(
           `SELECT id FROM users_extension WHERE id IN (${placeholders})`,
           coOrganizerIds
         );
-        const existingSet = new Set(existingUsers.rows.map((row: any) => row.id));
-
+        const existingSet = new Set(existingUsers.map((row: any) => row.id));
         for (const coOrganizerId of coOrganizerIds) {
           if (!existingSet.has(coOrganizerId)) continue;
-          await query(
+          await creationConnection.execute(
             `INSERT IGNORE INTO tournament_organizers (tournament_id, user_id, created_by)
              VALUES (?, ?, ?)`,
             [tournamentId, coOrganizerId, req.userId]
           );
         }
       }
-    }
 
-    // Add allowed factions and maps for all tournament modes (ranked, unranked, team)
-    for (const factionId of factionIds) {
-      await query(
-        `INSERT INTO tournament_unranked_factions (id, tournament_id, faction_id) VALUES (?, ?, ?)`,
-        [randomUUID(), tournamentId, factionId]
-      );
-    }
-    for (const mapId of mapIds) {
-      await query(
-        `INSERT INTO tournament_unranked_maps (id, tournament_id, map_id) VALUES (?, ?, ?)`,
-        [randomUUID(), tournamentId, mapId]
-      );
-    }
+      // Allowed factions and maps apply to every tournament mode (ranked, unranked, team).
+      for (const factionId of factionIds) {
+        await creationConnection.execute(
+          `INSERT INTO tournament_unranked_factions (id, tournament_id, faction_id) VALUES (?, ?, ?)`,
+          [randomUUID(), tournamentId, factionId]
+        );
+      }
+      for (const mapId of mapIds) {
+        await creationConnection.execute(
+          `INSERT INTO tournament_unranked_maps (id, tournament_id, map_id) VALUES (?, ?, ?)`,
+          [randomUUID(), tournamentId, mapId]
+        );
+      }
 
-    if (format_definition !== undefined) {
-      await saveTournamentFormat(tournamentId, format_definition as TournamentFormatDefinition);
+      await writeTournamentFormat(creationConnection, tournamentId, format_definition as TournamentFormatDefinition);
+      await creationConnection.commit();
+    } catch (error) {
+      await creationConnection.rollback();
+      throw error;
+    } finally {
+      creationConnection.release();
     }
 
     // Get organizer list (creator + co-organizers)
@@ -602,14 +605,6 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
     });
   } catch (error: any) {
     console.error('Tournament creation error:', error);
-    if (tournamentId) {
-      // Creation spans several association tables. Compensating cleanup keeps a
-      // failed request from leaving a partially configurable tournament.
-      await query('DELETE FROM tournament_unranked_factions WHERE tournament_id = ?', [tournamentId]).catch(() => undefined);
-      await query('DELETE FROM tournament_unranked_maps WHERE tournament_id = ?', [tournamentId]).catch(() => undefined);
-      await query('DELETE FROM tournament_organizers WHERE tournament_id = ?', [tournamentId]).catch(() => undefined);
-      await query('DELETE FROM tournaments WHERE id = ?', [tournamentId]).catch(() => undefined);
-    }
     if (error.code === 'ER_DUP_ENTRY' && String(error.message).includes('forum_topic')) {
       return res.status(409).json({ error: 'This forum topic is already assigned to another tournament' });
     }
