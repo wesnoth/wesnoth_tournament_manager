@@ -261,19 +261,7 @@ export const tournamentService = {
   getMyTournaments: () => api.get('/tournaments/my'),
   requestJoinTournament: (id: string, data?: { team_name?: string; teammate_name?: string }) => 
     api.post(`/tournaments/${id}/request-join`, data || {}),
-  getTournamentRounds: (id: string) => api.get(`/tournaments/${id}/rounds`),
-  getTournamentStandings: (id: string, roundId?: string) => 
-    api.get(`/tournaments/${id}/standings`, { params: roundId ? { round_id: roundId } : {} }),
-  calculateTournamentTiebreakers: (id: string) => api.post(`/tournaments/${id}/calculate-tiebreakers`, {}),
-  getTournamentMatches: (id: string) => api.get(`/tournaments/${id}/matches`),
   getTournamentScheduledSeries: (id: string) => api.get(`/tournaments/${id}/scheduled-series`),
-  getRoundMatches: (tournamentId: string, roundId: string) => 
-    api.get(`/tournaments/${tournamentId}/rounds/${roundId}/matches`),
-  recordMatchResult: (tournamentId: string, matchId: string, data: any) =>
-    api.post(`/tournaments/${tournamentId}/matches/${matchId}/result`, data),
-  determineMatchWinner: (tournamentId: string, matchId: string, data: any) =>
-    api.post(`/tournaments/${tournamentId}/matches/${matchId}/determine-winner`, data),
-  startNextRound: (id: string) => api.post(`/tournaments/${id}/next-round`),
   acceptParticipant: (tournamentId: string, participantId: string) => 
     api.post(`/tournaments/${tournamentId}/participants/${participantId}/accept`),
   confirmParticipation: (tournamentId: string, participantId: string) => 
@@ -400,7 +388,6 @@ export const publicService = {
   getTournamentById: (id: string) => api.get(`/public/tournaments/${id}`),
   getTournamentParticipants: (id: string) => api.get(`/public/tournaments/${id}/participants`),
   getTournamentTeams: (id: string) => api.get(`/public/tournaments/${id}/teams`),
-  getTournamentMatches: (id: string) => api.get(`/public/tournaments/${id}/matches`),
   getTournamentUnrankedAssets: (id: string) => api.get(`/public/tournaments/${id}/unranked-assets`),
   getMatch: (id: string) => api.get(`/matches/${id}`),
   getDebug: () => api.get('/public/debug'),

@@ -57,9 +57,7 @@ The old `GET /:id/ranking` implementation remains in the tournament router but i
 
 ### Frontend compatibility code
 
-The API client still exposes version 1 methods for tournament rounds, standings, tournament matches, round matches, result recording, winner determination, next-round start, and tournament tiebreaker calculation.
-
-`TournamentDetail` also retains hidden version 1 tabs, state, actions, modals, and rendering branches. Version 2 clears the old arrays and renders `TournamentCompetitionView` and `TournamentOverallStandings`. These hidden branches should be removed only after confirming there are no supported version 1 tournaments.
+Removed on 2026-10-09, after confirming that no version 1 tournaments remain: the version 1 API client methods, the round-match and single-match scheduling client paths, and the hidden version 1 tabs, state, actions, modals, and rendering branches of `TournamentDetail`. The page now always loads the phase format and renders only the participants, `TournamentCompetitionView`, and `TournamentOverallStandings` views. Splitting `TournamentDetail` into smaller components is still pending.
 
 ### Migration tooling and documentation
 
@@ -175,6 +173,8 @@ Collect server access metrics for the old routes that currently return `410 Gone
 This release establishes that new data cannot recreate the legacy state after cleanup starts.
 
 ### 2. Remove frontend version 1 behavior
+
+Done on 2026-10-09 except the `TournamentDetail` split. This was delivered before step 1, so a tournament created through the API without a phase format would show empty version 2 views; the frontend creation flow always sends a format.
 
 - Delete the unused API client methods.
 - Remove the hidden version 1 tabs, state, actions, and modals from `TournamentDetail`.

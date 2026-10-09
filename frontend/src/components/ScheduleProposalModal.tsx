@@ -8,9 +8,8 @@ import { groupSlotsIntoRanges, type GroupedTimeRange } from '../utils/slotGroupi
 interface ScheduleProposalModalProps {
   isOpen: boolean;
   tournamentId: string;
+  /** Version 2 series being scheduled; a proposal covers every game of the series. */
   seriesId?: string;
-  roundMatchId?: string;
-  matchId?: string;
   // Preloaded data from parent
   initialParticipants?: Participant[];
   initialProposal?: ProposalData | null;
@@ -84,8 +83,6 @@ export default function ScheduleProposalModal({
   isOpen,
   tournamentId,
   seriesId,
-  roundMatchId,
-  matchId,
   initialParticipants,
   initialProposal,
   initialViewingTimezone,
@@ -112,9 +109,6 @@ export default function ScheduleProposalModal({
   const [hasStartedConfirmationSelection, setHasStartedConfirmationSelection] = useState(false);
   const hasStartedConfirmationSelectionRef = useRef(false);
 
-  const targetId = seriesId || roundMatchId || matchId;
-  const isSeries = Boolean(seriesId);
-  const isRoundMatch = !!roundMatchId;
   const hasConfirmedCurrentUser = Boolean(
     userId && proposal?.confirmations?.some((confirmation) => confirmation.user_id === userId)
   );
@@ -264,26 +258,7 @@ export default function ScheduleProposalModal({
         ? await tournamentSchedulingService.modifyProposal(proposal!.id, slotArray, notes)
         : mode === 'counter'
         ? await tournamentSchedulingService.counterPropose(proposal!.id, slotArray, notes)
-        : isSeries
-        ? await tournamentSchedulingService.proposeSeriesSlots(
-            tournamentId,
-            targetId!,
-            slotArray,
-            notes
-          )
-        : isRoundMatch
-        ? await tournamentSchedulingService.proposeRoundMatchSlots(
-            tournamentId,
-            targetId!,
-            slotArray,
-            notes
-          )
-        : await tournamentSchedulingService.proposeMatchSlots(
-            tournamentId,
-            targetId!,
-            slotArray,
-            notes
-          );
+        : await tournamentSchedulingService.proposeSeriesSlots(tournamentId, seriesId!, slotArray, notes);
 
       if (response.success) {
         onSuccess?.();
@@ -327,11 +302,7 @@ export default function ScheduleProposalModal({
           .map(s => s.id);
       }
 
-      const response = isSeries
-        ? await tournamentSchedulingService.confirmSeriesSlots(tournamentId, targetId!, proposal.id, slotIdsToSend)
-        : isRoundMatch
-        ? await tournamentSchedulingService.confirmRoundMatchSlots(tournamentId, targetId!, proposal.id, slotIdsToSend)
-        : await tournamentSchedulingService.confirmMatchSlots(tournamentId, targetId!, proposal.id, slotIdsToSend);
+      const response = await tournamentSchedulingService.confirmSeriesSlots(tournamentId, seriesId!, proposal.id, slotIdsToSend);
 
       if (response.success) {
         onSuccess?.();

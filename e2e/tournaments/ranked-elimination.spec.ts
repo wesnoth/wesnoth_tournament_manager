@@ -420,10 +420,6 @@ test('flexible tournament accepts simulated joins and progresses through every c
     ]);
     await expect(page.locator('[data-help-id="region-tournament-phase-format-summary"]')).toBeVisible();
     await expect(page.locator('[data-help-id="action-tab-competition"]')).toBeVisible();
-    await expect(page.locator('[data-help-id="action-tab-matches"]')).toHaveCount(0);
-    await expect(page.locator('[data-help-id="action-tab-rounds"]')).toHaveCount(0);
-    await expect(page.locator('[data-help-id="action-tab-round-details"]')).toHaveCount(0);
-    await expect(page.locator('[data-help-id="action-tab-ranking"]')).toHaveCount(0);
     await page.locator('[data-help-id="action-tab-participants"]').click();
     await expect(page.getByRole('columnheader', { name: /classification|wins|losses|points/i })).toHaveCount(0);
   }
