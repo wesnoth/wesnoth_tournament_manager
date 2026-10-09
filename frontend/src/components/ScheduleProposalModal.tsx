@@ -79,6 +79,54 @@ const useAsyncGroupedRanges = (slotDatetimes: string[]): GroupedTimeRange[] => {
   return ranges;
 };
 
+/** Data the modal is opened with for one series. */
+export interface SeriesScheduleState {
+  tournamentId: string;
+  seriesId: string;
+  initialParticipants: Participant[];
+  initialProposal: ProposalData | null;
+  initialViewingTimezone: string;
+  initialDisplayDateStart: Date;
+  initialScrollToHour: number;
+}
+
+/**
+ * Load a series' participant availability and active proposal, and place the
+ * grid on the earliest proposed slot (or on `fallbackStart` when nothing is
+ * proposed yet). The grid shows days and hours in the viewing timezone, so
+ * the start date and hour are taken in that timezone; the date is returned as
+ * UTC midnight because the grid builds its columns from UTC dates.
+ */
+export async function loadSeriesSchedule(
+  tournamentId: string,
+  seriesId: string,
+  fallbackStart: Date = new Date()
+): Promise<SeriesScheduleState> {
+  const [availability, proposalResponse] = await Promise.all([
+    tournamentSchedulingService.getSeriesParticipantsAvailability(tournamentId, seriesId),
+    tournamentSchedulingService.getSeriesProposal(tournamentId, seriesId),
+  ]);
+  const proposal: ProposalData | null = proposalResponse.proposal || null;
+  const timezone: string = availability.viewing_timezone || 'UTC';
+  const start = proposal?.slots?.length
+    ? new Date(Math.min(...proposal.slots.map((slot) => new Date(slot.slot_datetime).getTime())))
+    : fallbackStart;
+  // hourCycle h23 keeps midnight as 00; `hour12: false` may print it as 24.
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23',
+  }).formatToParts(start);
+  const part = (type: string) => Number(parts.find((entry) => entry.type === type)?.value);
+  return {
+    tournamentId,
+    seriesId,
+    initialParticipants: availability.participants || [],
+    initialProposal: proposal,
+    initialViewingTimezone: timezone,
+    initialDisplayDateStart: new Date(Date.UTC(part('year'), part('month') - 1, part('day'))),
+    initialScrollToHour: part('hour'),
+  };
+}
+
 export default function ScheduleProposalModal({
   isOpen,
   tournamentId,

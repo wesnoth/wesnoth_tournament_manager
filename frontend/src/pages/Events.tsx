@@ -3,8 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { tournamentService, publicService } from '../services/api';
 import { p2pChallengesService } from '../services/p2pChallengesService';
-import { tournamentSchedulingService } from '../services/tournamentSchedulingService';
-import ScheduleProposalModal from '../components/ScheduleProposalModal';
+import ScheduleProposalModal, { loadSeriesSchedule } from '../components/ScheduleProposalModal';
 import ChallengeFromEventsModal from '../components/ChallengeFromEventsModal';
 import ChallengeActionButtons from '../components/ChallengeActionButtons';
 import { useAuthStore } from '../store/authStore';
@@ -111,29 +110,7 @@ const Events: React.FC = () => {
     const tournamentId = event.raw?.tournament_id;
     if (!seriesId || !tournamentId) return;
     try {
-      const [availability, proposalResponse] = await Promise.all([
-        tournamentSchedulingService.getSeriesParticipantsAvailability(tournamentId, seriesId),
-        tournamentSchedulingService.getSeriesProposal(tournamentId, seriesId),
-      ]);
-      const proposal = proposalResponse.proposal || null;
-      const timezone = availability.viewing_timezone || 'UTC';
-      const earliest = proposal?.slots?.length
-        ? new Date(Math.min(...proposal.slots.map((slot: any) => new Date(slot.slot_datetime).getTime())))
-        : new Date(event.datetime);
-      const dateParts = new Intl.DateTimeFormat('en-US', {
-        timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false,
-      }).formatToParts(earliest);
-      const value = (type: string, fallback: string) => dateParts.find((part) => part.type === type)?.value || fallback;
-      setScheduleModal({
-        isOpen: true,
-        tournamentId,
-        seriesId,
-        initialParticipants: availability.participants || [],
-        initialProposal: proposal,
-        initialViewingTimezone: timezone,
-        initialDisplayDateStart: new Date(Date.UTC(Number(value('year', '2026')), Number(value('month', '1')) - 1, Number(value('day', '1')))),
-        initialScrollToHour: Number(value('hour', '0')),
-      });
+      setScheduleModal({ isOpen: true, ...(await loadSeriesSchedule(tournamentId, seriesId, new Date(event.datetime))) });
     } catch (error) {
       console.error('Error opening series schedule from Events:', error);
     }
@@ -166,9 +143,8 @@ const Events: React.FC = () => {
         ...additionalTournamentPages.flatMap((response: any) => response.data?.data || []),
       ];
       const scheduledSeriesResponses = await Promise.all(
-        tournaments.map((t: any) => Number(t?.competition_model_version) === 2
-          ? tournamentService.getTournamentScheduledSeries(t.id).catch(() => ({ data: { schedules: [] } }))
-          : Promise.resolve({ data: { schedules: [] } }))
+        tournaments.map((t: any) => tournamentService.getTournamentScheduledSeries(t.id)
+          .catch(() => ({ data: { schedules: [] } })))
       );
       // Load participants for team mode tournaments
       const tournamentParticipantsMap: Record<string, any[]> = {};

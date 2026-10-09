@@ -75,3 +75,79 @@ export interface TournamentCreatePayload extends TournamentFormData {
 }
 
 export type TournamentUpdatePayload = Partial<Omit<TournamentFormData, 'organizer_ids'>>;
+
+/** Tournament row returned by `GET /public/tournaments/:id`, as the detail page reads it. */
+export interface TournamentDetails {
+  id: string;
+  name: string;
+  description: string;
+  rules_template_id?: string | null;
+  rules_content?: string;
+  creator_id: string;
+  creator_nickname: string;
+  status: string;
+  tournament_type: string;
+  tournament_mode?: TournamentMode;
+  general_rounds: number;
+  final_rounds: number;
+  general_rounds_format: MatchFormat;
+  final_rounds_format: MatchFormat;
+  round_duration_days: number;
+  auto_advance_round: boolean;
+  max_participants: number | null;
+  created_at: string;
+  scheduled_start_at?: string | null;
+  started_at: string;
+  finished_at: string;
+  forum_topic_id?: number | null;
+}
+
+export interface TournamentOrganizer {
+  user_id: string;
+  nickname: string;
+}
+
+/**
+ * Direct-pass placement of an entry (player or team) into a later phase.
+ * The round, series, and slot are set only for single-elimination targets.
+ */
+export interface DirectPassPlacement {
+  direct_group_id?: string | null;
+  direct_round_number?: number | null;
+  direct_series_position?: number | null;
+  direct_slot_number?: number | null;
+  direct_pass_note?: string | null;
+}
+
+/**
+ * Participant row returned by `GET /public/tournaments/:id/participants`.
+ * In team tournaments every member has its own row with `team_id` set.
+ */
+export interface TournamentParticipant extends DirectPassPlacement {
+  id: string;
+  user_id: string;
+  nickname: string;
+  participation_status: string;
+  elo_rating: number;
+  team_id?: string | null;
+  team_position?: number | null;
+}
+
+export interface TournamentTeamMember {
+  participant_id: string;
+  user_id: string;
+  nickname: string;
+  elo_rating: number;
+  team_position: number;
+  participation_status: string;
+}
+
+/** Team aggregate returned by `GET /public/tournaments/:id/teams`. */
+export interface TournamentTeam extends DirectPassPlacement {
+  id: string;
+  nickname: string;
+  status: string;
+  team_size?: number;
+  team_total_elo?: number | null;
+  members_with_elo?: TournamentTeamMember[] | null;
+}
