@@ -390,13 +390,10 @@ export const getSeriesProposal = async (seriesId: string) => {
   };
 };
 
-/**
 /** Get participant availability for a phase-engine series. */
 export const getParticipantsAvailability = async (
-  _roundMatchId?: string,
-  _matchId?: string,
-  loggedInUserId?: string,
-  seriesId?: string
+  loggedInUserId: string | undefined,
+  seriesId: string
 ): Promise<any> => {
   if (!seriesId) throw new Error('A tournament series is required');
   const participantsResult = await query(

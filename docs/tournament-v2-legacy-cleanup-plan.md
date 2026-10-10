@@ -51,9 +51,7 @@ Their associated indexes are also candidates for removal:
 
 ### Backend compatibility code
 
-The application still contains HTTP compatibility handlers that return `410 Gone` for removed tournament and scheduling routes. These handlers are useful only while old clients or saved links may still call them. Remove them after endpoint telemetry shows an agreed period with no relevant traffic.
-
-The old `GET /:id/ranking` implementation, unreachable behind the compatibility layer, was deleted on 2026-10-10.
+Removed on 2026-10-10. The old `GET /:id/ranking` implementation, unreachable behind the compatibility layer, was deleted first. The `410 Gone` handlers for removed tournament, public match-feed, and scheduling routes followed, by maintainer decision (no client uses them); those paths now get the generic 404. No router defines a handler behind them, so their removal exposes no legacy-table query. The unused version 1 helpers were removed at the same time: the standings tiebreaker, team-member check, league-ranking, and tournament-snapshot functions of the statistics calculator, the version 1 `Tournament` and `TournamentParticipant` types, and the round-match and match parameters of series availability.
 
 ### Frontend compatibility code
 
@@ -187,6 +185,8 @@ Done (2026-10-09 removal, 2026-10-10 split).
 Validate tournament viewing, organizer actions, scheduling, standings, replay links, administrative results, and responsive layouts.
 
 ### 3. Remove backend version 1 behavior
+
+Done on 2026-10-10. The package already points only to the supported runner (the broken `migrate` script was removed on 2026-10-08). The remaining `competition_model_version` guards stay until step 5.
 
 - Delete unreachable ranking and competition handlers.
 - Remove `410 Gone` compatibility shims after the telemetry window passes.

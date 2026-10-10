@@ -342,12 +342,6 @@ const notifySeriesRejection = async (
   ).catch(error => console.error(`⚠️ [SCHEDULING][NOTIFICATIONS] Failed action=schedule_rejected tournamentId=${proposal.tournament_id} seriesId=${proposal.series_id} proposalId=${proposalId}:`, error));
 };
 
-/**
- * GET /pending-confirmations
- * Get all schedules pending confirmation for the current user
- * Returns matches where a schedule was proposed and is waiting for user's confirmation
- * MUST be before /:tournamentRoundMatchId routes to avoid route param collision
- */
 // ============================================================
 // NEW PHASE 3 ENDPOINTS - Multi-slot scheduling with confirmations
 // ============================================================
@@ -419,7 +413,7 @@ router.get('/tournament/:tournamentId/series/:seriesId/participants-availability
       [seriesId, tournamentId]
     );
     if (!ownership.rows?.length) return res.status(404).json({ error: 'Series not found' });
-    return res.json(await getParticipantsAvailability(undefined, undefined, req.userId, seriesId));
+    return res.json(await getParticipantsAvailability(req.userId, seriesId));
   } catch (error) {
     return res.status(500).json({ error: 'Failed to fetch series availability' });
   }

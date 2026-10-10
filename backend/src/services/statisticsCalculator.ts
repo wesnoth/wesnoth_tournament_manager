@@ -3,10 +3,8 @@
  * Migrated from PostgreSQL stored procedures to TypeScript/Node.js
  * 
  * Functions:
- * - Tournament tiebreakers calculations (league, swiss, team swiss)
  * - Balance event snapshots management
  * - Faction/map statistics trend analysis
- * - Team member validation checks
  */
 
 import type { PoolConnection } from 'mysql2/promise';
@@ -16,15 +14,6 @@ import { randomUUID } from 'crypto';
 // ============================================================================
 // TYPES & INTERFACES
 // ============================================================================
-
-export interface TiebreakerResult {
-  user_id?: string;
-  team_id?: string;
-  total_points: number;
-  omp: number; // Opponent Match Points
-  gwp: number; // Game Win Percentage
-  ogp: number; // Opponent Game Win Percentage
-}
 
 export interface BalanceEventSnapshot {
   snapshot_date: Date;
@@ -75,124 +64,6 @@ export interface BalanceTrendPoint {
   winrate: number;
   confidence_level: number;
   sample_size_category: string;
-}
-
-// ============================================================================
-// TIEBREAKER CALCULATIONS
-// ============================================================================
-
-/**
- * Calculate league tournament tiebreakers
- * Returns: total_points, OMP, GWP, OGP for each player
- */
-/**
- * Calculate phase-engine standings tiebreakers from materialized v2 standings.
- * The phase engine owns series and game progression; this service only reads
- * its aggregate standings and never reconstructs results from legacy tables.
- */
-export async function calculateLeagueTiebreakers(tournamentId: string): Promise<TiebreakerResult[]> {
-  const result = await query(
-    `SELECT entries.participant_id AS user_id,
-            COALESCE(SUM(standings.points), 0) AS total_points,
-            COALESCE(AVG(standings.omp), 0) AS omp,
-            COALESCE(AVG(standings.gwp), 0) AS gwp,
-            COALESCE(AVG(standings.ogp), 0) AS ogp
-     FROM tournament_entries entries
-     JOIN tournament_phase_entries phase_entries ON phase_entries.entry_id = entries.id
-     LEFT JOIN tournament_phase_standings standings
-       ON standings.entry_id = phase_entries.entry_id
-      AND standings.group_id = phase_entries.group_id
-     WHERE entries.tournament_id = ? AND entries.entry_type = 'player'
-     GROUP BY entries.participant_id`,
-    [tournamentId]
-  );
-  return result.rows.map((row: any) => ({
-    user_id: row.user_id,
-    total_points: Number(row.total_points || 0),
-    omp: Number(row.omp || 0),
-    gwp: Number(row.gwp || 0),
-    ogp: Number(row.ogp || 0),
-  }));
-}
-
-/** Swiss uses the same materialized phase standings as league competition. */
-export async function calculateSwissTiebreakers(tournamentId: string): Promise<TiebreakerResult[]> {
-  return calculateLeagueTiebreakers(tournamentId);
-}
-
-/** Calculate team tiebreakers from phase-engine standings. */
-export async function calculateTeamSwissTiebreakers(tournamentId: string): Promise<TiebreakerResult[]> {
-  const result = await query(
-    `SELECT entries.team_id,
-            COALESCE(SUM(standings.points), 0) AS total_points,
-            COALESCE(AVG(standings.omp), 0) AS omp,
-            COALESCE(AVG(standings.gwp), 0) AS gwp,
-            COALESCE(AVG(standings.ogp), 0) AS ogp
-     FROM tournament_entries entries
-     JOIN tournament_phase_entries phase_entries ON phase_entries.entry_id = entries.id
-     LEFT JOIN tournament_phase_standings standings
-       ON standings.entry_id = phase_entries.entry_id
-      AND standings.group_id = phase_entries.group_id
-     WHERE entries.tournament_id = ? AND entries.entry_type = 'team'
-     GROUP BY entries.team_id`,
-    [tournamentId]
-  );
-  return result.rows.map((row: any) => ({
-    team_id: row.team_id,
-    total_points: Number(row.total_points || 0),
-    omp: Number(row.omp || 0),
-    gwp: Number(row.gwp || 0),
-    ogp: Number(row.ogp || 0),
-  }));
-}
-
-// TEAM MEMBER VALIDATIONS
-// ============================================================================
-
-/**
- * Check if team has more than 2 members
- */
-export async function checkTeamMemberCount(teamId: string): Promise<boolean> {
-  try {
-    const result = await query(
-      `SELECT COUNT(*) as count 
-       FROM tournament_participants 
-       WHERE team_id = ? AND team_position IS NOT NULL`,
-      [teamId]
-    );
-    
-    const count = result.rows[0]?.count || 0;
-    return count <= 2;
-  } catch (error) {
-    console.error('Error checking team member count:', error);
-    throw error;
-  }
-}
-
-/**
- * Check if team has duplicate positions (position must be unique)
- */
-export async function checkTeamMemberPositions(
-  teamId: string,
-  position: number,
-  userId: string
-): Promise<boolean> {
-  try {
-    const result = await query(
-      `SELECT COUNT(*) as count 
-       FROM tournament_participants 
-       WHERE team_id = ? 
-         AND team_position = ? 
-         AND user_id != ?`,
-      [teamId, position, userId]
-    );
-    
-    const count = result.rows[0]?.count || 0;
-    return count === 0; // Should be 0 duplicates
-  } catch (error) {
-    console.error('Error checking team member positions:', error);
-    throw error;
-  }
 }
 
 // ============================================================================
@@ -1098,83 +969,6 @@ export async function calculateFactionWinrates(
 }
 
 /**
- * Update league rankings after tournament completion
- */
-export async function updateLeagueRankings(
-  tournamentId: string
-): Promise<number> {
-  try {
-    // Get finishing positions from tournament_participants
-    const rankingsResult = await query(
-      `SELECT
-        rank() OVER (ORDER BY
-          tournament_wins DESC,
-          tournament_losses ASC,
-          tournament_omp DESC,
-          tournament_gwp DESC,
-          tournament_ogp DESC
-        ) as final_rank,
-        user_id
-       FROM tournament_participants
-       WHERE tournament_id = ?`,
-      [tournamentId]
-    );
-
-    let updatedCount = 0;
-
-    for (const row of rankingsResult.rows) {
-      // Update player rankings table
-      await query(
-        `UPDATE player_rankings
-         SET league_rank = CASE WHEN ? <= 10 THEN ? ELSE NULL END,
-             last_rank_update = CURRENT_TIMESTAMP
-         WHERE player_id = ?`,
-        [row.final_rank, row.user_id]
-      );
-      updatedCount++;
-    }
-
-    return updatedCount;
-  } catch (error) {
-    console.error('Error updating league rankings:', error);
-    throw error;
-  }
-}
-
-/**
- * Get tournament statistics snapshot
- */
-export async function getTournamentSnapshot(
-  tournamentId: string
-): Promise<{
-  tournament_id: string;
-  total_matches: number;
-  total_games: number;
-  avg_games_per_match: number;
-  total_participants: number;
-  final_date: Date;
-}> {
-  const result = await query(
-    `SELECT ? AS tournament_id,
-            COUNT(DISTINCT series.id) AS total_matches,
-            COUNT(games.id) AS total_games,
-            COALESCE(ROUND(COUNT(games.id) / NULLIF(COUNT(DISTINCT series.id), 0), 2), 0) AS avg_games_per_match,
-            (SELECT COUNT(*) FROM tournament_participants participants
-             WHERE participants.tournament_id = ?
-               AND participants.participation_status = 'accepted') AS total_participants,
-            MAX(games.played_at) AS final_date
-     FROM tournament_series series
-     JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
-     JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
-     JOIN tournament_phases phases ON phases.id = groups.phase_id
-     LEFT JOIN tournament_games games ON games.series_id = series.id AND games.status = 'completed'
-     WHERE phases.tournament_id = ?`,
-    [tournamentId, tournamentId, tournamentId]
-  );
-  return result.rows[0] as any;
-}
-
-/**
  * Get balance event impact computed directly from matches.
  * Uses event_date as the dividing line: matches before vs matches after.
  * Each match is processed twice (winner + loser perspective) like recalculateFactionMapStatistics.
@@ -1729,11 +1523,6 @@ export async function rebuildFactionMapStatisticsHistory(
   };
 }
 export default {
-  calculateLeagueTiebreakers,
-  calculateSwissTiebreakers,
-  calculateTeamSwissTiebreakers,
-  checkTeamMemberCount,
-  checkTeamMemberPositions,
   createFactionMapStatisticsSnapshot,
   getBalanceTrend,
   recalculatePlayerMatchStatistics,
@@ -1744,8 +1533,6 @@ export default {
   updatePlayerElo,
   updatePlayerFactionStats,
   calculateFactionWinrates,
-  updateLeagueRankings,
-  getTournamentSnapshot,
   getBalanceEventForwardImpact,
   getBalanceEventSnapshotImpact,
   getBalanceEventIntervalImpact,

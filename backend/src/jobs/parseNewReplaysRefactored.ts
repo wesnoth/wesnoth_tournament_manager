@@ -1517,30 +1517,28 @@ export class ParseNewReplaysRefactorized {
       return false;
     }
 
-    if (Number(tournament.competition_model_version) === 2) {
-      const phaseGames = await query(
-        `SELECT games.id, games.entry1_id, games.entry2_id,
-                entry1.team_id AS team1_id, entry2.team_id AS team2_id
-         FROM tournament_games games
-         JOIN tournament_series series ON series.id = games.series_id
-         JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
-         JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
-         JOIN tournament_phases phases ON phases.id = groups.phase_id
-         JOIN tournament_entries entry1 ON entry1.id = games.entry1_id
-         JOIN tournament_entries entry2 ON entry2.id = games.entry2_id
-         WHERE phases.tournament_id = ? AND rounds.status = 'in_progress' AND games.status = 'pending'
-           AND ((entry1.team_id = ? AND entry2.team_id = ?) OR (entry1.team_id = ? AND entry2.team_id = ?))
-         ORDER BY phases.phase_order, rounds.round_number, games.game_number
-         LIMIT 2`,
-        [tournament.id, team1, team2, team2, team1]
-      );
-      if (phaseGames.rows.length !== 1) return false;
-      const game = phaseGames.rows[0];
-      linkedGame = game;
-      parseSummary.linkedTournamentId = tournament.id;
-      parseSummary.linkedTournamentGameId = game.id;
-      parseSummary.tournamentLinkMethod = 'participants';
-    }
+    const phaseGames = await query(
+      `SELECT games.id, games.entry1_id, games.entry2_id,
+              entry1.team_id AS team1_id, entry2.team_id AS team2_id
+       FROM tournament_games games
+       JOIN tournament_series series ON series.id = games.series_id
+       JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+       JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
+       JOIN tournament_phases phases ON phases.id = groups.phase_id
+       JOIN tournament_entries entry1 ON entry1.id = games.entry1_id
+       JOIN tournament_entries entry2 ON entry2.id = games.entry2_id
+       WHERE phases.tournament_id = ? AND rounds.status = 'in_progress' AND games.status = 'pending'
+         AND ((entry1.team_id = ? AND entry2.team_id = ?) OR (entry1.team_id = ? AND entry2.team_id = ?))
+       ORDER BY phases.phase_order, rounds.round_number, games.game_number
+       LIMIT 2`,
+      [tournament.id, team1, team2, team2, team1]
+    );
+    if (phaseGames.rows.length !== 1) return false;
+    const game = phaseGames.rows[0];
+    linkedGame = game;
+    parseSummary.linkedTournamentId = tournament.id;
+    parseSummary.linkedTournamentGameId = game.id;
+    parseSummary.tournamentLinkMethod = 'participants';
 
     // Enrich parseSummary with detected team information
     console.log(`   [TEAM TOURNAMENT] Building detectedTeams structure...`);
