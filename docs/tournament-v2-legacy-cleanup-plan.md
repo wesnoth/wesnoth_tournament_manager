@@ -4,7 +4,7 @@
 
 Originally (2026-09-08) this work was deferred until the tournament active at that time had finished, and this document recorded the investigation and the proposed sequence only.
 
-Update (2026-10-10): the maintainer confirmed that no version 1 tournaments remain and authorized the code-only steps. Steps 2 and 3 are implemented and were merged into `prod` on 2026-10-11; step 1 is implemented with its database-backed integration coverage still pending and limited by audit findings 29, 30, and 32 (validator gaps). Each step distinguishes implementation, local verification, TEST validation, and release; none of them implies a production release. Steps 4 and 5 (schema contraction and field consolidation) still require the read-only production audit, a tested restore, and explicit authorization; production commands remain outside this authorization.
+Update (2026-10-10): the maintainer confirmed that no version 1 tournaments remain and authorized the code-only steps. Steps 2 and 3 are implemented and were merged into `prod` on 2026-10-11; step 1 is implemented with its database-backed integration coverage still pending; its validator gaps (audit findings 29, 30, and 32) were fixed on 2026-10-11. Each step distinguishes implementation, local verification, TEST validation, and release; none of them implies a production release. Steps 4 and 5 (schema contraction and field consolidation) still require the read-only production audit, a tested restore, and explicit authorization; production commands remain outside this authorization.
 
 The cleanup must be delivered as several small releases. Destructive schema changes come only after the application no longer reads or writes the affected fields and production observations confirm that the compatibility paths are unused.
 
@@ -164,7 +164,7 @@ Collect server access metrics for the old routes that currently return `410 Gone
 
 ### 1. Close the version 2 creation contract
 
-Implemented on 2026-10-10, validation pending: creation requires a valid `format_definition`, validates it before writing, and commits the tournament, organizers, allowed assets, and phase graph in one transaction. Migration `20261009_120000` sets the default to version 2. Merged into `prod` on 2026-10-11. The integration-test item below remains open. The atomic write guarantees that a created graph is complete, not that it is executable: audit findings 29 (disconnected graphs accepted), 30 (legacy Swiss round limit stricter than the editor), and 32 (malformed definitions throw) must be fixed before this step is closed.
+Implemented on 2026-10-10, validation pending: creation requires a valid `format_definition`, validates it before writing, and commits the tournament, organizers, allowed assets, and phase graph in one transaction. Migration `20261009_120000` sets the default to version 2. Merged into `prod` on 2026-10-11. The integration-test item below remains open. The atomic write guarantees that a created graph is complete, not that it is executable: audit findings 29 (disconnected graphs accepted), 30 (legacy Swiss round limit stricter than the editor), and 32 (malformed definitions throw) were fixed on 2026-10-11 (`b3d19a8f`, pending TEST); the Swiss round limit is 10 by maintainer decision. The step closes when that is validated and the integration coverage below exists.
 
 - Require a valid phase `format_definition` in the tournament creation API.
 - Create the root tournament and its phase graph atomically.
