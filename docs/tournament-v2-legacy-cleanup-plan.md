@@ -2,7 +2,9 @@
 
 ## Status
 
-This work is deferred until the tournament that was active on 2026-09-08 has finished. This document records the investigation and the proposed sequence only. It does not authorize code changes, schema changes, data migrations, or production commands.
+Originally (2026-09-08) this work was deferred until the tournament active at that time had finished, and this document recorded the investigation and the proposed sequence only.
+
+Update (2026-10-10): the maintainer confirmed that no version 1 tournaments remain and authorized the code-only steps. Steps 2 and 3 are implemented on `test`; step 1 is implemented with its database-backed integration coverage still pending and limited by audit findings 29, 30, and 32 (validator gaps). Each step distinguishes implementation, local verification, TEST validation, and release; none of them implies a production release. Steps 4 and 5 (schema contraction and field consolidation) still require the read-only production audit, a tested restore, and explicit authorization; production commands remain outside this authorization.
 
 The cleanup must be delivered as several small releases. Destructive schema changes come only after the application no longer reads or writes the affected fields and production observations confirm that the compatibility paths are unused.
 
@@ -72,7 +74,7 @@ These fields are mixed with active version 2 behavior and are not safe first-pas
 - `competition_model_version` still selects validation, compilation, API, event, and test paths in the backend. Since 2026-10-10 its schema default is version 2 and creation always stores a phase graph.
 - `tournament_type`, `general_rounds`, `final_rounds`, format fields, `total_rounds`, and `current_round` still feed UI, API, notifications, or summaries even where the phase graph contains equivalent information.
 - `auto_progress` is consumed by the compiler. `auto_advance_round` remains exposed through UI and API paths, and current writes keep the two concepts aligned.
-- Participant and team aggregates such as tournament wins, losses, points, OMP, GWP, OGP, and current round have no identified version 2 writer. Hidden version 1 UI still reads some of them.
+- Participant and team aggregates such as tournament wins, losses, points, OMP, GWP, OGP, and current round have no identified version 2 writer. No frontend view reads them since the version 1 UI was removed on 2026-10-09.
 - `tournament_ranking` remains an input to version 2 entry seeding in the competition compiler. An explicit replacement seeding rule is required before removing it.
 - `tournament_participants.status` appears to be a public compatibility field, while `participation_status` is authoritative. Confirm all API consumers before consolidating it.
 - `tournament_teams.status` is actively used to select complete or active teams and must remain.
@@ -162,7 +164,7 @@ Collect server access metrics for the old routes that currently return `410 Gone
 
 ### 1. Close the version 2 creation contract
 
-Done on 2026-10-10: creation requires a valid `format_definition`, validates it before writing, and commits the tournament, organizers, allowed assets, and phase graph in one transaction. Migration `20261009_120000` sets the default to version 2. The integration-test item below remains open.
+Implemented on 2026-10-10, validation pending: creation requires a valid `format_definition`, validates it before writing, and commits the tournament, organizers, allowed assets, and phase graph in one transaction. Migration `20261009_120000` sets the default to version 2. The integration-test item below remains open. The atomic write guarantees that a created graph is complete, not that it is executable: audit findings 29 (disconnected graphs accepted), 30 (legacy Swiss round limit stricter than the editor), and 32 (malformed definitions throw) must be fixed before this step is closed.
 
 - Require a valid phase `format_definition` in the tournament creation API.
 - Create the root tournament and its phase graph atomically.
@@ -174,7 +176,7 @@ This release establishes that new data cannot recreate the legacy state after cl
 
 ### 2. Remove frontend version 1 behavior
 
-Done (2026-10-09 removal, 2026-10-10 split).
+Implemented (2026-10-09 removal, verified on TEST; 2026-10-10 split, pending TEST).
 
 - Delete the unused API client methods.
 - Remove the hidden version 1 tabs, state, actions, and modals from `TournamentDetail`.
@@ -186,10 +188,10 @@ Validate tournament viewing, organizer actions, scheduling, standings, replay li
 
 ### 3. Remove backend version 1 behavior
 
-Done on 2026-10-10. The package already points only to the supported runner (the broken `migrate` script was removed on 2026-10-08). The remaining `competition_model_version` guards stay until step 5.
+Implemented on 2026-10-10 (local verification and local replay E2E; pending TEST). The package already points only to the supported runner (the broken `migrate` script was removed on 2026-10-08). The remaining `competition_model_version` guards stay until step 5.
 
 - Delete unreachable ranking and competition handlers.
-- Remove `410 Gone` compatibility shims after the telemetry window passes.
+- Remove `410 Gone` compatibility shims. The telemetry window was superseded by the maintainer's decision that no client uses them (2026-10-10).
 - Remove unused version 1 services, types, validation, and conversion-only code that has no remaining operational or audit purpose.
 - Remove the inactive migration runner and obsolete `backend/src/migrations/` tree.
 - Repair the backend migration package command so it points to the one supported runner.
