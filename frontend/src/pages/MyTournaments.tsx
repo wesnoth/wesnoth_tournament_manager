@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import FormatIssueList from '../components/FormatIssueList';
+import { readFormatIssues, type FormatValidationIssue } from '../utils/formatIssues';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { tournamentService } from '../services/api';
@@ -16,6 +18,8 @@ const MyTournaments: React.FC = () => {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // Phase-format problems returned by the API, listed so the organizer knows what to fix.
+  const [formatIssues, setFormatIssues] = useState<FormatValidationIssue[]>([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [formData, setFormData] = useState<TournamentFormData>({
     name: '',
@@ -64,7 +68,8 @@ const MyTournaments: React.FC = () => {
 
   const handleCreateTournament = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    setFormatIssues([]);
+
     if (!formData.name || !formData.description || !formData.tournament_type) {
       setError(t('error_name_description_required'));
       return;
@@ -121,7 +126,12 @@ const MyTournaments: React.FC = () => {
     } catch (err: any) {
       // Rate-limit errors are already localized by the backend with the retry
       // time rendered in the authenticated user's profile timezone.
-      setError(err.response?.data?.error || t('error_failed_create_tournament'));
+      // A rejected phase format is explained by the localized issue list, whose
+      // title already says what happened; the backend's generic English message
+      // would only repeat it.
+      const issues = readFormatIssues(err);
+      setFormatIssues(issues);
+      setError(issues.length > 0 ? '' : err.response?.data?.error || t('error_failed_create_tournament'));
     }
   };
 
@@ -144,6 +154,7 @@ const MyTournaments: React.FC = () => {
         </div>
 
         {error && <p className="bg-red-100 text-red-800 px-4 py-3 rounded-md mb-6 border-l-4 border-red-600">{error}</p>}
+        <FormatIssueList issues={formatIssues} definition={formData.format_definition} />
 
         {showCreateForm && (
           <TournamentForm 

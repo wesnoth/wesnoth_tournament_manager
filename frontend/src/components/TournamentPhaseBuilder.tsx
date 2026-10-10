@@ -7,6 +7,7 @@ import type {
 } from '../types/tournament';
 import { tournamentService } from '../services/api';
 import EditableIntegerInput from './EditableIntegerInput';
+import { MAX_SWISS_ROUNDS } from '../utils/formatIssues';
 
 interface Props {
   value?: TournamentFormatDefinition;
@@ -227,7 +228,7 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
               </select>
             </label>
             {item.format === 'swiss' && <label className="text-sm">Rounds
-              <EditableIntegerInput data-help-id="field-tournament-swiss-rounds" disabled={disabled} min={1} max={10} value={item.swiss?.round_count || 1} onValueChange={roundCount => replacePhase(index, { ...item, swiss: { ...item.swiss, round_count: roundCount } })} className="mt-1 w-full px-2 py-1 border rounded" />
+              <EditableIntegerInput data-help-id="field-tournament-swiss-rounds" disabled={disabled} min={1} max={MAX_SWISS_ROUNDS} value={item.swiss?.round_count || 1} onValueChange={roundCount => replacePhase(index, { ...item, swiss: { ...item.swiss, round_count: roundCount } })} className="mt-1 w-full px-2 py-1 border rounded" />
             </label>}
             {item.format === 'round_robin' && <label className="text-sm">Cycles
               <select data-help-id="option-tournament-league-cycles" disabled={disabled} value={item.round_robin?.cycle_count || 1} onChange={(event) => replacePhase(index, { ...item, round_robin: { ...item.round_robin, cycle_count: Number(event.target.value) as 1 | 2 } })} className="mt-1 w-full px-2 py-1 border rounded"><option value={1}>One</option><option value={2}>Two</option></select>

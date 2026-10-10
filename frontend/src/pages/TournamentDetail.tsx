@@ -38,6 +38,8 @@ import TournamentDetailTabs, {
 import TournamentTeamsList from '../components/TournamentTeamsList';
 import TournamentParticipantsTable, { type DirectPassContext, type ParticipantRowActions } from '../components/TournamentParticipantsTable';
 import { buildDirectPassGroups } from '../components/TournamentDirectPassControl';
+import FormatIssueList from '../components/FormatIssueList';
+import { readFormatIssues, type FormatValidationIssue } from '../utils/formatIssues';
 import { formatTournamentDate, getTournamentStatusColor, statusLabel, tournamentModeLabel } from '../utils/tournamentStatus';
 
 /**
@@ -70,6 +72,8 @@ const TournamentDetail: React.FC = () => {
   const [joiningTeamLoading, setJoiningTeamLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // Phase-format problems returned when saving the configuration, listed so the organizer knows what to fix.
+  const [formatIssues, setFormatIssues] = useState<FormatValidationIssue[]>([]);
   const [success, setSuccess] = useState('');
   const [activeTab, setActiveTab] = useState<TournamentDetailTab>(() => getRequestedTournamentTab(searchParams) || 'participants');
   const tabInitializedForTournament = useRef<string | null>(null);
@@ -499,6 +503,7 @@ const handleConfirmDelete = async () => {
   };
 
   const handleSaveChanges = async () => {
+    setFormatIssues([]);
     try {
       const updateObj: TournamentUpdatePayload = {
         tournament_type: editData.tournament_type,
@@ -531,7 +536,12 @@ const handleConfirmDelete = async () => {
       fetchTournamentData();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
-      setError(err.response?.data?.error || t('error_failed_save_changes'));
+      // A rejected phase format is explained by the localized issue list, whose
+      // title already says what happened; the backend's generic English message
+      // would only repeat it.
+      const issues = readFormatIssues(err);
+      setFormatIssues(issues);
+      setError(issues.length > 0 ? '' : err.response?.data?.error || t('error_failed_save_changes'));
     }
   };
 
@@ -645,6 +655,7 @@ const handleConfirmDelete = async () => {
       </div>
 
       {error && <p className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded mb-6">{error}</p>}
+      <FormatIssueList issues={formatIssues} definition={editData.format_definition} />
       {success && <p className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded mb-6">{success}</p>}
 
       <div data-help-id="region-tournament-details-summary" className="bg-white rounded-lg shadow-lg p-8 mb-8">
@@ -739,7 +750,7 @@ const handleConfirmDelete = async () => {
             const selected = allMaps.filter(m => mapIds.includes(m.id));
             setUnrankedMaps(selected);
           }}
-          onCancel={() => setEditMode(false)}
+          onCancel={() => { setEditMode(false); setFormatIssues([]); }}
           entryOptions={(tournament?.tournament_mode === 'team' ? teams : participants).map(entry => ({ id: entry.id, name: entry.nickname }))}
         />
       )}

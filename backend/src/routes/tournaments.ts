@@ -1017,6 +1017,18 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'No fields to update' });
     }
 
+    // Validate the phase graph before anything is written. The summary fields
+    // are committed in their own transaction below and the format is saved
+    // after it, so a format rejected only at that point would leave the
+    // configuration half updated. saveTournamentFormat validates again, which
+    // is cheap and keeps it safe for its other callers.
+    if (format_definition !== undefined) {
+      if (!format_definition || typeof format_definition !== 'object') {
+        return res.status(400).json({ error: 'A phase format (format_definition) is required' });
+      }
+      assertValidTournamentFormat(format_definition as TournamentFormatDefinition);
+    }
+
     updates.push(`updated_at = CURRENT_TIMESTAMP`);
     values.push(id);
 
@@ -1084,6 +1096,10 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
       tournament: updated.rows[0]
     });
   } catch (error: any) {
+    // An invalid phase graph is the organizer's input, not a server fault:
+    // return the validator issues so the form can say what to fix, as
+    // creation and PUT /:id/format already do.
+    if (error.issues) return res.status(400).json({ error: error.message, issues: error.issues });
     console.error('Update tournament error:', error);
     res.status(500).json({ error: 'Failed to update tournament' });
   }
