@@ -719,9 +719,12 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
 
     // Build WHERE clause dynamically
     // This legacy history endpoint follows the same rule as the combined feed:
-    // administrative tournament outcomes remain visible in the tournament,
-    // but only played games with a replay URL belong in match histories.
-    let whereConditions: string[] = ["TRIM(COALESCE(m.replay_file_path, '')) <> ''"];
+    // played games are listed with or without a replay file, and organizer or
+    // admin decisions stay in the tournament record only.
+    let whereConditions: string[] = [
+      `NOT EXISTS (SELECT 1 FROM tournament_games decided
+                   WHERE decided.match_id = m.id AND decided.organizer_action IS NOT NULL)`,
+    ];
     let params: any[] = [];
 
     if (playerFilter) {
@@ -769,7 +772,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
       `SELECT m.id, m.winner_id, m.loser_id, m.winner_faction, m.loser_faction, m.map, m.status,
               m.winner_elo_before, m.winner_elo_after, m.loser_elo_before, m.loser_elo_after,
               m.winner_rating, m.loser_rating, m.winner_comments, m.loser_comments,
-              m.replay_file_path, m.replay_downloads, m.created_at, m.updated_at, m.played_at,
+              m.replay_file_path, m.replay_downloads, m.created_at, m.updated_at,
               m.admin_reviewed, m.tournament_id,
               w.nickname as winner_nickname,
               l.nickname as loser_nickname,

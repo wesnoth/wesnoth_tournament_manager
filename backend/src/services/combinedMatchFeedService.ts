@@ -85,10 +85,12 @@ const buildRankedMatchQuery = (
   filters: MatchFeedFilters,
   playerId?: string,
 ): { sql: string; params: unknown[] } => {
-  // Match-history feeds represent games that were actually played. Tournament
-  // decisions can still exist in their tournament bracket, but without a
-  // replay URL they must not leak into general or player match histories.
-  const conditions: string[] = ["TRIM(COALESCE(m.replay_file_path, '')) <> ''"];
+  // Match-history feeds show games that were played, with or without a replay
+  // file (simulated matches on local and TEST have none). Only organizer or
+  // admin decisions stay out: they belong to the tournament record, not to
+  // match histories (maintainer decision, 2026-10-12, replacing the replay
+  // requirement of 2026-09-15).
+  const conditions: string[] = ['(game.id IS NULL OR game.organizer_action IS NULL)'];
   const params: unknown[] = [];
   const matchType = normalizeMatchType(filters.matchType);
 
@@ -183,10 +185,10 @@ const buildTournamentGameQuery = (
   playerId?: string,
 ): { sql: string; params: unknown[] } => {
   // The tournament page owns the complete competition record. Match-history
-  // feeds only include tournament games backed by a downloadable replay URL.
+  // feeds include played tournament games with or without a replay URL, and
+  // leave out organizer or admin decisions (`organizer_action`, below).
   const conditions = [
     'game.match_id IS NULL',
-    "TRIM(COALESCE(pending_replay.replay_url, replay.replay_url, '')) <> ''",
     `(
       (game.status = 'completed' AND game.organizer_action IS NULL)
       OR game.status = 'cancelled'
