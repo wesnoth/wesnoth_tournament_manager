@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { query } from '../config/database.js';
 import { authMiddleware, AuthRequest, optionalAuthMiddleware } from '../middleware/auth.js';
 import { sendDiscordNotification, storeNotificationForUsers } from '../services/discordNotificationService.js';
-import { groupSlotsIntoRanges, formatTimeRangesForDiscord, formatTimeRangesForDiscordByTimezone, buildNotificationMessage } from '../utils/slotGrouping.js';
+import { groupSlotsIntoRanges, formatTimeRangesForDiscordByTimezone } from '../utils/slotGrouping.js';
 import {
   createSeriesProposal,
   getSeriesProposal,
@@ -63,113 +63,44 @@ const getTeamNotificationContext = async (tournamentId: string, teamId: string):
   };
 };
 
+/** Both sides of a team series, as shown in notifications. */
+interface SeriesTeams {
+  actorTeam: TeamNotificationContext;
+  opponentTeam: TeamNotificationContext;
+}
+
 /**
- * Notify the other participants when a phase-engine series receives a proposal.
- * Series schedules intentionally have no legacy match id, so the in-app record
- * is linked to the tournament and remains visible in the notification centre.
+ * Identify the actor's team and the opposing team of a team series, so the
+ * notification names both teams instead of a single nickname. Returns null
+ * for 1v1 series, or when either team cannot be resolved (the caller then
+ * falls back to nicknames).
+ *
+ * @param rows participants of the series, each with `user_id` and `team_id`.
  */
-const notifySeriesProposal = async (
+const resolveSeriesTeams = async (
   tournamentId: string,
-  seriesId: string,
-  proposerUserId: string,
-  slotDatetimes: string[],
-  notes?: string
-): Promise<void> => {
-  const contextResult = await query(
-    `SELECT tournaments.tournament_mode, tournaments.name AS tournament_name,
-            entries.entry_type, entries.participant_id, entries.team_id,
-            tp.user_id, tp.team_id AS participant_team_id,
-            COALESCE(ue.nickname, ue.id) AS display_name, ue.discord_id, ue.timezone
-     FROM tournament_series_slots slots
-     JOIN tournament_entries entries ON entries.id = slots.resolved_entry_id
-     JOIN tournament_phase_rounds rounds ON rounds.id = (SELECT round_id FROM tournament_series WHERE id = ?)
-     JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
-     JOIN tournament_phases phases ON phases.id = groups.phase_id
-     JOIN tournaments ON tournaments.id = phases.tournament_id
-     JOIN tournament_participants tp
-       ON tp.id = entries.participant_id OR tp.team_id = entries.team_id
-     LEFT JOIN users_extension ue ON ue.id = tp.user_id
-     WHERE slots.series_id = ? AND slots.resolved_entry_id IS NOT NULL
-       AND phases.tournament_id = ? AND tp.participation_status = 'accepted'`,
-    [seriesId, seriesId, tournamentId]
-  );
-  const rows = contextResult.rows || [];
-  const recipientRows = rows.filter((row: any) => row.user_id !== proposerUserId);
-  const recipientIds = [...new Set(recipientRows.map((row: any) => row.user_id))];
-  if (recipientIds.length === 0) return;
-
-  const proposerRow = rows.find((row: any) => row.user_id === proposerUserId);
-  const tournamentMode = proposerRow?.tournament_mode || '1v1';
-  let proposerName = proposerRow?.display_name || 'Player';
-  let opponentName = recipientRows[0]?.display_name || 'Opponent';
-  let proposerTeamName: string | undefined;
-  let opponentTeamName: string | undefined;
-  let proposerTeamMembers: string[] | undefined;
-  let opponentTeamMembers: string[] | undefined;
-  let discordIds = recipientRows
-    .map((row: any) => row.discord_id)
-    .filter((id: string | null) => Boolean(id));
-
-  if (tournamentMode === 'team') {
-    const proposerTeamId = proposerRow?.participant_team_id || proposerRow?.team_id;
-    const opponentTeamRow = recipientRows.find(
-      (row: any) => (row.participant_team_id || row.team_id) !== proposerTeamId
-    );
-    const opponentTeamId = opponentTeamRow?.participant_team_id || opponentTeamRow?.team_id;
-    if (proposerTeamId && opponentTeamId) {
-      const proposerTeam = await getTeamNotificationContext(tournamentId, proposerTeamId);
-      const opponentTeam = await getTeamNotificationContext(tournamentId, opponentTeamId);
-      proposerName = proposerTeam.teamName;
-      opponentName = opponentTeam.teamName;
-      proposerTeamName = proposerTeam.teamName;
-      opponentTeamName = opponentTeam.teamName;
-      proposerTeamMembers = proposerTeam.memberNames;
-      opponentTeamMembers = opponentTeam.memberNames;
-      discordIds = opponentTeam.memberDiscordIds;
-      recipientIds.splice(0, recipientIds.length, ...opponentTeam.memberUserIds);
-    }
-  }
-
-  const ranges = groupSlotsIntoRanges(slotDatetimes);
-  const formattedRanges = formatTimeRangesForDiscordByTimezone(ranges, [
-    ...new Map(
-      rows.map((row: any) => [row.user_id, {
-        label: row.display_name || 'Player',
-        timezone: row.timezone || 'UTC',
-      }])
-    ).values(),
-  ]);
-  const notificationMessage = buildNotificationMessage('proposal', proposerName, ranges, notes);
-  const actorUserName = proposerRow?.display_name || proposerName;
-
-  await sendDiscordNotification(tournamentId, 'schedule_proposal', {
-    actionByUserName: actorUserName,
-    fromTeamName: proposerTeamName,
-    fromTeamMembers: proposerTeamMembers,
-    fromUserName: tournamentMode === '1v1' ? proposerName : actorUserName,
-    toTeamName: opponentTeamName,
-    toTeamMembers: opponentTeamMembers,
-    toUserName: tournamentMode === '1v1' ? opponentName : undefined,
-    discordIds,
-    proposedTimeRanges: formattedRanges,
-    messageExtra: notes || undefined,
-    seriesId,
-  }).catch(error => console.error('⚠️ Discord series notification failed:', error));
-
-  await storeNotificationForUsers(
-    recipientIds,
-    tournamentId,
-    'schedule_proposal',
-    `🗓️ Schedule Proposal - ${proposerRow?.tournament_name || 'Tournament'}`,
-    notificationMessage,
-    notes || null,
-    seriesId
-  ).catch(error => console.error(`⚠️ [SCHEDULING][NOTIFICATIONS] Failed action=schedule_proposal tournamentId=${tournamentId} seriesId=${seriesId}:`, error));
+  rows: any[],
+  actorUserId: string
+): Promise<SeriesTeams | null> => {
+  const actorTeamId = rows.find((row) => row.user_id === actorUserId)?.team_id;
+  const opponentTeamId = rows.find((row) => row.team_id && row.team_id !== actorTeamId)?.team_id;
+  if (!actorTeamId || !opponentTeamId) return null;
+  return {
+    actorTeam: await getTeamNotificationContext(tournamentId, actorTeamId),
+    opponentTeam: await getTeamNotificationContext(tournamentId, opponentTeamId),
+  };
 };
 
 type SeriesNotificationAction = 'schedule_proposal' | 'schedule_confirmed' | 'schedule_rejected' | 'schedule_changed' | 'schedule_cancelled';
 
-/** Notify every other participant when a phase-engine series changes state. */
+/**
+ * Notify every other participant when a phase-engine series changes state.
+ *
+ * Everyone in the series except the actor is notified; in a team series that
+ * includes the actor's teammate, so both members know what their team did. In
+ * team series the messages and the Discord embed name both teams (maintainer
+ * decision, 2026-10-11); 1v1 series use nicknames.
+ */
 const notifySeriesParticipants = async (
   seriesId: string,
   proposalId: string,
@@ -178,8 +109,8 @@ const notifySeriesParticipants = async (
   notes?: string
 ): Promise<void> => {
   const context = await query(
-    `SELECT phases.tournament_id, tournaments.name AS tournament_name,
-            tp.user_id, COALESCE(ue.nickname, ue.id) AS display_name, ue.discord_id, ue.timezone
+    `SELECT phases.tournament_id, tournaments.name AS tournament_name, tournaments.tournament_mode,
+            tp.user_id, tp.team_id, COALESCE(ue.nickname, ue.id) AS display_name, ue.discord_id, ue.timezone
      FROM tournament_series_slots slots
      JOIN tournament_series series ON series.id = slots.series_id
      JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
@@ -226,12 +157,20 @@ const notifySeriesParticipants = async (
   const actorName = actor?.display_name || 'Player';
   const recipientName = recipients[0]?.display_name || 'Opponent';
   const discordIds = recipients.map((row: any) => row.discord_id).filter(Boolean);
+  const teams = (actor?.tournament_mode || rows[0]?.tournament_mode) === 'team'
+    ? await resolveSeriesTeams(tournamentId, rows, actorUserId)
+    : null;
+  // "Ana (Red) ... the series Red vs Blue." for teams, "Ana ... your tournament series." for 1v1.
+  const actorLabel = teams ? `${actorName} (${teams.actorTeam.teamName})` : actorName;
+  const seriesLabel = teams
+    ? `the series ${teams.actorTeam.teamName} vs ${teams.opponentTeam.teamName}`
+    : 'your tournament series';
   const messageByAction: Record<SeriesNotificationAction, string> = {
-    schedule_proposal: `${actorName} proposed a schedule for your tournament series.`,
-    schedule_confirmed: `${actorName} confirmed the schedule for your tournament series.`,
-    schedule_rejected: `${actorName} rejected the schedule for your tournament series.`,
-    schedule_changed: `${actorName} changed the schedule for your tournament series.`,
-    schedule_cancelled: `${actorName} cancelled the schedule proposal for your tournament series.`,
+    schedule_proposal: `${actorLabel} proposed a schedule for ${seriesLabel}.`,
+    schedule_confirmed: `${actorLabel} confirmed the schedule for ${seriesLabel}.`,
+    schedule_rejected: `${actorLabel} rejected the schedule for ${seriesLabel}.`,
+    schedule_changed: `${actorLabel} changed the schedule for ${seriesLabel}.`,
+    schedule_cancelled: `${actorLabel} cancelled the schedule proposal for ${seriesLabel}.`,
   };
   const titleByAction: Record<SeriesNotificationAction, string> = {
     schedule_proposal: '🗓️ Schedule Proposal',
@@ -244,7 +183,11 @@ const notifySeriesParticipants = async (
   await sendDiscordNotification(tournamentId, action, {
     actionByUserName: actorName,
     fromUserName: actorName,
-    toUserName: recipientName,
+    toUserName: teams ? undefined : recipientName,
+    fromTeamName: teams?.actorTeam.teamName,
+    fromTeamMembers: teams?.actorTeam.memberNames,
+    toTeamName: teams?.opponentTeam.teamName,
+    toTeamMembers: teams?.opponentTeam.memberNames,
     discordIds,
     proposedTimeRanges: formattedRanges,
     messageExtra: notificationNotes || undefined,
@@ -261,85 +204,6 @@ const notifySeriesParticipants = async (
     notificationNotes || null,
     seriesId
   ).catch(error => console.error(`⚠️ [SCHEDULING][NOTIFICATIONS] Failed action=${action} tournamentId=${tournamentId} seriesId=${seriesId} proposalId=${proposalId}:`, error));
-};
-
-/** Notify the original proposer when the other participant rejects a series proposal. */
-const notifySeriesRejection = async (
-  proposalId: string,
-  rejectingUserId: string,
-  notes?: string
-): Promise<void> => {
-  const result = await query(
-    `SELECT proposals.proposed_by_user_id, series.id AS series_id,
-            phases.tournament_id, tournaments.name AS tournament_name,
-            tournaments.tournament_mode
-     FROM match_schedule_proposals proposals
-     JOIN tournament_series series ON series.id = proposals.tournament_series_id
-     JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
-     JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
-     JOIN tournament_phases phases ON phases.id = groups.phase_id
-     JOIN tournaments ON tournaments.id = phases.tournament_id
-     WHERE proposals.id = ?`,
-    [proposalId]
-  );
-  if (!result.rows?.length) return;
-
-  const proposal = result.rows[0];
-  const usersResult = await query(
-    `SELECT tp.user_id, tp.team_id,
-            COALESCE(ue.nickname, ue.id) AS display_name, ue.discord_id, ue.timezone
-     FROM tournament_series_slots slots
-     JOIN tournament_entries entries ON entries.id = slots.resolved_entry_id
-     JOIN tournament_participants tp
-       ON tp.id = entries.participant_id OR tp.team_id = entries.team_id
-     LEFT JOIN users_extension ue ON ue.id = tp.user_id
-     WHERE slots.series_id = ? AND tp.participation_status = 'accepted'`,
-    [proposal.series_id]
-  );
-  const users = usersResult.rows || [];
-  const rejectingUser = users.find((user: any) => user.user_id === rejectingUserId);
-  const proposerUsers = users.filter((user: any) => user.user_id === proposal.proposed_by_user_id);
-  if (!proposerUsers.length) return;
-
-  const slotsResult = await query(
-    `SELECT slot_datetime FROM match_schedule_slots WHERE proposal_id = ? ORDER BY slot_datetime`,
-    [proposalId]
-  );
-  const ranges = groupSlotsIntoRanges((slotsResult.rows || []).map((slot: any) => slot.slot_datetime));
-  const formattedRanges = formatTimeRangesForDiscordByTimezone(ranges, [
-    ...new Map(
-      users.map((user: any) => [user.user_id, {
-        label: user.display_name || 'Player',
-        timezone: user.timezone || 'UTC',
-      }])
-    ).values(),
-  ]);
-  const rejectingName = rejectingUser?.display_name || 'Player';
-  const proposerName = proposerUsers[0].display_name || 'Player';
-  const proposerDiscordIds = proposerUsers
-    .map((user: any) => user.discord_id)
-    .filter((id: string | null) => Boolean(id));
-
-  await sendDiscordNotification(proposal.tournament_id, 'schedule_rejected', {
-    actionByUserName: rejectingName,
-    fromUserName: rejectingName,
-    toUserName: proposerName,
-    discordIds: proposerDiscordIds,
-    proposedTimeRanges: formattedRanges,
-    messageExtra: notes || undefined,
-    proposalId,
-    seriesId: proposal.series_id,
-  }).catch(error => console.error(`⚠️ [SCHEDULING][DISCORD] Failed action=schedule_rejected tournamentId=${proposal.tournament_id} seriesId=${proposal.series_id} proposalId=${proposalId}:`, error));
-
-  await storeNotificationForUsers(
-    [proposal.proposed_by_user_id],
-    proposal.tournament_id,
-    'schedule_rejected',
-    `🗓️ Schedule Rejected - ${proposal.tournament_name}`,
-    `${rejectingName} rejected your schedule proposal.${notes ? ` ${notes}` : ''}`,
-    notes || null,
-    proposal.series_id
-  ).catch(error => console.error(`⚠️ [SCHEDULING][NOTIFICATIONS] Failed action=schedule_rejected tournamentId=${proposal.tournament_id} seriesId=${proposal.series_id} proposalId=${proposalId}:`, error));
 };
 
 // ============================================================
@@ -500,6 +364,8 @@ router.post('/proposals/:proposalId/reject', authMiddleware, async (req: AuthReq
       `SELECT tournament_series_id FROM match_schedule_proposals WHERE id = ?`,
       [proposalId]
     );
+    // Every proposal belongs to a phase-engine series; the version 1
+    // per-match proposals and their rejection notice were removed.
     if (seriesInfo.rows?.[0]?.tournament_series_id) {
       await notifySeriesParticipants(
         seriesInfo.rows[0].tournament_series_id,
@@ -508,8 +374,6 @@ router.post('/proposals/:proposalId/reject', authMiddleware, async (req: AuthReq
         'schedule_rejected',
         notes
       );
-    } else {
-      await notifySeriesRejection(proposalId, userId, notes);
     }
     return res.json(result);
   } catch (error) {
