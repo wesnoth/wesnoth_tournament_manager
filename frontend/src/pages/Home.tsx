@@ -287,7 +287,7 @@ const Home: React.FC = () => {
           <section className="bg-white rounded-xl shadow-lg p-8">
             <div className="flex justify-between items-center mb-6 pb-4 border-b-2 border-gray-200">
               <h2 className="text-2xl font-bold text-gray-800">{t('recent_games')}</h2>
-              <a href="/matches" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 font-semibold text-sm px-4 py-2 rounded transition-all">{t('view_all') || 'View All →'}</a>
+              <a href="/matches" data-help-id="action-view-all-matches" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 font-semibold text-sm px-4 py-2 rounded transition-all">{t('view_all') || 'View All →'}</a>
             </div>
             {recentMatches.length > 0 ? (
               <div className="overflow-x-auto">
