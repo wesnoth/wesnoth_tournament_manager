@@ -19,8 +19,6 @@ const CONTEXTUAL_HELP_ROUTES: Record<string, string> = {
   '/tournament': 'tournament',
   '/events': 'events',
   '/matches': 'matches',
-  '/my-matches': 'my-matches',
-  '/my-stats': 'my-stats',
   '/faq': 'faq',
   '/admin/audit': 'admin-audit',
 };

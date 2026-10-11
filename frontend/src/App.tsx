@@ -21,9 +21,7 @@ const Profile = React.lazy(() => import('./pages/Profile'));
 const Notifications = React.lazy(() => import('./pages/Notifications'));
 const PlayerProfile = React.lazy(() => import('./pages/PlayerProfile'));
 const Matches = React.lazy(() => import('./pages/Matches'));
-const MyMatches = React.lazy(() => import('./pages/MyMatches'));
 const Admin = React.lazy(() => import('./pages/Admin'));
-const MyStats = React.lazy(() => import('./pages/MyStats'));
 const MyTournaments = React.lazy(() => import('./pages/MyTournaments'));
 const Rankings = React.lazy(() => import('./pages/Rankings'));
 const Statistics = React.lazy(() => import('./pages/Statistics'));
@@ -126,7 +124,6 @@ const App: React.FC = () => {
               <Route path="/profile" element={<Profile />} />
               <Route path="/player/:id" element={<PlayerProfile />} />
               <Route path="/matches" element={<Matches />} />
-              <Route path="/my-matches" element={<MyMatches />} />
               <Route path="/players" element={<Players />} />
               <Route path="/rankings" element={<Rankings />} />
               <Route path="/statistics" element={<Statistics />} />
@@ -137,7 +134,6 @@ const App: React.FC = () => {
               <Route path="/tournament/:id" element={<TournamentDetail />} />
               <Route path="/events" element={<Events />} />
               <Route path="/news" element={<News />} />
-              <Route path="/my-stats" element={<MyStats />} />
               <Route path="/my-tournaments" element={<MyTournaments />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/admin/news" element={<AdminNews />} />

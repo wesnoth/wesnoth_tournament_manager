@@ -157,7 +157,6 @@ export const userService = {
     }
     return api.get(`/users/${id}/matches`, { params });
   },
-  getMatches: () => api.get('/matches'),
   searchUsers: (query: string) => api.get(`/users/search/${query}`),
   getGlobalRanking: (page: number = 1, filters?: any, sortBy?: string, sortOrder?: string) => {
     const params: any = { page };
@@ -179,30 +178,6 @@ export const matchService = {
   updateStream: (matchId: string, streamId: string, stream_url: string) => api.put(`/matches/${matchId}/streams/${streamId}`, { stream_url }),
   deleteStream: (matchId: string, streamId: string) => api.delete(`/matches/${matchId}/streams/${streamId}`),
   confirmMatch: (id: string, data: any) => api.post(`/matches/${id}/confirm`, data),
-  getAllMatches: (page: number = 1, filters?: any) => {
-    const params: any = { page };
-    if (filters) {
-      if (filters.player) params.player = filters.player;
-      if (filters.map) params.map = filters.map;
-      if (filters.status) params.status = filters.status;
-      if (filters.confirmed) params.confirmed = filters.confirmed;
-      if (filters.faction) params.faction = filters.faction;
-      if (filters.match_type) params.match_type = filters.match_type;
-    }
-    return api.get('/matches', { params });
-  },
-  getUserMatches: (userId: string, page: number = 1, filters?: any) => {
-    const params: any = { page };
-    if (filters) {
-      if (filters.player) params.player = filters.player;
-      if (filters.map) params.map = filters.map;
-      if (filters.status) params.status = filters.status;
-      if (filters.confirmed) params.confirmed = filters.confirmed;
-      if (filters.faction) params.faction = filters.faction;
-      if (filters.match_type) params.match_type = filters.match_type;
-    }
-    return api.get(`/users/${userId}/matches`, { params });
-  },
   getPendingMatches: () => api.get('/matches/pending/user'),
   getAllPendingMatches: () => api.get('/matches/pending/all'),
   getAllDisputedMatches: (page: number = 1) => api.get('/matches/disputed/all', { params: { page } }),
