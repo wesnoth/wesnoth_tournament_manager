@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import type { PoolConnection } from 'mysql2/promise';
 import { query } from '../config/database.js';
 import { isClientSafeError } from '../utils/clientError.js';
 import { logAuditEvent } from '../middleware/audit.js';
@@ -26,9 +27,28 @@ export type RecalculationResult = {
   warnings?: string[];
 };
 
-type RecalculationExecutor = (
-  onProgress: (progress: GlobalStatsRecalculationProgress) => Promise<void>
+/** What the running job tells its executor about itself. */
+export type RecalculationExecutionContext = {
+  /** The job row; the executor marks it inside its own transaction (audit finding 31). */
+  jobId: string;
+};
+
+export type RecalculationExecutor = (
+  onProgress: (progress: GlobalStatsRecalculationProgress) => Promise<void>,
+  context: RecalculationExecutionContext
 ) => Promise<RecalculationResult>;
+
+/**
+ * A recalculation slot taken by `reserveGlobalStatsRecalculation`. It must end
+ * in exactly one of `startGlobalStatsRecalculationJob` (after its job row is
+ * committed) or `releaseGlobalStatsRecalculationReservation`.
+ */
+export type GlobalStatsRecalculationReservation = {
+  readonly jobId: string;
+  readonly requestedBy: string | null;
+  readonly reason: string;
+  readonly execute: RecalculationExecutor;
+};
 
 /**
  * In-process reservation of the single allowed recalculation.
@@ -49,10 +69,12 @@ let activeJobId: string | null = null;
  * the requester as `user_id` (so filtering the log by that staff member shows
  * both the request and its result) and `localhost` as the address, matching the
  * scheduler's background events. Every job that reaches a final state produces
- * exactly one event: completed, failed, or interrupted by a restart.
+ * exactly one event: completed, failed, or interrupted by a restart. The one
+ * job queued without a request, the restart recovery, records its queuing here
+ * too.
  */
 const auditJobOutcome = async (
-  action: 'GLOBAL_STATS_RECALCULATION_COMPLETED' | 'GLOBAL_STATS_RECALCULATION_FAILED',
+  action: 'GLOBAL_STATS_RECALCULATION_COMPLETED' | 'GLOBAL_STATS_RECALCULATION_FAILED' | 'GLOBAL_STATS_RECALCULATION_QUEUED',
   job: { id: string; requestedBy: string | null; reason: string },
   details: Record<string, unknown>
 ): Promise<void> => {
@@ -65,13 +87,17 @@ const auditJobOutcome = async (
   });
 };
 
-/** Oldest persisted job that has not reached a final state, if any. */
-const findPersistedActiveJobId = async (): Promise<string | null> => {
-  const result = await query(
-    `SELECT id FROM global_stats_recalculation_jobs
+const ACTIVE_JOB_SQL = `SELECT id FROM global_stats_recalculation_jobs
      WHERE status IN ('queued', 'running')
-     ORDER BY created_at ASC LIMIT 1`
-  );
+     ORDER BY created_at ASC LIMIT 1`;
+
+/** Oldest persisted job that has not reached a final state, if any. */
+const findPersistedActiveJobId = async (connection?: PoolConnection): Promise<string | null> => {
+  if (connection) {
+    const [rows] = await connection.query<any[]>(ACTIVE_JOB_SQL);
+    return rows[0]?.id || null;
+  }
+  const result = await query(ACTIVE_JOB_SQL);
   return result.rows[0]?.id || null;
 };
 
@@ -93,6 +119,77 @@ export class GlobalStatsRecalculationInProgressError extends Error {
 }
 
 /**
+ * Take the single recalculation slot without touching the database.
+ *
+ * Reserving happens synchronously, before any await, so a concurrent caller
+ * in this process is refused (see `activeJobId`). Callers that must commit
+ * their own change together with the job row (dispute resolutions, audit
+ * finding 28) reserve first, then persist the job inside their transaction,
+ * and start it only after the commit.
+ *
+ * @throws GlobalStatsRecalculationInProgressError when the slot is taken.
+ */
+export const reserveGlobalStatsRecalculation = (options: {
+  requestedBy: string | null;
+  reason: string;
+  execute: RecalculationExecutor;
+}): GlobalStatsRecalculationReservation => {
+  if (activeJobId) {
+    throw new GlobalStatsRecalculationInProgressError(activeJobId);
+  }
+  const jobId = uuidv4();
+  activeJobId = jobId;
+  return { jobId, ...options };
+};
+
+/**
+ * Insert the reserved job as `queued`, on the caller's transaction when one is
+ * given. Also refuses when a job row left by a previous process is still
+ * active, which the in-memory slot cannot see.
+ *
+ * @throws GlobalStatsRecalculationInProgressError for a persisted active job.
+ */
+export const persistGlobalStatsRecalculationJob = async (
+  reservation: GlobalStatsRecalculationReservation,
+  connection?: PoolConnection
+): Promise<void> => {
+  const persistedJobId = await findPersistedActiveJobId(connection);
+  if (persistedJobId) {
+    throw new GlobalStatsRecalculationInProgressError(persistedJobId);
+  }
+  const sql = `INSERT INTO global_stats_recalculation_jobs
+        (id, requested_by, reason, status, phase)
+       VALUES (?, ?, ?, 'queued', 'queued')`;
+  const params = [reservation.jobId, reservation.requestedBy, reservation.reason];
+  if (connection) await connection.execute(sql, params);
+  else await query(sql, params);
+};
+
+/** Give the slot back when no job will run for this reservation. */
+export const releaseGlobalStatsRecalculationReservation = (reservation: GlobalStatsRecalculationReservation): void => {
+  releaseReservation(reservation.jobId);
+};
+
+/**
+ * Run a reserved job whose row is committed. The worker owns the reservation
+ * from here on and releases it when it ends.
+ */
+export const startGlobalStatsRecalculationJob = (reservation: GlobalStatsRecalculationReservation): void => {
+  setImmediate(() => {
+    void runGlobalStatsRecalculationJob(
+      { id: reservation.jobId, requestedBy: reservation.requestedBy, reason: reservation.reason },
+      reservation.execute
+    );
+  });
+};
+
+/** Whether a job row exists; used to settle a commit whose outcome is unknown. */
+export const globalStatsRecalculationJobExists = async (jobId: string): Promise<boolean> => {
+  const result = await query('SELECT id FROM global_stats_recalculation_jobs WHERE id = ?', [jobId]);
+  return result.rows.length > 0;
+};
+
+/**
  * Queue one global recalculation and execute it outside the HTTP request.
  * The database row makes progress observable and survives a frontend refresh;
  * the in-process guard prevents two expensive replays in the same backend.
@@ -102,39 +199,16 @@ export const enqueueGlobalStatsRecalculation = async (options: {
   reason: string;
   execute: RecalculationExecutor;
 }): Promise<string> => {
-  // Reserve before any await (see `activeJobId`); a concurrent call that runs
-  // while this one is waiting on the database sees the reservation and fails.
-  if (activeJobId) {
-    throw new GlobalStatsRecalculationInProgressError(activeJobId);
-  }
-  const jobId = uuidv4();
-  activeJobId = jobId;
-
+  const reservation = reserveGlobalStatsRecalculation(options);
   try {
-    const persistedJobId = await findPersistedActiveJobId();
-    if (persistedJobId) {
-      throw new GlobalStatsRecalculationInProgressError(persistedJobId);
-    }
-    await query(
-      `INSERT INTO global_stats_recalculation_jobs
-        (id, requested_by, reason, status, phase)
-       VALUES (?, ?, ?, 'queued', 'queued')`,
-      [jobId, options.requestedBy, options.reason]
-    );
+    await persistGlobalStatsRecalculationJob(reservation);
   } catch (error) {
     // No worker was scheduled, so nothing else would ever release it.
-    releaseReservation(jobId);
+    releaseGlobalStatsRecalculationReservation(reservation);
     throw error;
   }
-
-  setImmediate(() => {
-    void runGlobalStatsRecalculationJob(
-      { id: jobId, requestedBy: options.requestedBy, reason: options.reason },
-      options.execute
-    );
-  });
-
-  return jobId;
+  startGlobalStatsRecalculationJob(reservation);
+  return reservation.jobId;
 };
 
 const runGlobalStatsRecalculationJob = async (
@@ -158,7 +232,7 @@ const runGlobalStatsRecalculationJob = async (
          WHERE id = ?`,
         [phase, current, total, jobId]
       );
-    });
+    }, { jobId });
     const warnings = result.warnings ?? [];
 
     await query(
@@ -246,17 +320,29 @@ export const getGlobalStatsRecalculationJob = async (jobId: string) => {
 };
 
 /**
- * Mark work interrupted by a backend restart so it cannot block future jobs.
+ * Mark work interrupted by a backend restart so it cannot block future jobs,
+ * then queue one recovery recalculation.
  *
  * The interrupted jobs are read first so each one still gets its closing audit
  * event; otherwise a queued recalculation would have no recorded outcome.
+ *
+ * An interrupted job may stand for a committed change whose ratings were never
+ * rebuilt, for example a dispute resolution committed together with its job row
+ * just before a crash (audit finding 28). Its ratings would stay stale with
+ * nothing signalling it, so a new job with reason `RESTART_RECOVERY` is queued
+ * (maintainer decision, 2026-10-11). A full replay is idempotent, so rerunning
+ * it is always safe, even when the interrupted job was a manual one.
+ *
+ * @returns the recovery job id, or null when nothing was interrupted.
  */
-export const recoverInterruptedGlobalStatsRecalculationJobs = async (): Promise<void> => {
+export const recoverInterruptedGlobalStatsRecalculationJobs = async (
+  execute: RecalculationExecutor
+): Promise<string | null> => {
   const interrupted = await query(
     `SELECT id, requested_by, reason, phase FROM global_stats_recalculation_jobs
      WHERE status IN ('queued', 'running')`
   );
-  if (interrupted.rows.length === 0) return;
+  if (interrupted.rows.length === 0) return null;
 
   await query(
     `UPDATE global_stats_recalculation_jobs
@@ -273,4 +359,13 @@ export const recoverInterruptedGlobalStatsRecalculationJobs = async (): Promise<
       { error: 'Backend restarted before the recalculation completed', interrupted_phase: row.phase }
     );
   }
+
+  const recoveryJobId = await enqueueGlobalStatsRecalculation({ requestedBy: null, reason: 'RESTART_RECOVERY', execute });
+  await auditJobOutcome(
+    'GLOBAL_STATS_RECALCULATION_QUEUED',
+    { id: recoveryJobId, requestedBy: null, reason: 'RESTART_RECOVERY' },
+    { interrupted_job_ids: interrupted.rows.map((row: any) => row.id) }
+  );
+  console.log(`🔄 Queued recovery recalculation ${recoveryJobId} for ${interrupted.rows.length} interrupted job(s)`);
+  return recoveryJobId;
 };

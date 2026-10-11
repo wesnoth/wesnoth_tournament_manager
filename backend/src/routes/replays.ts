@@ -18,7 +18,9 @@ import {
 } from '../services/replayResultService.js';
 import { validateAndCorrectFactions } from '../services/replayConfirmationService.js';
 import { phaseGameDisplayMetadata } from '../tournament-engine/competitionProgression.js';
-import { globalRecalculationMiddleware } from '../services/systemPauseService.js';
+import { globalRecalculationInProgressResponse, globalRecalculationMiddleware } from '../services/systemPauseService.js';
+import { RatingHistoryLockedError } from '../services/ratingHistoryLock.js';
+import { getActiveGlobalStatsRecalculationJobId } from '../services/globalStatsRecalculationJobService.js';
 import { opponentEntryId, resolveWinnerEntryId } from '../services/tournamentWinnerEntry.js';
 
 const router = express.Router();
@@ -310,6 +312,11 @@ router.post('/:replayId/confirm-winner', authMiddleware, globalRecalculationMidd
     } catch (error) {
       if (error instanceof ReplayAlreadyIntegratedError) {
         return res.status(409).json({ error: 'This replay result has already been confirmed' });
+      }
+      if (error instanceof RatingHistoryLockedError) {
+        // A recalculation started after the middleware check; the replay is
+        // untouched and can be confirmed once it ends.
+        return globalRecalculationInProgressResponse(res, await getActiveGlobalStatsRecalculationJobId());
       }
       if (error instanceof ReplayResultDataError) {
         // The message is a fixed domain text from the service, safe to show.

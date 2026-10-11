@@ -38,7 +38,7 @@ Authorization is enforced by the backend. Hidden frontend controls are a conveni
 
 There are four modes: ranked (1v1), tournament ranked (1v1), tournament unranked (1v1), and tournament team games (2v2, unranked). Ranked and tournament-ranked games create a row in `matches` and update both players' ELO; unranked tournament and team games record only the tournament result.
 
-`matches` is the source of truth for ranked history. The global recalculation replays every non-cancelled match in order and rewrites ratings, levels, ranking positions, and derived statistics. This full replay is a design principle: it keeps the rewritten history faithful and allows the rating model to change (for example to Glicko-2) by replaying with a new formula. Corrections that change past results (a validated or inverted dispute) queue this recalculation instead of patching ratings locally; it always replays everything but writes only the rows that change, in one transaction. Player levels are stored as English identifiers and translated by the frontend.
+`matches` is the source of truth for ranked history. The global recalculation replays every non-cancelled match in order and rewrites ratings, levels, ranking positions, and derived statistics. This full replay is a design principle: it keeps the rewritten history faithful and allows the rating model to change (for example to Glicko-2) by replaying with a new formula. Corrections that change past results (a validated or inverted dispute) queue this recalculation instead of patching ratings locally; it always replays everything but writes only the rows that change, in one transaction. A database lock keeps rating writers and the recalculation apart: the recalculation waits for writes already in progress before reading, and while it runs new results are refused (HTTP 409 for players) or left for the next parse cycle. A dispute resolution commits its change together with the queued recalculation. Player levels are stored as English identifiers and translated by the frontend.
 
 ## Replay pipeline
 
@@ -89,7 +89,7 @@ All times are UTC.
 | 02:30 | Clean up expired schedules |
 | 03:00 | Clean up old notifications |
 
-Long administrative operations (global recalculation, balance history rebuild) run as background jobs with a persisted progress row and an audited outcome.
+Long administrative operations (global recalculation, balance history rebuild) run as background jobs with a persisted progress row and an audited outcome. A global recalculation interrupted by a restart is closed as failed and run again once at startup.
 
 ## Localization and help
 

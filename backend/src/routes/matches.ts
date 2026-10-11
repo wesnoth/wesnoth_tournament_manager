@@ -1,13 +1,20 @@
 import { Router, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { query } from '../config/database.js';
+import type { PoolConnection } from 'mysql2/promise';
+import { pool, query } from '../config/database.js';
 import { authMiddleware, moderatorOrAdminMiddleware, streamerMiddleware, AuthRequest } from '../middleware/auth.js';
 import { isTournamentOrganizer } from '../services/tournamentAuthorizationService.js';
 import { checkUserIsForumModerator } from '../services/phpbbAuth.js';
 import {
-  enqueueGlobalStatsRecalculation,
   getActiveGlobalStatsRecalculationJobId,
+  globalStatsRecalculationJobExists,
+  GlobalStatsRecalculationInProgressError,
+  persistGlobalStatsRecalculationJob,
+  releaseGlobalStatsRecalculationReservation,
+  reserveGlobalStatsRecalculation,
+  startGlobalStatsRecalculationJob,
 } from '../services/globalStatsRecalculationJobService.js';
+import { acquireSharedRatingHistoryLock, RatingHistoryLockedError } from '../services/ratingHistoryLock.js';
 import { performQueuedGlobalStatsRecalculation } from '../services/globalRecalculationService.js';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
 import { globalRecalculationMiddleware } from '../services/systemPauseService.js';
@@ -98,6 +105,79 @@ router.post('/:id/confirm', authMiddleware, globalRecalculationMiddleware, async
     return res.status(500).json({ error: 'Failed to update match' });
   }
 });
+
+/**
+ * Apply a dispute resolution that changes the rating history and queue the
+ * global recalculation that rebuilds it, atomically (audit finding 28).
+ *
+ * Order: reserve the recalculation slot (synchronous, so a concurrent
+ * resolution is refused before writing anything) -> begin -> rating-history
+ * lock (shared) -> conditional match update -> `queued` job row -> commit ->
+ * start the worker. A failure before the commit rolls back both writes and
+ * releases the slot, so no reader ever sees a corrected match without its
+ * scheduled recalculation, and no compensating update is needed. If the
+ * process dies after the commit, the job row survives and the restart
+ * recovery reruns the recalculation.
+ *
+ * @param mutate runs the conditional UPDATE on the transaction and returns its
+ *   affected rows; 0 means the match is no longer disputed.
+ * @returns the recalculation job id, or null when the match was no longer
+ *   disputed (nothing written).
+ * @throws GlobalStatsRecalculationInProgressError or RatingHistoryLockedError
+ *   while another recalculation is queued or running (map to HTTP 409).
+ */
+async function resolveDisputeWithRecalculation(
+  reason: string,
+  requestedBy: string | null,
+  mutate: (connection: PoolConnection) => Promise<number>
+): Promise<string | null> {
+  const reservation = reserveGlobalStatsRecalculation({
+    requestedBy,
+    reason,
+    execute: performQueuedGlobalStatsRecalculation,
+  });
+  let connection: PoolConnection | null = null;
+  let commitStarted = false;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    await acquireSharedRatingHistoryLock(connection);
+    if (await mutate(connection) === 0) {
+      await connection.rollback();
+      releaseGlobalStatsRecalculationReservation(reservation);
+      return null;
+    }
+    await persistGlobalStatsRecalculationJob(reservation, connection);
+    commitStarted = true;
+    await connection.commit();
+  } catch (error) {
+    await connection?.rollback().catch(() => undefined);
+    // A commit that reported an error may still have landed. Its job row
+    // then exists and must run; otherwise it would stay `queued` and block
+    // every recalculation until the next restart.
+    if (commitStarted && await globalStatsRecalculationJobExists(reservation.jobId).catch(() => false)) {
+      console.warn(`Dispute resolution commit for job ${reservation.jobId} was uncertain; it is committed`);
+      startGlobalStatsRecalculationJob(reservation);
+      return reservation.jobId;
+    }
+    releaseGlobalStatsRecalculationReservation(reservation);
+    throw error;
+  } finally {
+    connection?.release();
+  }
+  startGlobalStatsRecalculationJob(reservation);
+  return reservation.jobId;
+}
+
+/** Map a refused dispute resolution to its HTTP answer. */
+function sendDisputeRecalculationError(res: Response, error: any) {
+  if (error instanceof GlobalStatsRecalculationInProgressError || error instanceof RatingHistoryLockedError) {
+    return res.status(409).json({ error: error.message, jobId: (error as any).jobId });
+  }
+  // Any other failure is internal and stays in the server log.
+  console.error('Could not resolve the dispute and schedule the recalculation:', error);
+  return res.status(500).json({ error: 'Could not resolve the dispute' });
+}
 
 const DISPUTES_PAGE_SIZE = 20;
 
@@ -245,85 +325,40 @@ router.post('/admin/:id/dispute', moderatorOrAdminMiddleware, async (req: AuthRe
       // regardless of who opened the dispute (`disputed_by`): either
       // participant may dispute, so the action means "the reported result was
       // backwards", not "the disputing player wins".
-      const previousResult = {
-        winner_id: match.winner_id,
-        loser_id: match.loser_id,
-        winner_faction: match.winner_faction,
-        loser_faction: match.loser_faction,
-        winner_comments: match.winner_comments,
-        loser_comments: match.loser_comments,
-        winner_rating: match.winner_rating,
-        loser_rating: match.loser_rating,
-        winner_side: match.winner_side,
-        status: match.status,
-        admin_reviewed: match.admin_reviewed,
-        admin_reviewed_at: match.admin_reviewed_at,
-        admin_reviewed_by: match.admin_reviewed_by,
-      };
-
       const correctedWinnerSide = match.winner_side === 1 ? 2 : match.winner_side === 2 ? 1 : match.winner_side;
-      await query(
-        `UPDATE matches
-         SET winner_id = ?, loser_id = ?,
-             winner_faction = ?, loser_faction = ?,
-             winner_comments = ?, loser_comments = ?,
-             winner_rating = ?, loser_rating = ?,
-             winner_side = ?, status = 'confirmed',
-             admin_reviewed = true, admin_reviewed_at = CURRENT_TIMESTAMP, admin_reviewed_by = ?,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = ? AND status = 'disputed'`,
-        [
-          previousResult.loser_id,
-          previousResult.winner_id,
-          previousResult.loser_faction,
-          previousResult.winner_faction,
-          previousResult.loser_comments,
-          previousResult.winner_comments,
-          previousResult.loser_rating,
-          previousResult.winner_rating,
-          correctedWinnerSide,
-          req.userId,
-          id,
-        ]
-      );
-
-      let recalcJobId: string;
+      let recalcJobId: string | null;
       try {
-        recalcJobId = await enqueueGlobalStatsRecalculation({
-          requestedBy: req.userId ?? null,
-          reason: 'MATCH_DISPUTE_AWARDED_WIN',
-          execute: performQueuedGlobalStatsRecalculation,
+        recalcJobId = await resolveDisputeWithRecalculation('MATCH_DISPUTE_AWARDED_WIN', req.userId ?? null, async (connection) => {
+          // The values come from the row read above. The status condition
+          // makes the swap apply only if the row is still the disputed one we
+          // read; a concurrent resolution leaves 0 affected rows. (A swap
+          // written as `winner_id = loser_id, loser_id = winner_id` would not
+          // work: MariaDB assigns left to right by default.)
+          const [result] = await connection.execute<any>(
+            `UPDATE matches
+             SET winner_id = ?, loser_id = ?,
+                 winner_faction = ?, loser_faction = ?,
+                 winner_comments = ?, loser_comments = ?,
+                 winner_rating = ?, loser_rating = ?,
+                 winner_side = ?, status = 'confirmed',
+                 admin_reviewed = true, admin_reviewed_at = CURRENT_TIMESTAMP, admin_reviewed_by = ?,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ? AND status = 'disputed'`,
+            [
+              match.loser_id, match.winner_id,
+              match.loser_faction, match.winner_faction,
+              match.loser_comments, match.winner_comments,
+              match.loser_rating, match.winner_rating,
+              correctedWinnerSide, req.userId, id,
+            ]
+          );
+          return result.affectedRows;
         });
-      } catch (error: any) {
-        // Do not leave a corrected match without a scheduled recalculation.
-        await query(
-          `UPDATE matches
-           SET winner_id = ?, loser_id = ?,
-               winner_faction = ?, loser_faction = ?,
-               winner_comments = ?, loser_comments = ?,
-               winner_rating = ?, loser_rating = ?,
-               winner_side = ?, status = ?,
-               admin_reviewed = ?, admin_reviewed_at = ?, admin_reviewed_by = ?,
-               updated_at = CURRENT_TIMESTAMP
-           WHERE id = ?`,
-          [
-            previousResult.winner_id, previousResult.loser_id,
-            previousResult.winner_faction, previousResult.loser_faction,
-            previousResult.winner_comments, previousResult.loser_comments,
-            previousResult.winner_rating, previousResult.loser_rating,
-            previousResult.winner_side, previousResult.status,
-            previousResult.admin_reviewed, previousResult.admin_reviewed_at,
-            previousResult.admin_reviewed_by, id,
-          ]
-        );
-        // Only the in-progress conflict carries a client-facing message; any
-        // other scheduling failure is internal and stays in the server log.
-        const inProgress = error.name === 'GlobalStatsRecalculationInProgressError';
-        if (!inProgress) console.error('Could not schedule statistics recalculation:', error);
-        return res.status(inProgress ? 409 : 500).json({
-          error: inProgress ? error.message : 'Could not schedule statistics recalculation',
-          jobId: error.jobId,
-        });
+      } catch (error) {
+        return sendDisputeRecalculationError(res, error);
+      }
+      if (!recalcJobId) {
+        return res.status(409).json({ error: 'Match is no longer disputed' });
       }
 
       await logAuditEvent({
@@ -335,8 +370,8 @@ router.post('/admin/:id/dispute', moderatorOrAdminMiddleware, async (req: AuthRe
         details: {
           action: 'MATCH_DISPUTE_AWARDED_WIN',
           match_id: id,
-          previous_winner_id: previousResult.winner_id,
-          corrected_winner_id: previousResult.loser_id,
+          previous_winner_id: match.winner_id,
+          corrected_winner_id: match.loser_id,
         },
       });
 
@@ -353,46 +388,23 @@ router.post('/admin/:id/dispute', moderatorOrAdminMiddleware, async (req: AuthRe
       // transitively, of everyone who played them afterwards, so the ratings
       // are rebuilt by the global recalculation (full-replay principle)
       // instead of a partial cascade.
-      const previousReview = {
-        status: match.status,
-        admin_reviewed: match.admin_reviewed,
-        admin_reviewed_at: match.admin_reviewed_at,
-        admin_reviewed_by: match.admin_reviewed_by,
-      };
-      const cancelled = await query(
-        `UPDATE matches
-         SET status = 'cancelled', admin_reviewed = true, admin_reviewed_at = CURRENT_TIMESTAMP,
-             admin_reviewed_by = ?, updated_at = CURRENT_TIMESTAMP
-         WHERE id = ? AND status = 'disputed'`,
-        [req.userId, id]
-      );
-      if (cancelled.rowCount === 0) {
-        return res.status(409).json({ error: 'Match is no longer disputed' });
-      }
-
-      let recalcJobId: string;
+      let recalcJobId: string | null;
       try {
-        recalcJobId = await enqueueGlobalStatsRecalculation({
-          requestedBy: req.userId ?? null,
-          reason: 'MATCH_DISPUTE_VALIDATED',
-          execute: performQueuedGlobalStatsRecalculation,
+        recalcJobId = await resolveDisputeWithRecalculation('MATCH_DISPUTE_VALIDATED', req.userId ?? null, async (connection) => {
+          const [result] = await connection.execute<any>(
+            `UPDATE matches
+             SET status = 'cancelled', admin_reviewed = true, admin_reviewed_at = CURRENT_TIMESTAMP,
+                 admin_reviewed_by = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ? AND status = 'disputed'`,
+            [req.userId, id]
+          );
+          return result.affectedRows;
         });
-      } catch (error: any) {
-        // Do not leave a cancelled match without a scheduled recalculation.
-        await query(
-          `UPDATE matches
-           SET status = ?, admin_reviewed = ?, admin_reviewed_at = ?, admin_reviewed_by = ?,
-               updated_at = CURRENT_TIMESTAMP
-           WHERE id = ?`,
-          [previousReview.status, previousReview.admin_reviewed, previousReview.admin_reviewed_at,
-            previousReview.admin_reviewed_by, id]
-        );
-        const inProgress = error.name === 'GlobalStatsRecalculationInProgressError';
-        if (!inProgress) console.error('Could not schedule statistics recalculation:', error);
-        return res.status(inProgress ? 409 : 500).json({
-          error: inProgress ? error.message : 'Could not schedule statistics recalculation',
-          jobId: error.jobId,
-        });
+      } catch (error) {
+        return sendDisputeRecalculationError(res, error);
+      }
+      if (!recalcJobId) {
+        return res.status(409).json({ error: 'Match is no longer disputed' });
       }
 
       await logAuditEvent({

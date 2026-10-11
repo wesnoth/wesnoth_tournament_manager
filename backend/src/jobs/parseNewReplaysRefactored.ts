@@ -23,6 +23,7 @@ import ReplayParser from '../services/replayParser.js';
 import { parseRankedReplay, ParsedRankedReplay } from '../utils/replayRankedParser.js';
 import type { CreateMatchInput } from '../services/matchCreationService.js';
 import { integrateReplayResult, ReplayResultDataError } from '../services/replayResultService.js';
+import { RatingHistoryLockedError } from '../services/ratingHistoryLock.js';
 import { checkForumBanlist } from '../services/phpbbAuth.js';
 import { queryPhpbb } from '../config/phpbbDatabase.js';
 import * as fs from 'fs';
@@ -349,6 +350,13 @@ export class ParseNewReplaysRefactorized {
           matchCount++;
 
         } catch (replayError) {
+          if (replayError instanceof RatingHistoryLockedError) {
+            // A global recalculation started during this cycle. Nothing was
+            // written, so the replay stays `new`; the rest of the cycle would
+            // be refused too, and the next cycle resumes after the job.
+            console.log('⏸️  [PARSE] Global recalculation started; stopping the cycle, replay stays new');
+            break;
+          }
           const errorMsg = (replayError as any)?.message || String(replayError);
           console.error(`❌ [PARSE] Error processing replay:`, errorMsg);
 

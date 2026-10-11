@@ -11,9 +11,14 @@
  * rolls the match back too, so a failed replay never keeps a match_id and the
  * admin Reprocess action stays available for it.
  *
- * Lock order is fixed: replay -> tournament -> tournament game -> users
- * (ascending id). The replay lock makes concurrent confirmations of one
- * replay serialize; the second one re-reads the state and is refused with
+ * Lock order is fixed: rating history (shared, only when a global match is
+ * created) -> replay -> tournament -> tournament game -> users (ascending id).
+ * The rating-history lock is taken without waiting, so a running global
+ * recalculation refuses the integration with RatingHistoryLockedError
+ * instead of overwriting it with an older history (audit finding 27); nothing
+ * is written and the caller retries after the recalculation. The replay lock
+ * makes concurrent confirmations of one replay serialize; the second one
+ * re-reads the state and is refused with
  * ReplayAlreadyIntegratedError (HTTP 409). This reduces deadlock risk but
  * cannot rule it out, because tournament progression also locks series and
  * standings, so deadlocks and lock-wait timeouts are retried.
@@ -27,6 +32,7 @@ import type { PoolConnection } from 'mysql2/promise';
 import { pool, query } from '../config/database.js';
 import { logAuditEvent } from '../middleware/audit.js';
 import { createMatchInTransaction, type CreateMatchInput } from './matchCreationService.js';
+import { acquireSharedRatingHistoryLock, RatingHistoryLockedError } from './ratingHistoryLock.js';
 import {
   recordPhaseGameResultInTransaction,
   runPhaseGameResultFollowUp,
@@ -111,7 +117,12 @@ async function runIntegration(connection: PoolConnection, input: ReplayResultInp
   matchId: string | null;
   tournamentOutcome: PhaseGameResultOutcome | null;
 }> {
-  // 1. Replay first: concurrent integrations of one replay serialize here.
+  // 0. Rating history (shared): a result that changes ratings must not run
+  //    while a global recalculation reads and rewrites them. Tournament
+  //    unranked and team games create no global match and skip it.
+  if (input.match) await acquireSharedRatingHistoryLock(connection);
+
+  // 1. Replay: concurrent integrations of one replay serialize here.
   const [replayRows] = await connection.execute<any[]>(
     `SELECT parse_status, match_id FROM replays WHERE id = ? FOR UPDATE`,
     [input.replayId]
@@ -193,6 +204,8 @@ async function readReplayAfterUncertainCommit(replayId: string): Promise<{ compl
  * @throws ReplayAlreadyIntegratedError when the replay or its tournament game
  *   was integrated concurrently (map to HTTP 409).
  * @throws ReplayResultDataError for deterministic data problems.
+ * @throws RatingHistoryLockedError while a global recalculation runs; nothing
+ *   was written (map to HTTP 409, or leave the replay for the next cycle).
  * @throws the last database error when transient failures persist.
  */
 export async function integrateReplayResult(input: ReplayResultInput): Promise<ReplayResultOutcome> {
@@ -217,7 +230,10 @@ export async function integrateReplayResult(input: ReplayResultInput): Promise<R
           return { matchId: state.matchId, followUpCompleted: false };
         }
       }
-      if (error instanceof ReplayAlreadyIntegratedError || error instanceof ReplayResultDataError) throw error;
+      // A recalculation will hold the lock for its whole duration, so the
+      // short transient-lock retries below would only fail again.
+      if (error instanceof ReplayAlreadyIntegratedError || error instanceof ReplayResultDataError
+        || error instanceof RatingHistoryLockedError) throw error;
       if (isAlreadyRecordedError(error)) throw new ReplayAlreadyIntegratedError();
       if (isDataError(error)) throw new ReplayResultDataError((error as Error).message);
       if (!isTransientLockError(error) || attempt === MAX_ATTEMPTS) throw error;

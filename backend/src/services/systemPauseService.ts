@@ -23,7 +23,7 @@ export const getSystemPauseStatus = async (): Promise<SystemPauseStatus> => {
 };
 
 /** Return a stable API error for replay writes while a global replay is running. */
-export const globalRecalculationInProgressResponse = (res: any, jobId: string) =>
+export const globalRecalculationInProgressResponse = (res: any, jobId: string | null) =>
   res.status(409).json({
     code: 'GLOBAL_RECALCULATION_IN_PROGRESS',
     error: 'A global statistics recalculation is in progress. Please try again in a few minutes.',

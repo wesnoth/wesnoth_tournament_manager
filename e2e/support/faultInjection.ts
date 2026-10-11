@@ -14,6 +14,12 @@ import { localStack, runSql, sqlLiteral } from './localStack';
  * causes. That lets a fault fail only its first N executions, which is how a
  * transient deadlock that succeeds on retry is simulated.
  *
+ * A fault can also delay the statement instead of failing it (`delaySeconds`),
+ * which holds the surrounding transaction and its locks open long enough for a
+ * spec to start a concurrent operation inside that window. Observe a running
+ * delay with `delayActive`, not `faultHits`: the counter table stays locked by
+ * the delayed statement until it ends, so reading it waits for the delay.
+ *
  * Triggers live in the local tournament database only; always remove them in
  * a `finally` or `afterEach`, or later specs will fail.
  */
@@ -22,7 +28,8 @@ export interface FaultOptions {
   /** Unique fault name; also the trigger suffix (letters, digits, underscore). */
   name: string;
   /** Table whose `BEFORE <event>` trigger raises the error. */
-  table: 'replays' | 'users_extension' | 'tournaments' | 'faction_map_statistics_history';
+  table: 'replays' | 'users_extension' | 'tournaments' | 'faction_map_statistics_history'
+    | 'global_stats_recalculation_jobs';
   /** Statement that fires the trigger; default UPDATE. INSERT triggers have no OLD row. */
   event?: 'UPDATE' | 'INSERT';
   /** SQL condition over OLD/NEW that selects the targeted row. */
@@ -36,6 +43,11 @@ export interface FaultOptions {
   failTimes?: number;
   /** Let the first N matching rows pass before failing; default 0. */
   skipFirst?: number;
+  /**
+   * Sleep this many seconds instead of raising an error; `errno` is then
+   * ignored and `failTimes`/`skipFirst` select which hits are delayed.
+   */
+  delaySeconds?: number;
 }
 
 const counterTable = `${localStack.tournamentDb}.e2e_fault_hits`;
@@ -54,6 +66,9 @@ export function installFault(options: FaultOptions): void {
   const sqlState = errno === 1213 ? '40001' : '45000';
   const failTimes = options.failTimes ?? 1_000_000;
   const skipFirst = options.skipFirst ?? 0;
+  const action = options.delaySeconds !== undefined
+    ? `SELECT SLEEP(${Number(options.delaySeconds)}) INTO @e2e_delay_${options.name};`
+    : `SIGNAL SQLSTATE '${sqlState}' SET MYSQL_ERRNO = ${errno}, MESSAGE_TEXT = 'E2E injected failure';`;
   removeFault(options.name);
   runSql([
     `CREATE TABLE IF NOT EXISTS ${counterTable} (name VARCHAR(64) PRIMARY KEY, hits INT NOT NULL) ENGINE=MyISAM;`,
@@ -65,7 +80,7 @@ export function installFault(options: FaultOptions): void {
          INSERT INTO ${counterTable} (name, hits) VALUES (${sqlLiteral(options.name)}, 1)
            ON DUPLICATE KEY UPDATE hits = hits + 1;
          IF (SELECT hits FROM ${counterTable} WHERE name = ${sqlLiteral(options.name)}) BETWEEN ${skipFirst + 1} AND ${skipFirst + failTimes} THEN
-           SIGNAL SQLSTATE '${sqlState}' SET MYSQL_ERRNO = ${errno}, MESSAGE_TEXT = 'E2E injected failure';
+           ${action}
          END IF;
        END IF;
      END//`,
@@ -76,6 +91,18 @@ export function installFault(options: FaultOptions): void {
 /** Remove a fault's trigger; safe to call when it is not installed. */
 export function removeFault(name: string): void {
   runSql(`DROP TRIGGER IF EXISTS ${triggerName(name)};`);
+}
+
+/**
+ * Whether a statement is currently paused by the named delay fault. Reads the
+ * process list only, so it does not wait for the delay (see the module note).
+ */
+export function delayActive(name: string): boolean {
+  triggerName(name);
+  const rows = runSql(
+    `SELECT COUNT(*) AS n FROM information_schema.PROCESSLIST WHERE ID <> CONNECTION_ID() AND INFO LIKE '%@e2e\\_delay\\_${name}%';`,
+  );
+  return Number(rows[0]?.n ?? 0) > 0;
 }
 
 /** How many times the fault's condition matched, failed or not. */

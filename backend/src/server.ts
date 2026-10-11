@@ -4,6 +4,7 @@ import { initializeScheduledJobs, autoDiscardUnconfirmedReplays } from './jobs/s
 import { runMigrations } from './services/migrationRunner.js';
 import { avatarManifestService } from './services/avatarManifestService.js';
 import { recoverInterruptedGlobalStatsRecalculationJobs } from './services/globalStatsRecalculationJobService.js';
+import { performQueuedGlobalStatsRecalculation } from './services/globalRecalculationService.js';
 import { recoverInterruptedBalanceHistoryRebuildJobs } from './services/balanceHistoryRebuildJobService.js';
 import { invalidateNonAdminTokensIfMaintenanceIsActive } from './services/systemPauseService.js';
 
@@ -53,7 +54,8 @@ const startServer = async () => {
 
     await invalidateNonAdminTokensIfMaintenanceIsActive();
 
-    await recoverInterruptedGlobalStatsRecalculationJobs();
+    // Interrupted recalculations are closed and rerun once (audit finding 28).
+    await recoverInterruptedGlobalStatsRecalculationJobs(performQueuedGlobalStatsRecalculation);
     await recoverInterruptedBalanceHistoryRebuildJobs();
 
     // Generate/regenerate avatar manifest from PNG files

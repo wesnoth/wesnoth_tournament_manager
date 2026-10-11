@@ -1,5 +1,10 @@
 import { pool, query } from '../config/database.js';
-import type { GlobalStatsRecalculationProgress, RecalculationResult } from './globalStatsRecalculationJobService.js';
+import type {
+  GlobalStatsRecalculationProgress,
+  RecalculationExecutionContext,
+  RecalculationResult,
+} from './globalStatsRecalculationJobService.js';
+import { acquireExclusiveRatingHistoryLock } from './ratingHistoryLock.js';
 import { activeRatingModel } from './rating/ratingModel.js';
 import { replayRatings, type MatchRatingUpdate, type UserRatingResult } from './rating/ratingReplay.js';
 import { recalculateFactionMapStatistics, recalculatePlayerMatchStatistics } from './statisticsCalculator.js';
@@ -74,6 +79,25 @@ function sameValues(computed: unknown[], stored: unknown[]): boolean {
 }
 
 /**
+ * Settle a commit that reported an error (audit finding 31). The commit may
+ * still have landed, so a rollback is never assumed from the error alone: the
+ * job row's `ratings_committed_at`, written as the last statement of the
+ * transaction, is read on a fresh connection.
+ */
+async function readRatingsCommitOutcome(jobId: string): Promise<'committed' | 'rolled_back' | 'unknown'> {
+  try {
+    const result = await query(
+      'SELECT ratings_committed_at FROM global_stats_recalculation_jobs WHERE id = ?',
+      [jobId]
+    );
+    return result.rows[0]?.ratings_committed_at ? 'committed' : 'rolled_back';
+  } catch (error) {
+    console.error(`Could not read the commit outcome of recalculation job ${jobId}:`, error);
+    return 'unknown';
+  }
+}
+
+/**
  * Full global recalculation: replay every non-cancelled match through the
  * active rating model and rewrite ratings, levels, ranking positions, and
  * player totals, then rebuild the derived statistics (audit finding 10).
@@ -84,15 +108,25 @@ function sameValues(computed: unknown[], stored: unknown[]): boolean {
  * rating writes go in one transaction: a failure leaves the previous
  * consistent history in place instead of a half-rewritten one.
  *
- * Replay processing and the routes that create or confirm matches are paused
- * while a recalculation job is active (`systemPauseService`), so no match is
- * created between the read and the commit.
+ * The transaction takes the rating-history lock exclusively before its first
+ * read (`ratingHistoryLock`, audit finding 27): it waits for writers admitted
+ * before the job was reserved, and refuses new ones until the commit, so the
+ * history it reads is the history it overwrites. The early "job active"
+ * checks in `systemPauseService` only refuse work sooner.
+ *
+ * The last write of the transaction marks the job row
+ * (`ratings_committed_at`). After a commit error that marker tells a
+ * committed rewrite from a rolled-back one (audit finding 31); a committed
+ * rewrite continues with the derived statistics.
  *
  * The derived statistics (player aggregates, faction/map balance) are rebuilt
  * afterwards, outside the transaction, by their own services. A failure there
  * is reported as `success: false`; the ratings are already committed.
  */
-export async function performGlobalStatsRecalculation(onProgress?: ProgressCallback): Promise<RecalculationResult> {
+export async function performGlobalStatsRecalculation(
+  onProgress: ProgressCallback | undefined,
+  context: RecalculationExecutionContext
+): Promise<RecalculationResult> {
   const logs: string[] = [];
   const log = (message: string, isError = false) => {
     logs.push(message);
@@ -106,26 +140,39 @@ export async function performGlobalStatsRecalculation(onProgress?: ProgressCallb
   let matchesProcessed = 0;
   let matchesUpdated = 0;
   let usersUpdated = 0;
+  const connection = await pool.getConnection();
+  let commitStarted = false;
   try {
-    const [usersResult, matchesResult] = await Promise.all([
-      query<UserRatingRow>(
-        `SELECT id, is_blocked, elo_rating, matches_played, total_wins, total_losses,
-                trend, level, is_rated, is_active, last_match_date
-         FROM users_extension`
-      ),
-      query<MatchRatingRow>(
-        `SELECT id, winner_id, loser_id, created_at,
-                winner_elo_before, winner_elo_after, loser_elo_before, loser_elo_after,
-                winner_level_before, winner_level_after, loser_level_before, loser_level_after,
-                winner_ranking_pos, winner_ranking_change, loser_ranking_pos, loser_ranking_change,
-                elo_change
-         FROM matches
-         WHERE status != 'cancelled'
-         ORDER BY created_at ASC, id ASC`
-      ),
-    ]);
-    const storedUsers = usersResult.rows;
-    const storedMatches = matchesResult.rows;
+    // READ COMMITTED, not the default REPEATABLE READ. The exclusive lock
+    // already keeps every writer of the replay input out, so the reads need
+    // no common snapshot. Under REPEATABLE READ, MariaDB 11.6+ (with
+    // innodb_snapshot_isolation, on by default) rejects an UPDATE of a row
+    // that another connection changed after the snapshot, and unrelated
+    // writes do touch these rows during a recalculation: a login updates the
+    // user row, and the progress reports update the job row.
+    await connection.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+    await connection.beginTransaction();
+    await acquireExclusiveRatingHistoryLock(connection);
+
+    // Read only after the lock is granted, so every admitted writer has
+    // finished and its rows are visible.
+    const [userRows] = await connection.query<any[]>(
+      `SELECT id, is_blocked, elo_rating, matches_played, total_wins, total_losses,
+              trend, level, is_rated, is_active, last_match_date
+       FROM users_extension`
+    );
+    const [matchRows] = await connection.query<any[]>(
+      `SELECT id, winner_id, loser_id, created_at,
+              winner_elo_before, winner_elo_after, loser_elo_before, loser_elo_after,
+              winner_level_before, winner_level_after, loser_level_before, loser_level_after,
+              winner_ranking_pos, winner_ranking_change, loser_ranking_pos, loser_ranking_change,
+              elo_change
+       FROM matches
+       WHERE status != 'cancelled'
+       ORDER BY created_at ASC, id ASC`
+    );
+    const storedUsers = userRows as UserRatingRow[];
+    const storedMatches = matchRows as MatchRatingRow[];
     await report('replaying_matches', 0, storedMatches.length);
 
     const replay = replayRatings(
@@ -141,71 +188,84 @@ export async function performGlobalStatsRecalculation(onProgress?: ProgressCallb
     );
     matchesProcessed = replay.matches.length;
 
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
-
-      // replay.matches follows storedMatches one to one.
-      for (let index = 0; index < replay.matches.length; index += 1) {
-        const values = matchValues(replay.matches[index]);
-        if (!sameValues(values, storedMatchValues(storedMatches[index]))) {
-          await connection.execute(
-            `UPDATE matches
-             SET winner_elo_before = ?, winner_elo_after = ?,
-                 loser_elo_before = ?, loser_elo_after = ?,
-                 winner_level_before = ?, winner_level_after = ?,
-                 loser_level_before = ?, loser_level_after = ?,
-                 winner_ranking_pos = ?, winner_ranking_change = ?,
-                 loser_ranking_pos = ?, loser_ranking_change = ?,
-                 elo_change = ?
-             WHERE id = ?`,
-            [...values, storedMatches[index].id]
-          );
-          matchesUpdated += 1;
-        }
-        const done = index + 1;
-        if (done === replay.matches.length || done % PROGRESS_STEP === 0) {
-          await report('replaying_matches', done, replay.matches.length);
-        }
+    // replay.matches follows storedMatches one to one.
+    for (let index = 0; index < replay.matches.length; index += 1) {
+      const values = matchValues(replay.matches[index]);
+      if (!sameValues(values, storedMatchValues(storedMatches[index]))) {
+        await connection.execute(
+          `UPDATE matches
+           SET winner_elo_before = ?, winner_elo_after = ?,
+               loser_elo_before = ?, loser_elo_after = ?,
+               winner_level_before = ?, winner_level_after = ?,
+               loser_level_before = ?, loser_level_after = ?,
+               winner_ranking_pos = ?, winner_ranking_change = ?,
+               loser_ranking_pos = ?, loser_ranking_change = ?,
+               elo_change = ?
+           WHERE id = ?`,
+          [...values, storedMatches[index].id]
+        );
+        matchesUpdated += 1;
       }
-
-      // A user found only in matches (no users_extension row) has nothing to
-      // update, so it is skipped.
-      const storedById = new Map(storedUsers.map((row) => [row.id, row]));
-      await report('updating_users', 0, replay.users.length);
-      for (let index = 0; index < replay.users.length; index += 1) {
-        const user = replay.users[index];
-        const stored = storedById.get(user.userId);
-        const values = userValues(user);
-        if (stored && !sameValues(values, storedUserValues(stored))) {
-          await connection.execute(
-            `UPDATE users_extension
-             SET elo_rating = ?, matches_played = ?, total_wins = ?, total_losses = ?,
-                 trend = ?, level = ?, is_rated = ?, is_active = ?, last_match_date = ?,
-                 updated_at = CURRENT_TIMESTAMP
-             WHERE id = ?`,
-            [...values, user.userId]
-          );
-          usersUpdated += 1;
-        }
-        const done = index + 1;
-        if (done === replay.users.length || done % PROGRESS_STEP === 0) {
-          await report('updating_users', done, replay.users.length);
-        }
+      const done = index + 1;
+      if (done === replay.matches.length || done % PROGRESS_STEP === 0) {
+        await report('replaying_matches', done, replay.matches.length);
       }
-
-      await connection.commit();
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
     }
+
+    // A user found only in matches (no users_extension row) has nothing to
+    // update, so it is skipped.
+    const storedById = new Map(storedUsers.map((row) => [row.id, row]));
+    await report('updating_users', 0, replay.users.length);
+    for (let index = 0; index < replay.users.length; index += 1) {
+      const user = replay.users[index];
+      const stored = storedById.get(user.userId);
+      const values = userValues(user);
+      if (stored && !sameValues(values, storedUserValues(stored))) {
+        await connection.execute(
+          `UPDATE users_extension
+           SET elo_rating = ?, matches_played = ?, total_wins = ?, total_losses = ?,
+               trend = ?, level = ?, is_rated = ?, is_active = ?, last_match_date = ?,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+          [...values, user.userId]
+        );
+        usersUpdated += 1;
+      }
+      const done = index + 1;
+      if (done === replay.users.length || done % PROGRESS_STEP === 0) {
+        await report('updating_users', done, replay.users.length);
+      }
+    }
+
+    // Last statement before the commit, and no progress report after it:
+    // progress updates the same job row from another connection and would
+    // wait for this transaction's row lock.
+    await connection.execute(
+      'UPDATE global_stats_recalculation_jobs SET ratings_committed_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [context.jobId]
+    );
+    commitStarted = true;
+    await connection.commit();
     log(`✅ Replayed ${matchesProcessed} matches with ${activeRatingModel.id}: ` +
       `${matchesUpdated} match rows and ${usersUpdated} users changed`);
   } catch (error) {
-    log(`✗ Rating replay failed, nothing was written: ${error instanceof Error ? error.message : String(error)}`, true);
-    return { success: false, logs, matchesProcessed: 0, matchesUpdated: 0, usersUpdated: 0 };
+    await connection.rollback().catch(() => undefined);
+    const message = error instanceof Error ? error.message : String(error);
+    const outcome = commitStarted ? await readRatingsCommitOutcome(context.jobId) : 'rolled_back';
+    if (outcome === 'unknown') {
+      log(`✗ Rating replay commit failed and its outcome could not be read (${message}); ` +
+        'ratings may or may not have been written. Run the global recalculation again.', true);
+      return { success: false, logs, matchesProcessed: 0, matchesUpdated: 0, usersUpdated: 0 };
+    }
+    if (outcome === 'rolled_back') {
+      log(`✗ Rating replay failed, nothing was written: ${message}`, true);
+      return { success: false, logs, matchesProcessed: 0, matchesUpdated: 0, usersUpdated: 0 };
+    }
+    // The commit landed although it reported an error: continue as committed.
+    log(`⚠️ Rating replay commit reported an error (${message}) but the ratings were committed: ` +
+      `${matchesProcessed} matches replayed, ${matchesUpdated} match rows and ${usersUpdated} users changed`);
+  } finally {
+    connection.release();
   }
 
   let derivedStatisticsFailed = false;
@@ -244,8 +304,11 @@ export async function performGlobalStatsRecalculation(onProgress?: ProgressCallb
  * "recalculate player of the month" action or the monthly cron. The step is
  * skipped when the main replay failed, because it would read inconsistent data.
  */
-export async function performQueuedGlobalStatsRecalculation(onProgress: ProgressCallback): Promise<RecalculationResult> {
-  const recalcResult = await performGlobalStatsRecalculation(onProgress);
+export async function performQueuedGlobalStatsRecalculation(
+  onProgress: ProgressCallback,
+  context: RecalculationExecutionContext
+): Promise<RecalculationResult> {
+  const recalcResult = await performGlobalStatsRecalculation(onProgress, context);
   if (!recalcResult.success) return recalcResult;
 
   try {
