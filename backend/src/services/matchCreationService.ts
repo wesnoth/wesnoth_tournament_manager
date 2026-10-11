@@ -6,6 +6,7 @@
  */
 
 import { pool } from '../config/database.js';
+import { acquireSharedRatingHistoryLock, RatingHistoryLockedError } from './ratingHistoryLock.js';
 import { calculateTrend, getPlayerRankingPosition } from '../utils/elo.js';
 import { activeRatingModel } from './rating/ratingModel.js';
 import { getUserLevel } from '../utils/auth.js';
@@ -37,6 +38,8 @@ export interface CreateMatchResult {
   success: boolean;
   matchId?: string;
   error?: string;
+  /** A global recalculation holds the rating history; nothing was written (map to 409). */
+  recalculationInProgress?: boolean;
 }
 
 function getTournamentType(matchType: string): string | null {
@@ -151,8 +154,8 @@ export async function createMatchInTransaction(connection: SqlExecutor, input: C
        winner_elo_before, loser_elo_before, winner_level_before, loser_level_before,
        winner_elo_after, loser_elo_after, winner_level_after, loser_level_after,
        winner_ranking_pos, winner_ranking_change, loser_ranking_pos, loser_ranking_change,
-       winner_side, game_id, wesnoth_version, instance_uuid, created_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'reported', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+       elo_change, winner_side, game_id, wesnoth_version, instance_uuid, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'reported', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
     [
       matchId, winner.id, loser.id, input.winnerFaction, input.loserFaction, input.map,
       input.replayRowId, input.replayFilePath, input.autoReported === false ? 0 : 1,
@@ -162,6 +165,11 @@ export async function createMatchInTransaction(connection: SqlExecutor, input: C
       winnerNewRating, loserNewRating,
       getUserLevel(winnerNewRating), getUserLevel(loserNewRating),
       winnerPosAfter, winnerRankingChange, loserPosAfter, loserRankingChange,
+      // The winner's rating change, as the full replay stores it
+      // (ratingReplay: winnerAfter - winnerBefore). Profile history and the
+      // monthly ELO summary read it; without it a new match showed 0 until
+      // the next global recalculation.
+      winnerNewRating - winner.elo_rating,
       input.winnerSide, input.gameId, input.wesnothVersion, input.instanceUuid,
     ]
   );
@@ -196,17 +204,26 @@ export async function createMatchInTransaction(connection: SqlExecutor, input: C
  * Kept for callers that do not integrate a replay (test simulations). It
  * preserves the historical { success, error } contract: on any failure the
  * transaction is rolled back, so no match row or rating change survives.
+ *
+ * Like replay integration, it takes the rating-history lock in shared mode
+ * first (audit finding 35), so a simulated result can never commit during a
+ * global recalculation and be dropped by its rewrite.
  */
 export async function createMatch(input: CreateMatchInput): Promise<CreateMatchResult> {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
+    await acquireSharedRatingHistoryLock(connection);
     const matchId = await createMatchInTransaction(connection, input);
     await connection.commit();
     return { success: true, matchId };
   } catch (error) {
     await connection.rollback().catch(() => undefined);
-    return { success: false, error: (error as Error).message || String(error) };
+    return {
+      success: false,
+      error: (error as Error).message || String(error),
+      recalculationInProgress: error instanceof RatingHistoryLockedError,
+    };
   } finally {
     connection.release();
   }

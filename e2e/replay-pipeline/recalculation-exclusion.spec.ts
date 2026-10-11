@@ -6,7 +6,7 @@ import { localStack, runSql, sqlLiteral } from '../support/localStack';
 import { loginAs } from '../support/login';
 
 /**
- * Global recalculation vs concurrent rating writers (audit findings 27, 28).
+ * Global recalculation vs concurrent rating writers (audit findings 27, 28, 35).
  *
  * The recalculation reads the whole history and rewrites ratings. Writers
  * admitted before it was reserved must finish first and be included (27),
@@ -183,6 +183,37 @@ test('the recalculation holds the rating history until it commits', async ({ bro
 
     expect((await waitForJob(jobId)).status).toBe('completed');
     expect(runSql(`BEGIN; ${nowaitShare}`)).toEqual([{ id: '1' }]);
+  } finally {
+    await admin.close();
+  }
+});
+
+test('a simulated ranked result is refused while the recalculation holds the rating history', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const admin = await apiAs(browser, 'clmates');
+  const userId = (nickname: string) => runSql(
+    `SELECT id FROM ${localStack.tournamentDb}.users_extension WHERE nickname = ${sqlLiteral(nickname)};`,
+  )[0].id!;
+  const simulation = { mode: 'ranked', winner_id: userId('Blop'), loser_id: userId('clmates') };
+  try {
+    installFault({
+      name: 'hold_recalculation_commit',
+      table: 'global_stats_recalculation_jobs',
+      when: 'NEW.ratings_committed_at IS NOT NULL AND OLD.ratings_committed_at IS NULL',
+      delaySeconds: 6,
+    });
+    const jobId = await queueRecalculation(admin);
+    await waitUntil(() => delayActive('hold_recalculation_commit'), 60_000, 'the recalculation to reach its commit');
+
+    // The simulation writer takes the same shared lock as replay integration
+    // (audit finding 35), so it is refused instead of being dropped later.
+    const refused = await admin.post('/test-tools/simulate-match', simulation);
+    expect(refused.status, JSON.stringify(refused.body)).toBe(409);
+
+    expect((await waitForJob(jobId)).status).toBe('completed');
+    const accepted = await admin.post('/test-tools/simulate-match', simulation);
+    expect(accepted.status, JSON.stringify(accepted.body)).toBe(201);
+    await expectHistoryMatchesFullReplay(admin);
   } finally {
     await admin.close();
   }

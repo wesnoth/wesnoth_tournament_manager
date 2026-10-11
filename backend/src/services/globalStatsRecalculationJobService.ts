@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { PoolConnection } from 'mysql2/promise';
-import { query } from '../config/database.js';
+import { pool, query } from '../config/database.js';
 import { isClientSafeError } from '../utils/clientError.js';
 import { logAuditEvent } from '../middleware/audit.js';
 
@@ -333,39 +333,68 @@ export const getGlobalStatsRecalculationJob = async (jobId: string) => {
  * (maintainer decision, 2026-10-11). A full replay is idempotent, so rerunning
  * it is always safe, even when the interrupted job was a manual one.
  *
+ * Closing the interrupted jobs and inserting the recovery job happen in one
+ * transaction (audit finding 34): if the insert fails, or the process dies
+ * before the commit, the interrupted jobs stay `queued`/`running` and the
+ * next startup retries the whole recovery. The audit events are written only
+ * after the commit and after the worker is scheduled, and their failures are
+ * contained, so an audit problem cannot lose the pending work either.
+ *
  * @returns the recovery job id, or null when nothing was interrupted.
  */
 export const recoverInterruptedGlobalStatsRecalculationJobs = async (
   execute: RecalculationExecutor
 ): Promise<string | null> => {
-  const interrupted = await query(
-    `SELECT id, requested_by, reason, phase FROM global_stats_recalculation_jobs
-     WHERE status IN ('queued', 'running')`
+  const pending = await query(
+    `SELECT id FROM global_stats_recalculation_jobs WHERE status IN ('queued', 'running') LIMIT 1`
   );
-  if (interrupted.rows.length === 0) return null;
+  if (pending.rows.length === 0) return null;
 
-  await query(
-    `UPDATE global_stats_recalculation_jobs
-     SET status = 'failed', phase = 'failed',
-         error_message = 'Backend restarted before the recalculation completed',
-         completed_at = CURRENT_TIMESTAMP
-     WHERE status IN ('queued', 'running')`
-  );
-
-  for (const row of interrupted.rows) {
-    await auditJobOutcome(
-      'GLOBAL_STATS_RECALCULATION_FAILED',
-      { id: row.id, requestedBy: row.requested_by ?? null, reason: row.reason },
-      { error: 'Backend restarted before the recalculation completed', interrupted_phase: row.phase }
+  const reservation = reserveGlobalStatsRecalculation({ requestedBy: null, reason: 'RESTART_RECOVERY', execute });
+  const connection = await pool.getConnection();
+  let interrupted: any[];
+  try {
+    await connection.beginTransaction();
+    [interrupted] = await connection.query<any[]>(
+      `SELECT id, requested_by, reason, phase FROM global_stats_recalculation_jobs
+       WHERE status IN ('queued', 'running') FOR UPDATE`
     );
+    await connection.execute(
+      `UPDATE global_stats_recalculation_jobs
+       SET status = 'failed', phase = 'failed',
+           error_message = 'Backend restarted before the recalculation completed',
+           completed_at = CURRENT_TIMESTAMP
+       WHERE status IN ('queued', 'running')`
+    );
+    // The interrupted rows are closed inside this transaction, so the active
+    // job check in persist sees none of them.
+    await persistGlobalStatsRecalculationJob(reservation, connection);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback().catch(() => undefined);
+    releaseGlobalStatsRecalculationReservation(reservation);
+    throw error;
+  } finally {
+    connection.release();
   }
+  startGlobalStatsRecalculationJob(reservation);
+  console.log(`🔄 Queued recovery recalculation ${reservation.jobId} for ${interrupted.length} interrupted job(s)`);
 
-  const recoveryJobId = await enqueueGlobalStatsRecalculation({ requestedBy: null, reason: 'RESTART_RECOVERY', execute });
-  await auditJobOutcome(
-    'GLOBAL_STATS_RECALCULATION_QUEUED',
-    { id: recoveryJobId, requestedBy: null, reason: 'RESTART_RECOVERY' },
-    { interrupted_job_ids: interrupted.rows.map((row: any) => row.id) }
-  );
-  console.log(`🔄 Queued recovery recalculation ${recoveryJobId} for ${interrupted.rows.length} interrupted job(s)`);
-  return recoveryJobId;
+  try {
+    for (const row of interrupted) {
+      await auditJobOutcome(
+        'GLOBAL_STATS_RECALCULATION_FAILED',
+        { id: row.id, requestedBy: row.requested_by ?? null, reason: row.reason },
+        { error: 'Backend restarted before the recalculation completed', interrupted_phase: row.phase }
+      );
+    }
+    await auditJobOutcome(
+      'GLOBAL_STATS_RECALCULATION_QUEUED',
+      { id: reservation.jobId, requestedBy: null, reason: 'RESTART_RECOVERY' },
+      { interrupted_job_ids: interrupted.map((row: any) => row.id) }
+    );
+  } catch (error) {
+    console.error('Could not audit the restart recovery of global recalculations:', error);
+  }
+  return reservation.jobId;
 };

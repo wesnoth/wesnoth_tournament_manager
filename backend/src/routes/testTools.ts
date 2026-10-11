@@ -260,6 +260,7 @@ router.post('/simulate-match', async (req: AuthRequest, res) => {
         linkedTournamentGameId: mode === 'tournament_ranked' ? selectedMatchId : null,
         gameId: null, wesnothVersion: null, instanceUuid: null, autoReported: false,
       });
+      if (created.recalculationInProgress) return res.status(409).json({ error: created.error });
       if (!created.success) return res.status(500).json({ error: created.error || 'Failed to create simulated match' });
       matchId = created.matchId;
     }
