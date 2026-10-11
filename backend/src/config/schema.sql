@@ -306,7 +306,7 @@ DROP TABLE IF EXISTS `match_schedule_proposals`;
 CREATE TABLE `match_schedule_proposals` (
   `id` char(36) NOT NULL COMMENT 'UUID v4',
   `tournament_round_match_id` char(36) DEFAULT NULL COMMENT 'Reference to tournament_round_matches.id (series-level)',
-  `tournament_series_id` char(36) DEFAULT NULL COMMENT 'Reference to phase-engine tournament_series.id',
+  `tournament_series_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'Reference to phase-engine tournament_series.id',
   `tournament_match_id` char(36) DEFAULT NULL COMMENT 'Reference to tournament_matches.id (game-level)',
   `proposed_by_user_id` char(36) NOT NULL COMMENT 'User who made the proposal',
   `proposed_at` datetime NOT NULL,
@@ -505,6 +505,75 @@ CREATE TABLE `migrations` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=104 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `balance_history_rebuild_jobs`
+--
+
+DROP TABLE IF EXISTS `balance_history_rebuild_jobs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `balance_history_rebuild_jobs` (
+  `id` char(36) NOT NULL,
+  `requested_by` char(36) DEFAULT NULL,
+  `status` enum('queued','running','completed','failed') NOT NULL DEFAULT 'queued',
+  `progress_current` int(11) NOT NULL DEFAULT 0,
+  `progress_total` int(11) NOT NULL DEFAULT 0,
+  `result_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`result_json`)),
+  `error_message` text DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `started_at` datetime DEFAULT NULL,
+  `completed_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_balance_history_jobs_status_created` (`status`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `global_stats_recalculation_jobs`
+--
+
+DROP TABLE IF EXISTS `global_stats_recalculation_jobs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `global_stats_recalculation_jobs` (
+  `id` char(36) NOT NULL,
+  `requested_by` char(36) DEFAULT NULL,
+  `reason` varchar(100) NOT NULL,
+  `status` enum('queued','running','completed','failed') NOT NULL DEFAULT 'queued',
+  `phase` varchar(50) DEFAULT NULL,
+  `progress_current` int(11) NOT NULL DEFAULT 0,
+  `progress_total` int(11) NOT NULL DEFAULT 0,
+  `result_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`result_json`)),
+  `error_message` text DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `started_at` datetime DEFAULT NULL,
+  `completed_at` datetime DEFAULT NULL,
+  `ratings_committed_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_global_stats_jobs_status_created` (`status`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `rating_history_lock`
+--
+
+DROP TABLE IF EXISTS `rating_history_lock`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rating_history_lock` (
+  `id` tinyint(3) unsigned NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- The single row is required: rating writers and the global recalculation
+-- lock it (services/ratingHistoryLock.ts, migration 20261011_120000).
+--
+
+INSERT INTO `rating_history_lock` (`id`) VALUES (1);
 
 --
 -- Table structure for table `news`
@@ -1445,6 +1514,7 @@ CREATE TABLE `users_extension` (
   `avatar` varchar(255) DEFAULT NULL,
   `enable_ranked` tinyint(1) NOT NULL DEFAULT 0,
   `last_match_date` datetime DEFAULT NULL COMMENT 'Timestamp of last match participation — used to determine active status',
+  `token_invalidated_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_nickname` (`nickname`),
   KEY `idx_users_extension_last_match_date` (`last_match_date`)

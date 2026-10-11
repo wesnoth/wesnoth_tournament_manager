@@ -158,8 +158,6 @@ FROM matches;
 
 Before removing aggregate or administrative compatibility fields, add audit queries that compare them with `tournament_phase_standings`, series counters, played games, and explicit organizer actions. The queries must report mismatches rather than mutate data.
 
-Collect server access metrics for the old routes that currently return `410 Gone`. Agree on an observation window before removing those handlers.
-
 ## Delivery sequence
 
 ### 1. Close the version 2 creation contract
@@ -247,7 +245,7 @@ Use separate releases for code cleanup and destructive schema contraction. Deplo
 
 MariaDB DDL rollback is limited, so rollback of the contraction release depends on a tested database restore plus the previous application release. Record the backup identifier, restore test result, migration output, schema snapshot, and smoke-test result before promotion.
 
-After each release, monitor unknown-column errors, unexpected `404` or `410` responses, replay linking failures, scheduling failures, standings discrepancies, and phase progression errors. Stop the sequence and restore the previous release if any authoritative tournament data cannot be reconciled.
+After each release, monitor unknown-column errors, unexpected `404` responses, replay linking failures, scheduling failures, standings discrepancies, and phase progression errors. Stop the sequence and restore the previous release if any authoritative tournament data cannot be reconciled.
 
 ## Completion criteria
 
