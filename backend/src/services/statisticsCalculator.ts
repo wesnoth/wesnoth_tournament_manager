@@ -1,10 +1,15 @@
 /**
  * Statistics Calculator Service
  * Migrated from PostgreSQL stored procedures to TypeScript/Node.js
- * 
+ *
  * Functions:
- * - Balance event snapshots management
- * - Faction/map statistics trend analysis
+ * - Full rebuilds of the derived tables (player match statistics and
+ *   faction/map statistics), run by the daily job and the global recalculation
+ * - Balance event snapshots and the daily faction/map history
+ * - Faction/map statistics trend and balance-event impact analysis
+ *
+ * Every function is a named export; the per-match incremental updaters and the
+ * default export object were removed as unused (audit finding 26).
  */
 
 import type { PoolConnection } from 'mysql2/promise';
@@ -764,211 +769,6 @@ export async function recalculateFactionMapStatistics(
 }
 
 /**
- * Update faction/map statistics for a single match
- */
-export async function updateFactionMapStatistics(
-  map: string,
-  winnerFaction: string,
-  loserFaction: string,
-  winnerSideNumber?: number | null
-): Promise<boolean> {
-  try {
-    // Import randomUUID for ID generation
-    const { randomUUID } = await import('crypto');
-    
-    // Get map and faction IDs
-    const mapResult = await query('SELECT id FROM game_maps WHERE name = ?', [map]);
-    const winnerFactionResult = await query('SELECT id FROM factions WHERE name = ?', [winnerFaction]);
-    const loserFactionResult = await query('SELECT id FROM factions WHERE name = ?', [loserFaction]);
-
-    if (mapResult.rows.length === 0 || winnerFactionResult.rows.length === 0 || loserFactionResult.rows.length === 0) {
-      return false;
-    }
-
-    const mapId = mapResult.rows[0].id;
-    const winnerFactionId = winnerFactionResult.rows[0].id;
-    const loserFactionId = loserFactionResult.rows[0].id;
-
-    // faction_side: 0 = unknown, 1 = side 1, 2 = side 2
-    const winnerFactionSide = winnerSideNumber ?? 0;
-    const loserFactionSide = winnerSideNumber === 1 ? 2 : winnerSideNumber === 2 ? 1 : 0;
-
-    // Update winner stats using ON DUPLICATE KEY UPDATE (requires UNIQUE KEY on map_id+faction_id+opponent_faction_id+faction_side)
-    await query(
-      `INSERT INTO faction_map_statistics
-       (id, map_id, faction_id, opponent_faction_id, faction_side, total_games, wins, losses, winrate)
-       VALUES (?, ?, ?, ?, ?, 1, 1, 0, 100.00)
-       ON DUPLICATE KEY UPDATE
-         total_games = total_games + 1,
-         wins = wins + 1,
-         winrate = ROUND(100.0 * (wins + 1) / (total_games + 1), 2)`,
-      [randomUUID(), mapId, winnerFactionId, loserFactionId, winnerFactionSide]
-    );
-
-    // Update loser stats using ON DUPLICATE KEY UPDATE
-    await query(
-      `INSERT INTO faction_map_statistics
-       (id, map_id, faction_id, opponent_faction_id, faction_side, total_games, wins, losses, winrate)
-       VALUES (?, ?, ?, ?, ?, 1, 0, 1, 0.00)
-       ON DUPLICATE KEY UPDATE
-         total_games = total_games + 1,
-         losses = losses + 1,
-         winrate = ROUND(100.0 * wins / (total_games + 1), 2)`,
-      [randomUUID(), mapId, loserFactionId, winnerFactionId, loserFactionSide]
-    );
-
-    return true;
-  } catch (error) {
-    console.error('Error updating faction/map statistics:', error);
-    return false;
-  }
-}
-
-/**
- * Get balance statistics snapshot for a specific date
- */
-export async function getBalanceStatisticsSnapshot(
-  snapshotDate: Date
-): Promise<BalanceEventSnapshot[]> {
-  try {
-    const dateStr = snapshotDate.toISOString().split('T')[0];
-
-    const result = await query(
-      `SELECT
-        snapshot_date,
-        map_id,
-        faction_id,
-        opponent_faction_id,
-        total_games,
-        wins,
-        losses,
-        winrate,
-        sample_size_category,
-        confidence_level
-       FROM faction_map_statistics_history
-       WHERE snapshot_date = ?`,
-      [dateStr]
-    );
-
-    return result.rows as BalanceEventSnapshot[];
-  } catch (error) {
-    console.error('Error getting balance statistics snapshot:', error);
-    throw error;
-  }
-}
-
-/**
- * Recalculate all match statistics (calls recalculatePlayerMatchStatistics + recalculateFactionMapStatistics)
- */
-export async function recalculateAllMatchStatistics(): Promise<{
-  player_records: number;
-  faction_map_records: number;
-}> {
-  try {
-    const playerResult = await recalculatePlayerMatchStatistics();
-    const factionResult = await recalculateFactionMapStatistics();
-
-    return {
-      player_records: playerResult.records_updated,
-      faction_map_records: factionResult.records_updated
-    };
-  } catch (error) {
-    console.error('Error recalculating all match statistics:', error);
-    throw error;
-  }
-}
-
-/**
- * Update player ELO in ranking tables after match
- */
-export async function updatePlayerElo(
-  playerId: string,
-  eloChange: number,
-  newElo: number
-): Promise<boolean> {
-  try {
-    await query(
-      `UPDATE player_rankings
-       SET current_elo = ?,
-           elo_change = elo_change + ?,
-           last_elo_update = CURRENT_TIMESTAMP
-       WHERE player_id = ?`,
-      [newElo, eloChange, playerId]
-    );
-
-    return true;
-  } catch (error) {
-    console.error('Error updating player ELO:', error);
-    return false;
-  }
-}
-
-/**
- * Update player faction statistics
- */
-export async function updatePlayerFactionStats(
-  playerId: string,
-  factionId: string,
-  isWin: boolean
-): Promise<boolean> {
-  try {
-    if (isWin) {
-      await query(
-        `UPDATE player_faction_statistics
-         SET games_played = games_played + 1,
-             games_won = games_won + 1,
-             winrate = ROUND(100.0 * (games_won + 1) / (games_played + 1), 2)
-         WHERE player_id = ? AND faction_id = ?`,
-        [playerId, factionId]
-      );
-    } else {
-      await query(
-        `UPDATE player_faction_statistics
-         SET games_played = games_played + 1,
-             games_lost = games_lost + 1,
-             winrate = ROUND(100.0 * games_won / (games_played + 1), 2)
-         WHERE player_id = ? AND faction_id = ?`,
-        [playerId, factionId]
-      );
-    }
-
-    return true;
-  } catch (error) {
-    console.error('Error updating player faction statistics:', error);
-    return false;
-  }
-}
-
-/**
- * Calculate faction winrates for a specific map
- */
-export async function calculateFactionWinrates(
-  mapId: string
-): Promise<Map<string, number>> {
-  try {
-    const result = await query(
-      `SELECT
-        faction_id,
-        winrate
-       FROM faction_map_statistics
-       WHERE map_id = ?
-       ORDER BY faction_id`,
-      [mapId]
-    );
-
-    const winrates = new Map<string, number>();
-    for (const row of result.rows) {
-      winrates.set(row.faction_id, row.winrate);
-    }
-
-    return winrates;
-  } catch (error) {
-    console.error('Error calculating faction winrates:', error);
-    throw error;
-  }
-}
-
-/**
  * Get balance event impact computed directly from matches.
  * Uses event_date as the dividing line: matches before vs matches after.
  * Each match is processed twice (winner + loser perspective) like recalculateFactionMapStatistics.
@@ -1522,19 +1322,3 @@ export async function rebuildFactionMapStatisticsHistory(
     balance_events_updated: eventBoundaries.length,
   };
 }
-export default {
-  createFactionMapStatisticsSnapshot,
-  getBalanceTrend,
-  recalculatePlayerMatchStatistics,
-  recalculateFactionMapStatistics,
-  updateFactionMapStatistics,
-  getBalanceStatisticsSnapshot,
-  recalculateAllMatchStatistics,
-  updatePlayerElo,
-  updatePlayerFactionStats,
-  calculateFactionWinrates,
-  getBalanceEventForwardImpact,
-  getBalanceEventSnapshotImpact,
-  getBalanceEventIntervalImpact,
-  rebuildFactionMapStatisticsHistory,
-};

@@ -1,7 +1,7 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { query } from '../config/database.js';
-import { PasswordPolicy, User } from '../types/index.js';
+import { PasswordPolicy } from '../types/index.js';
 import { getJwtSecret } from '../config/securityConfig.js';
 
 const SALT_ROUNDS = 10;
@@ -82,12 +82,6 @@ export const validatePassword = async (password: string, userId?: string): Promi
     valid: errors.length === 0,
     errors,
   };
-};
-
-export const calculateELO = (currentELO: number, opponentELO: number, won: boolean, K = 32): number => {
-  const expected = 1 / (1 + Math.pow(10, (opponentELO - currentELO) / 400));
-  const score = won ? 1 : 0;
-  return Math.round(K * (score - expected));
 };
 
 /**
