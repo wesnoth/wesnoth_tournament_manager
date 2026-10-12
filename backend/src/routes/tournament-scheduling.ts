@@ -48,7 +48,8 @@ const getTeamNotificationContext = async (tournamentId: string, teamId: string):
     `SELECT tp.user_id, ue.discord_id, COALESCE(ue.nickname, tp.user_id) AS display_name
      FROM tournament_participants tp
      LEFT JOIN users_extension ue ON tp.user_id = ue.id
-     WHERE tp.tournament_id = ? AND tp.team_id = ?`,
+     WHERE tp.tournament_id = ? AND tp.team_id = ?
+     ORDER BY display_name`,
     [tournamentId, teamId]
   );
 
@@ -98,8 +99,9 @@ type SeriesNotificationAction = 'schedule_proposal' | 'schedule_confirmed' | 'sc
  *
  * Everyone in the series except the actor is notified; in a team series that
  * includes the actor's teammate, so both members know what their team did. In
- * team series the messages and the Discord embed name both teams (maintainer
- * decision, 2026-10-11); 1v1 series use nicknames.
+ * team series the messages and the Discord embed name both teams with their
+ * members (maintainer decisions, 2026-10-11 and 2026-10-12); 1v1 series use
+ * nicknames.
  */
 const notifySeriesParticipants = async (
   seriesId: string,
@@ -160,10 +162,14 @@ const notifySeriesParticipants = async (
   const teams = (actor?.tournament_mode || rows[0]?.tournament_mode) === 'team'
     ? await resolveSeriesTeams(tournamentId, rows, actorUserId)
     : null;
-  // "Ana (Red) ... the series Red vs Blue." for teams, "Ana ... your tournament series." for 1v1.
+  // "Ana (Red) ... the series Red (Ana, Bob) vs Blue (Cid, Dan)." for teams,
+  // "Ana ... your tournament series." for 1v1. Team names alone are ambiguous
+  // to players who do not know the rosters, so each side lists its members.
+  const teamWithMembers = (team: TeamNotificationContext) =>
+    team.memberNames.length ? `${team.teamName} (${team.memberNames.join(', ')})` : team.teamName;
   const actorLabel = teams ? `${actorName} (${teams.actorTeam.teamName})` : actorName;
   const seriesLabel = teams
-    ? `the series ${teams.actorTeam.teamName} vs ${teams.opponentTeam.teamName}`
+    ? `the series ${teamWithMembers(teams.actorTeam)} vs ${teamWithMembers(teams.opponentTeam)}`
     : 'your tournament series';
   const messageByAction: Record<SeriesNotificationAction, string> = {
     schedule_proposal: `${actorLabel} proposed a schedule for ${seriesLabel}.`,
