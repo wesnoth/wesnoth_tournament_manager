@@ -392,7 +392,8 @@
   "home": {
     "player_of_month": "Jugador del Mes",
     "recent_players": "Jugadores Recientes",
-    "top_10_players": "Top 10 Jugadores"
+    "top_10_players": "Top 10 Jugadores",
+    "error_loading": "Error al cargar los datos"
   },
   "hotfix": "Hotfix",
   "impact_analysis": "Estadísticas de Balance desde Evento",
@@ -688,25 +689,17 @@
     "error_change_password_failed": "Error al cambiar la contraseña",
     "updated": "Perfil actualizado exitosamente",
     "noAvatarSelected": "Sin avatar",
-    "error_language_update": "Error al cambiar el idioma"
+    "error_language_update": "Error al cambiar el idioma",
+    "refresh_all": "Actualizar todos los datos",
+    "selected_avatar": "Avatar seleccionado",
+    "title_of": "Perfil de {{nickname}}"
   },
-  "profile.avatar": "Avatar",
-  "profile.avatar_updated": "Avatar actualizado correctamente",
   "profile.change_password_on_forum": "Cambiar contraseña en el Foro de Wesnoth",
-  "profile.country_updated": "País actualizado correctamente",
-  "profile.discord_placeholder": "Ingresa tu ID de Discord",
-  "profile.discord_title": "ID de Discord",
-  "profile.error_discord_empty": "El ID de Discord no puede estar vacío",
   "profile.error_discord_invalid": "Formato de ID de Discord inválido. Introduce el ID numérico de usuario de Discord (17-20 dígitos).",
   "profile.error_ranked_update": "Error al actualizar la preferencia de clasificadas",
-  "profile.error_update_avatar_failed": "Error al actualizar el avatar",
-  "profile.error_update_country_failed": "Error al actualizar el país",
-  "profile.error_update_discord_failed": "Error al actualizar el ID de Discord",
   "profile.discord_validation_failed": "Error al validar el ID de Discord",
   "profile.discord_validation_sent": "ID de Discord validado para {{nickname}}",
-  "profile.not_found": "Perfil no encontrado",
   "profile.password_managed_by_forum": "Tu contraseña es gestionada por el sitio oficial de Wesnoth.",
-  "profile.preferences_title": "Preferencias",
   "profile.ranked_cannot_disable": "Las partidas clasificadas no se pueden desactivar una vez activadas",
   "profile.ranked_description": "Habilita esta opción para participar en partidas clasificadas. Una vez activada, esta opción no podrá desactivarse. Tus resultados afectarán tu clasificación ELO.",
   "profile.ranked_description_enabled": "Una vez activada, las partidas clasificadas no podrán desactivarse. Tus resultados seguirán afectando tu clasificación ELO.",
@@ -717,8 +710,6 @@
   "profile.ranked_updated": "Preferencia de clasificadas actualizada",
   "profile.scheduling_saved": "Preferencias de scheduling guardadas correctamente",
   "profile.error_scheduling_update": "Error al actualizar preferencias de scheduling",
-  "profile.title": "Perfil",
-  "profile.update_discord_button": "Actualizar ID de Discord",
   "profile.validate_discord_button": "Validar ID de Discord",
   "profile.updating_discord_validation": "Validando...",
   "profile_language_settings": "Configuración de Idioma",
@@ -939,7 +930,6 @@
     "unranked_assets": "Recursos del torneo sin ranking",
     "wesnoth_game_name": "Nombre de partida en Wesnoth"
   },
-  "tournament.round_configuration": "Configuración de Rondas",
   "tournament_create": "Crear Torneo",
   "tournament_description": "Descripción",
   "tournament_join": "Unirse",
@@ -1457,5 +1447,103 @@
   "register_step2": "Iniciar sesión en este gestor de torneos con tu usuario de Wesnoth",
   "register_step3": "Tu perfil se creará automáticamente",
   "register_go_to_login": "Ir al inicio de sesión",
-  "match_status_pending_report": "Pendiente de informar"
+  "match_status_pending_report": "Pendiente de informar",
+  "admin_nav": {
+    "audit_logs": "Registro de auditoría",
+    "replays": "Replays",
+    "map_packs": "Packs de mapas",
+    "wiki": "Wiki",
+    "maps_factions": "Mapas y facciones",
+    "manage_replays": "Gestionar replays",
+    "manage_map_packs": "Gestionar packs de mapas",
+    "manage_wiki": "Gestionar artículos del wiki",
+    "manage_maps_factions": "Gestionar mapas y facciones"
+  },
+  "challenge": {
+    "manage_title": "Gestionar este desafío"
+  },
+  "global_stats": {
+    "users": "Usuarios",
+    "ranked_matches": "Partidas ranked",
+    "tournament_matches": "Partidas de torneo",
+    "tournaments": "Torneos"
+  },
+  "match_modal": {
+    "error_confirm": "No se pudo confirmar la partida",
+    "error_dispute": "No se pudo disputar la partida",
+    "confirmation_title": "Confirmación de partida",
+    "you_winner": "Tú (ganador)",
+    "you_loser": "Tú (perdedor)",
+    "faction": "Facción",
+    "vs": "vs",
+    "rate_opponent": "Valora la actuación del rival",
+    "comments": "Comentarios",
+    "comments_placeholder": "Opcional: explica cualquier problema o añade comentarios sobre la partida...",
+    "dispute": "Disputar",
+    "waiting_opponent": "Esperando la respuesta del rival...",
+    "login_required": "Inicia sesión para confirmar o disputar esta partida.",
+    "details_title": "Detalles de la partida",
+    "statistic": "Estadística",
+    "player": "Jugador",
+    "rating": "Valoración",
+    "elo_before": "ELO antes",
+    "elo_after": "ELO después",
+    "elo_change": "Cambio de ELO",
+    "close": "Cerrar"
+  },
+  "matches_table": {
+    "error_discard_replay": "No se pudo descartar la replay. Inténtalo de nuevo.",
+    "error_download_replay": "No se pudo descargar la replay.",
+    "beats": "{{winner}} gana a {{loser}}"
+  },
+  "notifications": {
+    "select_all_title": "Seleccionar todas las notificaciones",
+    "select_all": "Seleccionar todas ({{count}})",
+    "mark_read": "Marcar como leída",
+    "mark_unread": "Marcar como no leída",
+    "go_to_events": "Ir a eventos",
+    "go_to_tournament": "Ir al torneo",
+    "range": "{{from}} - {{to}} de {{total}}"
+  },
+  "navbar": {
+    "change_language": "Cambiar idioma",
+    "help_for": "Ayuda sobre {{page}}"
+  },
+  "players": {
+    "error_loading": "Error al cargar los jugadores"
+  },
+  "profile_pagination": {
+    "showing": "{{showing}} de {{total}} partidas"
+  },
+  "opponent_selector.teammate_placeholder": "Busca un compañero...",
+  "route_loader": {
+    "loading": "Cargando página..."
+  },
+  "stats_errors": {
+    "faction": "Error al cargar las estadísticas de facciones",
+    "map": "Error al cargar las estadísticas de mapas",
+    "matchup": "Error al cargar las estadísticas de enfrentamientos",
+    "faction_matchup": "Error al cargar las estadísticas de facción contra facción"
+  },
+  "unranked_assets": {
+    "error_fetch_factions": "No se pudieron cargar las facciones",
+    "error_fetch_maps": "No se pudieron cargar los mapas",
+    "error_faction_name": "Escribe un nombre de facción",
+    "error_map_name": "Escribe un nombre de mapa",
+    "error_create_faction": "Error al crear la facción",
+    "error_create_map": "Error al crear el mapa",
+    "loading_factions": "Cargando facciones...",
+    "loading_maps": "Cargando mapas...",
+    "factions": "Facciones",
+    "maps": "Mapas",
+    "no_factions": "No hay facciones",
+    "no_maps": "No hay mapas",
+    "select_all": "Seleccionar todo",
+    "create_faction": "Crear facción nueva",
+    "create_map": "Crear mapa nuevo",
+    "faction_name": "Nombre de la facción",
+    "map_name": "Nombre del mapa",
+    "creating": "Creando...",
+    "create": "Crear"
+  }
 }

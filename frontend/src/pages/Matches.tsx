@@ -163,7 +163,7 @@ const Matches: React.FC = () => {
       document.body.removeChild(link);
     } catch (err) {
       console.error('❌ Error downloading replay:', err);
-      alert('Failed to download replay. Check console for details.');
+      alert(t('matches_table.error_download_replay'));
     }
   };
 

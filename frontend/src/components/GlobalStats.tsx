@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { publicService } from '../services/api';
+import i18next from 'i18next';
 
 interface GlobalStatistics {
   users_total: number;
@@ -30,7 +31,7 @@ interface StatRowProps {
 const StatRow: React.FC<StatRowProps> = ({ label, value }) => (
   <div className="flex justify-between items-center py-2 border-b border-gray-200">
     <span className="text-gray-600 text-sm">{label}</span>
-    <span className="text-gray-900 font-semibold">{value.toLocaleString()}</span>
+    <span className="text-gray-900 font-semibold">{value.toLocaleString(i18next.language)}</span>
   </div>
 );
 
@@ -86,7 +87,7 @@ const GlobalStats: React.FC = () => {
 
       <div className="space-y-1 text-xs">
         {/* Users */}
-        <div className="font-semibold text-gray-700 text-xs uppercase mb-2 mt-3">Users</div>
+        <div className="font-semibold text-gray-700 text-xs uppercase mb-2 mt-3">{t('global_stats.users')}</div>
         <StatRow label={t('total') || 'Total'} value={stats.users_total} />
         <StatRow label={t('active') || 'Active'} value={stats.users_active} />
         <StatRow label={t('ranked') || 'Ranked'} value={stats.users_ranked} />
@@ -94,7 +95,7 @@ const GlobalStats: React.FC = () => {
         <StatRow label={`${t('new') || 'New'} (${t('year')})`} value={stats.users_new_year} />
 
         {/* Ranked Matches */}
-        <div className="font-semibold text-gray-700 text-xs uppercase mb-2 mt-3">Ranked Matches</div>
+        <div className="font-semibold text-gray-700 text-xs uppercase mb-2 mt-3">{t('global_stats.ranked_matches')}</div>
         <StatRow label={t('today') || 'Today'} value={stats.matches_today} />
         <StatRow label={t('week') || 'Week'} value={stats.matches_week} />
         <StatRow label={t('month') || 'Month'} value={stats.matches_month} />
@@ -102,13 +103,13 @@ const GlobalStats: React.FC = () => {
         <StatRow label={t('total') || 'Total'} value={stats.matches_total} />
 
         {/* Tournament Matches */}
-        <div className="font-semibold text-gray-700 text-xs uppercase mb-2 mt-3">Tournament Matches</div>
+        <div className="font-semibold text-gray-700 text-xs uppercase mb-2 mt-3">{t('global_stats.tournament_matches')}</div>
         <StatRow label={`${t('month') || 'Month'}`} value={stats.tournament_matches_month} />
         <StatRow label={`${t('year') || 'Year'}`} value={stats.tournament_matches_year} />
         <StatRow label={t('total') || 'Total'} value={stats.tournament_matches_total} />
 
         {/* Tournaments */}
-        <div className="font-semibold text-gray-700 text-xs uppercase mb-2 mt-3">Tournaments</div>
+        <div className="font-semibold text-gray-700 text-xs uppercase mb-2 mt-3">{t('global_stats.tournaments')}</div>
         <StatRow label={`${t('month') || 'Month'}`} value={stats.tournaments_month} />
         <StatRow label={`${t('year') || 'Year'}`} value={stats.tournaments_year} />
         <StatRow label={t('total') || 'Total'} value={stats.tournaments_total} />

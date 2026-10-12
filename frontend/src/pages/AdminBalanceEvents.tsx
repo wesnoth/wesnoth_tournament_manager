@@ -5,6 +5,7 @@ import { statisticsService } from '../services/statisticsService';
 import api from '../services/api';
 import UserProfileNav from '../components/UserProfileNav';
 import { useAuthStore } from '../store/authStore';
+import i18next from 'i18next';
 
 interface Faction {
   id: string;
@@ -31,7 +32,7 @@ interface BalanceEvent {
 
 const formatEventDate = (value: string): string => {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(i18next.language);
 };
 
 const AdminBalanceEvents: React.FC = () => {

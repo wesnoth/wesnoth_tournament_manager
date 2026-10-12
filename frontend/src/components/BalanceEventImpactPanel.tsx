@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { statisticsService } from '../services/statisticsService';
+import i18next from 'i18next';
 
 interface BalanceEventImpactProps {
   eventId?: string;
@@ -27,7 +28,7 @@ interface BalanceEvent {
 const formatDate = (value?: string | null): string => {
   if (!value) return '—';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(i18next.language);
 };
 
 const addDays = (value: string): string => {

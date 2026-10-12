@@ -63,7 +63,7 @@ const PlayerStatsByFaction: React.FC<Props> = ({ playerId }) => {
         setStats(converted);
       } catch (err) {
         console.error('Error fetching faction stats:', err);
-        setError('Error loading faction statistics');
+        setError(t('stats_errors.faction'));
       } finally {
         setLoading(false);
       }

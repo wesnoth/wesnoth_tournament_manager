@@ -392,7 +392,8 @@
   "home": {
     "player_of_month": "Player of the Month",
     "recent_players": "Recent Players",
-    "top_10_players": "Top 10 Players"
+    "top_10_players": "Top 10 Players",
+    "error_loading": "Error loading data"
   },
   "hotfix": "Hotfix",
   "impact_analysis": "Balance Statistics from Event Date",
@@ -688,25 +689,17 @@
     "error_change_password_failed": "Failed to change password",
     "updated": "Profile updated successfully",
     "noAvatarSelected": "No Avatar",
-    "error_language_update": "Error updating language"
+    "error_language_update": "Error updating language",
+    "refresh_all": "Refresh all data",
+    "selected_avatar": "Selected avatar",
+    "title_of": "{{nickname}}'s Profile"
   },
-  "profile.avatar": "Avatar",
-  "profile.avatar_updated": "Avatar updated successfully",
   "profile.change_password_on_forum": "Change Password on Wesnoth Forum",
-  "profile.country_updated": "Country updated successfully",
-  "profile.discord_placeholder": "Enter your Discord ID",
-  "profile.discord_title": "Discord ID",
-  "profile.error_discord_empty": "Discord ID cannot be empty",
   "profile.error_discord_invalid": "Invalid Discord ID format. Enter the 17-20 digit Discord user ID.",
   "profile.error_ranked_update": "Error updating ranked preference",
-  "profile.error_update_avatar_failed": "Failed to update avatar",
-  "profile.error_update_country_failed": "Failed to update country",
-  "profile.error_update_discord_failed": "Failed to update Discord ID",
   "profile.discord_validation_failed": "Failed to validate Discord ID",
   "profile.discord_validation_sent": "Discord ID validated for {{nickname}}",
-  "profile.not_found": "Profile not found",
   "profile.password_managed_by_forum": "Your password is managed by the official Wesnoth website.",
-  "profile.preferences_title": "Preferences",
   "profile.ranked_cannot_disable": "Ranked matches cannot be disabled once enabled",
   "profile.ranked_description": "Enable this option to participate in ranked matches. Once activated, this option cannot be disabled. Your results will affect your ELO rating.",
   "profile.ranked_description_enabled": "Once activated, ranked matches cannot be disabled. Your results will continue to affect your ELO rating.",
@@ -717,8 +710,6 @@
   "profile.ranked_updated": "Ranked preference updated",
   "profile.scheduling_saved": "Scheduling preferences saved successfully",
   "profile.error_scheduling_update": "Error updating scheduling preferences",
-  "profile.title": "Profile",
-  "profile.update_discord_button": "Update Discord ID",
   "profile.validate_discord_button": "Validate Discord ID",
   "profile.updating_discord_validation": "Validating...",
   "profile_language_settings": "Language Settings",
@@ -939,7 +930,6 @@
     "unranked_assets": "Unranked Tournament Assets",
     "wesnoth_game_name": "Wesnoth game name"
   },
-  "tournament.round_configuration": "Round Configuration",
   "tournament_create": "Create Tournament",
   "tournament_description": "Description",
   "tournament_join": "Join",
@@ -1457,5 +1447,103 @@
   "register_step2": "Log in to this tournament manager using your Wesnoth username",
   "register_step3": "Your profile will be automatically created",
   "register_go_to_login": "Go to Login",
-  "match_status_pending_report": "Pending report"
+  "match_status_pending_report": "Pending report",
+  "admin_nav": {
+    "audit_logs": "Audit Logs",
+    "replays": "Replays",
+    "map_packs": "Map Packs",
+    "wiki": "Wiki",
+    "maps_factions": "Maps & Factions",
+    "manage_replays": "Manage Replays",
+    "manage_map_packs": "Manage Map Packs",
+    "manage_wiki": "Manage Wiki Articles",
+    "manage_maps_factions": "Manage Maps & Factions"
+  },
+  "challenge": {
+    "manage_title": "Manage this challenge"
+  },
+  "global_stats": {
+    "users": "Users",
+    "ranked_matches": "Ranked Matches",
+    "tournament_matches": "Tournament Matches",
+    "tournaments": "Tournaments"
+  },
+  "match_modal": {
+    "error_confirm": "Failed to confirm match",
+    "error_dispute": "Failed to dispute match",
+    "confirmation_title": "Match Confirmation",
+    "you_winner": "You (Winner)",
+    "you_loser": "You (Loser)",
+    "faction": "Faction",
+    "vs": "vs",
+    "rate_opponent": "Rate opponent's performance",
+    "comments": "Comments",
+    "comments_placeholder": "Optional: explain any issues or add comments about the match...",
+    "dispute": "Dispute",
+    "waiting_opponent": "Waiting for opponent's response...",
+    "login_required": "Please log in to confirm or dispute this match.",
+    "details_title": "Match Details",
+    "statistic": "Statistic",
+    "player": "Player",
+    "rating": "Rating",
+    "elo_before": "ELO Before",
+    "elo_after": "ELO After",
+    "elo_change": "ELO Change",
+    "close": "Close"
+  },
+  "matches_table": {
+    "error_discard_replay": "Failed to discard replay. Please try again.",
+    "error_download_replay": "Failed to download the replay.",
+    "beats": "{{winner}} beats {{loser}}"
+  },
+  "notifications": {
+    "select_all_title": "Select all notifications",
+    "select_all": "Select all ({{count}})",
+    "mark_read": "Mark as read",
+    "mark_unread": "Mark as unread",
+    "go_to_events": "Go to events",
+    "go_to_tournament": "Go to tournament details",
+    "range": "{{from}} - {{to}} of {{total}}"
+  },
+  "navbar": {
+    "change_language": "Change language",
+    "help_for": "Help for {{page}}"
+  },
+  "players": {
+    "error_loading": "Error loading players"
+  },
+  "profile_pagination": {
+    "showing": "{{showing}} of {{total}} matches"
+  },
+  "opponent_selector.teammate_placeholder": "Search for a teammate...",
+  "route_loader": {
+    "loading": "Loading page..."
+  },
+  "stats_errors": {
+    "faction": "Error loading faction statistics",
+    "map": "Error loading map statistics",
+    "matchup": "Error loading matchup statistics",
+    "faction_matchup": "Error loading faction matchup statistics"
+  },
+  "unranked_assets": {
+    "error_fetch_factions": "Failed to fetch factions",
+    "error_fetch_maps": "Failed to fetch maps",
+    "error_faction_name": "Please enter a faction name",
+    "error_map_name": "Please enter a map name",
+    "error_create_faction": "Error creating faction",
+    "error_create_map": "Error creating map",
+    "loading_factions": "Loading factions...",
+    "loading_maps": "Loading maps...",
+    "factions": "Factions",
+    "maps": "Maps",
+    "no_factions": "No factions available",
+    "no_maps": "No maps available",
+    "select_all": "Select All",
+    "create_faction": "Create New Faction",
+    "create_map": "Create New Map",
+    "faction_name": "Faction Name",
+    "map_name": "Map Name",
+    "creating": "Creating...",
+    "create": "Create"
+  }
 }

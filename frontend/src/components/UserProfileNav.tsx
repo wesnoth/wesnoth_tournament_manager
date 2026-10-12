@@ -96,20 +96,20 @@ const UserProfileNav: React.FC = () => {
               <button 
                 className="flex items-center gap-2 px-3 py-2 bg-orange-500/10 border border-orange-500/30 text-white text-sm font-medium rounded hover:bg-orange-500/20 hover:border-orange-500/50 active:bg-orange-500/25 transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-md:px-2.5"
                 onClick={() => handleNavigate('/admin/audit')}
-                title="Audit Logs"
+                title={t('admin_nav.audit_logs')}
               >
                 <span className="text-lg flex items-center justify-center min-w-5 max-sm:text-base">🔒</span>
-                <span className="hidden md:inline">Audit Logs</span>
+                <span className="hidden md:inline">{t('admin_nav.audit_logs')}</span>
               </button>
 
               {/* Replays */}
               <button 
                 className="flex items-center gap-2 px-3 py-2 bg-orange-500/10 border border-orange-500/30 text-white text-sm font-medium rounded hover:bg-orange-500/20 hover:border-orange-500/50 active:bg-orange-500/25 transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-md:px-2.5"
                 onClick={() => handleNavigate('/admin/replays')}
-                title="Manage Replays"
+                title={t('admin_nav.manage_replays')}
               >
                 <span className="text-lg flex items-center justify-center min-w-5 max-sm:text-base">🎮</span>
-                <span className="hidden md:inline">Replays</span>
+                <span className="hidden md:inline">{t('admin_nav.replays')}</span>
               </button>
 
               {/* Map Packs */}
@@ -117,10 +117,10 @@ const UserProfileNav: React.FC = () => {
                 data-help-id="action-open-map-packs"
                 className="flex items-center gap-2 px-3 py-2 bg-orange-500/10 border border-orange-500/30 text-white text-sm font-medium rounded hover:bg-orange-500/20 hover:border-orange-500/50 active:bg-orange-500/25 transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-md:px-2.5"
                 onClick={() => handleNavigate('/admin/maps-and-factions')}
-                title="Manage Map Packs"
+                title={t('admin_nav.manage_map_packs')}
               >
                 <span className="text-lg flex items-center justify-center min-w-5 max-sm:text-base">🗺️</span>
-                <span className="hidden md:inline">Map Packs</span>
+                <span className="hidden md:inline">{t('admin_nav.map_packs')}</span>
               </button>
 
             </>
@@ -163,20 +163,20 @@ const UserProfileNav: React.FC = () => {
               <button 
                 className="flex items-center gap-2 px-3 py-2 bg-orange-500/10 border border-orange-500/30 text-white text-sm font-medium rounded hover:bg-orange-500/20 hover:border-orange-500/50 active:bg-orange-500/25 transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-md:px-2.5"
                 onClick={() => handleNavigate('/admin/wiki')}
-                title="Manage Wiki Articles"
+                title={t('admin_nav.manage_wiki')}
               >
                 <span className="text-lg flex items-center justify-center min-w-5 max-sm:text-base">📖</span>
-                <span className="hidden md:inline">Wiki</span>
+                <span className="hidden md:inline">{t('admin_nav.wiki')}</span>
               </button>
 
               {/* Maps & Factions */}
               <button 
                 className="flex items-center gap-2 px-3 py-2 bg-orange-500/10 border border-orange-500/30 text-white text-sm font-medium rounded hover:bg-orange-500/20 hover:border-orange-500/50 active:bg-orange-500/25 transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-md:px-2.5"
                 onClick={() => handleNavigate('/admin/maps-and-factions')}
-                title="Manage Maps & Factions"
+                title={t('admin_nav.manage_maps_factions')}
               >
                 <span className="text-lg flex items-center justify-center min-w-5 max-sm:text-base">🗺️</span>
-                <span className="hidden md:inline">Maps & Factions</span>
+                <span className="hidden md:inline">{t('admin_nav.maps_factions')}</span>
               </button>
 
               {/* Disputes */}
@@ -193,20 +193,20 @@ const UserProfileNav: React.FC = () => {
               <button 
                 className="flex items-center gap-2 px-3 py-2 bg-orange-500/10 border border-orange-500/30 text-white text-sm font-medium rounded hover:bg-orange-500/20 hover:border-orange-500/50 active:bg-orange-500/25 transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-md:px-2.5"
                 onClick={() => handleNavigate('/admin/audit')}
-                title="Audit Logs"
+                title={t('admin_nav.audit_logs')}
               >
                 <span className="text-lg flex items-center justify-center min-w-5 max-sm:text-base">🔒</span>
-                <span className="hidden md:inline">Audit Logs</span>
+                <span className="hidden md:inline">{t('admin_nav.audit_logs')}</span>
               </button>
 
               {/* Replays */}
               <button 
                 className="flex items-center gap-2 px-3 py-2 bg-orange-500/10 border border-orange-500/30 text-white text-sm font-medium rounded hover:bg-orange-500/20 hover:border-orange-500/50 active:bg-orange-500/25 transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-md:px-2.5"
                 onClick={() => handleNavigate('/admin/replays')}
-                title="Manage Replays"
+                title={t('admin_nav.manage_replays')}
               >
                 <span className="text-lg flex items-center justify-center min-w-5 max-sm:text-base">🎮</span>
-                <span className="hidden md:inline">Replays</span>
+                <span className="hidden md:inline">{t('admin_nav.replays')}</span>
               </button>
 
               {/* Balance Events */}

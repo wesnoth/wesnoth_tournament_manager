@@ -13,6 +13,7 @@ import MatchTypeBadge from '../components/MatchTypeBadge';
 import WaitingLobby from '../components/WaitingLobby';
 import ChallengeFromPlayerModal from '../components/ChallengeFromPlayerModal';
 import { useAuthStore } from '../store/authStore';
+import i18next from 'i18next';
 
 // Get API URL for direct backend calls
 // Determine API URL based on frontend hostname and Vite environment variables
@@ -255,7 +256,7 @@ const Home: React.FC = () => {
         }
       } catch (error) {
         console.error('Error fetching data:', error);
-        setError('Error loading data');
+        setError(t('home.error_loading'));
       } finally {
         setLoading(false);
         fetchInProgressRef.current = false;
@@ -329,7 +330,7 @@ const Home: React.FC = () => {
                         return (
                           <tr key={match.feed_id || match.id} className={`border-b ${borderColor} hover:${isDueReplay ? 'bg-red-100' : 'bg-yellow-50'} ${bgColor}`}>
                             <td className="px-4 py-3 align-top text-sm text-gray-700">
-                              {new Date(match.created_at).toLocaleDateString()}
+                              {new Date(match.created_at).toLocaleDateString(i18next.language)}
                             </td>
 
                             <td className="px-4 py-3 align-top text-sm" colSpan={2}>
@@ -401,7 +402,7 @@ const Home: React.FC = () => {
                       return (
                         <tr data-help-id="region-home-recent-match-row" key={match.feed_id || match.id} className={`border-b transition-colors ${isPendingTournamentReplay ? 'border-yellow-200 bg-yellow-50 hover:bg-yellow-100' : 'hover:bg-gray-50'}`}>
                           <td className="px-4 py-3 align-top text-gray-700">
-                            {new Date(match.created_at).toLocaleDateString()}
+                            {new Date(match.created_at).toLocaleDateString(i18next.language)}
                           </td>
                           
                           <td className="px-4 py-3 align-top">
@@ -555,7 +556,7 @@ const Home: React.FC = () => {
                   {playerMonthlyStats && (
                     <>
                       <div className="flex justify-between items-center py-2 border-b border-gray-200">
-                        <span className="text-gray-600 font-medium">ELO {t('month')}:</span>
+                        <span className="text-gray-600 font-medium">{t('label_elo')} {t('month')}:</span>
                         <span className="text-gray-900 font-bold" style={{ color: playerMonthlyStats.elo_gained >= 0 ? '#4caf50' : '#f44336' }}>
                           {playerMonthlyStats.elo_gained >= 0 ? '+' : ''}{playerMonthlyStats.elo_gained}
                         </span>

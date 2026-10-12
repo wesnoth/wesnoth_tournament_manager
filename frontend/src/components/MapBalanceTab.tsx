@@ -155,7 +155,7 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
         setStats(converted);
       } catch (err) {
         console.error('Error fetching map balance stats:', err);
-        setError('Error loading map statistics');
+        setError(t('stats_errors.map'));
       } finally {
         setLoading(false);
       }

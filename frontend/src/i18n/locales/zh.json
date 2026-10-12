@@ -384,7 +384,8 @@
   "home": {
     "player_of_month": "本月玩家",
     "recent_players": "近期玩家",
-    "top_10_players": "前10名玩家"
+    "top_10_players": "前10名玩家",
+    "error_loading": "加载数据时出错"
   },
   "hotfix": "热修复",
   "impact_analysis": "从事件开始的平衡统计",
@@ -680,25 +681,17 @@
     "error_change_password_failed": "更改密码失败",
     "updated": "个人资料已成功更新",
     "noAvatarSelected": "无头像",
-    "error_language_update": "更新语言时出错"
+    "error_language_update": "更新语言时出错",
+    "refresh_all": "刷新所有数据",
+    "selected_avatar": "已选头像",
+    "title_of": "{{nickname}} 的个人资料"
   },
-  "profile.avatar": "头像",
-  "profile.avatar_updated": "头像更新成功",
   "profile.change_password_on_forum": "在 Wesnoth 论坛上更改密码",
-  "profile.country_updated": "国家更新成功",
-  "profile.discord_placeholder": "输入您的 Discord ID",
-  "profile.discord_title": "Discord ID",
-  "profile.error_discord_empty": "Discord ID 不能为空",
   "profile.error_discord_invalid": "Discord ID 格式无效。请输入 17-20 位数字的 Discord 用户 ID。",
   "profile.error_ranked_update": "更新排名偏好时出错",
-  "profile.error_update_avatar_failed": "更新头像失败",
-  "profile.error_update_country_failed": "更新国家失败",
-  "profile.error_update_discord_failed": "更新 Discord ID 失败",
   "profile.discord_validation_failed": "Discord ID 验证失败",
   "profile.discord_validation_sent": "{{nickname}} 的 Discord ID 已验证",
-  "profile.not_found": "未找到个人资料",
   "profile.password_managed_by_forum": "您的密码由官方 Wesnoth 网站管理。",
-  "profile.preferences_title": "偏好设置",
   "profile.ranked_cannot_disable": "启用后无法禁用排名比赛",
   "profile.ranked_description": "启用此选项以参加排名比赛。启用后，此选项无法禁用。您的结果将影响您的 ELO 等级。",
   "profile.ranked_description_enabled": "启用后，排名比赛无法禁用。您的结果将继续影响您的 ELO 等级。",
@@ -709,8 +702,6 @@
   "profile.ranked_updated": "排名偏好已更新",
   "profile.scheduling_saved": "日程偏好已成功保存",
   "profile.error_scheduling_update": "更新日程偏好时出错",
-  "profile.title": "个人资料",
-  "profile.update_discord_button": "更新 Discord ID",
   "profile.validate_discord_button": "验证 Discord ID",
   "profile.updating_discord_validation": "验证中...",
   "profile_language_settings": "语言设置",
@@ -931,7 +922,6 @@
     "unranked_assets": "非排名赛资源",
     "wesnoth_game_name": "Wesnoth 游戏名"
   },
-  "tournament.round_configuration": "回合配置",
   "tournament_create": "创建锦标赛",
   "tournament_description": "描述",
   "tournament_join": "加入",
@@ -1457,5 +1447,103 @@
   "register_step2": "使用你的 Wesnoth 用户名登录本赛事管理器",
   "register_step3": "你的个人资料将自动创建",
   "register_go_to_login": "前往登录",
-  "match_status_pending_report": "待报告"
+  "match_status_pending_report": "待报告",
+  "admin_nav": {
+    "audit_logs": "审计日志",
+    "replays": "回放",
+    "map_packs": "地图包",
+    "wiki": "Wiki",
+    "maps_factions": "地图与派系",
+    "manage_replays": "管理回放",
+    "manage_map_packs": "管理地图包",
+    "manage_wiki": "管理 Wiki 文章",
+    "manage_maps_factions": "管理地图与派系"
+  },
+  "challenge": {
+    "manage_title": "管理此挑战"
+  },
+  "global_stats": {
+    "users": "用户",
+    "ranked_matches": "排名赛比赛",
+    "tournament_matches": "赛事比赛",
+    "tournaments": "赛事"
+  },
+  "match_modal": {
+    "error_confirm": "无法确认比赛",
+    "error_dispute": "无法对比赛提出争议",
+    "confirmation_title": "比赛确认",
+    "you_winner": "你（胜者）",
+    "you_loser": "你（负者）",
+    "faction": "派系",
+    "vs": "对",
+    "rate_opponent": "为对手的表现评分",
+    "comments": "评论",
+    "comments_placeholder": "可选：说明问题或添加关于比赛的评论...",
+    "dispute": "提出争议",
+    "waiting_opponent": "等待对手回应...",
+    "login_required": "请登录以确认或对此比赛提出争议。",
+    "details_title": "比赛详情",
+    "statistic": "统计项",
+    "player": "玩家",
+    "rating": "评分",
+    "elo_before": "赛前 ELO",
+    "elo_after": "赛后 ELO",
+    "elo_change": "ELO 变化",
+    "close": "关闭"
+  },
+  "matches_table": {
+    "error_discard_replay": "无法丢弃回放，请重试。",
+    "error_download_replay": "无法下载回放。",
+    "beats": "{{winner}} 胜 {{loser}}"
+  },
+  "notifications": {
+    "select_all_title": "选择所有通知",
+    "select_all": "全选（{{count}}）",
+    "mark_read": "标为已读",
+    "mark_unread": "标为未读",
+    "go_to_events": "前往活动",
+    "go_to_tournament": "前往赛事详情",
+    "range": "第 {{from}} - {{to}} 条，共 {{total}} 条"
+  },
+  "navbar": {
+    "change_language": "切换语言",
+    "help_for": "{{page}} 的帮助"
+  },
+  "players": {
+    "error_loading": "加载玩家时出错"
+  },
+  "profile_pagination": {
+    "showing": "共 {{total}} 场比赛，显示 {{showing}} 场"
+  },
+  "opponent_selector.teammate_placeholder": "搜索队友...",
+  "route_loader": {
+    "loading": "正在加载页面..."
+  },
+  "stats_errors": {
+    "faction": "加载派系统计时出错",
+    "map": "加载地图统计时出错",
+    "matchup": "加载对局组合统计时出错",
+    "faction_matchup": "加载派系对抗统计时出错"
+  },
+  "unranked_assets": {
+    "error_fetch_factions": "无法获取派系",
+    "error_fetch_maps": "无法获取地图",
+    "error_faction_name": "请输入派系名称",
+    "error_map_name": "请输入地图名称",
+    "error_create_faction": "创建派系时出错",
+    "error_create_map": "创建地图时出错",
+    "loading_factions": "正在加载派系...",
+    "loading_maps": "正在加载地图...",
+    "factions": "派系",
+    "maps": "地图",
+    "no_factions": "没有可用的派系",
+    "no_maps": "没有可用的地图",
+    "select_all": "全选",
+    "create_faction": "创建新派系",
+    "create_map": "创建新地图",
+    "faction_name": "派系名称",
+    "map_name": "地图名称",
+    "creating": "正在创建...",
+    "create": "创建"
+  }
 }

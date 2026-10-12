@@ -75,7 +75,7 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
           {previewUrl ? (
             <img
               src={previewUrl}
-              alt="Selected Avatar"
+              alt={t('profile.selected_avatar')}
               className="w-full h-full object-cover"
               onError={handleImageError}
             />

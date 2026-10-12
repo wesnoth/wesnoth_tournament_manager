@@ -95,7 +95,7 @@ const FactionBalanceTab: React.FC<FactionBalanceTabProps> = ({ beforeData = null
         setStats(converted);
       } catch (err) {
         console.error('Error fetching faction balance stats:', err);
-        setError('Error loading faction statistics');
+        setError(t('stats_errors.faction'));
       } finally {
         setLoading(false);
       }

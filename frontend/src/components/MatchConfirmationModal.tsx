@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import api from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import StarRating from './StarRating';
+import { useTranslation } from 'react-i18next';
 
 interface MatchConfirmationModalProps {
   match: any;
@@ -20,6 +21,7 @@ const MatchConfirmationModal: React.FC<MatchConfirmationModalProps> = ({
   isTeamMode = false,
   currentUserTeamId = '',
 }) => {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     rating: '3',
     comments: '',
@@ -53,7 +55,7 @@ const MatchConfirmationModal: React.FC<MatchConfirmationModalProps> = ({
 
       onSubmit();
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to confirm match');
+      setError(err.response?.data?.message || t('match_modal.error_confirm'));
     } finally {
       setIsSubmitting(false);
     }
@@ -76,14 +78,14 @@ const MatchConfirmationModal: React.FC<MatchConfirmationModalProps> = ({
 
       onSubmit();
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to dispute match');
+      setError(err.response?.data?.message || t('match_modal.error_dispute'));
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const winnerElo = match.winner_elo_before || 'N/A';
-  const loserElo = match.loser_elo_before || 'N/A';
+  const winnerElo = match.winner_elo_before || t('not_available');
+  const loserElo = match.loser_elo_before || t('not_available');
   
   // Calculate loser_id from winner_id and the team/player IDs
   const loserId = isTeamMode 
@@ -116,7 +118,7 @@ const MatchConfirmationModal: React.FC<MatchConfirmationModalProps> = ({
     <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 animate-fadeIn" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-2xl max-w-lg w-11/12 max-h-screen overflow-y-auto animate-slideUp border border-gray-200" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center border-b-2 border-gray-100 px-6 py-6 bg-gray-50">
-          <h2 className="text-2xl font-semibold text-gray-800 m-0">Match Confirmation</h2>
+          <h2 className="text-2xl font-semibold text-gray-800 m-0">{t('match_modal.confirmation_title')}</h2>
           <button 
             data-help-id="action-close-match-confirmation"
             className="bg-none border-none text-gray-400 text-3xl cursor-pointer p-0 w-8 h-8 flex items-center justify-center rounded hover:text-gray-800 hover:bg-gray-100 transition-all"
@@ -130,27 +132,27 @@ const MatchConfirmationModal: React.FC<MatchConfirmationModalProps> = ({
           <div className="mb-4">
             <div className="flex items-center justify-between gap-4">
               <div className={`flex-1 bg-gray-50 rounded-lg p-4 text-center border border-gray-200 border-l-4 ${isWinner ? 'border-l-green-500 bg-gradient-to-br from-green-50 to-gray-50' : 'border-l-gray-300'}`}>
-                <h3 className="text-gray-800 m-0 mb-2 text-xs font-semibold uppercase tracking-wide">{isWinner ? 'You (Winner)' : 'Winner'}</h3>
+                <h3 className="text-gray-800 m-0 mb-2 text-xs font-semibold uppercase tracking-wide">{isWinner ? t('match_modal.you_winner') : t('label_winner')}</h3>
                 <p className="text-gray-900 font-semibold text-base m-0 mb-1">{match.winner_nickname}</p>
-                <p className="text-yellow-600 font-semibold text-sm m-0 mb-1">ELO: {winnerElo}</p>
-                <p className="text-gray-600 m-0 text-xs">Faction: {match.winner_faction || 'N/A'}</p>
+                <p className="text-yellow-600 font-semibold text-sm m-0 mb-1">{t('label_elo')}: {winnerElo}</p>
+                <p className="text-gray-600 m-0 text-xs">{t('match_modal.faction')}: {match.winner_faction || t('not_available')}</p>
               </div>
 
               <div className="flex items-center justify-center w-12 h-12 rounded-full bg-gray-200 flex-shrink-0">
-                <span className="text-gray-700 font-bold">vs</span>
+                <span className="text-gray-700 font-bold">{t('match_modal.vs')}</span>
               </div>
 
               <div className={`flex-1 bg-gray-50 rounded-lg p-4 text-center border border-gray-200 border-l-4 ${isLoser ? 'border-l-red-500 bg-gradient-to-br from-red-50 to-gray-50' : 'border-l-gray-300'}`}>
-                <h3 className="text-gray-800 m-0 mb-2 text-xs font-semibold uppercase tracking-wide">{isLoser ? 'You (Loser)' : 'Loser'}</h3>
+                <h3 className="text-gray-800 m-0 mb-2 text-xs font-semibold uppercase tracking-wide">{isLoser ? t('match_modal.you_loser') : t('label_loser')}</h3>
                 <p className="text-gray-900 font-semibold text-base m-0 mb-1">{match.loser_nickname}</p>
-                <p className="text-yellow-600 font-semibold text-sm m-0 mb-1">ELO: {loserElo}</p>
-                <p className="text-gray-600 m-0 text-xs">Faction: {match.loser_faction || 'N/A'}</p>
+                <p className="text-yellow-600 font-semibold text-sm m-0 mb-1">{t('label_elo')}: {loserElo}</p>
+                <p className="text-gray-600 m-0 text-xs">{t('match_modal.faction')}: {match.loser_faction || t('not_available')}</p>
               </div>
             </div>
 
             <div className="mt-6">
               <div>
-                <label className="block font-semibold text-gray-700 mb-2">Rate opponent's performance:</label>
+                <label className="block font-semibold text-gray-700 mb-2">{t('match_modal.rate_opponent')}:</label>
                 <StarRating
                   value={formData.rating}
                   onChange={(value) => setFormData((prev) => ({ ...prev, rating: value }))}
@@ -158,14 +160,14 @@ const MatchConfirmationModal: React.FC<MatchConfirmationModalProps> = ({
               </div>
 
               <div className="mt-4">
-                <label htmlFor="comments" className="block font-semibold text-gray-700 mb-2">Comments:</label>
+                <label htmlFor="comments" className="block font-semibold text-gray-700 mb-2">{t('match_modal.comments')}:</label>
                 <textarea
                   data-help-id="field-match-confirmation-comments"
                   id="comments"
                   name="comments"
                   value={formData.comments}
                   onChange={handleInputChange}
-                  placeholder="Optional: Explain any issues or add comments about the match..."
+                  placeholder={t('match_modal.comments_placeholder')}
                   rows={4}
                   disabled={isSubmitting}
                   maxLength={500}
@@ -186,7 +188,7 @@ const MatchConfirmationModal: React.FC<MatchConfirmationModalProps> = ({
             onClick={onClose}
             disabled={isSubmitting}
           >
-            Cancel
+            {t('cancel')}
           </button>
           {isLoser && isAuthenticated && (
             <>
@@ -196,7 +198,7 @@ const MatchConfirmationModal: React.FC<MatchConfirmationModalProps> = ({
                 onClick={handleDispute}
                 disabled={isSubmitting}
               >
-                {isSubmitting ? 'Processing...' : 'Dispute'}
+                {isSubmitting ? t('teams.processing') : t('match_modal.dispute')}
               </button>
               <button
                 data-help-id="action-confirm-match"
@@ -204,7 +206,7 @@ const MatchConfirmationModal: React.FC<MatchConfirmationModalProps> = ({
                 onClick={handleConfirm}
                 disabled={isSubmitting}
               >
-                {isSubmitting ? 'Processing...' : 'Confirm'}
+                {isSubmitting ? t('teams.processing') : t('btn_confirm')}
               </button>
             </>
           )}
@@ -215,12 +217,12 @@ const MatchConfirmationModal: React.FC<MatchConfirmationModalProps> = ({
               onClick={handleConfirm}
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Processing...' : 'Inform Match'}
+              {isSubmitting ? t('teams.processing') : t('match_inform')}
             </button>
           )}
           {isWinner && isAuthenticated && !isReported && match.winner_comments && match.winner_rating && (
             <div className="flex-1 px-4 py-2 bg-blue-100 text-blue-800 rounded-lg text-sm text-center font-semibold">
-              Waiting for opponent's response...
+              {t('match_modal.waiting_opponent')}
             </div>
           )}
           {isWinner && isAuthenticated && isReported && (
@@ -229,12 +231,12 @@ const MatchConfirmationModal: React.FC<MatchConfirmationModalProps> = ({
               onClick={handleConfirm}
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Processing...' : 'Inform Match'}
+              {isSubmitting ? t('teams.processing') : t('match_inform')}
             </button>
           )}
           {!isAuthenticated && (
             <div className="flex-1 px-4 py-2 bg-yellow-100 text-yellow-800 rounded-lg text-sm text-center">
-              Please log in to confirm or dispute this match.
+              {t('match_modal.login_required')}
             </div>
           )}
         </div>

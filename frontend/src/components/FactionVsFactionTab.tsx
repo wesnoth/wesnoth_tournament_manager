@@ -174,7 +174,7 @@ const FactionVsFactionTab: React.FC<{ beforeData?: any[] | null; afterData?: any
     setLoading(true);
     statisticsService.getMatchupStats(minGames)
       .then(data => setStats(globalToSideFactionRows(data, minGames)))
-      .catch(() => setError('Error loading faction matchup statistics'))
+      .catch(() => setError(t('stats_errors.faction_matchup')))
       .finally(() => setLoading(false));
   }, [minGames]);
 
@@ -217,9 +217,9 @@ const FactionVsFactionTab: React.FC<{ beforeData?: any[] | null; afterData?: any
   const TableHead = () => (
     <thead className="bg-gray-100 border-b-2 border-gray-300">
       <tr>
-        <th className="px-4 py-3 text-left font-semibold text-amber-700 bg-amber-50">Side 1</th>
+        <th className="px-4 py-3 text-left font-semibold text-amber-700 bg-amber-50">{t('match_feed.side_1')}</th>
         <th className="px-2 py-3 text-center font-semibold text-gray-800">{t('vs')}</th>
-        <th className="px-4 py-3 text-left font-semibold text-purple-700 bg-purple-50">Side 2</th>
+        <th className="px-4 py-3 text-left font-semibold text-purple-700 bg-purple-50">{t('match_feed.side_2')}</th>
         <th className="px-4 py-3 text-center font-semibold text-gray-800">{t('total_games') || 'G'}</th>
         <th className="px-4 py-3 text-center font-semibold text-amber-700 bg-amber-50">{t('side_1_wr') || 'S1 WR'}</th>
         <th className="px-4 py-3 text-center font-semibold text-purple-700 bg-purple-50">{t('side_2_wr') || 'S2 WR'}</th>

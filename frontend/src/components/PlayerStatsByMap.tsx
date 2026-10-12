@@ -63,7 +63,7 @@ const PlayerStatsByMap: React.FC<Props> = ({ playerId }) => {
         setStats(converted);
       } catch (err) {
         console.error('Error fetching map stats:', err);
-        setError('Error loading map statistics');
+        setError(t('stats_errors.map'));
       } finally {
         setLoading(false);
       }

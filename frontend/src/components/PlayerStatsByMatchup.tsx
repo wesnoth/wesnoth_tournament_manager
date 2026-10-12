@@ -64,7 +64,7 @@ const PlayerStatsByMatchup: React.FC<Props> = ({ playerId }) => {
         setStats(converted);
       } catch (err) {
         console.error('Error fetching matchup stats:', err);
-        setError('Error loading matchup statistics');
+        setError(t('stats_errors.matchup'));
       } finally {
         setLoading(false);
       }

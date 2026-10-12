@@ -8,6 +8,7 @@ import { useAuthStore } from '../store/authStore';
 import MatchStreams from './MatchStreams';
 import MatchTypeBadge from './MatchTypeBadge';
 import { Link } from 'react-router-dom';
+import i18next from 'i18next';
 
 interface MatchesTableProps {
   matches: any[];
@@ -143,7 +144,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
       if (onReplayReported) onReplayReported(replayId);
     } catch (err) {
       console.error('Admin discard failed:', err);
-      alert('Failed to discard replay. Please try again.');
+      alert(t('matches_table.error_discard_replay'));
     }
   };
 
@@ -253,7 +254,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
               const player2Name = match.loser_nickname || 'Player 2';
               const side1 = match.winner_side || 1;
               const side2 = match.loser_side || 2;
-              const date = new Date(match.created_at).toLocaleDateString(undefined, {
+              const date = new Date(match.created_at).toLocaleDateString(i18next.language, {
                 year: 'numeric',
                 month: 'short',
                 day: 'numeric',
@@ -351,7 +352,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                               }`}
                               onClick={() => handleReportConfidence1Replay(match, 'I won')}
                               disabled={showConfirmationModal}
-                              title={`${t('replay_i_won')}: ${currentUserNickname} beats ${opponent}`}
+                              title={`${t('replay_i_won')}: ${t('matches_table.beats', { winner: currentUserNickname, loser: opponent })}`}
                             >
                               {t('replay_i_won')}
                             </button>
@@ -364,7 +365,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                               }`}
                               onClick={() => handleReportConfidence1Replay(match, 'I lost')}
                               disabled={showConfirmationModal}
-                              title={`${t('replay_i_lost')}: ${opponent} beats ${currentUserNickname}`}
+                              title={`${t('replay_i_lost')}: ${t('matches_table.beats', { winner: opponent, loser: currentUserNickname })}`}
                             >
                               {t('replay_i_lost')}
                             </button>
@@ -415,7 +416,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
 
             return (
               <tr data-help-id="region-match-row" key={match.feed_id || match.id} className={`border-b ${matchRowBorderColor} ${matchRowHoverColor} ${matchRowBgColor}`}>
-              <td className="px-4 py-3 align-top text-sm text-gray-700">{new Date(match.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</td>
+              <td className="px-4 py-3 align-top text-sm text-gray-700">{new Date(match.created_at).toLocaleDateString(i18next.language, { year: 'numeric', month: 'short', day: 'numeric' })}</td>
 
               <td className="px-4 py-3 align-top text-sm">
                 <div className="space-y-2">
@@ -431,7 +432,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                   </div>
                   {hasEloData ? <div className="flex flex-wrap gap-3 text-xs text-gray-600">
                     <div>
-                      <span className="font-semibold text-gray-700">ELO: </span>
+                      <span className="font-semibold text-gray-700">{t('label_elo')}: </span>
                       <span>{match.winner_elo_before || 'N/A'}</span>
                       {!isCancelled && (
                         <span className={`ml-1 font-semibold ${winnerEloChange(match) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -441,7 +442,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                     </div>
                     {match.winner_ranking_pos && (
                       <div>
-                        <span className="font-semibold text-gray-700">Rank: </span>
+                        <span className="font-semibold text-gray-700">{t('label_rank')}: </span>
                         <span>{match.winner_ranking_pos}</span>
                         {!isCancelled && (
                           <span className={`ml-1 font-semibold ${(match.winner_ranking_change || 0) > 0 ? 'text-green-600' : (match.winner_ranking_change || 0) < 0 ? 'text-red-600' : ''}`}>
@@ -475,7 +476,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                   </div>
                   {hasEloData ? <div className="flex flex-wrap gap-3 text-xs text-gray-600">
                     <div>
-                      <span className="font-semibold text-gray-700">ELO: </span>
+                      <span className="font-semibold text-gray-700">{t('label_elo')}: </span>
                       <span>{match.loser_elo_before || 'N/A'}</span>
                       {!isCancelled && (
                         <span className={`ml-1 font-semibold ${loserEloChange(match) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -485,7 +486,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                     </div>
                     {match.loser_ranking_pos && (
                       <div>
-                        <span className="font-semibold text-gray-700">Rank: </span>
+                        <span className="font-semibold text-gray-700">{t('label_rank')}: </span>
                         <span>{match.loser_ranking_pos}</span>
                         {!isCancelled && (
                           <span className={`ml-1 font-semibold ${(match.loser_ranking_change || 0) > 0 ? 'text-green-600' : (match.loser_ranking_change || 0) < 0 ? 'text-red-600' : ''}`}>

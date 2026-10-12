@@ -6,6 +6,7 @@ import { matchService } from '../services/api';
 import MainLayout from '../components/MainLayout';
 import GlobalStatsRecalculationProgress from '../components/GlobalStatsRecalculationProgress';
 import { useGlobalStatsRecalculation } from '../hooks/useGlobalStatsRecalculation';
+import i18next from 'i18next';
 
 interface DisputedMatch {
   id: string;
@@ -31,7 +32,7 @@ interface DisputedMatch {
 function formatDisputeDate(value?: string | null): string {
   if (!value) return '—';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString(i18next.language);
 }
 
 const AdminDisputes: React.FC = () => {

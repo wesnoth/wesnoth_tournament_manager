@@ -6,6 +6,7 @@ import { useAuthStore } from '../store/authStore';
 import { api } from '../services/api';
 import MainLayout from '../components/MainLayout';
 import AdminMapPacksPanel from '../components/AdminMapPacksPanel';
+import i18next from 'i18next';
 
 interface Map {
   id: string;
@@ -384,7 +385,7 @@ const AdminMapsAndFactions: React.FC = () => {
                         {map.is_ranked ? 'Ranked' : 'Unranked'}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">Created: {new Date(map.created_at).toLocaleDateString()}</p>
+                    <p className="text-xs text-gray-500 mt-1">Created: {new Date(map.created_at).toLocaleDateString(i18next.language)}</p>
                   </div>
                   <div className="flex gap-2 flex-shrink-0 ml-4">
                     <button className={`px-3 py-1 text-sm rounded-lg font-semibold ${map.is_active ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-gray-500 text-white hover:bg-gray-600'}`}
@@ -436,7 +437,7 @@ const AdminMapsAndFactions: React.FC = () => {
                         {faction.is_ranked ? 'Ranked' : 'Unranked'}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">Created: {new Date(faction.created_at).toLocaleDateString()}</p>
+                    <p className="text-xs text-gray-500 mt-1">Created: {new Date(faction.created_at).toLocaleDateString(i18next.language)}</p>
                   </div>
                   <div className="flex gap-2 flex-shrink-0 ml-4">
                     <button className={`px-3 py-1 text-sm rounded-lg font-semibold ${faction.is_active ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-gray-500 text-white hover:bg-gray-600'}`}

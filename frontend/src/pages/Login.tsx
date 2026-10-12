@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { authService, userService, SESSION_END_REASON_KEY } from '../services/api';
 import { useAuthStore } from '../store/authStore';
+import i18next from 'i18next';
 
 const Login: React.FC = () => {
   const { t, i18n } = useTranslation();
@@ -89,7 +90,7 @@ const Login: React.FC = () => {
 
   const formatBanUntil = (until?: string | null): string => {
     if (!until) return t('login_ban_permanent', 'permanently');
-    return t('login_ban_until', { date: new Date(until).toLocaleDateString() });
+    return t('login_ban_until', { date: new Date(until).toLocaleDateString(i18next.language) });
   };
 
   return (

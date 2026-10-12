@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import i18next from 'i18next';
 
 export interface Tournament {
   id: string;
@@ -186,7 +187,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
 
   const formatDate = (date: string) => {
     if (!date) return 'N/A';
-    return new Date(date).toLocaleDateString();
+    return new Date(date).toLocaleDateString(i18next.language);
   };
 
   if (loading) {

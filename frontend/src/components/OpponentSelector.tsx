@@ -108,7 +108,7 @@ const OpponentSelector: React.FC<OpponentSelectorProps> = ({ value, onChange, ty
         <input
           ref={inputRef}
           type="text"
-          placeholder={type === 'teammate' ? 'Search for a teammate...' : t('opponent_selector.placeholder')}
+          placeholder={type === 'teammate' ? t('opponent_selector.teammate_placeholder') : t('opponent_selector.placeholder')}
           value={inputValue}
           onChange={handleInputChange}
           onFocus={() => inputValue && setIsOpen(true)}
@@ -136,7 +136,7 @@ const OpponentSelector: React.FC<OpponentSelectorProps> = ({ value, onChange, ty
             >
               <div className="flex flex-col">
                 <span className="font-medium text-gray-900">{user.nickname}</span>
-                <span className="text-xs text-gray-600">ELO: {user.elo_rating || 'N/A'}</span>
+                <span className="text-xs text-gray-600">{t('label_elo')}: {user.elo_rating || t('not_available')}</span>
               </div>
             </div>
           ))}

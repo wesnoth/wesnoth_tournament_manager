@@ -209,7 +209,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
       setError('');
     } catch (err) {
       console.error('Error loading notifications:', err);
-      setError('Failed to load notifications');
+      setError(t('notifications_load_error'));
     } finally {
       setLoading(false);
     }
@@ -440,10 +440,10 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
             checked={selectedIds.size === notifications.length && notifications.length > 0}
             onChange={toggleSelectAll}
             className="w-4 h-4 cursor-pointer"
-            title="Select all notifications"
+            title={t('notifications.select_all_title')}
           />
           <label className="text-sm text-gray-600 cursor-pointer">
-            Select All ({notifications.length})
+            {t('notifications.select_all', { count: notifications.length })}
           </label>
         </div>
       )}
@@ -499,7 +499,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
                     data-help-id="action-mark-notification-read"
                     onClick={() => handleMarkAsRead(notification.id)}
                     className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
-                    title="Mark as read"
+                    title={t('notifications.mark_read')}
                   >
                     ✓
                   </button>
@@ -509,7 +509,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
                     data-help-id="action-mark-notification-unread"
                     onClick={() => handleMarkAsUnread(notification.id)}
                     className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
-                    title="Mark as unread"
+                    title={t('notifications.mark_unread')}
                   >
                     ↩️
                   </button>
@@ -518,7 +518,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
                   data-help-id="action-delete-notification"
                   onClick={() => handleDelete(notification.id)}
                   className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
-                  title="Delete"
+                  title={t('btn_delete')}
                 >
                   🗑️
                 </button>
@@ -528,7 +528,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
                   data-help-id="action-go-events-from-notification"
                   onClick={() => navigate(`/events`)}
                   className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors font-semibold"
-                  title="Go to events"
+                  title={t('notifications.go_to_events')}
                 >
                   → {t('label_go_events') || 'Go to Events'}
                 </button>
@@ -537,7 +537,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
                   data-help-id="action-go-tournament-from-notification"
                   onClick={() => navigate(`/tournament/${notification.tournament_id}?tab=competition${notification.series_id ? `&seriesId=${notification.series_id}` : ''}`)}
                   className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors font-semibold"
-                  title="Go to tournament details"
+                  title={t('notifications.go_to_tournament')}
                 >
                   → {t('label_go_tournament') || 'Go to Tournament'}
                 </button>
@@ -554,11 +554,11 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
             disabled={pageOffset === 0}
             className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            ← Previous
+            {t('pagination_prev')}
           </button>
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-600">
-              {pageOffset + 1} - {Math.min(pageOffset + ITEMS_PER_PAGE, total)} of {total}
+              {t('notifications.range', { from: pageOffset + 1, to: Math.min(pageOffset + ITEMS_PER_PAGE, total), total })}
             </span>
           </div>
           <button
@@ -566,7 +566,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
             disabled={pageOffset + ITEMS_PER_PAGE >= total}
             className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Next →
+            {t('pagination_next')}
           </button>
         </div>
       )}

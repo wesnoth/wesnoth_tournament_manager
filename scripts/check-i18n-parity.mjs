@@ -11,7 +11,10 @@
  *
  * Keys are compared flattened with "." between levels, so a nested key and a
  * flat key containing a dot (both styles exist in these files) compare equal,
- * matching how i18next resolves them.
+ * matching how i18next resolves them. A file that defines the same flattened
+ * key both ways is reported too: i18next resolves the nested value first, so
+ * the flat copy is dead text that can silently disagree with it (audit
+ * finding 39 found 14 such pairs, some with different wording).
  *
  * Exit code: 0 when every locale matches, 1 otherwise.
  */
@@ -22,13 +25,23 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const localeDirs = ['frontend/src/i18n/locales', 'backend/src/i18n/locales'];
 
-function flatten(value, prefix = '', out = new Map()) {
+/** Flattened keys; `duplicates` collects keys defined both flat and nested. */
+function flatten(value, prefix = '', out = new Map(), duplicates = []) {
   for (const [key, child] of Object.entries(value)) {
     const fullKey = prefix ? `${prefix}.${key}` : key;
-    if (child && typeof child === 'object' && !Array.isArray(child)) flatten(child, fullKey, out);
-    else out.set(fullKey, child);
+    if (child && typeof child === 'object' && !Array.isArray(child)) flatten(child, fullKey, out, duplicates);
+    else {
+      if (out.has(fullKey)) duplicates.push(fullKey);
+      out.set(fullKey, child);
+    }
   }
   return out;
+}
+
+function readLocale(file) {
+  const duplicates = [];
+  const keys = flatten(JSON.parse(fs.readFileSync(file, 'utf8')), '', new Map(), duplicates);
+  return { keys, duplicates };
 }
 
 const placeholders = (text) => [...String(text).matchAll(/{{\s*([\w.]+)\s*}}/g)].map((m) => m[1]).sort().join(',');
@@ -36,16 +49,23 @@ const placeholders = (text) => [...String(text).matchAll(/{{\s*([\w.]+)\s*}}/g)]
 let problems = 0;
 for (const dir of localeDirs) {
   const absolute = path.join(root, dir);
-  const reference = flatten(JSON.parse(fs.readFileSync(path.join(absolute, 'en.json'), 'utf8')));
+  const english = readLocale(path.join(absolute, 'en.json'));
+  const reference = english.keys;
+  if (english.duplicates.length) {
+    problems += english.duplicates.length;
+    console.log(`${dir}/en.json:`);
+    for (const key of english.duplicates) console.log(`  defined both flat and nested: ${key}`);
+  }
   const locales = fs.readdirSync(absolute).filter((file) => file.endsWith('.json') && file !== 'en.json');
   for (const file of locales) {
-    const locale = flatten(JSON.parse(fs.readFileSync(path.join(absolute, file), 'utf8')));
+    const { keys: locale, duplicates } = readLocale(path.join(absolute, file));
     const missing = [...reference.keys()].filter((key) => !locale.has(key));
     const extra = [...locale.keys()].filter((key) => !reference.has(key));
     const mismatched = [...reference.keys()].filter(
       (key) => locale.has(key) && placeholders(reference.get(key)) !== placeholders(locale.get(key))
     );
     const report = [
+      ...duplicates.map((key) => `defined both flat and nested: ${key}`),
       ...missing.map((key) => `missing: ${key}`),
       ...extra.map((key) => `extra: ${key}`),
       ...mismatched.map((key) => `placeholders differ: ${key} (en: {{${placeholders(reference.get(key))}}})`),

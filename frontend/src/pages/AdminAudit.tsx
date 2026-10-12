@@ -3,6 +3,7 @@ import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import { adminService } from '../services/api';
 import UserProfileNav from '../components/UserProfileNav';
+import i18next from 'i18next';
 
 /** Audit log row returned by the normalized administrative API. */
 interface AuditLog {
@@ -130,7 +131,7 @@ export default function AdminAudit() {
 
   // Format timestamp
   const formatTime = (timestamp: string) => {
-    return new Date(timestamp).toLocaleString();
+    return new Date(timestamp).toLocaleString(i18next.language);
   };
 
   return (

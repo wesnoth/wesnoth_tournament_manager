@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import i18next from 'i18next';
 
 interface EloChartProps {
   matches: any[];
@@ -64,15 +65,15 @@ const getGranularityForData = (timestamps: number[]): Granularity => {
 
 const formatRangeLabel = (start: Date, end: Date, granularity: Granularity): string => {
   if (granularity === 'day') {
-    return start.toLocaleDateString();
+    return start.toLocaleDateString(i18next.language);
   }
 
   if (granularity === 'week') {
-    return `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`;
+    return `${start.toLocaleDateString(i18next.language)} - ${end.toLocaleDateString(i18next.language)}`;
   }
 
   if (granularity === 'month') {
-    return start.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    return start.toLocaleDateString(i18next.language, { month: 'long', year: 'numeric' });
   }
 
   if (granularity === 'quarter') {
@@ -84,15 +85,15 @@ const formatRangeLabel = (start: Date, end: Date, granularity: Granularity): str
 
 const formatTickLabel = (start: Date, granularity: Granularity): string => {
   if (granularity === 'day') {
-    return start.toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
+    return start.toLocaleDateString(i18next.language, { day: '2-digit', month: 'short' });
   }
 
   if (granularity === 'week') {
-    return start.toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
+    return start.toLocaleDateString(i18next.language, { day: '2-digit', month: 'short' });
   }
 
   if (granularity === 'month') {
-    return start.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
+    return start.toLocaleDateString(i18next.language, { month: 'short', year: '2-digit' });
   }
 
   if (granularity === 'quarter') {

@@ -9,6 +9,7 @@ import { useAuthStore } from '../store/authStore';
 import WikiEditor from '../components/WikiEditor';
 import MainLayout from '../components/MainLayout';
 import JSZip from 'jszip';
+import i18next from 'i18next';
 
 interface WikiTranslation {
   title: string;
@@ -608,7 +609,7 @@ const AdminWiki: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">
-                        {new Date(article.updated_at).toLocaleDateString()}
+                        {new Date(article.updated_at).toLocaleDateString(i18next.language)}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <button
@@ -704,7 +705,7 @@ const AdminWiki: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">
-                        {new Date(image.created_at).toLocaleDateString()}
+                        {new Date(image.created_at).toLocaleDateString(i18next.language)}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <button

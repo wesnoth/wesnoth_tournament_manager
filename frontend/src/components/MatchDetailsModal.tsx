@@ -5,6 +5,7 @@ import StarDisplay from './StarDisplay';
 import MatchTypeBadge from './MatchTypeBadge';
 import PlayerLink from './PlayerLink';
 import { useTranslation } from 'react-i18next';
+import i18next from 'i18next';
 
 interface MatchDetailsModalProps {
   match: any;
@@ -84,7 +85,7 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
     <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 animate-fadeIn" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-11/12 max-h-screen overflow-y-auto border border-gray-200" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center border-b-2 border-gray-100 px-6 py-6 bg-gray-50">
-          <h2 className="text-2xl font-semibold text-gray-800 m-0">Match Details</h2>
+          <h2 className="text-2xl font-semibold text-gray-800 m-0">{t('match_modal.details_title')}</h2>
           <button 
             data-help-id="action-close-match-details"
             className="bg-none border-none text-gray-400 text-2xl cursor-pointer p-0 w-8 h-8 flex items-center justify-center rounded hover:text-gray-800 hover:bg-gray-100 transition-all"
@@ -99,15 +100,15 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
             <MatchTypeBadge match={match} />
             <div className="grid grid-cols-3 gap-4 mb-6 pb-4 border-b border-gray-200">
               <div>
-                <label className="text-gray-600 text-sm font-semibold">Date:</label>
-                <span className="text-gray-800 text-sm block">{new Date(match.played_at || match.created_at).toLocaleString()}</span>
+                <label className="text-gray-600 text-sm font-semibold">{t('label_date')}:</label>
+                <span className="text-gray-800 text-sm block">{new Date(match.played_at || match.created_at).toLocaleString(i18next.language)}</span>
               </div>
               <div>
-                <label className="text-gray-600 text-sm font-semibold">Map:</label>
+                <label className="text-gray-600 text-sm font-semibold">{t('label_map')}:</label>
                 <span className="text-gray-800 text-sm block">{match.map}</span>
               </div>
               <div>
-                <label className="text-gray-600 text-sm font-semibold">Status:</label>
+                <label className="text-gray-600 text-sm font-semibold">{t('label_status')}:</label>
                 <div className="text-sm">
                   {match.status === 'confirmed' && <span className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">✓ Confirmed</span>}
                   {match.status === 'reported' && <span className="inline-block px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-semibold">📋 Reported</span>}
@@ -124,20 +125,20 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="border-b-2 border-gray-300">
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Statistic</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-green-50">{match.has_outcome === false ? t('match_feed.side_1', 'Side 1') : 'Winner'}</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-red-50">{match.has_outcome === false ? t('match_feed.side_2', 'Side 2') : 'Loser'}</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">{t('match_modal.statistic')}</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-green-50">{match.has_outcome === false ? t('match_feed.side_1', 'Side 1') : t('label_winner')}</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-red-50">{match.has_outcome === false ? t('match_feed.side_2', 'Side 2') : t('label_loser')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr className="border-b border-gray-200 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">Player</td>
+                    <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">{t('match_modal.player')}</td>
                     <td className="px-4 py-3 text-center text-gray-800">{renderCompetitor(true)}</td>
                     <td className="px-4 py-3 text-center text-gray-800">{renderCompetitor(false)}</td>
                   </tr>
 
                   <tr className="border-b border-gray-200 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">Faction</td>
+                    <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">{t('match_modal.faction')}</td>
                     <td className="px-4 py-3 text-center">
                       <span className="inline-block px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-semibold">{match.winner_faction}</span>
                       {match.winner_side && (
@@ -153,25 +154,25 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
                   </tr>
 
                   <tr className="border-b border-gray-200 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">Rating</td>
+                    <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">{t('match_modal.rating')}</td>
                     <td className="px-4 py-3 text-center text-gray-800"><StarDisplay rating={match.loser_rating} size="md" /></td>
                     <td className="px-4 py-3 text-center text-gray-800"><StarDisplay rating={match.winner_rating} size="md" /></td>
                   </tr>
 
                   {hasEloData && <tr className="border-b border-gray-200 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">ELO Before</td>
+                    <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">{t('match_modal.elo_before')}</td>
                     <td className="px-4 py-3 text-center text-gray-800">{match.winner_elo_before || 'N/A'}</td>
                     <td className="px-4 py-3 text-center text-gray-800">{match.loser_elo_before || 'N/A'}</td>
                   </tr>}
 
                   {hasEloData && <tr className="border-b border-gray-200 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">ELO After</td>
+                    <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">{t('match_modal.elo_after')}</td>
                     <td className="px-4 py-3 text-center text-gray-800">{match.winner_elo_after || 'N/A'}</td>
                     <td className="px-4 py-3 text-center text-gray-800">{match.loser_elo_after || 'N/A'}</td>
                   </tr>}
 
                   {hasEloData && <tr className="border-b border-gray-200 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">ELO Change</td>
+                    <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">{t('match_modal.elo_change')}</td>
                     <td className="px-4 py-3 text-center">
                       <span className={`font-semibold ${winnerEloChange(match) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                         {winnerEloChange(match) >= 0 ? '+' : ''}{winnerEloChange(match)}
@@ -185,7 +186,7 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
                   </tr>}
 
                   {!hasEloData && <tr className="border-b border-gray-200 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">ELO</td>
+                    <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">{t('label_elo')}</td>
                     <td colSpan={2} className="px-4 py-3 text-center font-semibold text-gray-500">
                       {match.match_type === 'tournament_ranked'
                         ? t('match_feed.elo_unavailable', 'ELO unavailable')
@@ -195,7 +196,7 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
 
                   {(match.winner_comments || match.loser_comments) && (
                     <tr className="border-b border-gray-200 hover:bg-gray-50">
-                      <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">Comments</td>
+                      <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">{t('label_comments')}</td>
                       <td className="whitespace-pre-line break-words px-4 py-3 text-justify text-xs text-gray-800">{match.winner_comments || '-'}</td>
                       <td className="whitespace-pre-line break-words px-4 py-3 text-justify text-xs text-gray-800">{match.loser_comments || '-'}</td>
                     </tr>
@@ -203,7 +204,7 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
 
                   {match.replay_file_path && (
                     <tr className="border-b border-gray-200 hover:bg-gray-50">
-                      <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">Replay</td>
+                      <td className="px-4 py-3 font-semibold text-gray-700 bg-gray-50">{t('label_replay')}</td>
                       <td colSpan={2} className="px-4 py-3 text-center">
                         <a
                           data-help-id="action-download-match-replay"
@@ -288,7 +289,7 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
             className="px-6 py-2 bg-gray-400 hover:bg-gray-500 text-white rounded-lg font-semibold transition-colors"
             onClick={onClose}
           >
-            Close
+            {t('match_modal.close')}
           </button>
         </div>
       </div>

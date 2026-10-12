@@ -5,6 +5,7 @@ import { useAuthStore } from '../store/authStore';
 import MainLayout from '../components/MainLayout';
 import MarkdownPreview from '../components/MarkdownPreview';
 import { adminService } from '../services/api';
+import i18next from 'i18next';
 
 interface RuleTemplate {
   id: string;
@@ -196,7 +197,7 @@ const AdminRuleTemplates: React.FC = () => {
                     <tr key={tpl.id} className="border-b">
                       <td className="py-2">{tpl.title}</td>
                       <td className="py-2">{tpl.is_active === 1 ? t('admin.rule_templates_active') : t('admin.rule_templates_disabled')}</td>
-                      <td className="py-2">{new Date(tpl.updated_at).toLocaleString()}</td>
+                      <td className="py-2">{new Date(tpl.updated_at).toLocaleString(i18next.language)}</td>
                       <td className="py-2">
                         <button
                           onClick={() => handleEdit(tpl)}

@@ -163,7 +163,7 @@ const Players: React.FC = () => {
         }
       } catch (err) {
         console.error('Error fetching players:', err);
-        setError('Error loading players');
+        setError(t('players.error_loading'));
       } finally {
         setLoading(false);
       }
@@ -363,7 +363,7 @@ const Players: React.FC = () => {
           <button data-help-id="action-reset-players-filters" className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded transition-colors whitespace-nowrap" onClick={handleResetFilters}>
             {t('reset_filters')}
           </button>
-          <button data-help-id="action-refresh-players" className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded transition-colors" onClick={handleRefresh} title="Refresh">
+          <button data-help-id="action-refresh-players" className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded transition-colors" onClick={handleRefresh} title={t('common.refresh')}>
             🔄
           </button>
         </div>

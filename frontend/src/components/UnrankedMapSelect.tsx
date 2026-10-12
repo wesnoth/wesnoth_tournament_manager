@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 
@@ -30,6 +31,7 @@ export const UnrankedMapSelect: React.FC<UnrankedMapSelectProps> = ({
   disabled = false,
   isRankedOnly = false
 }) => {
+  const { t } = useTranslation();
   const [maps, setMaps] = useState<Map[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +55,7 @@ export const UnrankedMapSelect: React.FC<UnrankedMapSelectProps> = ({
           setMaps(filtered);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch maps');
+        setError(err instanceof Error ? err.message : t('unranked_assets.error_fetch_maps'));
       } finally {
         setLoading(false);
       }
@@ -87,7 +89,7 @@ export const UnrankedMapSelect: React.FC<UnrankedMapSelectProps> = ({
 
   const handleCreateMap = async () => {
     if (!newMapData.name.trim()) {
-      alert('Please enter a map name');
+      alert(t('unranked_assets.error_map_name'));
       return;
     }
 
@@ -109,28 +111,28 @@ export const UnrankedMapSelect: React.FC<UnrankedMapSelectProps> = ({
       setNewMapData({ name: '' });
       setShowModal(false);
     } catch (err: any) {
-      alert(err.response?.data?.error || (err instanceof Error ? err.message : 'Error creating map'));
+      alert(err.response?.data?.error || (err instanceof Error ? err.message : t('unranked_assets.error_create_map')));
     } finally {
       setCreatingMap(false);
     }
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center min-h-[200px] text-gray-600 text-sm">Loading maps...</div>;
+    return <div className="flex items-center justify-center min-h-[200px] text-gray-600 text-sm">{t('unranked_assets.loading_maps')}</div>;
   }
 
   return (
     <div data-help-id="region-tournament-maps" className="flex flex-col h-full min-h-[26rem] max-h-[66vh] bg-white border border-gray-300 rounded-lg overflow-hidden shadow-sm">
       <div className="flex flex-col h-full gap-0">
         <div className="flex justify-between items-center px-4 py-3 bg-gradient-to-r from-purple-700 to-indigo-500 border-b border-gray-200 text-white font-semibold flex-shrink-0">
-          <h4 className="text-sm font-semibold">Maps</h4>
+          <h4 className="text-sm font-semibold">{t('unranked_assets.maps')}</h4>
           <span className="text-xs">{selectedMapIds.length} / {maps.length}</span>
         </div>
 
         {error && <div className="text-red-600 px-4 py-2 bg-red-50">{error}</div>}
 
         {maps.length === 0 ? (
-          <div className="text-gray-500 px-4 py-3">No maps available</div>
+          <div className="text-gray-500 px-4 py-3">{t('unranked_assets.no_maps')}</div>
         ) : (
           <>
             <div className="px-4 py-2">
@@ -143,7 +145,7 @@ export const UnrankedMapSelect: React.FC<UnrankedMapSelectProps> = ({
                   disabled={disabled}
                   className="w-4 h-4 cursor-pointer"
                 />
-                <span className="text-sm">Select All</span>
+                <span className="text-sm">{t('unranked_assets.select_all')}</span>
               </label>
             </div>
 
@@ -184,12 +186,12 @@ export const UnrankedMapSelect: React.FC<UnrankedMapSelectProps> = ({
       {!isRankedOnly && showModal && (
         <div data-help-id="region-create-tournament-map" className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowModal(false)}>
           <div className="bg-white rounded-lg shadow-lg p-6 w-96" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-xl font-bold mb-4">Create New Map</h3>
+            <h3 className="text-xl font-bold mb-4">{t('unranked_assets.create_map')}</h3>
 
             <input
               data-help-id="field-new-tournament-map-name"
               type="text"
-              placeholder="Map Name"
+              placeholder={t('unranked_assets.map_name')}
               value={newMapData.name}
               onChange={(e) => setNewMapData({ ...newMapData, name: e.target.value })}
               disabled={creatingMap}
@@ -206,7 +208,7 @@ export const UnrankedMapSelect: React.FC<UnrankedMapSelectProps> = ({
                 type="button"
                 className="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 disabled:opacity-50"
               >
-                Cancel
+                {t('cancel')}
               </button>
               <button
                 data-help-id="action-confirm-create-tournament-map"
@@ -215,7 +217,7 @@ export const UnrankedMapSelect: React.FC<UnrankedMapSelectProps> = ({
                 className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
                 type="button"
               >
-                {creatingMap ? 'Creating...' : 'Create'}
+                {creatingMap ? t('unranked_assets.creating') : t('unranked_assets.create')}
               </button>
             </div>
           </div>

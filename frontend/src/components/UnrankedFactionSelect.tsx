@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 
@@ -28,6 +29,7 @@ export const UnrankedFactionSelect: React.FC<UnrankedFactionSelectProps> = ({
   disabled = false,
   isRankedOnly = false
 }) => {
+  const { t } = useTranslation();
   const [factions, setFactions] = useState<Faction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +51,7 @@ export const UnrankedFactionSelect: React.FC<UnrankedFactionSelectProps> = ({
           setFactions(filtered);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch factions');
+        setError(err instanceof Error ? err.message : t('unranked_assets.error_fetch_factions'));
       } finally {
         setLoading(false);
       }
@@ -83,7 +85,7 @@ export const UnrankedFactionSelect: React.FC<UnrankedFactionSelectProps> = ({
 
   const handleCreateFaction = async () => {
     if (!newFactionName.trim()) {
-      alert('Please enter a faction name');
+      alert(t('unranked_assets.error_faction_name'));
       return;
     }
 
@@ -105,28 +107,28 @@ export const UnrankedFactionSelect: React.FC<UnrankedFactionSelectProps> = ({
       setNewFactionName('');
       setShowModal(false);
     } catch (err: any) {
-      alert(err.response?.data?.error || (err instanceof Error ? err.message : 'Error creating faction'));
+      alert(err.response?.data?.error || (err instanceof Error ? err.message : t('unranked_assets.error_create_faction')));
     } finally {
       setCreatingFaction(false);
     }
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center min-h-[200px] text-gray-600 text-sm">Loading factions...</div>;
+    return <div className="flex items-center justify-center min-h-[200px] text-gray-600 text-sm">{t('unranked_assets.loading_factions')}</div>;
   }
 
   return (
     <div data-help-id="region-tournament-factions" className="flex flex-col h-full min-h-[26rem] max-h-[66vh] bg-white border border-gray-300 rounded-lg overflow-hidden shadow-sm">
       <div className="flex flex-col h-full gap-0">
         <div className="flex justify-between items-center px-4 py-3 bg-gradient-to-r from-purple-700 to-indigo-500 border-b border-gray-200 text-white font-semibold flex-shrink-0">
-          <h4 className="text-sm font-semibold">Factions</h4>
+          <h4 className="text-sm font-semibold">{t('unranked_assets.factions')}</h4>
           <span className="text-xs">{selectedFactionIds.length} / {factions.length}</span>
         </div>
 
         {error && <div className="text-red-600 px-4 py-2 bg-red-50">{error}</div>}
 
         {factions.length === 0 ? (
-          <div className="text-gray-500 px-4 py-3">No factions available</div>
+          <div className="text-gray-500 px-4 py-3">{t('unranked_assets.no_factions')}</div>
         ) : (
           <>
             <div className="px-4 py-2">
@@ -139,7 +141,7 @@ export const UnrankedFactionSelect: React.FC<UnrankedFactionSelectProps> = ({
                   disabled={disabled}
                   className="w-4 h-4 cursor-pointer"
                 />
-                <span className="text-sm">Select All</span>
+                <span className="text-sm">{t('unranked_assets.select_all')}</span>
               </label>
             </div>
 
@@ -177,12 +179,12 @@ export const UnrankedFactionSelect: React.FC<UnrankedFactionSelectProps> = ({
       {!isRankedOnly && showModal && (
         <div data-help-id="region-create-tournament-faction" className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowModal(false)}>
           <div className="bg-white rounded-lg shadow-lg p-6 w-96" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-xl font-bold mb-4">Create New Faction</h3>
+            <h3 className="text-xl font-bold mb-4">{t('unranked_assets.create_faction')}</h3>
 
             <input
               data-help-id="field-new-tournament-faction-name"
               type="text"
-              placeholder="Faction Name"
+              placeholder={t('unranked_assets.faction_name')}
               value={newFactionName}
               onChange={(e) => setNewFactionName(e.target.value)}
               disabled={creatingFaction}
@@ -199,7 +201,7 @@ export const UnrankedFactionSelect: React.FC<UnrankedFactionSelectProps> = ({
                 type="button"
                 className="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 disabled:opacity-50"
               >
-                Cancel
+                {t('cancel')}
               </button>
               <button
                 data-help-id="action-confirm-create-tournament-faction"
@@ -208,7 +210,7 @@ export const UnrankedFactionSelect: React.FC<UnrankedFactionSelectProps> = ({
                 className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
                 type="button"
               >
-                {creatingFaction ? 'Creating...' : 'Create'}
+                {creatingFaction ? t('unranked_assets.creating') : t('unranked_assets.create')}
               </button>
             </div>
           </div>

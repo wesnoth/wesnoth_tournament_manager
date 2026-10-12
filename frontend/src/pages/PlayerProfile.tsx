@@ -12,6 +12,7 @@ import ScheduleDisplay from '../components/ScheduleDisplay';
 import ChallengeFromPlayerModal from '../components/ChallengeFromPlayerModal';
 import { useAuthStore } from '../store/authStore';
 import ProfileMatchesPagination from '../components/ProfileMatchesPagination';
+import i18next from 'i18next';
 
 // Lazy-load heavy chart and statistics components
 const EloChart = lazy(() => import('../components/EloChart'));
@@ -189,7 +190,7 @@ const PlayerProfile: React.FC = () => {
   if (!profile) {
     return (
       <div className="w-full max-w-6xl mx-auto px-4 py-8">
-        <p>Profile not found</p>
+        <p>{t('profile.not_found')}</p>
         <button data-help-id="action-back-to-players" onClick={() => navigate('/players')}>{t('back_to_players')}</button>
       </div>
     );
@@ -207,7 +208,7 @@ const PlayerProfile: React.FC = () => {
   return (
     <div data-help-id="region-player-profile" className="bg-gradient-to-br from-gray-100 to-gray-300 min-h-screen py-8 px-4">
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-4xl font-bold text-gray-800 mb-8 text-center">{profile?.nickname}'s Profile</h1>
+        <h1 className="text-4xl font-bold text-gray-800 mb-8 text-center">{t('profile.title_of', { nickname: profile?.nickname })}</h1>
         
         {profile && (
           <>
@@ -556,7 +557,7 @@ const PlayerProfile: React.FC = () => {
                                   -{Number(stat.elo_lost).toFixed(2)}
                                 </td>
                                 <td className="px-4 py-3 text-center text-gray-700 text-sm">
-                                  {stat.last_match_date ? new Date(stat.last_match_date).toLocaleDateString() : 'N/A'}
+                                  {stat.last_match_date ? new Date(stat.last_match_date).toLocaleDateString(i18next.language) : 'N/A'}
                                 </td>
                               </tr>
                             );

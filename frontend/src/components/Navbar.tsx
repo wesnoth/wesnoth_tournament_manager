@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../store/authStore';
 import { getHelpSlugFromPath } from '../utils/helpNavigation';
 import { endRejectedSession } from '../services/api';
+import i18next from 'i18next';
 
 /** Minimal notification shape required by the navbar dropdown. */
 interface NavbarNotification {
@@ -186,7 +187,7 @@ const Navbar: React.FC = () => {
                 ref={languageBtnMobileRef}
                 className="px-2 py-2 bg-white/10 text-white border border-white/30 rounded hover:bg-white/20 transition-all flex items-center gap-1 font-semibold max-sm:px-1 max-sm:text-xs"
                 onClick={() => setLanguageDropdownOpen(!languageDropdownOpen)}
-                title="Change language"
+                title={t('navbar.change_language')}
               >
                 <img 
                   src={`https://flagcdn.com/w20/${currentLanguage.countryCode}.png`}
@@ -235,7 +236,7 @@ const Navbar: React.FC = () => {
               navigate(`/help/${helpSlug}`);
             }}
             className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm"
-            title={`Help for ${getHelpSlugFromPath(location.pathname)}`}
+            title={t('navbar.help_for', { page: getHelpSlugFromPath(location.pathname) })}
           >
             {t('help')}
           </button>
@@ -248,7 +249,7 @@ const Navbar: React.FC = () => {
                 ref={notificationsBtnRef}
                 className="relative px-3 py-2 bg-white/10 text-white hover:bg-white/20 rounded transition-all flex items-center gap-2 max-sm:px-2 max-sm:py-1.5 max-nav:px-2.5 max-nav:py-1.5"
                 onClick={() => setNotificationsDropdownOpen(!notificationsDropdownOpen)}
-                title="Notifications"
+                title={t('notifications_title')}
               >
                 <span className="text-lg">🔔</span>
                 {unreadCount > 0 && (
@@ -309,7 +310,7 @@ const Navbar: React.FC = () => {
                                 </p>
                               )}
                               <p className="text-xs text-gray-400 mt-1">
-                                {new Date(notif.created_at).toLocaleDateString()}
+                                {new Date(notif.created_at).toLocaleDateString(i18next.language)}
                               </p>
                               {notif.type?.startsWith?.('challenge_') ? (
                                 <p className="text-xs text-blue-600 font-semibold mt-1">
@@ -396,7 +397,7 @@ const Navbar: React.FC = () => {
                 ref={languageBtnRef}
                 className="px-2 py-2 bg-white/10 text-white border border-white/30 rounded hover:bg-white/20 transition-all flex items-center gap-1 font-semibold"
                 onClick={() => setLanguageDropdownOpen(!languageDropdownOpen)}
-                title="Change language"
+                title={t('navbar.change_language')}
               >
                 <img 
                   src={`https://flagcdn.com/w20/${currentLanguage.countryCode}.png`}

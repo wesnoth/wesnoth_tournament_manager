@@ -6,6 +6,7 @@ import { adminService } from '../services/api';
 import MainLayout from '../components/MainLayout';
 import MarkdownTranslationEditor from '../components/MarkdownTranslationEditor';
 import { renderWikiMarkdown } from '../utils/wikiMarkdown';
+import i18next from 'i18next';
 
 const AdminNews: React.FC = () => {
   const { t } = useTranslation();
@@ -229,7 +230,7 @@ const AdminNews: React.FC = () => {
                   </div>
                   <div className="prose prose-sm max-w-none mb-2" dangerouslySetInnerHTML={{ __html: renderWikiMarkdown(newsGroup[firstLang || 'en']?.content || '').html }} />
                   {author && publishedAt && (
-                    <small className="text-gray-600">By {author} on {new Date(publishedAt).toLocaleDateString()}</small>
+                    <small className="text-gray-600">By {author} on {new Date(publishedAt).toLocaleDateString(i18next.language)}</small>
                   )}
                   <div className="flex gap-2 mt-4">
                     <button data-help-id="action-edit-news" onClick={() => handleEdit(newsGroup)} className="px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600">Edit</button>

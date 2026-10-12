@@ -384,7 +384,8 @@
   "home": {
     "player_of_month": "Игрок месяца",
     "recent_players": "Недавние игроки",
-    "top_10_players": "Топ-10 игроков"
+    "top_10_players": "Топ-10 игроков",
+    "error_loading": "Ошибка загрузки данных"
   },
   "hotfix": "Срочное исправление",
   "impact_analysis": "Статистика баланса с момента события",
@@ -680,25 +681,17 @@
     "error_change_password_failed": "Не удалось изменить пароль",
     "updated": "Профиль успешно обновлен",
     "noAvatarSelected": "Нет аватара",
-    "error_language_update": "Ошибка смены языка"
+    "error_language_update": "Ошибка смены языка",
+    "refresh_all": "Обновить все данные",
+    "selected_avatar": "Выбранный аватар",
+    "title_of": "Профиль {{nickname}}"
   },
-  "profile.avatar": "Аватар",
-  "profile.avatar_updated": "Аватар успешно обновлён",
   "profile.change_password_on_forum": "Изменить пароль на форуме Wesnoth",
-  "profile.country_updated": "Страна успешно обновлена",
-  "profile.discord_placeholder": "Введите ваш ID Discord",
-  "profile.discord_title": "ID Discord",
-  "profile.error_discord_empty": "ID Discord не может быть пустым",
   "profile.error_discord_invalid": "Неверный формат Discord ID. Введите числовой ID пользователя Discord длиной 17–20 цифр.",
   "profile.error_ranked_update": "Ошибка при обновлении предпочтения рейтинговых матчей",
-  "profile.error_update_avatar_failed": "Ошибка при обновлении аватара",
-  "profile.error_update_country_failed": "Ошибка при обновлении страны",
-  "profile.error_update_discord_failed": "Ошибка при обновлении ID Discord",
   "profile.discord_validation_failed": "Не удалось проверить ID Discord",
   "profile.discord_validation_sent": "ID Discord проверен для {{nickname}}",
-  "profile.not_found": "Профиль не найден",
   "profile.password_managed_by_forum": "Ваш пароль управляется официальным сайтом Wesnoth.",
-  "profile.preferences_title": "Настройки",
   "profile.ranked_cannot_disable": "Рейтинговые матчи не могут быть отключены после активации",
   "profile.ranked_description": "Включите эту опцию для участия в рейтинговых матчах. Один раз активированная, эта опция не может быть отключена. Ваши результаты повлияют на ваш рейтинг ELO.",
   "profile.ranked_description_enabled": "После активации рейтинговые матчи не могут быть отключены. Ваши результаты будут продолжать влиять на ваш рейтинг ELO.",
@@ -709,8 +702,6 @@
   "profile.ranked_updated": "Предпочтение рейтинговых матчей обновлено",
   "profile.scheduling_saved": "Предпочтения расписания успешно сохранены",
   "profile.error_scheduling_update": "Ошибка при обновлении предпочтений расписания",
-  "profile.title": "Профиль",
-  "profile.update_discord_button": "Обновить ID Discord",
   "profile.validate_discord_button": "Проверить ID Discord",
   "profile.updating_discord_validation": "Проверка...",
   "profile_language_settings": "Настройки языка",
@@ -931,7 +922,6 @@
     "unranked_assets": "Ресурсы турнира без рейтинга",
     "wesnoth_game_name": "Имя игры в Wesnoth"
   },
-  "tournament.round_configuration": "Настройка раундов",
   "tournament_create": "Создать турнир",
   "tournament_description": "Описание",
   "tournament_join": "Присоединиться",
@@ -1457,5 +1447,103 @@
   "register_step2": "Войти в менеджер турниров под своим именем Wesnoth",
   "register_step3": "Ваш профиль будет создан автоматически",
   "register_go_to_login": "Перейти ко входу",
-  "match_status_pending_report": "Ожидает отчёта"
+  "match_status_pending_report": "Ожидает отчёта",
+  "admin_nav": {
+    "audit_logs": "Журнал аудита",
+    "replays": "Повторы",
+    "map_packs": "Наборы карт",
+    "wiki": "Вики",
+    "maps_factions": "Карты и фракции",
+    "manage_replays": "Управление повторами",
+    "manage_map_packs": "Управление наборами карт",
+    "manage_wiki": "Управление статьями вики",
+    "manage_maps_factions": "Управление картами и фракциями"
+  },
+  "challenge": {
+    "manage_title": "Управление вызовом"
+  },
+  "global_stats": {
+    "users": "Пользователи",
+    "ranked_matches": "Рейтинговые матчи",
+    "tournament_matches": "Турнирные матчи",
+    "tournaments": "Турниры"
+  },
+  "match_modal": {
+    "error_confirm": "Не удалось подтвердить матч",
+    "error_dispute": "Не удалось оспорить матч",
+    "confirmation_title": "Подтверждение матча",
+    "you_winner": "Вы (победитель)",
+    "you_loser": "Вы (проигравший)",
+    "faction": "Фракция",
+    "vs": "vs",
+    "rate_opponent": "Оцените игру соперника",
+    "comments": "Комментарии",
+    "comments_placeholder": "Необязательно: опишите проблемы или добавьте комментарий к матчу...",
+    "dispute": "Оспорить",
+    "waiting_opponent": "Ожидание ответа соперника...",
+    "login_required": "Войдите, чтобы подтвердить или оспорить этот матч.",
+    "details_title": "Подробности матча",
+    "statistic": "Показатель",
+    "player": "Игрок",
+    "rating": "Оценка",
+    "elo_before": "ELO до",
+    "elo_after": "ELO после",
+    "elo_change": "Изменение ELO",
+    "close": "Закрыть"
+  },
+  "matches_table": {
+    "error_discard_replay": "Не удалось отклонить повтор. Попробуйте ещё раз.",
+    "error_download_replay": "Не удалось скачать повтор.",
+    "beats": "{{winner}} побеждает {{loser}}"
+  },
+  "notifications": {
+    "select_all_title": "Выбрать все уведомления",
+    "select_all": "Выбрать все ({{count}})",
+    "mark_read": "Отметить как прочитанное",
+    "mark_unread": "Отметить как непрочитанное",
+    "go_to_events": "Перейти к событиям",
+    "go_to_tournament": "Перейти к турниру",
+    "range": "{{from}} - {{to}} из {{total}}"
+  },
+  "navbar": {
+    "change_language": "Сменить язык",
+    "help_for": "Справка: {{page}}"
+  },
+  "players": {
+    "error_loading": "Ошибка загрузки игроков"
+  },
+  "profile_pagination": {
+    "showing": "{{showing}} из {{total}} матчей"
+  },
+  "opponent_selector.teammate_placeholder": "Найдите напарника...",
+  "route_loader": {
+    "loading": "Загрузка страницы..."
+  },
+  "stats_errors": {
+    "faction": "Ошибка загрузки статистики фракций",
+    "map": "Ошибка загрузки статистики карт",
+    "matchup": "Ошибка загрузки статистики противостояний",
+    "faction_matchup": "Ошибка загрузки статистики фракция против фракции"
+  },
+  "unranked_assets": {
+    "error_fetch_factions": "Не удалось загрузить фракции",
+    "error_fetch_maps": "Не удалось загрузить карты",
+    "error_faction_name": "Введите название фракции",
+    "error_map_name": "Введите название карты",
+    "error_create_faction": "Ошибка создания фракции",
+    "error_create_map": "Ошибка создания карты",
+    "loading_factions": "Загрузка фракций...",
+    "loading_maps": "Загрузка карт...",
+    "factions": "Фракции",
+    "maps": "Карты",
+    "no_factions": "Нет доступных фракций",
+    "no_maps": "Нет доступных карт",
+    "select_all": "Выбрать все",
+    "create_faction": "Создать фракцию",
+    "create_map": "Создать карту",
+    "faction_name": "Название фракции",
+    "map_name": "Название карты",
+    "creating": "Создание...",
+    "create": "Создать"
+  }
 }

@@ -14,6 +14,7 @@ import RouteLoader from '../components/RouteLoader';
 import ScheduleDisplay from '../components/ScheduleDisplay';
 import ProfileMatchesPagination from '../components/ProfileMatchesPagination';
 import WaitingLobby from '../components/WaitingLobby';
+import i18next from 'i18next';
 
 // Lazy-load heavy chart and statistics components
 const EloChart = lazy(() => import('../components/EloChart'));
@@ -211,7 +212,7 @@ const User: React.FC = () => {
     return (
       <MainLayout>
         <div className="max-w-6xl mx-auto px-4 py-8">
-          <p>Profile not found</p>
+          <p>{t('profile.not_found')}</p>
         </div>
       </MainLayout>
     );
@@ -229,7 +230,7 @@ const User: React.FC = () => {
   return (
     <MainLayout>
       <div data-help-id="region-user-profile" className="bg-gradient-to-br from-gray-100 to-gray-300 min-h-screen py-8 px-4">
-        <h1 className="text-4xl font-bold text-gray-800 mb-8 text-center">{profile?.nickname}'s Profile</h1>
+        <h1 className="text-4xl font-bold text-gray-800 mb-8 text-center">{t('profile.title_of', { nickname: profile?.nickname })}</h1>
         
         {profile && (
           <>
@@ -272,7 +273,7 @@ const User: React.FC = () => {
                   refreshData();
                 }}
                 className="px-3 py-2 bg-gray-300 hover:bg-gray-400 text-gray-700 font-semibold rounded transition-colors flex items-center gap-2"
-                title="Refresh all data"
+                title={t('profile.refresh_all')}
               >
                 🔄 {t('common.refresh')}
               </button>
@@ -523,7 +524,7 @@ const User: React.FC = () => {
                                     </td>
                                     <td className="px-4 py-2 text-right font-semibold text-green-600">+{Number(stat.elo_gained).toFixed(2)}</td>
                                     <td className="px-4 py-2 text-right font-semibold text-red-600">-{Number(stat.elo_lost).toFixed(2)}</td>
-                                    <td className="px-4 py-2 text-left text-gray-600">{stat.last_match_date ? new Date(stat.last_match_date).toLocaleDateString() : 'N/A'}</td>
+                                    <td className="px-4 py-2 text-left text-gray-600">{stat.last_match_date ? new Date(stat.last_match_date).toLocaleDateString(i18next.language) : 'N/A'}</td>
                                   </tr>
                                 );
                               })}
