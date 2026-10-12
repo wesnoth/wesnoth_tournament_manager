@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { api } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import ReplayConfirmationModal from './ReplayConfirmationModal';
@@ -47,8 +48,10 @@ function getBracketRoundSpacing(roundIndex: number): React.CSSProperties {
  * Build a read-only bracket outline before the compiler creates real series.
  * Advancement seeds and direct-pass slots describe the future bracket even
  * before qualifying results exist. Preview only matches with a possible path.
+ * Placeholder entrant names are translated here because they are rendered as
+ * entry names, not as labels.
  */
-function buildPlannedBracketSeries(phase: any, isFinalPhase: boolean): any[] {
+function buildPlannedBracketSeries(phase: any, isFinalPhase: boolean, t: TFunction): any[] {
   const groups = Array.isArray(phase.groups) && phase.groups.length > 0
     ? phase.groups
     : [{
@@ -104,7 +107,7 @@ function buildPlannedBracketSeries(phase: any, isFinalPhase: boolean): any[] {
               resolved_entry_id: directPass?.entry_id || null,
               resolved_entry_user_id: directPass?.entry_user_id || null,
               resolved_entry_members: directPass?.entry_members || [],
-              resolved_entry_name: directPass?.entry_name || (round === 1 ? 'Qualifier' : 'TBD'),
+              resolved_entry_name: directPass?.entry_name || (round === 1 ? t('competition.qualifier') : t('competition.tbd')),
               direct_pass: Boolean(directPass),
             };
           }),
@@ -144,8 +147,8 @@ function buildPlannedBracketSeries(phase: any, isFinalPhase: boolean): any[] {
         entry2_wins: 0,
         winner_entry_id: null,
         slots: [
-          { slot_number: 1, resolved_entry_name: 'Semifinal loser' },
-          { slot_number: 2, resolved_entry_name: 'Semifinal loser' },
+          { slot_number: 1, resolved_entry_name: t('competition.semifinal_loser') },
+          { slot_number: 2, resolved_entry_name: t('competition.semifinal_loser') },
         ],
       });
     }
@@ -176,7 +179,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
   refreshKey = 0,
   tournamentStatus,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [phases, setPhases] = useState<any[]>([]);
   const [details, setDetails] = useState<Record<string, any[]>>({});
   const [games, setGames] = useState<any[]>([]);
@@ -205,6 +208,12 @@ const TournamentCompetitionView: React.FC<Props> = ({
   const { user, isAdmin, isTournamentModerator, isStreamer } = useAuthStore();
 
   const pageSize = 20;
+  const bracketStatusLabels: Record<'completed' | 'ready' | 'in_progress' | 'waiting', string> = {
+    completed: t('competition.status_completed'),
+    ready: t('competition.status_open'),
+    in_progress: t('competition.status_in_progress'),
+    waiting: t('competition.status_waiting'),
+  };
 
   const streamLinksFor = (game: any): any[] => {
     if (Array.isArray(game.stream_links)) return game.stream_links;
@@ -259,8 +268,8 @@ const TournamentCompetitionView: React.FC<Props> = ({
   };
 
   const decideReplay = async (game: any, action: 'resolve' | 'discard', winnerEntryId?: string) => {
-    if (action === 'discard' && !window.confirm('Discard this confidence-one replay?')) return;
-    if (action === 'resolve' && !window.confirm('Resolve this replay with the selected winner?')) return;
+    if (action === 'discard' && !window.confirm(t('competition.confirm_discard_replay'))) return;
+    if (action === 'resolve' && !window.confirm(t('competition.confirm_resolve_replay'))) return;
     try {
       await api.post(`/tournaments/${tournamentId}/games/${game.game_id}/replay-decision`, {
         replay_id: game.pending_replay_id,
@@ -269,7 +278,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
       });
       setReloadKey(value => value + 1);
     } catch (decisionError: any) {
-      setError(decisionError.response?.data?.error || 'Failed to decide replay');
+      setError(decisionError.response?.data?.error || t('competition.error_decide_replay'));
     }
   };
 
@@ -303,7 +312,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
         setGames(gameResponses.flatMap(response => response.data.games || []));
         setAdministrativeDecisions(gameResponses.flatMap(response => response.data.administrative_decisions || []));
       } catch (loadError: any) {
-        setError(loadError.response?.data?.error || 'Failed to load the competition structure');
+        setError(loadError.response?.data?.error || t('competition.error_load'));
       }
     };
     load();
@@ -534,12 +543,12 @@ const TournamentCompetitionView: React.FC<Props> = ({
         return <section key={phase.phase_id} className="border rounded-lg p-4 bg-white">
           <div className="flex justify-between items-center mb-3"><h3 className="font-semibold text-lg">{phase.phase_name}</h3>
             {canManage && phase.phase_status === 'ready' && <button data-help-id="action-start-tournament-phase" type="button" onClick={async () => {
-              try { await api.post(`/tournaments/${tournamentId}/phases/${phase.phase_id}/start`); setReloadKey(value => value + 1); } catch (startError: any) { setError(startError.response?.data?.error || 'Failed to start phase'); }
-            }} className="px-3 py-1 bg-green-600 text-white rounded">Start phase</button>}
+              try { await api.post(`/tournaments/${tournamentId}/phases/${phase.phase_id}/start`); setReloadKey(value => value + 1); } catch (startError: any) { setError(startError.response?.data?.error || t('competition.error_start_phase')); }
+            }} className="px-3 py-1 bg-green-600 text-white rounded">{t('competition.start_phase')}</button>}
             {renderPhaseAdvancement(phase)}
           </div>
           {renderPhaseFeedback(phase)}
-          {groups.length === 0 ? <p className="text-sm text-gray-600">No group standings are available yet.</p> : <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+          {groups.length === 0 ? <p className="text-sm text-gray-600">{t('competition.no_group_standings')}</p> : <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
             {groups.map(group => <article key={group.id} data-help-id="region-tournament-standings-group" className="overflow-hidden rounded-lg border border-blue-200 bg-blue-50 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-200 bg-blue-100 px-4 py-3">
                 <h4 className="font-semibold text-blue-900">{group.name}</h4>
@@ -557,7 +566,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
               </div>
               {groupFeedback?.id === group.id && <p role="status" className={`px-4 py-2 text-sm ${groupFeedback.failed ? 'text-red-700' : 'text-green-700'}`}>{groupFeedback.text}</p>}
               <div className="overflow-x-auto"><table className="w-full bg-white text-sm">
-                <thead><tr className="bg-gray-100"><th className="p-2 text-left">Pos.</th><th className="p-2 text-left">Entry</th><th className="p-2">Played</th><th className="p-2">W</th><th className="p-2">L</th><th className="p-2">Points</th><th className="p-2">OMP</th><th className="p-2">GWP</th><th className="p-2">OGP</th></tr></thead>
+                <thead><tr className="bg-gray-100"><th className="p-2 text-left">{t('competition.col_position')}</th><th className="p-2 text-left">{t('competition.col_entry')}</th><th className="p-2">{t('competition.col_played')}</th><th className="p-2">{t('competition.col_wins')}</th><th className="p-2">{t('competition.col_losses')}</th><th className="p-2">{t('label_points')}</th><th className="p-2">OMP</th><th className="p-2">GWP</th><th className="p-2">OGP</th></tr></thead>
                 <tbody>{group.rows.map((row: any) => <tr key={row.entry_id} className="border-t"><td className="p-2">{row.rank_position || '—'}</td><td className="p-2 font-medium"><TournamentEntryName name={row.entry_name} userId={row.entry_user_id} members={row.entry_members} /></td><td className="p-2 text-center">{row.matches_played}</td><td className="p-2 text-center">{row.wins}</td><td className="p-2 text-center">{row.losses}</td><td className="p-2 text-center font-semibold">{row.points}</td><td className="p-2 text-center">{row.omp}</td><td className="p-2 text-center">{row.gwp}</td><td className="p-2 text-center">{row.ogp}</td></tr>)}</tbody>
               </table></div>
             </article>)}
@@ -567,17 +576,17 @@ const TournamentCompetitionView: React.FC<Props> = ({
       const series = Array.from(new Map(rows.map((row: any) => [row.series_id, { ...row, slots: [] as any[] }])).values()) as any[];
       for (const row of rows) series.find(item => item.series_id === row.series_id)?.slots.push(row);
       const isFinalPhase = !phases.some(candidate => Number(candidate.phase_order) > Number(phase.phase_order));
-      const displaySeries = series.length > 0 ? series : buildPlannedBracketSeries(phase, isFinalPhase);
+      const displaySeries = series.length > 0 ? series : buildPlannedBracketSeries(phase, isFinalPhase, t);
       const bracketGroups = Array.from(new Set(displaySeries.map(item => item.group_name))) as string[];
       return <section key={phase.phase_id} className="border rounded-lg p-4 bg-white">
         <div className="flex justify-between items-center mb-3"><h3 className="font-semibold text-lg">{phase.phase_name}</h3>
           {canManage && phase.phase_status === 'ready' && <button data-help-id="action-start-tournament-phase" type="button" onClick={async () => {
-            try { await api.post(`/tournaments/${tournamentId}/phases/${phase.phase_id}/start`); setReloadKey(value => value + 1); } catch (startError: any) { setError(startError.response?.data?.error || 'Failed to start phase'); }
-          }} className="px-3 py-1 bg-green-600 text-white rounded">Start phase</button>}
+            try { await api.post(`/tournaments/${tournamentId}/phases/${phase.phase_id}/start`); setReloadKey(value => value + 1); } catch (startError: any) { setError(startError.response?.data?.error || t('competition.error_start_phase')); }
+          }} className="px-3 py-1 bg-green-600 text-white rounded">{t('competition.start_phase')}</button>}
           {renderPhaseAdvancement(phase)}
         </div>
         {renderPhaseFeedback(phase)}
-        {bracketGroups.length === 0 ? <p className="text-sm text-gray-600">No elimination bracket is configured yet.</p> : <div className="space-y-5">
+        {bracketGroups.length === 0 ? <p className="text-sm text-gray-600">{t('competition.no_bracket')}</p> : <div className="space-y-5">
           {bracketGroups.map(groupName => {
             const groupSeries = displaySeries.filter(item => item.group_name === groupName);
             const mainSeries = groupSeries.filter(item => item.series_role !== 'third_place');
@@ -599,7 +608,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
                   const nextRoundSeries = mainSeries.filter(item => item.round_number === rounds[roundIndex + 1]);
                   return <React.Fragment key={round}>
                   <div className="flex min-w-64 flex-col">
-                    <h5 className="text-center font-medium">Round {round}</h5>
+                    <h5 className="text-center font-medium">{t('competition.round', { round })}</h5>
                     <div className="flex flex-1 flex-col" style={getBracketRoundSpacing(roundIndex)}>
                       {mainSeries.filter(item => item.round_number === round).map(item => {
                         const slots = [...item.slots].sort((a: any, b: any) => a.slot_number - b.slot_number);
@@ -616,12 +625,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
                           in_progress: 'border-yellow-300 bg-yellow-50',
                           waiting: 'border-gray-300 bg-gray-100',
                         }[status];
-                        const statusLabel = {
-                          completed: 'Completed',
-                          ready: 'Open',
-                          in_progress: 'In progress',
-                          waiting: 'Waiting',
-                        }[status];
+                        const statusLabel = bracketStatusLabels[status];
                         return <div key={item.series_id} className="flex flex-col gap-4"><div id={`series-${item.series_id}`} className={`relative h-28 overflow-hidden rounded border shadow-sm ${highlightedSeriesId === item.series_id ? 'border-yellow-500 bg-yellow-200 ring-4 ring-yellow-300' : statusStyles}`}>
                           <div className="flex items-center justify-between border-b border-inherit px-3 py-1 text-xs text-gray-600">
                             <span>Bo{item.best_of}</span>
@@ -632,26 +636,26 @@ const TournamentCompetitionView: React.FC<Props> = ({
                             const score = slot.slot_number === 1 ? item.entry1_wins : item.entry2_wins;
                             return <div key={slot.slot_number} className={`flex items-center justify-between gap-3 border-b border-inherit px-3 py-2 last:border-b-0 ${isWinner ? 'font-bold text-green-800' : 'text-gray-800'}`}>
                               <span className="min-w-0 truncate"><TournamentEntryName
-                                name={slot.resolved_entry_name || `Seed ${slot.source_group_seed || '?'}`}
+                                name={slot.resolved_entry_name || t('competition.seed', { seed: slot.source_group_seed || '?' })}
                                 userId={slot.resolved_entry_user_id}
                                 members={slot.resolved_entry_members}
                               /></span>
-                              {(slot.direct_pass || slot.source_type === 'direct') && <span className="shrink-0 rounded bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-800">Direct pass</span>}
+                              {(slot.direct_pass || slot.source_type === 'direct') && <span className="shrink-0 rounded bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-800">{t('competition.direct_pass')}</span>}
                               <span className={`min-w-6 text-right font-mono text-sm ${isWinner ? 'text-green-800' : 'text-gray-600'}`}>{Number(score || 0)}</span>
                             </div>;
                           })}
                         </div>
                           {roundIndex === rounds.length - 1 && thirdPlaceSeries && <div id={`series-${thirdPlaceSeries.series_id}`} data-help-id="region-tournament-third-place" className={`h-28 overflow-hidden rounded border shadow-sm ${highlightedSeriesId === thirdPlaceSeries.series_id ? 'border-yellow-500 bg-yellow-200 ring-4 ring-yellow-300' : thirdPlaceStyles}`}>
                             <div className="flex items-center justify-between border-b border-inherit px-3 py-1 text-xs text-gray-600">
-                              <span>Third-place · Bo{thirdPlaceSeries.best_of}</span>
+                              <span>{t('competition.third_place')} · Bo{thirdPlaceSeries.best_of}</span>
                               <span className={`rounded-full px-2 py-0.5 font-semibold ${thirdPlaceStatus === 'ready' ? 'bg-green-200 text-green-900' : thirdPlaceStatus === 'in_progress' ? 'bg-yellow-200 text-yellow-900' : 'bg-gray-200 text-gray-700'}`}>
-                                {{ completed: 'Completed', ready: 'Open', in_progress: 'In progress', waiting: 'Waiting' }[thirdPlaceStatus]}
+                                {bracketStatusLabels[thirdPlaceStatus]}
                               </span>
                             </div>
                             {[...thirdPlaceSeries.slots].sort((a: any, b: any) => a.slot_number - b.slot_number).map((slot: any) => {
                               const isWinner = Boolean(slot.resolved_entry_id && thirdPlaceSeries.winner_entry_id === slot.resolved_entry_id);
                               return <div key={slot.slot_number} className={`flex items-center justify-between gap-3 border-b border-inherit px-3 py-2 last:border-b-0 ${isWinner ? 'font-bold text-green-800' : 'text-gray-800'}`}>
-                                <span className="min-w-0 truncate"><TournamentEntryName name={slot.resolved_entry_name || 'Semifinal loser'} userId={slot.resolved_entry_user_id} members={slot.resolved_entry_members} /></span>
+                                <span className="min-w-0 truncate"><TournamentEntryName name={slot.resolved_entry_name || t('competition.semifinal_loser')} userId={slot.resolved_entry_user_id} members={slot.resolved_entry_members} /></span>
                                 <span className="min-w-6 text-right font-mono text-sm">{Number(slot.slot_number === 1 ? thirdPlaceSeries.entry1_wins : thirdPlaceSeries.entry2_wins)}</span>
                               </div>;
                             })}
@@ -670,9 +674,9 @@ const TournamentCompetitionView: React.FC<Props> = ({
                 })}
               </div>
               <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-600">
-                <span className="rounded bg-green-100 px-2 py-1 text-green-900">Green: open</span>
-                <span className="rounded bg-yellow-100 px-2 py-1 text-yellow-900">Yellow: in progress</span>
-                <span className="rounded bg-gray-200 px-2 py-1 text-gray-700">Gray: waiting for previous round</span>
+                <span className="rounded bg-green-100 px-2 py-1 text-green-900">{t('competition.legend_open')}</span>
+                <span className="rounded bg-yellow-100 px-2 py-1 text-yellow-900">{t('competition.legend_in_progress')}</span>
+                <span className="rounded bg-gray-200 px-2 py-1 text-gray-700">{t('competition.legend_waiting')}</span>
               </div>
             </div>;
           })}
@@ -680,7 +684,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
       </section>;
     })}
     {administrativeDecisions.length > 0 && <section data-help-id="region-tournament-administrative-decisions" className="rounded-lg border border-amber-300 bg-amber-50 p-4">
-      <h3 className="mb-4 border-b-2 border-amber-500 pb-3 text-2xl font-bold text-amber-950">Administrative Decisions</h3>
+      <h3 className="mb-4 border-b-2 border-amber-500 pb-3 text-2xl font-bold text-amber-950">{t('competition.administrative_decisions')}</h3>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {administrativeDecisions.map(decision => {
           const winnerIsEntry1 = decision.winner_entry_id === decision.entry1_id;
@@ -689,22 +693,22 @@ const TournamentCompetitionView: React.FC<Props> = ({
           const winnerScore = winnerIsEntry1 ? decision.entry1_wins : decision.entry2_wins;
           const loserScore = winnerIsEntry1 ? decision.entry2_wins : decision.entry1_wins;
           const actionLabel = decision.organizer_action === 'forfeit'
-            ? 'Forfeit'
+            ? t('competition.action_forfeit')
             : decision.organizer_action === 'legacy_admin_decision'
-              ? 'Migrated administrative decision'
-              : 'Result awarded by organizer';
+              ? t('competition.action_legacy')
+              : t('competition.action_awarded');
           return <article key={decision.decision_id} className="rounded-lg border-l-4 border-amber-600 bg-white p-4 shadow-sm">
             <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
               <div>
                 <div className="font-semibold text-gray-900">{decision.phase_name} · {decision.group_name}</div>
-                <div className="text-xs text-gray-500">Round {decision.round_number} · Bo{decision.best_of}</div>
+                <div className="text-xs text-gray-500">{t('competition.round', { round: decision.round_number })} · Bo{decision.best_of}</div>
               </div>
-              <span className="rounded-full bg-amber-600 px-3 py-1 text-xs font-semibold text-white">Admin decision</span>
+              <span className="rounded-full bg-amber-600 px-3 py-1 text-xs font-semibold text-white">{t('competition.admin_decision')}</span>
             </div>
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-              <div><div className="text-xs uppercase text-gray-500">Winner</div><div className="font-semibold text-green-700">{winnerName}</div></div>
+              <div><div className="text-xs uppercase text-gray-500">{t('label_winner')}</div><div className="font-semibold text-green-700">{winnerName}</div></div>
               <div className="rounded bg-gray-100 px-3 py-1 font-mono font-bold text-gray-800">{winnerScore}–{loserScore}</div>
-              <div className="text-right"><div className="text-xs uppercase text-gray-500">Loser</div><div className="font-semibold text-red-700">{loserName}</div></div>
+              <div className="text-right"><div className="text-xs uppercase text-gray-500">{t('label_loser')}</div><div className="font-semibold text-red-700">{loserName}</div></div>
             </div>
             <div className="mt-3 text-sm font-medium text-amber-800">{actionLabel}</div>
           </article>;
@@ -735,8 +739,8 @@ const TournamentCompetitionView: React.FC<Props> = ({
       </div>
       {renderPagination()}
       {[
-        { status: 'pending', title: 'Scheduled Matches' },
-        { status: 'completed', title: 'Completed Matches' },
+        { status: 'pending', title: t('matches.scheduled') },
+        { status: 'completed', title: t('matches.completed') },
       ].map(section => {
         const sectionGames = paginatedGames.filter(game => {
           const hasPendingReplay = Boolean(game.pending_replay_id);
@@ -770,10 +774,10 @@ const TournamentCompetitionView: React.FC<Props> = ({
             </colgroup>
             <thead className="bg-gray-200"><tr>
               {completed && <th className="px-4 py-3 text-left font-semibold text-gray-700">{t('label_date')}</th>}
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">{completed ? 'Winner' : 'Player 1'}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">{completed ? 'Loser' : 'Player 2'}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">{completed ? t('label_winner') : t('label_player1')}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">{completed ? t('label_loser') : t('label_player2')}</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-700">{t('label_map')}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">Status / Actions</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">{t('label_status_actions')}</th>
             </tr></thead>
             <tbody>{sectionGames.map(game => {
               const pendingReplay = Boolean(game.pending_replay_id);
@@ -885,7 +889,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
                 setReplayChoice(choice);
               };
               return <tr data-help-id="region-tournament-game-row" id={highlightedGameId ? `game-${game.game_id}` : `series-${game.series_id}`} key={game.game_id} className={`border-b border-gray-200 ${highlightedGameId === game.game_id || highlightedSeriesId === game.series_id ? 'bg-yellow-200 ring-2 ring-yellow-400' : pendingReplay ? 'bg-yellow-50 hover:bg-yellow-100' : 'hover:bg-gray-50'}`}>
-                {completed && <td className="px-4 py-3 align-top text-gray-700">{displayDate && !Number.isNaN(displayDate.getTime()) ? displayDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}</td>}
+                {completed && <td className="px-4 py-3 align-top text-gray-700">{displayDate && !Number.isNaN(displayDate.getTime()) ? displayDate.toLocaleDateString(i18n.language, { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}</td>}
                 <td className={`px-4 py-3 align-top font-semibold ${completed ? 'text-green-700' : 'text-gray-800'}`}>
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
@@ -908,7 +912,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
                 </td>
                 <td className="px-4 py-3 align-top text-gray-700">
                   <div className="break-words">{pendingSummary?.finalMap || pendingSummary?.resolvedMap || pendingSummary?.selectedMapName || pendingSummary?.forumMap || game.map || '—'}</div>
-                  <div className="mt-1 break-words text-xs text-gray-500">{game.phase_name} · {game.group_name} · {game.series_role === 'third_place' ? 'Third-place match' : `Round ${game.round_number}`} · Game {game.game_number} · Bo{game.best_of}</div>
+                  <div className="mt-1 break-words text-xs text-gray-500">{game.phase_name} · {game.group_name} · {game.series_role === 'third_place' ? t('competition.third_place_match') : t('competition.round', { round: game.round_number })} · {t('competition.game_number', { number: game.game_number })} · Bo{game.best_of}</div>
                 </td>
                 <td data-help-id="region-game-stream-links" className="px-4 py-3 align-top text-gray-700">
                   {streamLinksFor(game).length > 0 && <div className="mb-2 flex flex-wrap items-center gap-1 border-b border-gray-100 pb-2">
@@ -981,11 +985,11 @@ const TournamentCompetitionView: React.FC<Props> = ({
                     >{savingStreamGameId === game.game_id ? t('stream.saving') : t('stream.add')}</button>
                   </form>}
                   {completed ? <div className="flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full px-3 py-1 text-xs font-semibold text-white ${pendingReplay ? 'bg-yellow-500' : 'bg-green-500'}`}>{pendingReplay ? 'Pending confirmation' : 'Completed'}</span>
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold text-white ${pendingReplay ? 'bg-yellow-500' : 'bg-green-500'}`}>{pendingReplay ? t('competition.pending_confirmation') : t('competition.status_completed')}</span>
                     {canConfirmReplay && <>
-                      <button data-help-id="action-confirm-confidence-one-replay-won" type="button" onClick={() => openReplayAction('I won')} className="rounded bg-green-600 px-2 py-1 text-xs font-semibold text-white hover:bg-green-700">I won</button>
-                      <button data-help-id="action-confirm-confidence-one-replay-lost" type="button" onClick={() => openReplayAction('I lost')} className="rounded bg-red-600 px-2 py-1 text-xs font-semibold text-white hover:bg-red-700">I lost</button>
-                      <button data-help-id="action-discard-confidence-one-replay" type="button" onClick={() => openReplayAction('cancel')} className="rounded bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700">Discard</button>
+                      <button data-help-id="action-confirm-confidence-one-replay-won" type="button" onClick={() => openReplayAction('I won')} className="rounded bg-green-600 px-2 py-1 text-xs font-semibold text-white hover:bg-green-700">{t('competition.i_won')}</button>
+                      <button data-help-id="action-confirm-confidence-one-replay-lost" type="button" onClick={() => openReplayAction('I lost')} className="rounded bg-red-600 px-2 py-1 text-xs font-semibold text-white hover:bg-red-700">{t('competition.i_lost')}</button>
+                      <button data-help-id="action-discard-confidence-one-replay" type="button" onClick={() => openReplayAction('cancel')} className="rounded bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700">{t('competition.discard')}</button>
                     </>}
                     {!pendingReplay && !game.organizer_action && ['unconfirmed', 'reported'].includes(confirmationStatus) && isCurrentUserWinner && <button
                       data-help-id="action-inform-phase-game-result"
@@ -1003,12 +1007,12 @@ const TournamentCompetitionView: React.FC<Props> = ({
                       >
                         {t('report_match_link') || 'Report Match'}
                       </button>}
-                    {!pendingReplay && confirmationStatus === 'disputed' && <span className="rounded-full bg-red-500 px-3 py-1 text-xs font-semibold text-white">Disputed</span>}
-                    {pendingReplay && game.pending_replay_url && <a href={game.pending_replay_url} target="_blank" rel="noopener noreferrer" className="rounded bg-yellow-600 px-2 py-1 text-xs font-semibold text-white hover:bg-yellow-700">Replay ⬇</a>}
+                    {!pendingReplay && confirmationStatus === 'disputed' && <span className="rounded-full bg-red-500 px-3 py-1 text-xs font-semibold text-white">{t('competition.disputed')}</span>}
+                    {pendingReplay && game.pending_replay_url && <a href={game.pending_replay_url} target="_blank" rel="noopener noreferrer" className="rounded bg-yellow-600 px-2 py-1 text-xs font-semibold text-white hover:bg-yellow-700">{t('competition.replay')} ⬇</a>}
                     {pendingReplay && canManage && <>
-                      <button data-help-id="action-resolve-tournament-replay" type="button" onClick={() => void decideReplay(game, 'resolve', game.entry1_id)} className="rounded bg-green-700 px-2 py-1 text-xs font-semibold text-white hover:bg-green-800">Resolve {game.entry1_name}</button>
-                      <button data-help-id="action-resolve-tournament-replay" type="button" onClick={() => void decideReplay(game, 'resolve', game.entry2_id)} className="rounded bg-green-700 px-2 py-1 text-xs font-semibold text-white hover:bg-green-800">Resolve {game.entry2_name}</button>
-                      <button data-help-id="action-discard-tournament-replay" type="button" onClick={() => void decideReplay(game, 'discard')} className="rounded bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700">Discard replay</button>
+                      <button data-help-id="action-resolve-tournament-replay" type="button" onClick={() => void decideReplay(game, 'resolve', game.entry1_id)} className="rounded bg-green-700 px-2 py-1 text-xs font-semibold text-white hover:bg-green-800">{t('competition.resolve_entry', { name: game.entry1_name })}</button>
+                      <button data-help-id="action-resolve-tournament-replay" type="button" onClick={() => void decideReplay(game, 'resolve', game.entry2_id)} className="rounded bg-green-700 px-2 py-1 text-xs font-semibold text-white hover:bg-green-800">{t('competition.resolve_entry', { name: game.entry2_name })}</button>
+                      <button data-help-id="action-discard-tournament-replay" type="button" onClick={() => void decideReplay(game, 'discard')} className="rounded bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700">{t('competition.discard_replay')}</button>
                     </>}
                     {!pendingReplay && game.replay_url
                       ? <a
@@ -1018,17 +1022,17 @@ const TournamentCompetitionView: React.FC<Props> = ({
                           rel="noopener noreferrer"
                           onClick={() => { void api.post(`/tournaments/${tournamentId}/games/${game.game_id}/replay/download-count`); }}
                           className="rounded bg-green-600 px-2 py-1 text-xs font-semibold text-white hover:bg-green-700"
-                          title={`Downloads: ${game.replay_downloads || 0}`}
-                        >Replay ⬇</a>
-                      : !pendingReplay && <span className="text-xs text-gray-500">No replay</span>}
+                          title={`${t('downloads')}: ${game.replay_downloads || 0}`}
+                        >{t('competition.replay')} ⬇</a>
+                      : !pendingReplay && <span className="text-xs text-gray-500">{t('no_replay')}</span>}
                   </div> : <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full bg-yellow-500 px-3 py-1 text-xs font-semibold text-white">Pending</span>
+                    <span className="rounded-full bg-yellow-500 px-3 py-1 text-xs font-semibold text-white">{t('pending')}</span>
                     {scheduleStatus !== 'none' && <div className="flex flex-col gap-1">
                       <span className={`rounded-full px-3 py-1 text-xs font-semibold text-white ${scheduleStatus === 'confirmed' ? 'bg-green-500' : 'bg-purple-500'}`}>
-                        {scheduleStatus === 'confirmed' ? '✅ Schedule confirmed' : '⏳ Schedule proposed'}
+                        {scheduleStatus === 'confirmed' ? `✅ ${t('competition.schedule_confirmed')}` : `⏳ ${t('competition.schedule_proposed')}`}
                       </span>
                       {scheduleRanges.map(range => <span key={range.start.toISOString()} className="text-xs text-gray-600">
-                        {range.start.toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })} – {range.end.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                        {range.start.toLocaleString(i18n.language, { dateStyle: 'short', timeStyle: 'short' })} – {range.end.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' })}
                       </span>)}
                     </div>}
                     {isScheduleParticipant && scheduleSeriesId && onScheduleGame && <button
@@ -1037,16 +1041,16 @@ const TournamentCompetitionView: React.FC<Props> = ({
                       onClick={() => onScheduleGame(game)}
                       className="rounded bg-purple-600 px-2 py-1 text-xs font-semibold text-white hover:bg-purple-700"
                     >
-                      {scheduleStatus === 'none' ? '🗓️ Schedule' : 'Open schedule'}
+                      {scheduleStatus === 'none' ? `🗓️ ${t('competition.schedule')}` : t('events_open_schedule')}
                     </button>}
                     {canManage && [{ id: game.entry1_id, name: game.entry1_name }, { id: game.entry2_id, name: game.entry2_name }].map(entry => <button key={entry.id} data-help-id="action-record-tournament-game-winner" type="button" onClick={async () => {
-                      if (!window.confirm(`Record ${entry.name} as the winner of this game?`)) return;
-                      try { await api.post(`/tournaments/${tournamentId}/games/${game.game_id}/result`, { winner_entry_id: entry.id }); setReloadKey(value => value + 1); } catch (resultError: any) { setError(resultError.response?.data?.error || 'Failed to record result'); }
-                    }} className="rounded bg-blue-600 px-2 py-1 text-xs font-semibold text-white">{entry.name} won</button>)}
+                      if (!window.confirm(t('competition.confirm_record_winner', { name: entry.name }))) return;
+                      try { await api.post(`/tournaments/${tournamentId}/games/${game.game_id}/result`, { winner_entry_id: entry.id }); setReloadKey(value => value + 1); } catch (resultError: any) { setError(resultError.response?.data?.error || t('competition.error_record_result')); }
+                    }} className="rounded bg-blue-600 px-2 py-1 text-xs font-semibold text-white">{t('competition.entry_won', { name: entry.name })}</button>)}
                     {canManage && <div className="mt-2 flex w-full flex-wrap items-center gap-2 border-t border-amber-200 pt-2">
-                      <span className="text-xs font-semibold text-amber-800">Administrative:</span>
+                      <span className="text-xs font-semibold text-amber-800">{t('competition.administrative_label')}</span>
                       {[{ id: game.entry1_id, name: game.entry1_name }, { id: game.entry2_id, name: game.entry2_name }].map(entry => <button key={entry.id} data-help-id="action-record-tournament-administrative-decision" type="button" onClick={async () => {
-                        if (!window.confirm(`Award this series to ${entry.name} by administrative decision? Unplayed games will not count towards game-percentage tiebreakers.`)) return;
+                        if (!window.confirm(t('competition.confirm_award', { name: entry.name }))) return;
                         try {
                           await api.post(`/tournaments/${tournamentId}/series/${game.series_id}/admin-decision`, {
                             winner_entry_id: entry.id,
@@ -1054,9 +1058,9 @@ const TournamentCompetitionView: React.FC<Props> = ({
                           });
                           setReloadKey(value => value + 1);
                         } catch (resultError: any) {
-                          setError(resultError.response?.data?.error || 'Failed to record administrative decision');
+                          setError(resultError.response?.data?.error || t('competition.error_admin_decision'));
                         }
-                      }} className="rounded border border-amber-600 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100">Award to {entry.name}</button>)}
+                      }} className="rounded border border-amber-600 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100">{t('competition.award_to', { name: entry.name })}</button>)}
                     </div>}
                   </div>}
                 </td>
@@ -1065,7 +1069,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
           </table></div>
         </div>;
       })}
-      {filteredGames.length === 0 && <p className="text-sm text-gray-600">No matches match the selected filters.</p>}
+      {filteredGames.length === 0 && <p className="text-sm text-gray-600">{t('competition.no_filter_results')}</p>}
       {renderPagination()}
     </section>}
     {selectedReplay && <ReplayConfirmationModal
