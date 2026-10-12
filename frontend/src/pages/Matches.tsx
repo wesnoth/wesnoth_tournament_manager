@@ -364,7 +364,7 @@ const Matches: React.FC = () => {
           </div>
 
           <button data-help-id="action-reset-match-filters" className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors flex-shrink-0 h-fit self-end" onClick={resetFilters}>{t('reset_filters')}</button>
-          <button data-help-id="action-refresh-matches" className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded transition-colors flex-shrink-0 h-fit self-end" onClick={handleRefresh} title={t('refresh') || 'Refresh'} aria-label={t('refresh') || 'Refresh'}>↻</button>
+          <button data-help-id="action-refresh-matches" className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded transition-colors flex-shrink-0 h-fit self-end" onClick={handleRefresh} title={t('common.refresh')} aria-label={t('common.refresh')}>↻</button>
         </div>
       </div>
 

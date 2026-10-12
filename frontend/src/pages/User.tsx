@@ -274,7 +274,7 @@ const User: React.FC = () => {
                 className="px-3 py-2 bg-gray-300 hover:bg-gray-400 text-gray-700 font-semibold rounded transition-colors flex items-center gap-2"
                 title="Refresh all data"
               >
-                🔄 {t('refresh') || 'Refresh'}
+                🔄 {t('common.refresh')}
               </button>
             </div>
 
@@ -394,7 +394,7 @@ const User: React.FC = () => {
                           </select>
                         </div>
 
-                        <button data-help-id="action-refresh-user-matches" type="button" className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-semibold flex-shrink-0 h-fit self-end" onClick={applyMatchFilters}>{t('refresh') || 'Refresh'}</button>
+                        <button data-help-id="action-refresh-user-matches" type="button" className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-semibold flex-shrink-0 h-fit self-end" onClick={applyMatchFilters}>{t('common.refresh')}</button>
                         <button data-help-id="action-reset-user-match-filters" type="button" className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 font-semibold flex-shrink-0 h-fit self-end" onClick={resetFilters}>{t('reset_filters')}</button>
                       </div>
                     </div>

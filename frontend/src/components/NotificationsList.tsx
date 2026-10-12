@@ -323,7 +323,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
   if (error) {
     return (
       <div className="bg-red-50 border border-red-200 rounded-md p-4">
-        <div className="text-red-800">❌ {t('notifications_load_error', error)}</div>
+        <div className="text-red-800">❌ {t('notifications_load_error')}</div>
       </div>
     );
   }

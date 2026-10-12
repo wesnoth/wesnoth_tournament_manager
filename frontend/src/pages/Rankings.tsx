@@ -293,8 +293,8 @@ const Rankings: React.FC = () => {
               <button className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors font-semibold" onClick={handleResetFilters}>
                 {t('reset_filters')}
               </button>
-              <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded transition-colors" onClick={handleRefresh} title={t('refresh')} aria-label={t('refresh')}>
-                {t('refresh')}
+              <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded transition-colors" onClick={handleRefresh} title={t('common.refresh')} aria-label={t('common.refresh')}>
+                {t('common.refresh')}
               </button>
             </div>
           </div>

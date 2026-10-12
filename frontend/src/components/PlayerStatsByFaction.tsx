@@ -109,7 +109,7 @@ const PlayerStatsByFaction: React.FC<Props> = ({ playerId }) => {
           onClick={applyFilters}
           className="px-3 py-1 bg-gray-200 text-gray-700 font-semibold rounded hover:bg-gray-300 transition-colors"
         >
-          {t('refresh') || 'Refresh'}
+          {t('common.refresh')}
         </button>
         <SideToggle side={side} onChange={setSide} />
       </div>

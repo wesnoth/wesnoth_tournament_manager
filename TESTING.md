@@ -6,7 +6,7 @@ The project does not use hosted CI. Verification runs locally through one comman
 npm run verify
 ```
 
-It checks i18n parity (every locale has the English keys and interpolation variables), type-checks the frontend, compiles the backend with its unit tests into a scratch directory, and runs the unit tests, the tournament-engine self-test, and the group-progression harness. It takes a few seconds and stops at the first failure.
+It checks i18n parity (every locale has the English keys and interpolation variables) and that every literal translation key used in the frontend exists in `en.json`, type-checks the frontend, compiles the backend with its unit tests into a scratch directory, and runs the unit tests, the tournament-engine self-test, and the group-progression harness. It takes a few seconds and stops at the first failure.
 
 Backend unit tests are `*.test.ts` files next to the code, run with Node's built-in runner (`node:test`) and excluded from the production build. Replay parser tests use real replays stored by Wesnoth version in `backend/test-fixtures/replay-samples/`, each with the forum rows wesnothd recorded for it; add samples for a new Wesnoth or Ranked add-on version next to the old ones.
 

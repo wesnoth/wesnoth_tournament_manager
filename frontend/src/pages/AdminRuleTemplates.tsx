@@ -157,7 +157,7 @@ const AdminRuleTemplates: React.FC = () => {
                   disabled={saving}
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {saving ? t('saving', 'Saving...') : form.id ? t('admin.rule_templates_update') : t('admin.rule_templates_create')}
+                  {saving ? t('common.saving') : form.id ? t('admin.rule_templates_update') : t('admin.rule_templates_create')}
                 </button>
                 {form.id && (
                   <button onClick={resetForm} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">
@@ -208,7 +208,7 @@ const AdminRuleTemplates: React.FC = () => {
                           onClick={() => handleDelete(tpl.id)}
                           className="text-red-600 hover:text-red-800"
                         >
-                          {t('delete')}
+                          {t('btn_delete')}
                         </button>
                       </td>
                     </tr>

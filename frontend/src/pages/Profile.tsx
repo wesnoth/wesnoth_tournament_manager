@@ -428,7 +428,7 @@ const Profile: React.FC = () => {
                         disabled={savingScheduling}
                         className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-green-700 text-white rounded-lg font-semibold hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                       >
-                        {savingScheduling ? t('profile.saving') : t('common.save') || 'Save'}
+                        {savingScheduling ? t('common.saving') : t('common.save') || 'Save'}
                       </button>
                     </div>
                   </div>

@@ -370,7 +370,7 @@ const PlayerProfile: React.FC = () => {
                       className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-semibold flex-shrink-0 h-fit"
                       onClick={applyMatchFilters}
                     >
-                      {t('refresh') || 'Refresh'}
+                      {t('common.refresh')}
                     </button>
                     <button data-help-id="action-reset-player-match-filters" type="button"
                       className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-semibold flex-shrink-0 h-fit"
