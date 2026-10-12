@@ -41,12 +41,12 @@ export const TeamReplacementModal: React.FC<TeamReplacementModalProps> = ({
 
     // Validation
     if (!selectedMemberId) {
-      setValidationError(t('Please select a team member to replace'));
+      setValidationError(t('teams.error_select_member'));
       return;
     }
 
     if (!newPlayerNickname.trim()) {
-      setValidationError(t('Please enter substitute player nickname'));
+      setValidationError(t('teams.error_substitute_required'));
       return;
     }
 
@@ -69,12 +69,12 @@ export const TeamReplacementModal: React.FC<TeamReplacementModalProps> = ({
         onSuccess();
         onClose();
       } else {
-        setError(response.data.error || t('Failed to initiate replacement'));
+        setError(response.data.error || t('teams.error_replacement'));
       }
     } catch (err: any) {
       const errorMessage = err.response?.data?.error || 
                            err.response?.data?.message || 
-                           (err instanceof Error ? err.message : t('Failed to initiate replacement'));
+                           (err instanceof Error ? err.message : t('teams.error_replacement'));
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -89,7 +89,7 @@ export const TeamReplacementModal: React.FC<TeamReplacementModalProps> = ({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full mx-4">
         <h2 className="text-xl font-bold mb-4 text-gray-800">
-          {t('Replace Team Member')}
+          {t('teams.replace_title')}
         </h2>
 
         {error && (
@@ -108,7 +108,7 @@ export const TeamReplacementModal: React.FC<TeamReplacementModalProps> = ({
           {/* Select member to replace */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              {t('Member to replace')} *
+              {t('teams.member_to_replace')} *
             </label>
             <select
               value={selectedMemberId}
@@ -116,7 +116,7 @@ export const TeamReplacementModal: React.FC<TeamReplacementModalProps> = ({
               disabled={loading}
               className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 disabled:bg-gray-100 disabled:text-gray-600"
             >
-              <option value="">-- {t('Select team member')} --</option>
+              <option value="">-- {t('teams.select_member')} --</option>
               {teamMembers
                 .filter(m => m.participation_status === 'accepted')
                 .map((member) => (
@@ -130,18 +130,18 @@ export const TeamReplacementModal: React.FC<TeamReplacementModalProps> = ({
           {/* Enter substitute nickname */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              {t('Substitute player nickname')} *
+              {t('teams.substitute_nickname')} *
             </label>
             <input
               type="text"
               value={newPlayerNickname}
               onChange={(e) => setNewPlayerNickname(e.target.value)}
               disabled={loading}
-              placeholder={t('Enter player nickname')}
+              placeholder={t('teams.substitute_placeholder')}
               className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 disabled:bg-gray-100 disabled:text-gray-600"
             />
             <p className="text-xs text-gray-500 mt-1">
-              {t('The player will receive a notification and must confirm the replacement')}
+              {t('teams.substitute_hint')}
             </p>
           </div>
         </div>
@@ -153,14 +153,14 @@ export const TeamReplacementModal: React.FC<TeamReplacementModalProps> = ({
             disabled={loading}
             className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-600 font-medium transition-colors"
           >
-            {t('Cancel')}
+            {t('cancel')}
           </button>
           <button
             onClick={handleConfirm}
             disabled={loading || !selectedMemberId || !newPlayerNickname.trim()}
             className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium transition-colors"
           >
-            {loading ? t('Processing...') : t('Confirm Replacement')}
+            {loading ? t('teams.processing') : t('teams.confirm_replacement')}
           </button>
         </div>
       </div>

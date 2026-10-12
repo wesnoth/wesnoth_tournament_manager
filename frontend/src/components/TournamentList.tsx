@@ -152,9 +152,9 @@ const TournamentList: React.FC<TournamentListProps> = ({
   const getTournamentModeLabel = (mode?: string) => {
     if (!mode) return '-';
     const modeMap: Record<string, string> = {
-      ranked: t('tournament.ranked', 'Ranked (1v1)'),
-      unranked: t('tournament.unranked', 'Unranked (1v1)'),
-      team: t('tournament.team', 'Team (2v2)'),
+      ranked: t('tournament.mode_ranked'),
+      unranked: t('tournament.mode_unranked'),
+      team: t('tournament.mode_team'),
     };
     return modeMap[mode] || mode;
   };
@@ -200,7 +200,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
           <h1 className="text-4xl font-bold text-gray-800">{title}</h1>
           {showCreateButton && (
             <button data-help-id="action-create-tournament" className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors" onClick={onCreateClick}>
-              {t('create_tournament')}
+              {t('tournament_create')}
             </button>
           )}
         </div>
@@ -418,7 +418,7 @@ const TournamentList: React.FC<TournamentListProps> = ({
                         onClick={() => onDelete(tournament.id)}
                         className="px-3 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600 transition-colors"
                       >
-                        {t('delete')}
+                        {t('btn_delete')}
                       </button>
                     )}
                   </td>

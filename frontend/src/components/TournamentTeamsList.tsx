@@ -72,17 +72,17 @@ const TournamentTeamsList: React.FC<TournamentTeamsListProps> = ({
                     <button
                       data-help-id="action-rename-team"
                       className="text-gray-400 hover:text-blue-600 transition-colors p-1"
-                      title="Rename team"
+                      title={t('teams.rename_team')}
                       onClick={() => onRename(team)}
                     >
                       ✏️
                     </button>
                   )}
                 </div>
-                <span className="text-sm text-gray-600">({team.team_size}/2 members)</span>
+                <span className="text-sm text-gray-600">{t('teams.member_count', { count: team.team_size })}</span>
                 {team.team_total_elo && (
                   <div className="text-sm text-gray-700 mt-2">
-                    <strong>Total ELO:</strong> {team.team_total_elo}
+                    <strong>{t('teams.total_elo')}:</strong> {team.team_total_elo}
                   </div>
                 )}
               </div>
@@ -91,7 +91,7 @@ const TournamentTeamsList: React.FC<TournamentTeamsListProps> = ({
               <TournamentDirectPassControl tournamentId={tournament.id} entityType="team" entityId={team.id} groups={directPass.groups} current={team}
                 disabled={!['active'].includes(team.status)} onSaved={directPass.onSaved} />
             </div>}
-            {describeDirectPass(team, directPass.groups) && <p className="mb-3 text-sm font-medium text-indigo-800">Direct pass: {describeDirectPass(team, directPass.groups)}</p>}
+            {describeDirectPass(t, team, directPass.groups) && <p className="mb-3 text-sm font-medium text-indigo-800">{t('competition.direct_pass')}: {describeDirectPass(t, team, directPass.groups)}</p>}
             {team.members_with_elo && team.members_with_elo.length > 0 ? (
               <div className="mt-4 max-md:overflow-x-auto max-md:-webkit-overflow-scrolling-touch">
                 <table className="w-full text-sm max-md:min-w-[600px]">
@@ -99,7 +99,7 @@ const TournamentTeamsList: React.FC<TournamentTeamsListProps> = ({
                     <tr>
                       <th className="px-4 py-3 max-md:px-2 max-md:py-2 text-left font-semibold text-gray-700 border-b-2 border-gray-300 max-md:text-xs">{t('label_nickname')}</th>
                       <th className="px-4 py-3 max-md:px-2 max-md:py-2 text-left font-semibold text-gray-700 border-b-2 border-gray-300 max-md:text-xs">{t('label_elo')}</th>
-                      <th className="px-4 py-3 max-md:px-2 max-md:py-2 text-left font-semibold text-gray-700 border-b-2 border-gray-300 max-md:text-xs">Position</th>
+                      <th className="px-4 py-3 max-md:px-2 max-md:py-2 text-left font-semibold text-gray-700 border-b-2 border-gray-300 max-md:text-xs">{t('teams.position')}</th>
                       <th className="px-4 py-3 max-md:px-2 max-md:py-2 text-left font-semibold text-gray-700 border-b-2 border-gray-300 max-md:text-xs">{t('label_status')}</th>
                       <th className="px-4 py-3 max-md:px-2 max-md:py-2 text-left font-semibold text-gray-700 border-b-2 border-gray-300 max-md:text-xs">{t('label_actions')}</th>
                     </tr>
@@ -115,9 +115,8 @@ const TournamentTeamsList: React.FC<TournamentTeamsListProps> = ({
                             className="inline-block px-3 py-1 text-white rounded-full text-xs font-semibold"
                             style={{ backgroundColor: getParticipationStatusColor(member.participation_status || 'pending') }}
                           >
-                            {member.participation_status === 'unconfirmed' ? 'Unconfirmed' :
-                           member.participation_status === 'pending' ? 'Pending' :
-                           member.participation_status === 'accepted' ? 'Accepted' : 'Pending'}
+                            {member.participation_status === 'unconfirmed' ? t('teams.status_unconfirmed') :
+                           member.participation_status === 'accepted' ? t('teams.status_accepted') : t('pending')}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-gray-700">
@@ -127,9 +126,9 @@ const TournamentTeamsList: React.FC<TournamentTeamsListProps> = ({
                               data-help-id="action-confirm-participation"
                               className="px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600 transition-colors"
                               onClick={() => actions.onConfirm(member.participant_id)}
-                              title="Confirm your participation"
+                              title={t('teams.confirm_participation')}
                             >
-                              {t('btn_confirm') || 'Confirm'}
+                              {t('btn_confirm')}
                             </button>
                           )}
                           {isOrganizer && member.participation_status === 'pending' && (
@@ -153,8 +152,8 @@ const TournamentTeamsList: React.FC<TournamentTeamsListProps> = ({
                             </>
                           )}
                           {isOrganizer && member.participation_status === 'unconfirmed' && (
-                            <span title="Awaiting player confirmation" className="text-sm text-gray-600">
-                              Awaiting confirmation
+                            <span title={t('teams.awaiting_player_confirmation')} className="text-sm text-gray-600">
+                              {t('teams.awaiting_confirmation')}
                             </span>
                           )}
                           {/* Substitute Player — organizer only, after tournament starts, team active, for accepted members */}
@@ -162,10 +161,10 @@ const TournamentTeamsList: React.FC<TournamentTeamsListProps> = ({
                             <button
                               data-help-id="action-replace-team-member"
                               className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
-                              title="Replace this player with a substitute"
+                              title={t('teams.replace_player')}
                               onClick={() => onSubstitute(team, member)}
                             >
-                              Substitute
+                              {t('teams.substitute')}
                             </button>
                           )}
                           {/* Remove participant — self, organizer, admin, moderator; only before tournament starts */}
@@ -174,7 +173,7 @@ const TournamentTeamsList: React.FC<TournamentTeamsListProps> = ({
                             <button
                               data-help-id="action-remove-participant"
                               className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 transition-colors"
-                              title="Remove from tournament"
+                              title={t('teams.remove_from_tournament')}
                               onClick={() => actions.onRemove(member.participant_id, member.nickname)}
                             >
                               ✕
@@ -188,7 +187,7 @@ const TournamentTeamsList: React.FC<TournamentTeamsListProps> = ({
               </table>
               </div>
             ) : (
-              <p className="text-gray-600 text-center py-4">No members</p>
+              <p className="text-gray-600 text-center py-4">{t('teams.no_members')}</p>
             )}
           </div>
         ))}

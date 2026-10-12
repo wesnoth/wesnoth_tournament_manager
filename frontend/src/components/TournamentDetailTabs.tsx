@@ -74,28 +74,28 @@ const TournamentDetailTabs: React.FC<TournamentDetailTabsProps> = ({
           className={`px-4 py-2 rounded font-semibold cursor-pointer transition-all ${activeTab === 'tournamentStandings' ? 'bg-blue-500 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
           onClick={() => onTabChange('tournamentStandings')}
         >
-          Tournament Standings
+          {t('overall_standings.title')}
         </button>
         <button
           data-help-id="action-tab-competition"
           className={`px-4 py-2 rounded font-semibold cursor-pointer transition-all ${activeTab === 'competition' ? 'bg-blue-500 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
           onClick={() => onTabChange('competition')}
         >
-          Competition
+          {t('tournament_tabs.competition')}
         </button>
         {activeTab === 'competition' && (
           <div className="flex flex-wrap items-center gap-3 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-sm">
             <label className="flex items-center gap-2 font-semibold text-gray-700">
-              <span>Matches</span>
+              <span>{t('tournament_tabs.matches')}</span>
               <select
                 data-help-id="option-competition-match-status-filter"
                 value={competitionFilters.matchFilter}
                 onChange={(event) => onCompetitionFiltersChange({ ...competitionFilters, matchFilter: event.target.value as CompetitionMatchFilter })}
                 className="rounded border border-gray-300 bg-white px-2 py-1 font-normal"
               >
-                <option value="all">All</option>
-                <option value="pending">Scheduled</option>
-                <option value="completed">Completed</option>
+                <option value="all">{t('tournament_tabs.all')}</option>
+                <option value="pending">{t('tournament_tabs.scheduled')}</option>
+                <option value="completed">{t('tournament_tabs.completed')}</option>
               </select>
             </label>
             <label className="flex items-center gap-2 font-semibold text-gray-700">
@@ -105,7 +105,7 @@ const TournamentDetailTabs: React.FC<TournamentDetailTabsProps> = ({
                 checked={competitionFilters.showOnlyMine}
                 onChange={(event) => onCompetitionFiltersChange({ ...competitionFilters, showOnlyMine: event.target.checked })}
               />
-              Show only mine
+              {t('tournament_tabs.show_only_mine')}
             </label>
             <label className="flex items-center gap-2 font-semibold text-gray-700">
               <input
@@ -114,7 +114,7 @@ const TournamentDetailTabs: React.FC<TournamentDetailTabsProps> = ({
                 checked={!competitionFilters.showPhasesGroups}
                 onChange={(event) => onCompetitionFiltersChange({ ...competitionFilters, showPhasesGroups: !event.target.checked })}
               />
-              Hide phases / groups
+              {t('tournament_tabs.hide_phases_groups')}
             </label>
           </div>
         )}

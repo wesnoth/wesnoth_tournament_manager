@@ -75,7 +75,7 @@ const TournamentActionsBar: React.FC<TournamentActionsBarProps> = ({
               disabled={!editReady}
               className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
-              {t('btn_edit', 'Edit')}
+              {t('edit')}
             </button>
           )}
 
@@ -99,13 +99,13 @@ const TournamentActionsBar: React.FC<TournamentActionsBarProps> = ({
             <button 
               data-help-id="action-cancel-tournament"
               onClick={() => {
-                if (confirm(t('confirm_cancel_tournament', 'Are you sure you want to cancel this tournament? All data will be deleted.'))) {
+                if (confirm(t('confirm_cancel_tournament'))) {
                   onCancel();
                 }
               }} 
               className="px-6 py-2 bg-red-700 text-white rounded hover:bg-red-800 transition-colors"
             >
-              {t('cancel_tournament', 'Cancel Tournament')}
+              {t('cancel_tournament')}
             </button>
           )}
         </div>

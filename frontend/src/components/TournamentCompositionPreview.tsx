@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { TournamentFormatDefinition } from '../types/tournament';
 
 interface CompositionEntry {
@@ -24,6 +25,7 @@ function distributeEntries(count: number, groupCount: number): number[] {
 
 /** Show the roster impact of the saved phase graph before it is prepared. */
 const TournamentCompositionPreview: React.FC<Props> = ({ format, entries }) => {
+  const { t } = useTranslation();
   const [firstPhase, ...laterPhases] = format.phases;
   if (!firstPhase || entries.length === 0) return null;
 
@@ -50,21 +52,21 @@ const TournamentCompositionPreview: React.FC<Props> = ({ format, entries }) => {
 
   return (
     <section data-help-id="region-tournament-phase-composition" className="mb-5 rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-3">
-      <h3 className="font-semibold text-gray-800">Participant and bracket preview</h3>
+      <h3 className="font-semibold text-gray-800">{t('composition.title')}</h3>
       <p className="text-sm text-gray-700">
-        {entries.length} eligible {entries.length === 1 ? 'entry' : 'entries'}; {directEntryIds.size} assigned direct {directEntryIds.size === 1 ? 'pass' : 'passes'} are reserved for later phases, leaving {firstPhaseEntries.length} for {firstPhase.name}.
+        {t('composition.summary', { eligible: entries.length, direct: directEntryIds.size, remaining: firstPhaseEntries.length, phase: firstPhase.name })}
       </p>
       <div className="text-sm text-gray-700">
-        <strong>{firstPhase.name} group sizes:</strong>{' '}
+        <strong>{t('composition.group_sizes', { phase: firstPhase.name })}:</strong>{' '}
         {firstPhase.groups.map((group, index) => `${group.name}: ${firstGroupSizes[index]}`).join(' · ')}
       </div>
       {smallGroups > 0 && suggestedGroupCount > 0 && (
         <div role="status" className="rounded bg-amber-50 p-3 text-sm text-amber-900">
-          {smallGroups} {smallGroups === 1 ? 'group has' : 'groups have'} fewer than 3 entries. Consider reducing to {suggestedGroupCount} {suggestedGroupCount === 1 ? 'group' : 'groups'} ({suggestionSizes.join(' and ')} entries each), or fewer.
+          {t('composition.small_groups', { count: smallGroups, suggested: suggestedGroupCount, sizes: suggestionSizes.join(' / ') })}
         </div>
       )}
       {overqualifiedGroups.length > 0 && <div role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">
-        Qualification exceeds the assigned roster in {overqualifiedGroups.map(group => group.name).join(', ')}. Reduce the advancing count or add participants before preparing.
+        {t('composition.overqualified', { groups: overqualifiedGroups.map(group => group.name).join(', ') })}
       </div>}
       {laterPhases.map(phase => (
         <div key={phase.id} className="space-y-1 text-sm text-gray-700">
@@ -75,7 +77,7 @@ const TournamentCompositionPreview: React.FC<Props> = ({ format, entries }) => {
             const assigned = Number(group.direct_assigned_count || 0);
             const total = qualifiers + reserved;
             if (phase.format !== 'single_elimination') {
-              return <div key={group.id}>{group.name}: {qualifiers} mapped qualifier(s) + {assigned}/{reserved} assigned/reserved direct pass(es) = {total} projected entries.</div>;
+              return <div key={group.id}>{group.name}: {t('composition.projection', { qualifiers, assigned, reserved, total })}.</div>;
             }
             const bracketSize = phase.elimination?.bracket_size || recommendedBracketSize(total);
             const assignedPlacements = entries.filter(entry => entry.direct_group_id === group.id);
@@ -84,11 +86,11 @@ const TournamentCompositionPreview: React.FC<Props> = ({ format, entries }) => {
               count + (entry.direct_round_number ? 2 ** (Number(entry.direct_round_number) - 1) : 0), 0);
             const mappedCapacity = Math.max(0, bracketSize - bypassedSeedPositions);
             const roundSummary = assignedPlacements.some(entry => entry.direct_round_number)
-              ? `; ${bypassedSeedPositions} feeder seed position(s) bypassed by round-specific passes, capacity for ${mappedCapacity} mapped qualifier(s)`
+              ? `; ${t('composition.bypassed', { bypassed: bypassedSeedPositions, capacity: mappedCapacity })}`
               : '';
             return <div key={group.id}>
-              {group.name}: {qualifiers} mapped qualifier(s) + {assigned}/{reserved} assigned/reserved direct pass(es) = {total} projected entries; {phase.elimination?.bracket_size ? 'configured' : 'recommended'} bracket of {bracketSize}, {Math.max(0, bracketSize - total)} bye(s){roundSummary}.
-              {bypassedSeedPositions > 0 && qualifiers > mappedCapacity && <span role="alert" className="ml-1 text-red-700">Too many mapped qualifiers for the assigned round-specific passes.</span>}
+              {group.name}: {t('composition.projection', { qualifiers, assigned, reserved, total })}; {t(phase.elimination?.bracket_size ? 'composition.bracket_configured' : 'composition.bracket_recommended', { size: bracketSize, byes: Math.max(0, bracketSize - total) })}{roundSummary}.
+              {bypassedSeedPositions > 0 && qualifiers > mappedCapacity && <span role="alert" className="ml-1 text-red-700">{t('composition.too_many_qualifiers')}</span>}
             </div>;
           })}
         </div>

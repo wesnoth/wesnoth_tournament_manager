@@ -58,7 +58,7 @@ const TournamentParticipantsTable: React.FC<TournamentParticipantsTableProps> = 
             <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_status')}</th>
             <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_elo')}</th>
             {showParticipantActions && <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_actions')}</th>}
-            {directPass.groups.length > 0 && <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">Direct pass</th>}
+            {directPass.groups.length > 0 && <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('competition.direct_pass')}</th>}
           </tr>
         </thead>
         <tbody>
@@ -99,7 +99,7 @@ const TournamentParticipantsTable: React.FC<TournamentParticipantsTableProps> = 
                   <button
                     data-help-id="action-remove-participant"
                     className="px-2 py-1 bg-red-700 text-white rounded text-xs hover:bg-red-800 transition-colors"
-                    title="Remove from tournament"
+                    title={t('teams.remove_from_tournament')}
                     onClick={() => actions.onRemove(p.id, p.nickname)}
                   >
                     ✕
@@ -113,8 +113,8 @@ const TournamentParticipantsTable: React.FC<TournamentParticipantsTableProps> = 
                   ? <TournamentDirectPassControl tournamentId={tournament.id} entityType="participant" entityId={p.id}
                       groups={directPass.groups} current={p} disabled={p.participation_status !== 'accepted' || Boolean(p.team_id)}
                       onSaved={directPass.onSaved} />
-                  : describeDirectPass(p, directPass.groups)
-                    ? <span className="font-medium text-indigo-800">{describeDirectPass(p, directPass.groups)}</span>
+                  : describeDirectPass(t, p, directPass.groups)
+                    ? <span className="font-medium text-indigo-800">{describeDirectPass(t, p, directPass.groups)}</span>
                     : <span className="text-gray-400">—</span>}
               </td>}
           </tr>

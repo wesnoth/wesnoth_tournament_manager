@@ -213,7 +213,7 @@ function SchedulingFreeBusyGrid({
   scrollToHour = null,
   confirmMode = false
 }: SchedulingFreeBusyGridProps) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const gridContainerRef = useRef<HTMLDivElement>(null);
   const scrollRafRef = useRef<number | null>(null);
   const lastTouchActivationRef = useRef(0);
@@ -518,42 +518,42 @@ function SchedulingFreeBusyGrid({
         <div className="sticky top-0 z-20 bg-white flex items-center gap-6 text-xs p-4 border border-gray-200 rounded-lg">
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-blue-200 border border-blue-400 rounded"></div>
-            <span>Proposed</span>
+            <span>{t('schedule_grid.proposed')}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-green-500 border border-green-700 rounded"></div>
-            <span>Confirmed</span>
+            <span>{t('schedule_grid.confirmed')}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-red-300 border border-red-500 rounded"></div>
-            <span>Rejected</span>
+            <span>{t('schedule_grid.rejected')}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-orange-200 border border-orange-400 rounded"></div>
-            <span>Reserved P2P</span>
+            <span>{t('schedule_grid.reserved_p2p')}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-purple-200 border border-purple-400 rounded"></div>
-            <span>Reserved tournament</span>
+            <span>{t('schedule_grid.reserved_tournament')}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-gray-200 border border-gray-400 rounded"></div>
-            <span>Past</span>
+            <span>{t('schedule_grid.past')}</span>
           </div>
         </div>
       ) : (
         <div className="sticky top-0 z-20 bg-white flex items-center gap-6 text-xs p-4 border border-gray-200 rounded-lg">
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-green-100 border border-green-300 rounded"></div>
-            <span>Available</span>
+            <span>{t('schedule_grid.available')}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-gray-100 border border-gray-300 rounded"></div>
-            <span>Busy</span>
+            <span>{t('schedule_grid.busy')}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-blue-200 border border-blue-400 rounded"></div>
-            <span>Proposed</span>
+            <span>{t('schedule_grid.proposed')}</span>
           </div>
         </div>
       )}
@@ -578,7 +578,7 @@ function SchedulingFreeBusyGrid({
                 className="border border-gray-300 p-2 bg-gray-50 sticky left-0 z-10 text-left min-w-[180px]"
                 style={{ width: `${PARTICIPANT_COLUMN_WIDTH}px` }}
               >
-                Participant
+                {t('schedule_grid.participant')}
               </th>
               {virtualWindow.leftSpacerWidth > 0 && (
                 <th
@@ -732,7 +732,7 @@ function SchedulingFreeBusyGrid({
                         touchGestureRef.current = null;
                       }}
                       onClick={() => handleSlotToggleAction(slot, 'click')}
-                      title={`${participant.nickname} - ${slot.dateStr} ${slot.timeStr}${isPast ? ' (past slot)' : ''}${isReserved ? ` (${reservationSource} slot already reserved)` : ''}${isPending ? ` (${pendingSource} proposal)` : ''}`}
+                      title={`${participant.nickname} - ${slot.dateStr} ${slot.timeStr}${isPast ? ` (${t('schedule_grid.title_past')})` : ''}${isReserved ? ` (${t(reservationSource === 'tournament' ? 'schedule_grid.title_reserved_tournament' : 'schedule_grid.title_reserved_p2p')})` : ''}${isPending ? ` (${t(pendingSource === 'tournament' ? 'schedule_grid.title_pending_tournament' : 'schedule_grid.title_pending_p2p')})` : ''}`}
                     >
                       {isConfirmed && (
                         <div className="w-full h-full flex items-center justify-center text-green-700 font-bold">

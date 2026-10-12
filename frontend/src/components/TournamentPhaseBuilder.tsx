@@ -5,6 +5,7 @@ import type {
   TournamentFormatDefinition,
   TournamentPhaseDefinition,
 } from '../types/tournament';
+import { useTranslation } from 'react-i18next';
 import { tournamentService } from '../services/api';
 import EditableIntegerInput from './EditableIntegerInput';
 import { MAX_SWISS_ROUNDS } from '../utils/formatIssues';
@@ -58,6 +59,7 @@ function template(code: string): TournamentFormatDefinition {
 }
 
 const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, initialTemplate = 'swiss', entryOptions = [] }) => {
+  const { t } = useTranslation();
   const [advanced, setAdvanced] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState(initialTemplate);
   const [showMappings, setShowMappings] = useState(false);
@@ -158,7 +160,7 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
       source.groups.some(group => group.id === rule.source_group_id)
       && target.groups.some(group => group.id === rule.target_group_id)
     );
-    if (replacing && !window.confirm('Regenerating these mappings replaces existing mappings and manual edits between these phases. Continue?')) return;
+    if (replacing && !window.confirm(t('phase_builder.confirm_regenerate'))) return;
     setGenerationError('');
     try {
       const response = await tournamentService.previewAdvancementMappings(definition, source.id, target.id);
@@ -172,7 +174,7 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
       setSameSourcePairs(response.data.same_source_first_round_pairs || []);
       setShowMappings(true);
     } catch (error: any) {
-      setGenerationError(error.response?.data?.error || 'Could not generate mappings. Check that every group advances at least one entry.');
+      setGenerationError(error.response?.data?.error || t('phase_builder.error_generate'));
     }
   };
 
@@ -180,33 +182,33 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
     <section data-help-id="region-tournament-phase-builder" className="p-4 border border-blue-200 rounded-lg bg-blue-50 space-y-4">
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex-1 min-w-64 text-sm font-medium text-gray-700">
-          Format template
+          {t('phase_builder.template')}
           <select data-help-id="option-tournament-format-template" disabled={disabled} className="mt-1 w-full px-3 py-2 border rounded-md bg-white" value={selectedTemplate} onChange={(event) => {
             const nextTemplate = event.target.value as typeof selectedTemplate;
             if (nextTemplate !== selectedTemplate
-              && !window.confirm('Applying a template replaces the current phase configuration and mappings. Continue?')) return;
+              && !window.confirm(t('phase_builder.confirm_template'))) return;
             setSelectedTemplate(nextTemplate);
             setSameSourcePairs([]);
             onChange(template(nextTemplate));
           }}>
-            <option value="swiss">Swiss</option>
-            <option value="league">Round robin league</option>
-            <option value="elimination">Single elimination</option>
-            <option value="swiss_brackets_final">4 Swiss groups → 2 brackets → grand final</option>
+            <option value="swiss">{t('format_summary.swiss')}</option>
+            <option value="league">{t('phase_builder.template_league')}</option>
+            <option value="elimination">{t('format_summary.single_elimination')}</option>
+            <option value="swiss_brackets_final">{t('phase_builder.template_swiss_brackets_final')}</option>
           </select>
         </label>
         <button data-help-id="action-toggle-advanced-phase-builder" type="button" disabled={disabled} onClick={() => setAdvanced(current => !current)} className="px-4 py-2 border border-blue-500 text-blue-700 rounded-md">
-          {advanced ? 'Hide advanced editor' : 'Advanced editor'}
+          {advanced ? t('phase_builder.hide_advanced') : t('phase_builder.advanced')}
         </button>
       </div>
 
       <div className="space-y-3">
         {definition.phases.map((item, index) => (
           <div key={item.id} className="p-3 bg-white border rounded-md grid grid-cols-1 md:grid-cols-5 gap-3">
-            <label className="text-sm">Phase name
+            <label className="text-sm">{t('phase_builder.phase_name')}
               <input data-help-id="field-tournament-phase-name" disabled={disabled} value={item.name} onChange={(event) => replacePhase(index, { ...item, name: event.target.value })} className="mt-1 w-full px-2 py-1 border rounded" />
             </label>
-            <label className="text-sm">System
+            <label className="text-sm">{t('format_summary.system')}
               <select data-help-id="option-tournament-phase-format" disabled={disabled} value={item.format} onChange={(event) => {
                 const format = event.target.value as PhaseFormat;
                 replacePhase(index, {
@@ -216,26 +218,26 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
                   elimination: format === 'single_elimination' ? { bracket_size: null, seeding_policy: 'seeded', reseed_each_round: false } : undefined,
                 });
               }} className="mt-1 w-full px-2 py-1 border rounded">
-                <option value="swiss">Swiss</option><option value="round_robin">Round robin</option><option value="single_elimination">Elimination</option>
+                <option value="swiss">{t('format_summary.swiss')}</option><option value="round_robin">{t('format_summary.round_robin')}</option><option value="single_elimination">{t('phase_builder.elimination')}</option>
               </select>
             </label>
-            <label className="text-sm">Groups / brackets
+            <label className="text-sm">{t('format_summary.groups_brackets')}
               <EditableIntegerInput data-help-id="field-tournament-phase-group-count" disabled={disabled} min={1} max={32} value={item.groups.length} onValueChange={count => changeGroupCount(index, count)} className="mt-1 w-full px-2 py-1 border rounded" />
             </label>
-            <label className="text-sm">Best of
+            <label className="text-sm">{t('phase_builder.best_of')}
               <select data-help-id="option-tournament-phase-best-of" disabled={disabled} value={item.default_best_of} onChange={(event) => replacePhase(index, { ...item, default_best_of: Number(event.target.value) as BestOf })} className="mt-1 w-full px-2 py-1 border rounded">
                 <option value={1}>Bo1</option><option value={3}>Bo3</option><option value={5}>Bo5</option>
               </select>
             </label>
-            {item.format === 'swiss' && <label className="text-sm">Rounds
+            {item.format === 'swiss' && <label className="text-sm">{t('format_summary.rounds')}
               <EditableIntegerInput data-help-id="field-tournament-swiss-rounds" disabled={disabled} min={1} max={MAX_SWISS_ROUNDS} value={item.swiss?.round_count || 1} onValueChange={roundCount => replacePhase(index, { ...item, swiss: { ...item.swiss, round_count: roundCount } })} className="mt-1 w-full px-2 py-1 border rounded" />
             </label>}
-            {item.format === 'round_robin' && <label className="text-sm">Cycles
-              <select data-help-id="option-tournament-league-cycles" disabled={disabled} value={item.round_robin?.cycle_count || 1} onChange={(event) => replacePhase(index, { ...item, round_robin: { ...item.round_robin, cycle_count: Number(event.target.value) as 1 | 2 } })} className="mt-1 w-full px-2 py-1 border rounded"><option value={1}>One</option><option value={2}>Two</option></select>
+            {item.format === 'round_robin' && <label className="text-sm">{t('format_summary.cycles')}
+              <select data-help-id="option-tournament-league-cycles" disabled={disabled} value={item.round_robin?.cycle_count || 1} onChange={(event) => replacePhase(index, { ...item, round_robin: { ...item.round_robin, cycle_count: Number(event.target.value) as 1 | 2 } })} className="mt-1 w-full px-2 py-1 border rounded"><option value={1}>{t('phase_builder.cycles_one')}</option><option value={2}>{t('phase_builder.cycles_two')}</option></select>
             </label>}
-            {advanced && <label className="text-sm">Assignment
+            {advanced && <label className="text-sm">{t('phase_builder.assignment')}
               <select data-help-id="option-tournament-phase-assignment" disabled={disabled || index > 0} value={item.assignment_method} onChange={(event) => replacePhase(index, { ...item, assignment_method: event.target.value as TournamentPhaseDefinition['assignment_method'] })} className="mt-1 w-full px-2 py-1 border rounded">
-                <option value="seeded_snake">Preclassification snake</option><option value="random">Random</option><option value="manual">Manual</option>
+                <option value="seeded_snake">{t('phase_builder.assignment_snake')}</option><option value="random">{t('phase_builder.assignment_random')}</option><option value="manual">{t('phase_builder.assignment_manual')}</option>
               </select>
             </label>}
             {advanced && definition.phases.length > 1 && <button
@@ -249,27 +251,27 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
                 onChange({ phases, advancement_rules: definition.advancement_rules.filter(rule => !removedGroups.has(rule.source_group_id) && !removedGroups.has(rule.target_group_id)) });
               }}
               className="text-sm text-red-700"
-            >Remove phase</button>}
+            >{t('phase_builder.remove_phase')}</button>}
             {advanced && index === 0 && item.assignment_method === 'manual' && <div className="md:col-span-5 border-t pt-2 space-y-2">
-              <p className="text-sm text-gray-600">Assign every accepted entry to one group. The order within each group is its preclassification.</p>
-              {entryOptions.length === 0 ? <p className="text-sm text-amber-700">Manual membership becomes available when accepted participants or complete teams exist.</p> : entryOptions.map(entry => {
+              <p className="text-sm text-gray-600">{t('phase_builder.manual_help')}</p>
+              {entryOptions.length === 0 ? <p className="text-sm text-amber-700">{t('phase_builder.manual_unavailable')}</p> : entryOptions.map(entry => {
                 const assignedGroup = item.groups.find(group => (group.entry_ids || []).includes(entry.id));
                 return <label key={entry.id} className="grid grid-cols-2 gap-2 text-sm items-center"><span>{entry.name}</span><select data-help-id="option-manual-tournament-group" disabled={disabled} value={assignedGroup?.id || ''} onChange={(event) => {
                   const groups = item.groups.map(group => ({ ...group, entry_ids: (group.entry_ids || []).filter(entryId => entryId !== entry.id) }));
                   const target = groups.find(group => group.id === event.target.value);
                   if (target) target.entry_ids = [...(target.entry_ids || []), entry.id];
                   replacePhase(index, { ...item, groups });
-                }} className="border rounded p-1"><option value="">Unassigned</option>{item.groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>;
+                }} className="border rounded p-1"><option value="">{t('phase_builder.unassigned')}</option>{item.groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>;
               })}
             </div>}
           </div>
         ))}
       </div>
       {directPassSummaries.map(summary => <div key={`direct-capacity-${summary.target.id}`} className="p-3 bg-white border rounded-md space-y-2">
-        <h4 className="font-medium">Reserve direct passes in {summary.target.name} before mapping qualifiers</h4>
-        <p className="text-xs text-gray-600">Direct-pass capacity is reserved first. In elimination brackets, a pass assigned after round 1 also reserves the feeder positions it bypasses; the participant preview shows the remaining mapped-qualifier capacity once passes are assigned.</p>
+        <h4 className="font-medium">{t('phase_builder.reserve_title', { phase: summary.target.name })}</h4>
+        <p className="text-xs text-gray-600">{t('phase_builder.reserve_help')}</p>
         <div className="grid gap-2 md:grid-cols-2">
-          {summary.target.groups.map(group => <label key={group.id} className="text-sm">{group.name} reserved direct passes
+          {summary.target.groups.map(group => <label key={group.id} className="text-sm">{t('phase_builder.reserved_passes', { group: group.name })}
             <EditableIntegerInput data-help-id="field-group-direct-advancement-capacity" disabled={disabled} min={0} value={group.direct_advancement_slots ?? 0} onValueChange={capacity => {
               const phases = definition.phases.map(item => item.id !== summary.target.id ? item : {
                 ...item,
@@ -282,21 +284,21 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
         </div>
         {summary.groups.map(({ group, qualifiers, directPasses, projected, bracketSize, byes, configured }) => (
           <p key={`${group.id}-direct-summary`} className="text-sm text-gray-700">
-            {group.name}: {summary.hasMappings ? qualifiers : '—'} mapped qualifier(s) + {directPasses} reserved direct pass(es) = {summary.hasMappings ? projected : '—'} projected entries; {summary.target.format === 'single_elimination'
-              ? `${configured ? 'configured' : 'recommended'} bracket of ${bracketSize}, ${summary.hasMappings ? byes : '—'} bye(s).`
-              : 'bracket size is not constrained by powers of two.'}
+            {group.name}: {t('phase_builder.projection', { qualifiers: summary.hasMappings ? qualifiers : '—', reserved: directPasses, total: summary.hasMappings ? projected : '—' })}; {summary.target.format === 'single_elimination'
+              ? `${t(configured ? 'composition.bracket_configured' : 'composition.bracket_recommended', { size: bracketSize, byes: summary.hasMappings ? byes : '—' })}.`
+              : t('phase_builder.bracket_unconstrained')}
           </p>
         ))}
-        {!summary.hasMappings && <p className="text-xs text-amber-800">Configure each source group’s qualifier count and generate mappings to see the per-bracket totals. Current source total: {summary.sourceQualifierTotal} qualifier(s).</p>}
+        {!summary.hasMappings && <p className="text-xs text-amber-800">{t('phase_builder.configure_help', { total: summary.sourceQualifierTotal })}</p>}
       </div>)}
       {definition.phases.slice(0, -1).map((source, sourceIndex) => {
         const target = definition.phases[sourceIndex + 1];
         return <div key={`advancement-${source.id}`} className="p-3 bg-white border rounded-md space-y-2">
-          <h4 className="font-medium">Advancement from {source.name} to {target.name}</h4>
-          <p className="text-xs text-gray-600">Choose how many qualify from each group. Counts are per group; if a later phase exists, each group must advance at least one entry.</p>
-          <p className="text-sm text-gray-700">Configured total: {source.groups.reduce((total, group) => total + Number(group.advance_count || 0), 0)} qualifier(s)</p>
+          <h4 className="font-medium">{t('phase_builder.advancement_title', { source: source.name, target: target.name })}</h4>
+          <p className="text-xs text-gray-600">{t('phase_builder.advancement_help')}</p>
+          <p className="text-sm text-gray-700">{t('phase_builder.configured_total', { total: source.groups.reduce((total, group) => total + Number(group.advance_count || 0), 0) })}</p>
           <div className="grid gap-2 md:grid-cols-2">
-            {source.groups.map(group => <label key={group.id} className="text-sm">{group.name} qualifiers
+            {source.groups.map(group => <label key={group.id} className="text-sm">{t('phase_builder.group_qualifiers', { group: group.name })}
               <input data-help-id="field-group-advance-count" disabled={disabled} type="text" inputMode="numeric" pattern="[0-9]*" value={group.advance_count ?? ''} onChange={event => {
                 const rawValue = event.target.value;
                 const parsedValue = Number(rawValue);
@@ -312,7 +314,7 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
               }} className="mt-1 block w-full border rounded px-2 py-1" />
             </label>)}
           </div>
-          <button data-help-id="action-generate-advancement-mappings" type="button" disabled={disabled} onClick={() => void generateMappings(sourceIndex)} className="px-3 py-2 border border-blue-600 text-blue-700 rounded-md">Generate / review mappings</button>
+          <button data-help-id="action-generate-advancement-mappings" type="button" disabled={disabled} onClick={() => void generateMappings(sourceIndex)} className="px-3 py-2 border border-blue-600 text-blue-700 rounded-md">{t('phase_builder.generate_mappings')}</button>
           {generationError && <p role="alert" className="text-sm text-red-700">{generationError}</p>}
         </div>;
       })}
@@ -320,29 +322,29 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
         {advanced && <button data-help-id="action-add-tournament-phase" type="button" disabled={disabled} onClick={() => {
           setSameSourcePairs([]);
           onChange({ ...definition, phases: [...definition.phases, phase(`Phase ${definition.phases.length + 1}`, definition.phases.length + 1, 'single_elimination')] });
-        }} className="px-3 py-2 bg-blue-600 text-white rounded-md">Add phase</button>}
+        }} className="px-3 py-2 bg-blue-600 text-white rounded-md">{t('phase_builder.add_phase')}</button>}
         <div data-help-id="region-tournament-advancement-mappings" className="p-3 bg-white border rounded-md space-y-2">
-          <h4 className="font-medium">Advancement mappings</h4>
-          <p className="text-xs text-gray-600">Rules stay in the order they were added.</p>
+          <h4 className="font-medium">{t('phase_builder.mappings_title')}</h4>
+          <p className="text-xs text-gray-600">{t('phase_builder.mappings_order')}</p>
           {rulesInEntryOrder.map((rule, ruleIndex) => <div key={rule.id} className="grid grid-cols-2 md:grid-cols-5 gap-2 items-end">
-            <div className="col-span-2 md:col-span-5 text-xs font-medium text-gray-700">{ruleIndex + 1}. {groupOptions.find(group => group.id === rule.source_group_id)?.label || 'Unknown source'} position {rule.source_rank} → {groupOptions.find(group => group.id === rule.target_group_id)?.label || 'Unknown target'} seed {rule.target_seed}</div>
-            <label className="text-xs">Source group<select data-help-id="option-advancement-source-group" disabled={disabled} value={rule.source_group_id} onChange={(event) => updateMappings(definition.advancement_rules.map(item => item.id === rule.id ? { ...item, source_group_id: event.target.value } : item))} className="block w-full border rounded p-1">{groupOptions.map(group => <option key={group.id} value={group.id}>{group.label}</option>)}</select></label>
-            <label className={`text-xs ${duplicateSourceRuleIds.has(rule.id) ? 'text-red-700' : ''}`}>Source rank<EditableIntegerInput data-help-id="field-advancement-source-rank" aria-invalid={duplicateSourceRuleIds.has(rule.id)} disabled={disabled} min={1} value={rule.source_rank} onValueChange={rank => updateMappings(definition.advancement_rules.map(item => item.id === rule.id ? { ...item, source_rank: rank } : item))} className={`block w-full border rounded p-1 ${duplicateSourceRuleIds.has(rule.id) ? 'border-red-600 bg-red-50' : ''}`} /></label>
-            <label className="text-xs">Target group<select data-help-id="option-advancement-target-group" disabled={disabled} value={rule.target_group_id} onChange={(event) => updateMappings(definition.advancement_rules.map(item => item.id === rule.id ? { ...item, target_group_id: event.target.value } : item))} className="block w-full border rounded p-1">{groupOptions.filter(group => group.phaseOrder > (groupOptions.find(source => source.id === rule.source_group_id)?.phaseOrder || 0)).map(group => <option key={group.id} value={group.id}>{group.label}</option>)}</select></label>
-            <label className={`text-xs ${duplicateTargetRuleIds.has(rule.id) ? 'text-red-700' : ''}`}>Target preclassification<EditableIntegerInput data-help-id="field-advancement-target-seed" aria-invalid={duplicateTargetRuleIds.has(rule.id)} disabled={disabled} min={1} value={rule.target_seed} onValueChange={seed => updateMappings(definition.advancement_rules.map(item => item.id === rule.id ? { ...item, target_seed: seed } : item))} className={`block w-full border rounded p-1 ${duplicateTargetRuleIds.has(rule.id) ? 'border-red-600 bg-red-50' : ''}`} /></label>
-            <button data-help-id="action-remove-advancement-rule" type="button" disabled={disabled} onClick={() => updateMappings(definition.advancement_rules.filter(item => item.id !== rule.id))} className="text-red-700 text-sm">Remove</button>
+            <div className="col-span-2 md:col-span-5 text-xs font-medium text-gray-700">{ruleIndex + 1}. {t('phase_builder.rule_summary', { source: groupOptions.find(group => group.id === rule.source_group_id)?.label || t('phase_builder.unknown_group'), rank: rule.source_rank, target: groupOptions.find(group => group.id === rule.target_group_id)?.label || t('phase_builder.unknown_group'), seed: rule.target_seed })}</div>
+            <label className="text-xs">{t('phase_builder.source_group')}<select data-help-id="option-advancement-source-group" disabled={disabled} value={rule.source_group_id} onChange={(event) => updateMappings(definition.advancement_rules.map(item => item.id === rule.id ? { ...item, source_group_id: event.target.value } : item))} className="block w-full border rounded p-1">{groupOptions.map(group => <option key={group.id} value={group.id}>{group.label}</option>)}</select></label>
+            <label className={`text-xs ${duplicateSourceRuleIds.has(rule.id) ? 'text-red-700' : ''}`}>{t('phase_builder.source_rank')}<EditableIntegerInput data-help-id="field-advancement-source-rank" aria-invalid={duplicateSourceRuleIds.has(rule.id)} disabled={disabled} min={1} value={rule.source_rank} onValueChange={rank => updateMappings(definition.advancement_rules.map(item => item.id === rule.id ? { ...item, source_rank: rank } : item))} className={`block w-full border rounded p-1 ${duplicateSourceRuleIds.has(rule.id) ? 'border-red-600 bg-red-50' : ''}`} /></label>
+            <label className="text-xs">{t('phase_builder.target_group')}<select data-help-id="option-advancement-target-group" disabled={disabled} value={rule.target_group_id} onChange={(event) => updateMappings(definition.advancement_rules.map(item => item.id === rule.id ? { ...item, target_group_id: event.target.value } : item))} className="block w-full border rounded p-1">{groupOptions.filter(group => group.phaseOrder > (groupOptions.find(source => source.id === rule.source_group_id)?.phaseOrder || 0)).map(group => <option key={group.id} value={group.id}>{group.label}</option>)}</select></label>
+            <label className={`text-xs ${duplicateTargetRuleIds.has(rule.id) ? 'text-red-700' : ''}`}>{t('phase_builder.target_seed')}<EditableIntegerInput data-help-id="field-advancement-target-seed" aria-invalid={duplicateTargetRuleIds.has(rule.id)} disabled={disabled} min={1} value={rule.target_seed} onValueChange={seed => updateMappings(definition.advancement_rules.map(item => item.id === rule.id ? { ...item, target_seed: seed } : item))} className={`block w-full border rounded p-1 ${duplicateTargetRuleIds.has(rule.id) ? 'border-red-600 bg-red-50' : ''}`} /></label>
+            <button data-help-id="action-remove-advancement-rule" type="button" disabled={disabled} onClick={() => updateMappings(definition.advancement_rules.filter(item => item.id !== rule.id))} className="text-red-700 text-sm">{t('phase_builder.remove')}</button>
           </div>)}
-          {duplicateTargetRuleIds.size > 0 && <p role="alert" className="text-sm text-red-700">Target preclassifications must be unique within each target group. Correct the highlighted values before saving.</p>}
-          {duplicateSourceRuleIds.size > 0 && <p role="alert" className="text-sm text-red-700">A source group position can advance only once. Correct the highlighted values before saving.</p>}
-          {sameSourcePairs.length > 0 && <p role="alert" className="text-sm text-amber-700">Some first-round matches still contain qualifiers from the same source group: {sameSourcePairs.map(pair => `${groupOptions.find(group => group.id === pair.target_group_id)?.label || 'Bracket'} seeds ${pair.seed_one} and ${pair.seed_two}`).join('; ')}.</p>}
+          {duplicateTargetRuleIds.size > 0 && <p role="alert" className="text-sm text-red-700">{t('phase_builder.error_duplicate_target')}</p>}
+          {duplicateSourceRuleIds.size > 0 && <p role="alert" className="text-sm text-red-700">{t('phase_builder.error_duplicate_source')}</p>}
+          {sameSourcePairs.length > 0 && <p role="alert" className="text-sm text-amber-700">{t('phase_builder.same_source_warning', { pairs: sameSourcePairs.map(pair => t('phase_builder.same_source_pair', { bracket: groupOptions.find(group => group.id === pair.target_group_id)?.label || t('phase_builder.bracket'), one: pair.seed_one, two: pair.seed_two })).join(' · ') })}</p>}
           {definition.phases.length > 1 && <button data-help-id="action-add-advancement-rule" type="button" disabled={disabled || groupOptions.length < 2} onClick={() => {
             const source = groupOptions[0];
             const target = groupOptions.find(group => group.phaseOrder > source.phaseOrder);
             if (target) updateMappings([...definition.advancement_rules, { id: id(), source_group_id: source.id, source_rank: 1, target_group_id: target.id, target_seed: 1 }]);
-          }} className="text-sm text-blue-700">Add mapping</button>}
+          }} className="text-sm text-blue-700">{t('phase_builder.add_mapping')}</button>}
         </div>
       </div>}
-      <p className={`text-sm ${validMappings ? 'text-green-700' : 'text-red-700'}`}>{validMappings ? `${definition.phases.length} ordered phase(s); advancement graph is acyclic by server validation.` : 'A mapping refers to a removed group. Reapply a template or edit mappings.'}</p>
+      <p className={`text-sm ${validMappings ? 'text-green-700' : 'text-red-700'}`}>{validMappings ? t('phase_builder.valid_summary', { count: definition.phases.length }) : t('phase_builder.error_removed_group')}</p>
     </section>
   );
 };

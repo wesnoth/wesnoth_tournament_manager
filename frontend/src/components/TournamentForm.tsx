@@ -254,7 +254,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
         </div>
 
         <div className="mt-4 flex flex-col gap-2">
-          <label className="font-medium text-gray-700">Wesnoth Forum Tournament Thread URL</label>
+          <label className="font-medium text-gray-700">{t('tournament.forum_thread_url')}</label>
           <input
             data-help-id="field-tournament-forum-topic-url"
             type="url"
@@ -265,8 +265,8 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
             pattern="https://forums\.wesnoth\.org/viewtopic\.php\?.*t=[0-9]+.*"
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
           />
-          <small className="text-gray-600">Optional in test and production. When present, its topic number becomes the short unique game code.</small>
-          {extractedForumTopicId && <small className="text-green-700">Detected topic {extractedForumTopicId}; Wesnoth game name: T{extractedForumTopicId}</small>}
+          <small className="text-gray-600">{t('tournament.forum_thread_help')}</small>
+          {extractedForumTopicId && <small className="text-green-700">{t('tournament.forum_topic_detected', { id: extractedForumTopicId })}</small>}
         </div>
 
         {/* Tournament Description - Wiki editor */}
@@ -434,7 +434,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
 
 
       <details data-help-id="region-tournament-phase-configuration" className="mb-6 rounded-lg border border-blue-200 bg-white">
-        <summary data-help-id="action-toggle-tournament-phase-configuration" className="cursor-pointer p-4 font-semibold text-gray-800">Tournament Phases</summary>
+        <summary data-help-id="action-toggle-tournament-phase-configuration" className="cursor-pointer p-4 font-semibold text-gray-800">{t('tournament.phases')}</summary>
         <div className="px-4 pb-4">
           <TournamentPhaseBuilder
             value={formData.format_definition}
@@ -563,7 +563,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
 
         <div className="flex flex-col gap-2 mb-4">
           <label className="font-medium text-gray-700">
-            {t('label_scheduled_start_date', 'Planned Start')}
+            {t('label_scheduled_start_date')}
           </label>
           <input
             data-help-id="field-tournament-scheduled-start"

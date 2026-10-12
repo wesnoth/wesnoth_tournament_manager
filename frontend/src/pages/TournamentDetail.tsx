@@ -227,7 +227,7 @@ const TournamentDetail: React.FC = () => {
       if (teamsRes) setTeams(teamsRes.data?.data || []);
     } catch (refreshError) {
       console.error('Could not refresh direct-pass data:', refreshError);
-      setError('The direct pass was saved, but the page could not refresh its latest assignments. Use Refresh to retry.');
+      setError(t('direct_pass.error_refresh'));
     }
   };
 
@@ -254,7 +254,7 @@ const TournamentDetail: React.FC = () => {
       setScheduleSeries(await loadSeriesSchedule(id!, seriesId));
     } catch (err) {
       console.error('Error preloading scheduling data:', err);
-      setError('Failed to load scheduling data');
+      setError(t('tournament.error_load_scheduling'));
     }
   };
 
@@ -493,12 +493,12 @@ const handleConfirmDelete = async () => {
   const handleCancelTournament = async () => {
     try {
       await api.delete(`/tournaments/${id}`);
-      setSuccess(t('success_tournament_cancelled', 'Tournament cancelled successfully'));
+      setSuccess(t('success_tournament_cancelled'));
       setTimeout(() => {
         navigate('/tournaments');
       }, 2000);
     } catch (err: any) {
-      setError(err.response?.data?.error || t('error_failed_cancel_tournament', 'Failed to cancel tournament'));
+      setError(err.response?.data?.error || t('error_failed_cancel_tournament'));
     }
   };
 
@@ -563,7 +563,7 @@ const handleConfirmDelete = async () => {
       fetchTournamentData();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
-      setError(err.response?.data?.error || t('error_failed_confirm_participation') || 'Failed to confirm participation');
+      setError(err.response?.data?.error || t('error_failed_confirm_participation'));
     }
   };
 
@@ -594,17 +594,17 @@ const handleConfirmDelete = async () => {
 
   const handleTeamRenamed = async () => {
     setRenameTeam(null);
-    showSuccess('Team renamed successfully');
+    showSuccess(t('tournament.team_renamed'));
     const teamsRes = await publicService.getTournamentTeams(id!);
     setTeams(teamsRes.data?.data || []);
   };
 
   const handleRemoveParticipant = async (participantId: string, nickname: string) => {
     if (!tournament) return;
-    if (!window.confirm(`Remove ${nickname} from this tournament?`)) return;
+    if (!window.confirm(t('teams.confirm_remove_participant', { nickname }))) return;
     try {
       await tournamentService.removeParticipant(tournament.id, participantId);
-      setSuccess(`${nickname} removed from tournament`);
+      setSuccess(t('teams.participant_removed', { nickname }));
       setTimeout(() => setSuccess(''), 3000);
       // Refresh both individual membership and the team aggregates rendered by this page.
       const [participantsRes, teamsRes] = await Promise.all([
@@ -614,7 +614,7 @@ const handleConfirmDelete = async () => {
       setParticipants(participantsRes.data || []);
       setTeams(teamsRes.data?.data || []);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to remove participant');
+      setError(err.response?.data?.error || t('tournament.error_remove_participant'));
       setTimeout(() => setError(''), 4000);
     }
   };
@@ -667,19 +667,19 @@ const handleConfirmDelete = async () => {
           onSuccess={showSuccess}
           onError={setError}
         />
-        <p><strong>{t('tournament.col_type')}:</strong> Flexible phases</p>
-        <p><strong>Wesnoth game name:</strong> <code className="px-1 bg-gray-100 rounded">{tournament.forum_topic_id ? `T${tournament.forum_topic_id}` : tournament.name}</code></p>
+        <p><strong>{t('tournament.col_type')}:</strong> {t('tournament.type_flexible_phases')}</p>
+        <p><strong>{t('tournament.wesnoth_game_name')}:</strong> <code className="px-1 bg-gray-100 rounded">{tournament.forum_topic_id ? `T${tournament.forum_topic_id}` : tournament.name}</code></p>
         {tournament.forum_topic_id && (
-          <p><strong>Forum:</strong>{' '}
+          <p><strong>{t('tournament.forum')}:</strong>{' '}
             <a data-help-id="action-open-tournament-forum-topic" className="text-blue-600 hover:underline" href={`https://forums.wesnoth.org/viewtopic.php?t=${tournament.forum_topic_id}`} target="_blank" rel="noreferrer">
-              Topic {tournament.forum_topic_id}
+              {t('tournament.forum_topic', { id: tournament.forum_topic_id })}
             </a>
           </p>
         )}
         {tournament.scheduled_start_at && (
-          <p><strong>{t('label_scheduled_start_date', 'Planned Start')}:</strong> {formatTournamentDate(t, tournament.scheduled_start_at)}</p>
+          <p><strong>{t('label_scheduled_start_date')}:</strong> {formatTournamentDate(t, tournament.scheduled_start_at)}</p>
         )}
-        <p><strong>{t('tournament.mode', 'Tournament Mode')}:</strong> {tournamentModeLabel(tournament.tournament_mode)}</p>
+        <p><strong>{t('tournament.mode')}:</strong> {tournamentModeLabel(t, tournament.tournament_mode)}</p>
         <p><strong>{t('label_max_participants')}:</strong> {tournament.max_participants || t('unlimited')}</p>
         <p><strong>{t('label_created')}:</strong> {formatTournamentDate(t, tournament.created_at)}</p>
         {tournament.started_at && <p><strong>{t('label_started')}:</strong> {formatTournamentDate(t, tournament.started_at)}</p>}
@@ -766,7 +766,7 @@ const handleConfirmDelete = async () => {
       <TournamentDetailTabs
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        participantsLabel={tournament.tournament_mode === 'team' ? 'Teams' : t('tabs.participants', { count: participants.length })}
+        participantsLabel={tournament.tournament_mode === 'team' ? t('tournament.teams_tab') : t('tabs.participants', { count: participants.length })}
         competitionFilters={competitionFilters}
         onCompetitionFiltersChange={setCompetitionFilters}
         onRefresh={refreshActiveTab}

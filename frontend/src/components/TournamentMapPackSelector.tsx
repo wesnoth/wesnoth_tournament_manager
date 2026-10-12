@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../services/api';
 
 interface MapPack {
@@ -22,6 +23,7 @@ interface Props {
  * or persisted with the tournament.
  */
 const TournamentMapPackSelector: React.FC<Props> = ({ selectedMapIds, onChange, rankedOnly = false, disabled = false }) => {
+  const { t } = useTranslation();
   const [packs, setPacks] = useState<MapPack[]>([]);
   const [selectedPackId, setSelectedPackId] = useState('');
   const [loading, setLoading] = useState(true);
@@ -35,7 +37,7 @@ const TournamentMapPackSelector: React.FC<Props> = ({ selectedMapIds, onChange, 
         if (active) setPacks(response.data || []);
       })
       .catch((requestError: any) => {
-        if (active) setError(requestError.response?.data?.error || 'Failed to load map packs');
+        if (active) setError(requestError.response?.data?.error || t('map_pack.error_load'));
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -56,7 +58,7 @@ const TournamentMapPackSelector: React.FC<Props> = ({ selectedMapIds, onChange, 
     <div data-help-id="region-tournament-map-pack-selector" className="mb-4 rounded-lg border border-purple-200 bg-purple-50 p-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-end">
         <label className="flex-1 text-sm font-medium text-gray-700">
-          Map Pack
+          {t('map_pack.label')}
           <select
             data-help-id="option-tournament-map-pack"
             value={selectedPackId}
@@ -64,8 +66,8 @@ const TournamentMapPackSelector: React.FC<Props> = ({ selectedMapIds, onChange, 
             disabled={disabled || loading || packs.length === 0}
             className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 disabled:bg-gray-100"
           >
-            <option value="">{loading ? 'Loading map packs...' : packs.length ? 'Select a map pack' : 'No map packs available'}</option>
-            {packs.map(pack => <option key={pack.id} value={pack.id}>{pack.name} ({pack.maps.length} maps)</option>)}
+            <option value="">{loading ? t('map_pack.loading') : packs.length ? t('map_pack.select') : t('map_pack.none')}</option>
+            {packs.map(pack => <option key={pack.id} value={pack.id}>{pack.name} ({t('map_pack.map_count', { count: pack.maps.length })})</option>)}
           </select>
         </label>
         <button
@@ -75,15 +77,15 @@ const TournamentMapPackSelector: React.FC<Props> = ({ selectedMapIds, onChange, 
           disabled={disabled || !selectedPack}
           className="rounded-md bg-purple-700 px-4 py-2 font-semibold text-white hover:bg-purple-800 disabled:opacity-50"
         >
-          Apply Map Pack
+          {t('map_pack.apply')}
         </button>
       </div>
       {selectedPack?.description && <p className="mt-2 text-sm text-gray-600">{selectedPack.description}</p>}
       {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
       <p className="mt-2 text-xs text-gray-600">
-        Applying a pack replaces the current map checkboxes. You can then select or deselect individual maps; the pack itself is not saved with the tournament.
+        {t('map_pack.help')}
       </p>
-      <span className="sr-only">{selectedMapIds.length} maps currently selected</span>
+      <span className="sr-only">{t('map_pack.selected_count', { count: selectedMapIds.length })}</span>
     </div>
   );
 };

@@ -731,7 +731,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
             <input data-help-id="field-tournament-competition-faction" type="text" name="faction" value={inputFilters.faction} onChange={handleFilterInputChange} onKeyDown={handleFilterKeyDown} placeholder={t('filter_faction') || 'Faction'} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 font-normal focus:border-green-500 focus:outline-none" />
           </label>
           <button data-help-id="action-reset-tournament-competition-filters" type="button" onClick={resetFilters} className="rounded bg-red-500 px-4 py-2 text-white transition-colors hover:bg-red-600">{t('reset_filters')}</button>
-          <button data-help-id="action-refresh-tournament-competition" type="button" onClick={applyFilters} className="rounded bg-gray-200 px-4 py-2 font-semibold text-gray-700 transition-colors hover:bg-gray-300" title={t('refresh') || 'Refresh'}>↻</button>
+          <button data-help-id="action-refresh-tournament-competition" type="button" onClick={applyFilters} className="rounded bg-gray-200 px-4 py-2 font-semibold text-gray-700 transition-colors hover:bg-gray-300" title={t('common.refresh')}>↻</button>
         </div>
       </div>
       <div className="text-sm text-gray-600">

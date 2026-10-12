@@ -24,7 +24,7 @@ const TeamRenameModal: React.FC<TeamRenameModalProps> = ({ tournamentId, team, o
       await tournamentService.renameTeam(tournamentId, team.id, name.trim());
       onRenamed();
     } catch (err: any) {
-      onError(err.response?.data?.error || 'Failed to rename team');
+      onError(err.response?.data?.error || t('teams.error_rename'));
     } finally {
       setSaving(false);
     }
@@ -33,16 +33,16 @@ const TeamRenameModal: React.FC<TeamRenameModalProps> = ({ tournamentId, team, o
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
-        <h2 className="text-xl font-bold text-gray-800 mb-4">Rename Team</h2>
+        <h2 className="text-xl font-bold text-gray-800 mb-4">{t('teams.rename_team')}</h2>
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-1">New team name</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('teams.new_name')}</label>
           <input
             data-help-id="field-team-name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-            placeholder="Enter team name"
+            placeholder={t('teams.team_name_placeholder')}
             maxLength={64}
             autoFocus
           />
@@ -53,7 +53,7 @@ const TeamRenameModal: React.FC<TeamRenameModalProps> = ({ tournamentId, team, o
             className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors"
             onClick={onClose}
           >
-            {t('cancel_btn') || 'Cancel'}
+            {t('cancel')}
           </button>
           <button
             data-help-id="action-save-team-name"
@@ -61,7 +61,7 @@ const TeamRenameModal: React.FC<TeamRenameModalProps> = ({ tournamentId, team, o
             disabled={saving || !name.trim()}
             onClick={handleSave}
           >
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? t('teams.saving') : t('teams.save')}
           </button>
         </div>
       </div>

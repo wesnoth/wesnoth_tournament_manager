@@ -115,7 +115,7 @@ const TournamentRulesPanel: React.FC<TournamentRulesPanelProps> = ({
           <div className="mt-2 rounded border border-gray-200 bg-gray-50 p-3">
             <MarkdownPreview
               markdown={tournament.description || ''}
-              emptyMessage={t('tournament.description_preview_empty', 'No description configured for this tournament.')}
+              emptyMessage={t('tournament.description_empty')}
             />
           </div>
         </div>

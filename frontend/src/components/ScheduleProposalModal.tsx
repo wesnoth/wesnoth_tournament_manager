@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo, useDeferredValue, useRef, useCallback } from 'react';
 import SchedulingFreeBusyGrid from './SchedulingFreeBusyGrid';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../store/authStore';
 import { tournamentSchedulingService } from '../services/tournamentSchedulingService';
 import { p2pChallengesService } from '../services/p2pChallengesService';
@@ -139,6 +140,7 @@ export default function ScheduleProposalModal({
   onClose,
   onSuccess
 }: ScheduleProposalModalProps) {
+  const { t, i18n } = useTranslation();
   const { userId } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -293,7 +295,7 @@ export default function ScheduleProposalModal({
 
   const handleProposeSlots = async () => {
     if (selectedSlots.size === 0) {
-      setError('Please select at least one slot');
+      setError(t('schedule_modal.error_select_slot'));
       return;
     }
 
@@ -315,7 +317,7 @@ export default function ScheduleProposalModal({
     } catch (err: any) {
       console.error('Error proposing slots:', err);
       // Preserve localized 429 details, including the profile-timezone retry time.
-      setError(err.response?.data?.error || 'Failed to propose slots');
+      setError(err.response?.data?.error || t('schedule_modal.error_propose'));
     } finally {
       setLoading(false);
     }
@@ -323,11 +325,11 @@ export default function ScheduleProposalModal({
 
   const handleConfirmSlots = async () => {
     if (!proposal) {
-      setError('No proposal to confirm');
+      setError(t('schedule_modal.error_no_proposal'));
       return;
     }
     if (hasConfirmedCurrentUser) {
-      setError('You have already confirmed this proposal');
+      setError(t('schedule_modal.error_already_confirmed'));
       return;
     }
 
@@ -360,7 +362,7 @@ export default function ScheduleProposalModal({
       console.error('Error confirming slots:', err);
       // Keep the modal open: the success callback may unmount it and hide the
       // reservation conflict, including the affected slots returned by the API.
-      setError((err as any).response?.data?.error || 'Failed to confirm slots. Please try again.');
+      setError((err as any).response?.data?.error || t('schedule_modal.error_confirm'));
     } finally {
       setLoading(false);
     }
@@ -376,7 +378,7 @@ export default function ScheduleProposalModal({
       onClose();
     } catch (err) {
       console.error('Error cancelling confirmation:', err);
-      setError('Failed to cancel confirmation');
+      setError(t('schedule_modal.error_cancel_confirmation'));
     } finally {
       setLoading(false);
     }
@@ -384,11 +386,11 @@ export default function ScheduleProposalModal({
 
   const handleCancelProposal = async () => {
     if (!proposal) {
-      setError('No proposal to cancel');
+      setError(t('schedule_modal.error_no_proposal'));
       return;
     }
 
-    if (!confirm('Are you sure you want to cancel this proposal?')) {
+    if (!confirm(t('schedule_modal.confirm_cancel_proposal'))) {
       return;
     }
 
@@ -402,7 +404,7 @@ export default function ScheduleProposalModal({
       onClose();
     } catch (err) {
       console.error('Error canceling proposal:', err);
-      setError('Failed to cancel proposal');
+      setError(t('schedule_modal.error_cancel_proposal'));
     } finally {
       setLoading(false);
     }
@@ -410,11 +412,11 @@ export default function ScheduleProposalModal({
 
   const handleRejectProposal = async () => {
     if (!proposal) {
-      setError('No proposal to reject');
+      setError(t('schedule_modal.error_no_proposal'));
       return;
     }
 
-    if (!confirm('Are you sure you want to reject this proposal?')) return;
+    if (!confirm(t('schedule_modal.confirm_reject_proposal'))) return;
 
     try {
       setLoading(true);
@@ -424,7 +426,7 @@ export default function ScheduleProposalModal({
       onClose();
     } catch (err) {
       console.error('Error rejecting proposal:', err);
-      setError('Failed to reject proposal');
+      setError(t('schedule_modal.error_reject_proposal'));
     } finally {
       setLoading(false);
     }
@@ -451,7 +453,7 @@ export default function ScheduleProposalModal({
             const slotDate = new Date(s.slot_datetime);
             return slotDate >= range.start && slotDate < range.end;
           })
-          .map(s => s.status)
+          .map(s => t(`schedule_modal.slot_status_${s.status}`, s.status))
           .join(', ')
       ),
     [proposal, proposalRanges]
@@ -486,7 +488,7 @@ export default function ScheduleProposalModal({
         <div className="sticky top-0 bg-white border-b border-gray-200 p-6">
           <div className="flex justify-between items-start">
             <h2 className="text-2xl font-bold text-gray-800">
-              {mode === 'propose' ? 'Propose Match Schedule' : mode === 'edit_proposal' ? 'Edit Schedule Proposal' : 'Confirm Schedule'}
+              {mode === 'propose' ? t('schedule_modal.title_propose') : mode === 'edit_proposal' ? t('schedule_modal.title_edit') : t('schedule_modal.title_confirm')}
             </h2>
             <button
               data-help-id="action-close-schedule-modal"
@@ -507,13 +509,13 @@ export default function ScheduleProposalModal({
         <div className="p-6 space-y-6">
           {loading && participants.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-gray-500">Loading scheduling data...</p>
+              <p className="text-gray-500">{t('schedule_modal.loading')}</p>
             </div>
           ) : (
             <>
               {/* Date picker */}
               <div className="space-y-2">
-                <label className="block text-sm font-semibold text-gray-800">Select Date Range Start</label>
+                <label className="block text-sm font-semibold text-gray-800">{t('schedule_modal.date_range_start')}</label>
                 <div className="flex gap-2">
                   <input
                     data-help-id="field-schedule-start-date"
@@ -524,17 +526,17 @@ export default function ScheduleProposalModal({
                     className="px-3 py-2 border border-gray-300 rounded text-sm"
                   />
                   <span className="text-sm text-gray-500 self-center">
-                    Next 14 days ({dateEnd.toLocaleDateString()})
+                    {t('schedule_modal.next_14_days', { date: dateEnd.toLocaleDateString(i18n.language) })}
                   </span>
                   <span className="text-sm text-gray-600 self-center font-semibold">
-                    | Viewing: {viewingTimezone}
+                    | {t('schedule_modal.viewing_timezone', { timezone: viewingTimezone })}
                   </span>
                 </div>
               </div>
 
               {/* Grid */}
               <div className="space-y-2">
-                <h3 className="font-semibold text-gray-800">Availability Grid</h3>
+                <h3 className="font-semibold text-gray-800">{t('schedule_modal.availability_grid')}</h3>
                 <SchedulingFreeBusyGrid
                   participants={participants}
                   dateStart={displayDateStart}
@@ -558,18 +560,18 @@ export default function ScheduleProposalModal({
                 <div className={`p-3 rounded ${mode === 'confirm' ? 'bg-green-50 border border-green-200' : 'bg-blue-50 border border-blue-200'}`}>
                   <p className={`text-sm font-semibold ${mode === 'confirm' ? 'text-green-900' : 'text-blue-900'}`}>
                     {mode === 'confirm' 
-                      ? `${confirmedSlotIds.size} slot${confirmedSlotIds.size !== 1 ? 's' : ''} to confirm` 
-                      : `${selectedSlots.size} slot${selectedSlots.size !== 1 ? 's' : ''} selected`
+                      ? t('schedule_modal.slots_to_confirm', { count: confirmedSlotIds.size })
+                      : t('schedule_modal.slots_selected', { count: selectedSlots.size })
                     }
                   </p>
                   <div className="mt-3 space-y-2">
                     {selectedRanges.map((range, idx) => (
                       <div key={idx} className={`text-sm p-2 bg-white rounded border ${mode === 'confirm' ? 'text-green-800 border-green-100' : 'text-blue-800 border-blue-100'}`}>
                         <div className="font-semibold">
-                          {range.start.toLocaleDateString()} - {range.hours}
+                          {range.start.toLocaleDateString(i18n.language)} - {range.hours}
                         </div>
                         <div className="text-xs text-gray-600">
-                          UTC: {range.start.toISOString()} to {range.end.toISOString()}
+                          {t('schedule_modal.utc_range', { start: range.start.toISOString(), end: range.end.toISOString() })}
                         </div>
                       </div>
                     ))}
@@ -580,23 +582,23 @@ export default function ScheduleProposalModal({
               {/* Proposal info (if responding) */}
               {proposal && (
                 <div className="p-3 bg-yellow-50 border border-yellow-200 rounded">
-                  <p className="text-sm font-semibold text-yellow-900">Active Proposal</p>
+                  <p className="text-sm font-semibold text-yellow-900">{t('schedule_modal.active_proposal')}</p>
                   <p className="text-xs text-yellow-800 mt-1">
-                    Proposed {new Date(proposal.proposed_at).toLocaleString()}
+                    {t('schedule_modal.proposed_at', { date: new Date(proposal.proposed_at).toLocaleString(i18n.language) })}
                   </p>
                   {proposal.notes && (
                     <p className="text-xs text-yellow-800 mt-2 italic">
-                      Notes: {proposal.notes}
+                      {t('schedule_modal.notes_value', { notes: proposal.notes })}
                     </p>
                   )}
                   {proposal.slots && proposal.slots.length > 0 && (
                     <div className="mt-3">
-                      <p className="text-xs font-semibold text-yellow-900 mb-2">Proposed Slots:</p>
+                      <p className="text-xs font-semibold text-yellow-900 mb-2">{t('schedule_modal.proposed_slots')}</p>
                       <div className="space-y-1">
                         {proposalRanges.map((range, idx) => (
                           <div key={idx} className="text-xs text-yellow-800 bg-white rounded px-2 py-1 border border-yellow-100">
                             <div className="font-semibold">
-                              {range.start.toLocaleDateString()} - {range.hours}
+                              {range.start.toLocaleDateString(i18n.language)} - {range.hours}
                             </div>
                             <div className="text-xs text-gray-600">
                               ({proposalStatusesByRange[idx]})
@@ -612,13 +614,13 @@ export default function ScheduleProposalModal({
               {/* Notes textarea */}
               <div className="space-y-2">
                 <label className="block text-sm font-semibold text-gray-800">
-                  Notes (optional, max 500 characters)
+                  {t('schedule_modal.notes_label')}
                 </label>
                 <textarea
                   data-help-id="field-schedule-notes"
                   value={notes}
                   onChange={handleNotesChange}
-                  placeholder="Add any notes about your availability or preferences..."
+                  placeholder={t('schedule_modal.notes_placeholder')}
                   className="w-full p-3 border border-gray-300 rounded text-sm font-mono"
                   rows={3}
                   disabled={loading}
@@ -638,7 +640,7 @@ export default function ScheduleProposalModal({
               className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 text-gray-700 font-medium"
               disabled={loading}
             >
-              Cancel
+              {t('cancel')}
             </button>
 
             {mode === 'propose' ? (
@@ -648,7 +650,7 @@ export default function ScheduleProposalModal({
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium disabled:opacity-50"
                 disabled={loading || selectedSlots.size === 0}
               >
-                {loading ? 'Proposing...' : 'Propose Selected Slots'}
+                {loading ? t('schedule_modal.proposing') : t('schedule_modal.propose_selected')}
               </button>
             ) : mode === 'edit_proposal' ? (
               <>
@@ -659,7 +661,7 @@ export default function ScheduleProposalModal({
                     className="px-4 py-2 border border-orange-300 rounded hover:bg-orange-50 text-orange-700 font-medium"
                     disabled={loading}
                   >
-                    Cancel Confirmation
+                    {t('schedule_modal.cancel_confirmation')}
                   </button>
                 )}
                 <button
@@ -668,7 +670,7 @@ export default function ScheduleProposalModal({
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-medium"
                   disabled={loading}
                 >
-                  Cancel Proposal
+                  {t('schedule_modal.cancel_proposal')}
                 </button>
                 <button
                   data-help-id="action-change-schedule-proposal"
@@ -676,7 +678,7 @@ export default function ScheduleProposalModal({
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium disabled:opacity-50"
                   disabled={loading || selectedSlots.size === 0}
                 >
-                  {loading ? 'Updating...' : 'Change Proposal'}
+                  {loading ? t('schedule_modal.updating') : t('schedule_modal.change_proposal')}
                 </button>
               </>
             ) : (
@@ -687,7 +689,7 @@ export default function ScheduleProposalModal({
                   className="px-4 py-2 border border-red-300 rounded hover:bg-red-50 text-red-700 font-medium"
                   disabled={loading}
                 >
-                  Reject Proposal
+                  {t('schedule_modal.reject_proposal')}
                 </button>
                 <button
                   data-help-id="action-counter-propose-schedule"
@@ -698,7 +700,7 @@ export default function ScheduleProposalModal({
                   className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 text-gray-700 font-medium"
                   disabled={loading}
                 >
-                  Counter-propose
+                  {t('schedule_modal.counter_propose')}
                 </button>
                 {!hasConfirmedCurrentUser && (
                   <button
@@ -707,7 +709,7 @@ export default function ScheduleProposalModal({
                     className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium disabled:opacity-50"
                     disabled={loading || confirmedSlotIds.size === 0}
                   >
-                    {loading ? 'Confirming...' : `Confirm ${confirmedSlotIds.size} Slot${confirmedSlotIds.size !== 1 ? 's' : ''}`}
+                    {loading ? t('schedule_modal.confirming') : t('schedule_modal.confirm_slots', { count: confirmedSlotIds.size })}
                   </button>
                 )}
               </>

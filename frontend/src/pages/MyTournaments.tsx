@@ -59,7 +59,7 @@ const MyTournaments: React.FC = () => {
       setError('');
 
     } catch {
-      setError('Error loading tournaments');
+      setError(t('tournament.error_load_list'));
       setTournaments([]);
     } finally {
       setLoading(false);

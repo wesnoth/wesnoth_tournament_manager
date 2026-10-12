@@ -105,7 +105,7 @@ export default function ScheduleProposalModalP2P({
   onClose,
   onSuccess
 }: ScheduleProposalModalP2PProps) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { userId } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -283,7 +283,7 @@ export default function ScheduleProposalModalP2P({
 
   const handleProposeSlots = async () => {
     if (selectedSlots.size === 0) {
-      setError('Please select at least one slot');
+      setError(t('schedule_modal.error_select_slot'));
       return;
     }
 
@@ -296,7 +296,7 @@ export default function ScheduleProposalModalP2P({
       if (mode === 'counter') {
         // Counter-propose on existing proposal
         if (!proposal) {
-          setError('No proposal to counter-propose');
+          setError(t('schedule_modal.error_no_proposal'));
           return;
         }
         const response = await p2pChallengesService.counterPropose(
@@ -311,7 +311,7 @@ export default function ScheduleProposalModalP2P({
       } else if (mode === 'edit_proposal') {
         // Update existing proposal (proposer editing their own proposal)
         if (!proposal) {
-          setError('No proposal to update');
+          setError(t('schedule_modal.error_no_proposal'));
           return;
         }
         const response = await p2pChallengesService.updateProposal(
@@ -339,7 +339,7 @@ export default function ScheduleProposalModalP2P({
     } catch (err: any) {
       console.error('Error proposing challenge:', err);
       // Preserve localized 429 details, including the profile-timezone retry time.
-      setError(err.response?.data?.error || 'Failed to propose challenge');
+      setError(err.response?.data?.error || t('schedule_modal.error_propose'));
     } finally {
       setLoading(false);
     }
@@ -347,7 +347,7 @@ export default function ScheduleProposalModalP2P({
 
   const handleConfirmSlots = async () => {
     if (!proposal) {
-      setError('No proposal to confirm');
+      setError(t('schedule_modal.error_no_proposal'));
       return;
     }
 
@@ -380,7 +380,7 @@ export default function ScheduleProposalModalP2P({
       console.error('Error confirming slots:', err);
       // Keep the modal open: the success callback may unmount it and hide the
       // reservation conflict, including the affected slots returned by the API.
-      setError((err as any).response?.data?.error || 'Failed to confirm slots. Please try again.');
+      setError((err as any).response?.data?.error || t('schedule_modal.error_confirm'));
     } finally {
       setLoading(false);
     }
@@ -388,11 +388,11 @@ export default function ScheduleProposalModalP2P({
 
   const handleCancelProposal = async () => {
     if (!proposal) {
-      setError('No proposal to cancel');
+      setError(t('schedule_modal.error_no_proposal'));
       return;
     }
 
-    if (!confirm('Are you sure you want to cancel this proposal?')) {
+    if (!confirm(t('schedule_modal.confirm_cancel_proposal'))) {
       return;
     }
 
@@ -406,7 +406,7 @@ export default function ScheduleProposalModalP2P({
       onClose();
     } catch (err) {
       console.error('Error canceling proposal:', err);
-      setError('Failed to cancel proposal');
+      setError(t('schedule_modal.error_cancel_proposal'));
     } finally {
       setLoading(false);
     }
@@ -434,7 +434,7 @@ export default function ScheduleProposalModalP2P({
             const slotDate = new Date(s.slot_datetime);
             return slotDate >= range.start && slotDate < range.end;
           })
-          .map(s => s.status)
+          .map(s => t(`schedule_modal.slot_status_${s.status}`, s.status))
           .join(', ')
       ),
     [visibleProposalSlots, proposalRanges]
@@ -469,7 +469,7 @@ export default function ScheduleProposalModalP2P({
         <div className="sticky top-0 bg-white border-b border-gray-200 p-6">
           <div className="flex justify-between items-start">
             <h2 className="text-2xl font-bold text-gray-800">
-              {mode === 'propose' ? 'Propose Match Schedule' : mode === 'edit_proposal' ? 'Edit Schedule Proposal' : 'Confirm Schedule'}
+              {mode === 'propose' ? t('schedule_modal.title_propose') : mode === 'edit_proposal' ? t('schedule_modal.title_edit') : t('schedule_modal.title_confirm')}
             </h2>
             <button
               onClick={onClose}
@@ -489,13 +489,13 @@ export default function ScheduleProposalModalP2P({
         <div className="p-6 space-y-6">
           {loading && participants.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-gray-500">Loading scheduling data...</p>
+              <p className="text-gray-500">{t('schedule_modal.loading')}</p>
             </div>
           ) : (
             <>
               {/* Date picker */}
               <div data-help-id="region-p2p-schedule-date-range" className="space-y-2">
-                <label className="block text-sm font-semibold text-gray-800">Select Date Range Start</label>
+                <label className="block text-sm font-semibold text-gray-800">{t('schedule_modal.date_range_start')}</label>
                 <div className="flex gap-2">
                   <input
                     data-help-id="field-p2p-schedule-start-date"
@@ -506,17 +506,17 @@ export default function ScheduleProposalModalP2P({
                     className="px-3 py-2 border border-gray-300 rounded text-sm"
                   />
                   <span className="text-sm text-gray-500 self-center">
-                    Next 14 days ({dateEnd.toLocaleDateString(i18n.language || 'en-US')})
+                    {t('schedule_modal.next_14_days', { date: dateEnd.toLocaleDateString(i18n.language || 'en-US') })}
                   </span>
                   <span className="text-sm text-gray-600 self-center font-semibold">
-                    | Viewing: {viewingTimezone}
+                    | {t('schedule_modal.viewing_timezone', { timezone: viewingTimezone })}
                   </span>
                 </div>
               </div>
 
               {/* Grid */}
               <div data-help-id="region-p2p-availability-grid" className="space-y-2">
-                <h3 className="font-semibold text-gray-800">Availability Grid</h3>
+                <h3 className="font-semibold text-gray-800">{t('schedule_modal.availability_grid')}</h3>
                 <SchedulingFreeBusyGrid
                   participants={participants}
                   dateStart={displayDateStart}
@@ -540,8 +540,8 @@ export default function ScheduleProposalModalP2P({
                 <div data-help-id="region-p2p-selected-slots" className={`p-3 rounded ${mode === 'confirm' ? 'bg-green-50 border border-green-200' : 'bg-blue-50 border border-blue-200'}`}>
                   <p className={`text-sm font-semibold ${mode === 'confirm' ? 'text-green-900' : 'text-blue-900'}`}>
                     {mode === 'confirm' 
-                      ? `${confirmedSlotIds.size} slot${confirmedSlotIds.size !== 1 ? 's' : ''} to confirm` 
-                      : `${selectedSlots.size} slot${selectedSlots.size !== 1 ? 's' : ''} selected`
+                      ? t('schedule_modal.slots_to_confirm', { count: confirmedSlotIds.size })
+                      : t('schedule_modal.slots_selected', { count: selectedSlots.size })
                     }
                   </p>
                   <div className="mt-3 space-y-2">
@@ -562,18 +562,18 @@ export default function ScheduleProposalModalP2P({
               {/* Proposal info (if responding) */}
               {proposal && (
                 <div className="p-3 bg-yellow-50 border border-yellow-200 rounded">
-                  <p className="text-sm font-semibold text-yellow-900">Active Proposal</p>
+                  <p className="text-sm font-semibold text-yellow-900">{t('schedule_modal.active_proposal')}</p>
                   <p className="text-xs text-yellow-800 mt-1">
-                    Proposed {new Date(proposal.proposed_at).toLocaleString(i18n.language || 'en-US', { timeZone: viewingTimezone })}
+                    {t('schedule_modal.proposed_at', { date: new Date(proposal.proposed_at).toLocaleString(i18n.language || 'en-US', { timeZone: viewingTimezone }) })}
                   </p>
                   {proposal.notes && (
                     <p className="text-xs text-yellow-800 mt-2 italic">
-                      Notes: {proposal.notes}
+                      {t('schedule_modal.notes_value', { notes: proposal.notes })}
                     </p>
                   )}
                   {visibleProposalSlots.length > 0 && (
                     <div className="mt-3">
-                      <p className="text-xs font-semibold text-yellow-900 mb-2">Proposed Slots:</p>
+                      <p className="text-xs font-semibold text-yellow-900 mb-2">{t('schedule_modal.proposed_slots')}</p>
                       <div className="space-y-1">
                         {proposalRanges.map((range, idx) => (
                           <div key={idx} className="text-xs text-yellow-800 bg-white rounded px-2 py-1 border border-yellow-100">
@@ -596,7 +596,7 @@ export default function ScheduleProposalModalP2P({
                 // In confirm mode, show the proposer's notes as read-only
                 proposal?.notes && (
                   <div className="p-3 bg-blue-50 border border-blue-200 rounded">
-                    <p className="text-sm font-semibold text-blue-900">Proposer's Notes</p>
+                    <p className="text-sm font-semibold text-blue-900">{t('schedule_modal.proposer_notes')}</p>
                     <p className="text-sm text-blue-800 mt-2 whitespace-pre-wrap">{proposal.notes}</p>
                   </div>
                 )
@@ -604,13 +604,13 @@ export default function ScheduleProposalModalP2P({
                 // In propose/edit mode, show textarea for editing notes
                 <div data-help-id="region-p2p-schedule-notes" className="space-y-2">
                   <label className="block text-sm font-semibold text-gray-800">
-                    Notes (optional, max 500 characters)
+                    {t('schedule_modal.notes_label')}
                   </label>
                   <textarea
                     data-help-id="field-p2p-schedule-notes"
                     value={notes}
                     onChange={handleNotesChange}
-                    placeholder="Add any notes about your availability or preferences..."
+                    placeholder={t('schedule_modal.notes_placeholder')}
                     className="w-full p-3 border border-gray-300 rounded text-sm font-mono"
                     rows={3}
                     disabled={loading}
@@ -631,7 +631,7 @@ export default function ScheduleProposalModalP2P({
               className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 text-gray-700 font-medium"
               disabled={loading}
             >
-              Cancel
+              {t('cancel')}
             </button>
 
             {mode === 'propose' ? (
@@ -641,7 +641,7 @@ export default function ScheduleProposalModalP2P({
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium disabled:opacity-50"
                 disabled={loading || selectedSlots.size === 0}
               >
-                {loading ? 'Proposing...' : 'Propose Selected Slots'}
+                {loading ? t('schedule_modal.proposing') : t('schedule_modal.propose_selected')}
               </button>
             ) : mode === 'edit_proposal' ? (
               <>
@@ -651,7 +651,7 @@ export default function ScheduleProposalModalP2P({
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-medium"
                   disabled={loading}
                 >
-                  Cancel Proposal
+                  {t('schedule_modal.cancel_proposal')}
                 </button>
                 <button
                   data-help-id="action-p2p-change-proposal"
@@ -659,7 +659,7 @@ export default function ScheduleProposalModalP2P({
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium disabled:opacity-50"
                   disabled={loading || selectedSlots.size === 0}
                 >
-                  {loading ? 'Updating...' : 'Change Proposal'}
+                  {loading ? t('schedule_modal.updating') : t('schedule_modal.change_proposal')}
                 </button>
               </>
             ) : (
@@ -670,7 +670,7 @@ export default function ScheduleProposalModalP2P({
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-medium"
                   disabled={loading}
                 >
-                  {loading ? 'Rejecting...' : '❌ Reject'}
+                  {loading ? t('schedule_modal.rejecting') : `❌ ${t('schedule_modal.reject')}`}
                 </button>
                 <button
                   data-help-id="action-p2p-counter-propose"
@@ -681,7 +681,7 @@ export default function ScheduleProposalModalP2P({
                   className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 text-gray-700 font-medium"
                   disabled={loading}
                 >
-                  🔄 Counter-propose
+                  🔄 {t('schedule_modal.counter_propose')}
                 </button>
                 <button
                   data-help-id="action-p2p-confirm-schedule"
@@ -689,7 +689,7 @@ export default function ScheduleProposalModalP2P({
                   className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium disabled:opacity-50"
                   disabled={loading || confirmedSlotIds.size === 0}
                 >
-                  {loading ? 'Confirming...' : `✅ Confirm ${confirmedSlotIds.size} Slot${confirmedSlotIds.size !== 1 ? 's' : ''}`}
+                  {loading ? t('schedule_modal.confirming') : `✅ ${t('schedule_modal.confirm_slots', { count: confirmedSlotIds.size })}`}
                 </button>
               </>
             )}

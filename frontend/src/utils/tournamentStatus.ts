@@ -1,3 +1,4 @@
+import i18n from 'i18next';
 import type { TFunction } from 'i18next';
 
 /** Badge colors for tournament and team statuses; unknown values fall back to grey. */
@@ -38,19 +39,23 @@ export const statusLabel = (t: TFunction, status?: string | null) => {
   return translated !== key ? translated : (status || t('option_pending'));
 };
 
-export const tournamentModeLabel = (mode?: string) => {
+/** Translated label of a tournament mode; an unknown stored mode is shown as stored. */
+export const tournamentModeLabel = (t: TFunction, mode?: string) => {
   switch (mode) {
     case 'ranked':
-      return 'Ranked (1v1)';
     case 'unranked':
-      return 'Unranked (1v1)';
     case 'team':
-      return 'Team (2v2)';
+      return t(`tournament.mode_${mode}`);
     default:
-      return mode || 'Unknown';
+      return mode || t('not_available');
   }
 };
 
-/** Local date of an ISO timestamp, or the "not available" text when it is missing. */
+/**
+ * Date of an ISO timestamp in the selected interface language, or the "not
+ * available" text when it is missing. The language comes from the shared
+ * i18next instance so dates match the rest of the translated page instead of
+ * the browser locale.
+ */
 export const formatTournamentDate = (t: TFunction, date?: string | null) =>
-  date ? new Date(date).toLocaleDateString() : t('not_available');
+  date ? new Date(date).toLocaleDateString(i18n.language) : t('not_available');

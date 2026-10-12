@@ -23,12 +23,12 @@ const TournamentFormatSummary: React.FC<TournamentFormatSummaryProps> = ({ tourn
       {/* Tournament Assets Section */}
       {(factions.length > 0 || maps.length > 0) && (
         <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
-          <h3>{t('tournament.unranked_assets', 'Tournament Assets')}</h3>
+          <h3>{t('tournament.assets')}</h3>
           
           <div className="flex flex-col gap-6">
             {factions.length > 0 && (
               <div className="flex flex-col gap-3">
-                <h4 className="text-lg font-semibold text-gray-800">{t('tournament.allowed_factions', 'Allowed Factions')}</h4>
+                <h4 className="text-lg font-semibold text-gray-800">{t('tournament.allowed_factions')}</h4>
                 <div className="flex flex-wrap gap-2">
                   {factions.map((faction) => (
                     <span key={faction.id} className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold">{faction.name}</span>
@@ -39,7 +39,7 @@ const TournamentFormatSummary: React.FC<TournamentFormatSummaryProps> = ({ tourn
 
             {maps.length > 0 && (
               <div className="flex flex-col gap-3">
-                <h4 className="text-lg font-semibold text-gray-800">{t('tournament.allowed_maps', 'Allowed Maps')}</h4>
+                <h4 className="text-lg font-semibold text-gray-800">{t('tournament.allowed_maps')}</h4>
                 <div className="flex flex-wrap gap-2">
                   {maps.map((map) => (
                     <span key={map.id} className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold">{map.name}</span>
@@ -70,14 +70,14 @@ const TournamentFormatSummary: React.FC<TournamentFormatSummaryProps> = ({ tourn
               <article key={phase.id} className="rounded-lg border border-blue-200 bg-blue-50 p-4">
                 <h4 className="font-semibold text-gray-800">{phase.order}. {phase.name}</h4>
                 <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-                  <dt className="text-gray-600">System</dt>
-                  <dd className="font-medium text-gray-800">{phase.format === 'single_elimination' ? 'Single elimination' : phase.format === 'round_robin' ? 'Round robin' : 'Swiss'}</dd>
-                  <dt className="text-gray-600">Groups / brackets</dt>
+                  <dt className="text-gray-600">{t('format_summary.system')}</dt>
+                  <dd className="font-medium text-gray-800">{phase.format === 'single_elimination' ? t('format_summary.single_elimination') : phase.format === 'round_robin' ? t('format_summary.round_robin') : t('format_summary.swiss')}</dd>
+                  <dt className="text-gray-600">{t('format_summary.groups_brackets')}</dt>
                   <dd className="font-medium text-gray-800">{phase.groups.length}</dd>
-                  <dt className="text-gray-600">Match format</dt>
+                  <dt className="text-gray-600">{t('format_summary.match_format')}</dt>
                   <dd className="font-medium text-gray-800">Bo{phase.default_best_of}</dd>
-                  {phase.swiss && <><dt className="text-gray-600">Rounds</dt><dd className="font-medium text-gray-800">{phase.swiss.round_count}</dd></>}
-                  {phase.round_robin && <><dt className="text-gray-600">Cycles</dt><dd className="font-medium text-gray-800">{phase.round_robin.cycle_count}</dd></>}
+                  {phase.swiss && <><dt className="text-gray-600">{t('format_summary.rounds')}</dt><dd className="font-medium text-gray-800">{phase.swiss.round_count}</dd></>}
+                  {phase.round_robin && <><dt className="text-gray-600">{t('format_summary.cycles')}</dt><dd className="font-medium text-gray-800">{phase.round_robin.cycle_count}</dd></>}
                 </dl>
               </article>
             ))}

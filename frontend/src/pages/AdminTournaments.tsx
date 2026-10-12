@@ -51,7 +51,7 @@ const AdminTournaments: React.FC = () => {
       }
     } catch (err: any) {
       console.error('Error fetching tournaments:', err);
-      setError('Error loading tournaments');
+      setError(t('tournament.error_load_list'));
     } finally {
       setLoading(false);
     }
