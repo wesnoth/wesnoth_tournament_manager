@@ -80,7 +80,7 @@ const AdminUsers: React.FC = () => {
       setError('');
     } catch (err: any) {
       console.error('Error fetching users:', err);
-      setError('Error loading users');
+      setError(t('admin.users_load_failed'));
       setUsers([]);
       setFilteredUsers([]);
     } finally {
@@ -141,7 +141,7 @@ const AdminUsers: React.FC = () => {
       setMaintenanceReason('');
       setTimeout(() => setMessage(''), 3000);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to toggle maintenance mode');
+      setError(err.response?.data?.error || t('admin.maintenance_toggle_failed'));
     } finally {
       setTogglingMaintenance(false);
     }
@@ -217,7 +217,7 @@ const AdminUsers: React.FC = () => {
       fetchUsers();
       setTimeout(() => setMessage(''), 3000);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Action failed');
+      setError(err.response?.data?.error || t('admin.action_failed'));
     }
   };
 
@@ -423,7 +423,7 @@ const AdminUsers: React.FC = () => {
                   <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('label_level')}</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('label_status')}</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('label_role')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-800">Ranked</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('label_ranked')}</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('label_actions')}</th>
                 </tr>
             </thead>
@@ -472,7 +472,7 @@ const AdminUsers: React.FC = () => {
                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
                       user.enable_ranked ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-500'
                     }`}>
-                      {user.enable_ranked ? 'Enabled' : 'Disabled'}
+                      {user.enable_ranked ? t('label_ranked_enabled') : t('label_ranked_disabled')}
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -632,20 +632,20 @@ const AdminUsers: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-md">
             <h3 className="text-lg font-semibold text-gray-800 mb-4">
-              {maintenanceMode ? '⚠️ Disable Maintenance Mode?' : '🔧 Enable Maintenance Mode?'}
+              {maintenanceMode ? `⚠️ ${t('admin.maintenance_disable_title')}` : `🔧 ${t('admin.maintenance_enable_title')}`}
             </h3>
             <p className="text-gray-700 mb-4">
               {maintenanceMode
-                ? 'Disabling maintenance mode will allow all users to login again.'
-                : 'Enabling maintenance mode will prevent non-admin users from logging in. Only admins will have access.'}
+                ? t('admin.maintenance_disable_info')
+                : t('admin.maintenance_enable_info')}
             </p>
             {!maintenanceMode && (
               <div className="mb-4">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Reason (optional):</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('admin.maintenance_reason_label')}</label>
                 <textarea
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
                   rows={3}
-                  placeholder="E.g., Database migration, server updates..."
+                  placeholder={t('admin.maintenance_reason_placeholder')}
                   value={maintenanceReason}
                   onChange={(e) => setMaintenanceReason(e.target.value)}
                 />
@@ -653,7 +653,7 @@ const AdminUsers: React.FC = () => {
             )}
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
               <p className="text-sm text-yellow-800">
-                💡 A banner will be displayed to inform users about the maintenance mode.
+                💡 {t('admin.maintenance_banner_info')}
               </p>
             </div>
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
@@ -665,7 +665,7 @@ const AdminUsers: React.FC = () => {
                 }}
                 disabled={togglingMaintenance}
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 className={`px-4 py-2 text-white rounded-lg font-semibold ${
@@ -677,10 +677,10 @@ const AdminUsers: React.FC = () => {
                 disabled={togglingMaintenance}
               >
                 {togglingMaintenance
-                  ? 'Updating...'
+                  ? t('common.updating')
                   : maintenanceMode
-                  ? 'Disable Maintenance'
-                  : 'Enable Maintenance'}
+                  ? t('admin.maintenance_disable_action')
+                  : t('admin.maintenance_enable_action')}
               </button>
             </div>
           </div>

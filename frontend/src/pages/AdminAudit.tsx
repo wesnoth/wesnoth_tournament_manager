@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { adminService } from '../services/api';
 import UserProfileNav from '../components/UserProfileNav';
 import i18next from 'i18next';
+import { useTranslation } from 'react-i18next';
 
 /** Audit log row returned by the normalized administrative API. */
 interface AuditLog {
@@ -18,6 +19,7 @@ interface AuditLog {
 }
 
 export default function AdminAudit() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { isAuthenticated, isAdmin, isTournamentModerator } = useAuthStore();
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -59,7 +61,7 @@ export default function AdminAudit() {
       const response = await adminService.getAuditLogs(params);
       setAuditLogs(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to fetch audit logs');
+      setError(err.response?.data?.error || t('audit_admin.load_failed'));
     } finally {
       setLoading(false);
     }
@@ -68,7 +70,7 @@ export default function AdminAudit() {
   // Delete selected logs
   const deleteSelectedLogs = async () => {
     if (selectedLogs.size === 0) {
-      setError('Please select logs to delete');
+      setError(t('audit_admin.select_logs_first'));
       return;
     }
 
@@ -83,7 +85,7 @@ export default function AdminAudit() {
       setSelectedLogs(new Set());
       setShowDeleteConfirm(false);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to delete logs');
+      setError(err.response?.data?.error || t('audit_admin.delete_failed'));
     } finally {
       setLoading(false);
     }
@@ -91,7 +93,7 @@ export default function AdminAudit() {
 
   // Delete all logs older than X days
   const deleteOldLogs = async () => {
-    if (!window.confirm(`Delete all logs older than ${filters.daysBack} days?`)) {
+    if (!window.confirm(t('audit_admin.confirm_delete_old', { days: filters.daysBack }))) {
       return;
     }
 
@@ -103,7 +105,7 @@ export default function AdminAudit() {
 
       fetchAuditLogs();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to delete logs');
+      setError(err.response?.data?.error || t('audit_admin.delete_failed'));
     } finally {
       setLoading(false);
     }
@@ -138,31 +140,31 @@ export default function AdminAudit() {
     <>
       <UserProfileNav />
       <div className="w-full mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-6">🔒 Audit Logs</h1>
+        <h1 className="text-3xl font-bold text-gray-800 mb-6">🔒 {t('audit_admin.title')}</h1>
 
       {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</div>}
 
       {/* Filters */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Filters</h3>
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">{t('common.filters')}</h3>
         <div className="grid grid-cols-5 gap-4">
           <input
             type="text"
-            placeholder="Event Type (e.g., LOGIN_FAILED)"
+            placeholder={t('audit_admin.event_type_placeholder')}
             value={filters.eventType}
             onChange={(e) => setFilters({ ...filters, eventType: e.target.value })}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
           />
           <input
             type="text"
-            placeholder="Username"
+            placeholder={t('audit_admin.username_placeholder')}
             value={filters.username}
             onChange={(e) => setFilters({ ...filters, username: e.target.value })}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
           />
           <input
             type="text"
-            placeholder="IP Address"
+            placeholder={t('audit_admin.ip_placeholder')}
             value={filters.ipAddress}
             onChange={(e) => setFilters({ ...filters, ipAddress: e.target.value })}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
@@ -172,13 +174,13 @@ export default function AdminAudit() {
             onChange={(e) => setFilters({ ...filters, daysBack: parseInt(e.target.value) })}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
           >
-            <option value="1">Last 24 hours</option>
-            <option value="7">Last 7 days</option>
-            <option value="30">Last 30 days</option>
-            <option value="90">Last 90 days</option>
+            <option value="1">{t('audit_admin.last_24h')}</option>
+            <option value="7">{t('audit_admin.last_7d')}</option>
+            <option value="30">{t('audit_admin.last_30d')}</option>
+            <option value="90">{t('audit_admin.last_90d')}</option>
           </select>
           <button onClick={fetchAuditLogs} disabled={loading} className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">
-            {loading ? 'Loading...' : 'Search'}
+            {loading ? t('common.loading') : t('common.search_action')}
           </button>
         </div>
       </div>
@@ -191,14 +193,14 @@ export default function AdminAudit() {
           disabled={selectedLogs.size === 0 || loading}
           className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
         >
-          🗑️ Delete Selected ({selectedLogs.size})
+          🗑️ {t('audit_admin.delete_selected', { count: selectedLogs.size })}
         </button>
         <button
           onClick={deleteOldLogs}
           disabled={loading}
           className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50"
         >
-          🧹 Delete Logs Older Than {filters.daysBack} Days
+          🧹 {t('audit_admin.delete_older', { days: filters.daysBack })}
         </button>
       </div>
       )}
@@ -207,21 +209,21 @@ export default function AdminAudit() {
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm">
-            <h3 className="text-lg font-semibold text-gray-800 mb-3">⚠️ Confirm Deletion</h3>
-            <p className="text-gray-700 mb-6">Delete {selectedLogs.size} selected log(s)? This action cannot be undone.</p>
+            <h3 className="text-lg font-semibold text-gray-800 mb-3">⚠️ {t('common.confirm_deletion')}</h3>
+            <p className="text-gray-700 mb-6">{t('audit_admin.confirm_delete_selected', { count: selectedLogs.size })}</p>
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setShowDeleteConfirm(false)}
                 className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={deleteSelectedLogs}
                 disabled={loading}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
               >
-                {loading ? 'Deleting...' : 'Delete'}
+                {loading ? t('common.deleting') : t('btn_delete')}
               </button>
             </div>
           </div>
@@ -230,10 +232,10 @@ export default function AdminAudit() {
 
       {/* Logs Table */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        <h3 className="text-lg font-semibold text-gray-800 px-6 py-4 border-b border-gray-300">Logs ({auditLogs.length})</h3>
+        <h3 className="text-lg font-semibold text-gray-800 px-6 py-4 border-b border-gray-300">{t('audit_admin.logs_count', { count: auditLogs.length })}</h3>
 
         {auditLogs.length === 0 ? (
-          <div className="text-center py-8 text-gray-600">No audit logs found</div>
+          <div className="text-center py-8 text-gray-600">{t('audit_admin.empty')}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
@@ -247,11 +249,11 @@ export default function AdminAudit() {
                       className="w-4 h-4"
                     />
                   </th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-800">Time</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-800">Event Type</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-800">User</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-800">IP Address</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-800">Details</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('audit_admin.col_time')}</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('audit_admin.col_event_type')}</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('audit_admin.col_user')}</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('audit_admin.col_ip')}</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('audit_admin.col_details')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -281,9 +283,9 @@ export default function AdminAudit() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-700 text-sm">
-                      {log.username || log.user_id || 'ANONYMOUS'}
+                      {log.username || log.user_id || t('audit_admin.anonymous')}
                     </td>
-                    <td className="px-4 py-3 text-gray-700 text-sm">{log.ip_address || 'UNKNOWN'}</td>
+                    <td className="px-4 py-3 text-gray-700 text-sm">{log.ip_address || t('audit_admin.unknown')}</td>
                     <td className="px-4 py-3 text-gray-700 text-sm">
                       <code className="bg-gray-100 px-2 py-1 rounded text-xs">{JSON.stringify(log.details, null, 2)}</code>
                     </td>

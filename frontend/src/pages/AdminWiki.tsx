@@ -86,12 +86,12 @@ const AdminWiki: React.FC = () => {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      if (!response.ok) throw new Error('Failed to fetch articles');
+      if (!response.ok) throw new Error(t('wiki_admin.fetch_articles_failed'));
 
       const data = await response.json();
       setArticles(data);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to fetch articles';
+      const msg = err instanceof Error ? err.message : t('wiki_admin.fetch_articles_failed');
       setError(msg);
     } finally {
       setLoading(false);
@@ -107,12 +107,12 @@ const AdminWiki: React.FC = () => {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      if (!response.ok) throw new Error('Failed to fetch images');
+      if (!response.ok) throw new Error(t('wiki_admin.fetch_images_failed'));
 
       const data = await response.json();
       setImages(data);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to fetch images';
+      const msg = err instanceof Error ? err.message : t('wiki_admin.fetch_images_failed');
       setError(msg);
     } finally {
       setLoading(false);
@@ -139,7 +139,7 @@ const AdminWiki: React.FC = () => {
   };
 
   const cleanupOrphanedImages = async (filenames: string[]) => {
-    if (!confirm(`Delete ${filenames.length} unregistered image file(s)? This cannot be undone.`)) {
+    if (!confirm(t('wiki_admin.confirm_delete_orphaned', { count: filenames.length }))) {
       return;
     }
 
@@ -154,14 +154,17 @@ const AdminWiki: React.FC = () => {
         body: JSON.stringify({ filenames })
       });
 
-      if (!response.ok) throw new Error('Cleanup failed');
+      if (!response.ok) throw new Error(t('wiki_admin.cleanup_failed'));
 
       const result = await response.json();
       setError(null);
-      alert(`Deleted ${result.deleted.length} files. ${result.failed.length > 0 ? `Failed: ${result.failed.join(', ')}` : ''}`);
+      alert([
+        t('wiki_admin.deleted_files', { count: result.deleted.length }),
+        result.failed.length > 0 ? t('wiki_admin.failed_files', { files: result.failed.join(', ') }) : '',
+      ].join(' ').trim());
       fetchOrphanedImages();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Cleanup failed';
+      const msg = err instanceof Error ? err.message : t('wiki_admin.cleanup_failed');
       setError(msg);
     } finally {
       setLoading(false);
@@ -169,7 +172,7 @@ const AdminWiki: React.FC = () => {
   };
 
   const cleanupUnusedImages = async (filenames: string[]) => {
-    if (!confirm(`Delete ${filenames.length} unused registered image(s)? This cannot be undone.`)) {
+    if (!confirm(t('wiki_admin.confirm_delete_unused', { count: filenames.length }))) {
       return;
     }
 
@@ -184,14 +187,17 @@ const AdminWiki: React.FC = () => {
         body: JSON.stringify({ filenames })
       });
 
-      if (!response.ok) throw new Error('Unused image cleanup failed');
+      if (!response.ok) throw new Error(t('wiki_admin.unused_cleanup_failed'));
 
       const result = await response.json();
       setError(null);
-      alert(`Deleted ${result.deleted.length} images. ${result.failed.length > 0 ? `Skipped because they are now used or unavailable: ${result.failed.join(', ')}` : ''}`);
+      alert([
+        t('wiki_admin.deleted_images', { count: result.deleted.length }),
+        result.failed.length > 0 ? t('wiki_admin.skipped_images', { files: result.failed.join(', ') }) : '',
+      ].join(' ').trim());
       await Promise.all([fetchImages(), fetchOrphanedImages()]);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unused image cleanup failed';
+      const msg = err instanceof Error ? err.message : t('wiki_admin.unused_cleanup_failed');
       setError(msg);
     } finally {
       setLoading(false);
@@ -237,20 +243,20 @@ const AdminWiki: React.FC = () => {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Save failed');
+        throw new Error(errorData.error || t('wiki_admin.save_failed'));
       }
 
       setShowEditor(false);
       fetchArticles();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Save failed';
+      const msg = err instanceof Error ? err.message : t('wiki_admin.save_failed');
       setError(msg);
       throw err;
     }
   };
 
   const handleDeleteArticle = async (slug: string) => {
-    if (!confirm('Are you sure? This will permanently delete the article.')) {
+    if (!confirm(t('wiki_admin.confirm_delete_article'))) {
       return;
     }
 
@@ -260,11 +266,11 @@ const AdminWiki: React.FC = () => {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      if (!response.ok) throw new Error('Delete failed');
+      if (!response.ok) throw new Error(t('wiki_admin.delete_failed'));
 
       fetchArticles();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Delete failed';
+      const msg = err instanceof Error ? err.message : t('wiki_admin.delete_failed');
       setError(msg);
     }
   };
@@ -276,19 +282,19 @@ const AdminWiki: React.FC = () => {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      if (!response.ok) throw new Error('Failed to check usage');
+      if (!response.ok) throw new Error(t('wiki_admin.usage_check_failed'));
 
       const usage = await response.json();
       setImageUsage(usage);
       setDeletingImage(filename);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to check image usage';
+      const msg = err instanceof Error ? err.message : t('wiki_admin.usage_check_failed');
       setError(msg);
     }
   };
 
   const confirmDeleteImage = async (filename: string) => {
-    if (!confirm(`Are you sure? This will permanently delete the image.`)) {
+    if (!confirm(t('wiki_admin.confirm_delete_image'))) {
       return;
     }
 
@@ -298,13 +304,13 @@ const AdminWiki: React.FC = () => {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      if (!response.ok) throw new Error('Delete failed');
+      if (!response.ok) throw new Error(t('wiki_admin.delete_failed'));
 
       setDeletingImage(null);
       setImageUsage([]);
       fetchImages();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Delete failed';
+      const msg = err instanceof Error ? err.message : t('wiki_admin.delete_failed');
       setError(msg);
     }
   };
@@ -316,7 +322,7 @@ const AdminWiki: React.FC = () => {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      if (!response.ok) throw new Error('Export failed');
+      if (!response.ok) throw new Error(t('wiki_admin.export_failed'));
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -328,7 +334,7 @@ const AdminWiki: React.FC = () => {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Export failed';
+      const msg = err instanceof Error ? err.message : t('wiki_admin.export_failed');
       setError(msg);
     } finally {
       setLoading(false);
@@ -354,7 +360,7 @@ const AdminWiki: React.FC = () => {
         // Extract metadata
         const metadataFile = zipData.file('article-metadata.json');
         if (!metadataFile) {
-          throw new Error('article-metadata.json not found in ZIP');
+          throw new Error(t('wiki_admin.metadata_missing'));
         }
 
         const metadataText = await metadataFile.async('text');
@@ -362,7 +368,7 @@ const AdminWiki: React.FC = () => {
 
         // Validate metadata
         if (!metadata.slug) {
-          throw new Error('Invalid metadata: missing slug');
+          throw new Error(t('wiki_admin.metadata_no_slug'));
         }
 
         // Extract images
@@ -401,7 +407,7 @@ const AdminWiki: React.FC = () => {
         let forceImport = false;
         if (conflictInfo.exists) {
           const confirmed = confirm(
-            `Article "${metadata.slug}" already exists with languages: ${conflictInfo.current_languages?.join(', ')}\n\nOverwrite all translations?`
+            t('wiki_admin.confirm_overwrite_languages', { slug: metadata.slug, languages: conflictInfo.current_languages?.join(', ') })
           );
           if (!confirmed) {
             setLoading(false);
@@ -427,13 +433,13 @@ const AdminWiki: React.FC = () => {
 
         // Fallback: if backend reports conflict, ask confirmation and retry with force=true
         if (!importResponse.ok) {
-          const error = await importResponse.json().catch(() => ({ error: 'Import failed' }));
-          const errorMessage = error.error || 'Import failed';
+          const error = await importResponse.json().catch(() => ({ error: t('wiki_admin.import_failed') }));
+          const errorMessage = error.error || t('wiki_admin.import_failed');
           const conflictDetected = errorMessage.includes('already exists');
 
           if (conflictDetected && !forceImport) {
             const confirmed = confirm(
-              `Article "${metadata.slug}" already exists.\n\nOverwrite all translations?`
+              t('wiki_admin.confirm_overwrite', { slug: metadata.slug })
             );
             if (!confirmed) {
               setLoading(false);
@@ -459,20 +465,20 @@ const AdminWiki: React.FC = () => {
         }
 
         if (!importResponse.ok) {
-          const error = await importResponse.json().catch(() => ({ error: 'Import failed' }));
-          throw new Error(error.error || 'Import failed');
+          const error = await importResponse.json().catch(() => ({ error: t('wiki_admin.import_failed') }));
+          throw new Error(error.error || t('wiki_admin.import_failed'));
         }
 
         const result = await importResponse.json();
         alert(
-          `✅ Import successful!\n\n${result.message}`
+          `✅ ${t('wiki_admin.import_success')}\n\n${result.message}`
         );
 
         // Refresh articles list
         fetchArticles();
         setActiveTab('articles');
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Import failed';
+        const msg = err instanceof Error ? err.message : t('wiki_admin.import_failed');
         setError(msg);
         console.error('Import error:', err);
       } finally {
@@ -499,7 +505,7 @@ const AdminWiki: React.FC = () => {
   return (
     <MainLayout>
       <div className="admin-wiki p-6 max-w-7xl mx-auto">
-      <h1 className="text-4xl font-bold text-gray-900 mb-6">Wiki Management</h1>
+      <h1 className="text-4xl font-bold text-gray-900 mb-6">{t('wiki_admin.title')}</h1>
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
@@ -518,7 +524,7 @@ const AdminWiki: React.FC = () => {
               : 'text-gray-600 hover:text-gray-900'
           }`}
         >
-          Articles
+          {t('wiki_admin.tab_articles')}
         </button>
         <button
           onClick={() => {
@@ -535,7 +541,7 @@ const AdminWiki: React.FC = () => {
               : 'text-gray-600 hover:text-gray-900'
           }`}
         >
-          Images
+          {t('wiki_admin.tab_images')}
         </button>
       </div>
 
@@ -547,13 +553,13 @@ const AdminWiki: React.FC = () => {
               onClick={handleCreateArticle}
               className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark font-medium"
             >
-              ➕ New Article
+              ➕ {t('wiki_admin.new_article')}
             </button>
             <button
               onClick={handleImportArticle}
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
             >
-              📥 Import Article
+              📥 {t('wiki_admin.import_article')}
             </button>
           </div>
 
@@ -563,18 +569,18 @@ const AdminWiki: React.FC = () => {
             </div>
           ) : articles.length === 0 ? (
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
-              <p className="text-gray-600">No articles yet. Create one to get started.</p>
+              <p className="text-gray-600">{t('wiki_admin.no_articles')}</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="border-b-2 border-gray-300 bg-gray-50">
-                    <th className="text-left px-4 py-3 font-semibold text-gray-900">Slug</th>
-                    <th className="text-left px-4 py-3 font-semibold text-gray-900">Languages</th>
-                    <th className="text-center px-4 py-3 font-semibold text-gray-900">Status</th>
-                    <th className="text-left px-4 py-3 font-semibold text-gray-900">Updated</th>
-                    <th className="text-center px-4 py-3 font-semibold text-gray-900">Actions</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-900">{t('wiki_admin.col_slug')}</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-900">{t('wiki_admin.col_languages')}</th>
+                    <th className="text-center px-4 py-3 font-semibold text-gray-900">{t('label_status')}</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-900">{t('wiki_admin.col_updated')}</th>
+                    <th className="text-center px-4 py-3 font-semibold text-gray-900">{t('actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -605,7 +611,7 @@ const AdminWiki: React.FC = () => {
                               : 'bg-yellow-100 text-yellow-800'
                           }`}
                         >
-                          {article.is_published ? 'Published' : 'Draft'}
+                          {article.is_published ? t('wiki_admin.published') : t('wiki_admin.draft')}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">
@@ -616,19 +622,19 @@ const AdminWiki: React.FC = () => {
                           onClick={() => handleEditArticle(article)}
                           className="text-blue-600 hover:text-blue-800 text-sm font-medium mr-3"
                         >
-                          ✏️ Edit
+                          ✏️ {t('edit')}
                         </button>
                         <button
                           onClick={() => handleExportArticle(article.slug)}
                           className="text-green-600 hover:text-green-800 text-sm font-medium mr-3"
                         >
-                          📥 Export
+                          📥 {t('wiki_admin.export')}
                         </button>
                         <button
                           onClick={() => handleDeleteArticle(article.slug)}
                           className="text-red-600 hover:text-red-800 text-sm font-medium"
                         >
-                          🔴 Delete
+                          🔴 {t('btn_delete')}
                         </button>
                       </td>
                     </tr>
@@ -648,11 +654,10 @@ const AdminWiki: React.FC = () => {
               {unusedImages.length > 0 ? (
                 <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-4">
                   <h2 className="mb-2 text-lg font-bold text-amber-900">
-                    Unused registered images ({unusedImages.length})
+                    {t('wiki_admin.unused_title', { count: unusedImages.length })}
                   </h2>
                   <p className="text-sm text-amber-800">
-                    These images are stored in the image library but are not referenced by any article.
-                    This commonly happens after deleting or replacing an article.
+                    {t('wiki_admin.unused_info')}
                   </p>
                   <button
                     onClick={() => cleanupUnusedImages(unusedImages.map((image) => image.filename))}
@@ -660,14 +665,14 @@ const AdminWiki: React.FC = () => {
                     disabled={loading}
                     data-help-id="action-delete-unused-wiki-images"
                   >
-                    🗑️ Delete All Unused Images
+                    🗑️ {t('wiki_admin.delete_all_unused')}
                   </button>
                 </div>
               ) : (
                 <div className="rounded-lg border border-green-200 bg-green-50 p-4">
-                  <h2 className="font-bold text-green-900">No unused registered images</h2>
+                  <h2 className="font-bold text-green-900">{t('wiki_admin.no_unused_title')}</h2>
                   <p className="mt-1 text-sm text-green-800">
-                    Every registered image is currently referenced by at least one article.
+                    {t('wiki_admin.no_unused_info')}
                   </p>
                 </div>
               )}
@@ -680,18 +685,18 @@ const AdminWiki: React.FC = () => {
             </div>
           ) : images.length === 0 ? (
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
-              <p className="text-gray-600">No images uploaded yet. Upload images in the article editor.</p>
+              <p className="text-gray-600">{t('wiki_admin.no_images')}</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="border-b-2 border-gray-300 bg-gray-50">
-                    <th className="text-left px-4 py-3 font-semibold text-gray-900">Filename</th>
-                    <th className="text-left px-4 py-3 font-semibold text-gray-900">Original Name</th>
-                    <th className="text-center px-4 py-3 font-semibold text-gray-900">Usage</th>
-                    <th className="text-left px-4 py-3 font-semibold text-gray-900">Uploaded</th>
-                    <th className="text-center px-4 py-3 font-semibold text-gray-900">Actions</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-900">{t('wiki_admin.col_filename')}</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-900">{t('wiki_admin.col_original_name')}</th>
+                    <th className="text-center px-4 py-3 font-semibold text-gray-900">{t('wiki_admin.col_usage')}</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-900">{t('wiki_admin.col_uploaded')}</th>
+                    <th className="text-center px-4 py-3 font-semibold text-gray-900">{t('actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -718,7 +723,7 @@ const AdminWiki: React.FC = () => {
                           disabled={image.usage_count > 0}
                           data-help-id="action-delete-wiki-image"
                         >
-                          🗑️ Delete
+                          🗑️ {t('btn_delete')}
                         </button>
                       </td>
                     </tr>
@@ -735,20 +740,19 @@ const AdminWiki: React.FC = () => {
           >
             {orphanScanLoading ? (
               <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                <h3 className="font-bold text-gray-900">Checking for unregistered image files…</h3>
+                <h3 className="font-bold text-gray-900">{t('wiki_admin.checking_orphans')}</h3>
               </div>
             ) : orphanedImages.length > 0 ? (
               <>
                 <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4 mb-4">
                   <h3 className="text-lg font-bold text-yellow-900 mb-2">
-                    ⚠️ Unregistered Image Files Found ({orphanedImages.length})
+                    ⚠️ {t('wiki_admin.orphans_title', { count: orphanedImages.length })}
                   </h3>
                   <p className="text-yellow-800 text-sm">
-                    These image files exist on the server but are not registered in the database.
-                    They can be safely deleted to free up disk space.
+                    {t('wiki_admin.orphans_info')}
                   </p>
                   <p className="text-yellow-800 text-sm font-semibold mt-2">
-                    Total size: {(orphanedTotalSize / 1024 / 1024).toFixed(2)} MB
+                    {t('wiki_admin.total_size', { size: (orphanedTotalSize / 1024 / 1024).toFixed(2) })}
                   </p>
                 </div>
 
@@ -756,8 +760,8 @@ const AdminWiki: React.FC = () => {
                   <table className="w-full border-collapse">
                     <thead>
                       <tr className="border-b-2 border-gray-300 bg-gray-50">
-                        <th className="text-left px-4 py-3 font-semibold text-gray-900">Filename</th>
-                        <th className="text-right px-4 py-3 font-semibold text-gray-900">Size</th>
+                        <th className="text-left px-4 py-3 font-semibold text-gray-900">{t('wiki_admin.col_filename')}</th>
+                        <th className="text-right px-4 py-3 font-semibold text-gray-900">{t('wiki_admin.col_size')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -779,14 +783,14 @@ const AdminWiki: React.FC = () => {
                   disabled={loading}
                   data-help-id="action-delete-orphaned-wiki-files"
                 >
-                  🗑️ Delete All Unregistered Files
+                  🗑️ {t('wiki_admin.delete_all_orphans')}
                 </button>
               </>
             ) : (
               <div className="rounded-lg border border-green-200 bg-green-50 p-4">
-                <h3 className="font-bold text-green-900">No unregistered image files</h3>
+                <h3 className="font-bold text-green-900">{t('wiki_admin.no_orphans_title')}</h3>
                 <p className="mt-1 text-sm text-green-800">
-                  Every image file on disk has matching metadata in the image library.
+                  {t('wiki_admin.no_orphans_info')}
                 </p>
               </div>
             )}
@@ -796,12 +800,12 @@ const AdminWiki: React.FC = () => {
       {deletingImage && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-6 max-w-md">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Delete Image</h3>
+            <h3 className="text-lg font-bold text-gray-900 mb-4">{t('wiki_admin.delete_image_title')}</h3>
 
             {imageUsage.length > 0 ? (
               <>
                 <p className="text-red-600 font-semibold mb-3">
-                  ⚠️ This image is used in {imageUsage.length} article(s):
+                  ⚠️ {t('wiki_admin.image_used_in', { count: imageUsage.length })}
                 </p>
                 <ul className="bg-red-50 border border-red-200 rounded p-3 mb-4 max-h-48 overflow-y-auto">
                   {imageUsage.map((usage) => (
@@ -811,32 +815,32 @@ const AdminWiki: React.FC = () => {
                   ))}
                 </ul>
                 <p className="text-gray-600 mb-4">
-                  Remove the image from these articles before deleting it.
+                  {t('wiki_admin.remove_before_delete')}
                 </p>
                 <button
                   onClick={() => setDeletingImage(null)}
                   className="w-full px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-medium"
                 >
-                  Close
+                  {t('close_btn')}
                 </button>
               </>
             ) : (
               <>
                 <p className="text-gray-700 mb-6">
-                  Are you sure? This will permanently delete the image.
+                  {t('wiki_admin.confirm_delete_image')}
                 </p>
                 <div className="flex gap-3">
                   <button
                     onClick={() => setDeletingImage(null)}
                     className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
                   >
-                    Cancel
+                    {t('common.cancel')}
                   </button>
                   <button
                     onClick={() => confirmDeleteImage(deletingImage)}
                     className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
                   >
-                    Delete
+                    {t('btn_delete')}
                   </button>
                 </div>
               </>

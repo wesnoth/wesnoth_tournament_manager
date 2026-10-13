@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { renderWikiMarkdown } from '../utils/wikiMarkdown';
 
 type Language = 'en' | 'es' | 'de' | 'ru' | 'zh';
@@ -39,6 +40,7 @@ const MarkdownTranslationEditor: React.FC<MarkdownTranslationEditorProps> = ({
   onCopyFromEnglish,
   showPreview = true,
 }) => {
+  const { t } = useTranslation();
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -60,7 +62,7 @@ const MarkdownTranslationEditor: React.FC<MarkdownTranslationEditorProps> = ({
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || 'Image upload failed');
+        throw new Error(data.error || t('wiki_editor.image_upload_failed'));
       }
 
       const { url } = await response.json();
@@ -101,7 +103,7 @@ const MarkdownTranslationEditor: React.FC<MarkdownTranslationEditorProps> = ({
 
       {currentLanguage !== 'en' && onCopyFromEnglish && (
         <button type="button" onClick={onCopyFromEnglish} className="w-full px-3 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-sm font-medium border border-blue-200">
-          Copy title and content from English
+          {t('wiki_editor.copy_from_english')}
         </button>
       )}
 
@@ -110,21 +112,21 @@ const MarkdownTranslationEditor: React.FC<MarkdownTranslationEditorProps> = ({
         type="text"
         value={current.title || ''}
         onChange={(event) => onTitleChange(event.target.value)}
-        placeholder={`Title (${currentLanguage})`}
+        placeholder={t('wiki_editor.title_placeholder', { language: currentLanguage })}
         className="w-full px-3 py-2 border border-gray-300 rounded-lg"
       />
 
       <div className={showPreview ? 'grid grid-cols-1 xl:grid-cols-2 gap-4' : ''}>
         <div>
           <div className="flex justify-between items-center mb-2">
-            <label className="text-sm font-medium text-gray-700">Content (Markdown)</label>
+            <label className="text-sm font-medium text-gray-700">{t('wiki_editor.content_label')}</label>
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={!token || uploadingImage}
               className="text-xs px-3 py-1 bg-blue-100 text-blue-700 rounded disabled:opacity-50"
             >
-              {uploadingImage ? 'Uploading...' : 'Insert Image'}
+              {uploadingImage ? t('wiki_editor.uploading') : t('wiki_editor.insert_image')}
             </button>
             <input ref={fileInputRef} type="file" accept="image/*" onChange={insertImage} className="hidden" />
           </div>
@@ -134,13 +136,13 @@ const MarkdownTranslationEditor: React.FC<MarkdownTranslationEditorProps> = ({
             value={current.content_markdown || ''}
             onChange={(event) => onContentChange(event.target.value)}
             rows={12}
-            placeholder={`Write Markdown here (${currentLanguage})...`}
+            placeholder={t('wiki_editor.content_placeholder', { language: currentLanguage })}
             className="w-full p-3 border border-gray-300 rounded-lg font-mono text-sm resize-y"
           />
         </div>
         {showPreview && <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 min-h-[300px]">
-          <p className="text-sm font-semibold text-gray-700 mb-2">Preview ({currentLanguage.toUpperCase()})</p>
-          {preview ? <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: preview }} /> : <p className="text-sm text-gray-500">Start writing to see the preview.</p>}
+          <p className="text-sm font-semibold text-gray-700 mb-2">{t('wiki_editor.preview', { language: currentLanguage.toUpperCase() })}</p>
+          {preview ? <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: preview }} /> : <p className="text-sm text-gray-500">{t('wiki_editor.preview_empty')}</p>}
         </div>}
       </div>
     </div>

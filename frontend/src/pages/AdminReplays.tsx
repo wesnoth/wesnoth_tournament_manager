@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import i18next from 'i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { adminService, featureService } from '../services/api';
@@ -50,10 +51,10 @@ function parseSummaryMode(summaryJson: string | null): { rankedMode: boolean; to
   }
 }
 
-const CONFIDENCE_LABELS: Record<number, string> = {
-  0: '—',
-  1: 'Manual',
-  2: 'Auto',
+/** Translation keys of the integration confidence levels (0 has no label). */
+const CONFIDENCE_LABEL_KEYS: Record<number, string> = {
+  1: 'replays_admin.confidence_manual',
+  2: 'replays_admin.confidence_auto',
 };
 
 function formatReplayDate(dateStr: string | null): string {
@@ -61,10 +62,7 @@ function formatReplayDate(dateStr: string | null): string {
   try {
     const date = new Date(dateStr);
     if (Number.isNaN(date.getTime())) return '—';
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}/${month}/${year}`;
+    return date.toLocaleDateString(i18next.language);
   } catch {
     return '—';
   }
@@ -144,7 +142,7 @@ const AdminReplays: React.FC = () => {
       }
       setError('');
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load replays');
+      setError(err.response?.data?.error || t('replays_admin.load_failed'));
     } finally {
       setLoading(false);
     }
@@ -178,15 +176,15 @@ const AdminReplays: React.FC = () => {
   };
 
   const handleForceDiscard = async (replayId: string, filename: string) => {
-    if (!window.confirm(`Force-discard replay "${filename}"?`)) return;
+    if (!window.confirm(t('replays_admin.confirm_discard', { filename }))) return;
     setDiscarding(replayId);
     try {
       await adminService.forceDiscardReplay(replayId);
-      setMessage(`Replay ${filename} discarded`);
+      setMessage(t('replays_admin.discarded_message', { filename }));
       setTimeout(() => setMessage(''), 4000);
       fetchReplays();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to discard replay');
+      setError(err.response?.data?.error || t('replays_admin.discard_failed'));
     } finally {
       setDiscarding(null);
     }
@@ -201,7 +199,7 @@ const AdminReplays: React.FC = () => {
     if (!reprocessModal) return;
     const { replay, rankedMode, tournament, tournamentName } = reprocessModal;
     if (tournament && !tournamentName.trim()) {
-      setError('Tournament name is required when Tournament is enabled');
+      setError(t('replays_admin.tournament_name_required'));
       return;
     }
     setReprocessing(replay.id);
@@ -245,13 +243,13 @@ const AdminReplays: React.FC = () => {
     setSavingSettings(true);
     try {
       await adminService.updateSystemSetting(editingSettingKey, editingSettingValue);
-      setMessage('Setting updated successfully');
+      setMessage(t('replays_admin.setting_updated'));
       setTimeout(() => setMessage(''), 4000);
       setEditingSettingKey(null);
       setEditingSettingValue('');
       fetchSystemSettings();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to update setting');
+      setError(err.response?.data?.error || t('replays_admin.setting_update_failed'));
     } finally {
       setSavingSettings(false);
     }
@@ -310,7 +308,7 @@ const AdminReplays: React.FC = () => {
               onClick={() => setShowSimulation((visible) => !visible)}
               className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700"
             >
-              {showSimulation ? 'Close Simulator' : 'Simulate Match'}
+              {showSimulation ? t('replays_admin.close_simulator') : t('replays_admin.simulate_match')}
             </button>
           )}
         </div>
@@ -322,21 +320,21 @@ const AdminReplays: React.FC = () => {
 
         {/* System settings are replay-processing controls, shown only to administrators. */}
         {isAdmin && <details data-help-id="region-replay-system-settings" className="bg-white rounded-lg shadow-md mb-8">
-          <summary data-help-id="action-toggle-replay-system-settings" className="cursor-pointer p-6 text-xl font-bold text-gray-800">System Settings</summary>
+          <summary data-help-id="action-toggle-replay-system-settings" className="cursor-pointer p-6 text-xl font-bold text-gray-800">{t('replays_admin.system_settings')}</summary>
           <div className="px-6 pb-6">
           {loadingSettings ? (
             <p className="text-gray-600">{t('loading')}</p>
           ) : systemSettings.length === 0 ? (
-            <p className="text-gray-500">No system settings found</p>
+            <p className="text-gray-500">{t('replays_admin.no_settings')}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full border-collapse bg-white rounded-lg text-sm">
                 <thead>
                   <tr className="bg-gray-100 border-b border-gray-200">
-                    <th className="px-4 py-3 text-left font-semibold text-gray-800">Key</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-800">Value</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-800">Description</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-800">Actions</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('replays_admin.col_key')}</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('replays_admin.col_value')}</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('replays_admin.col_description')}</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -355,7 +353,7 @@ const AdminReplays: React.FC = () => {
                           onClick={() => handleEditSetting(setting.setting_key, setting.setting_value)}
                           className="text-blue-600 hover:text-blue-800 text-sm font-semibold"
                         >
-                          Edit
+                          {t('edit')}
                         </button>
                       </td>
                     </tr>
@@ -381,28 +379,28 @@ const AdminReplays: React.FC = () => {
                 }}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
               >
-                <option value="all">All</option>
-                <option value="new">New</option>
-                <option value="processing">Processing</option>
-                <option value="parsed">Parsed</option>
-                <option value="completed">Completed</option>
-                <option value="error">Error</option>
-                <option value="failed">Failed</option>
-                <option value="rejected">Rejected</option>
-                <option value="due">Due</option>
-                <option value="skipped">Skipped</option>
-                <option value="discarded">Discarded</option>
-                <option value="reported">Reported (has match)</option>
+                <option value="all">{t('replays_admin.status_all')}</option>
+                <option value="new">{t('replays_admin.status_new')}</option>
+                <option value="processing">{t('replays_admin.status_processing')}</option>
+                <option value="parsed">{t('replays_admin.status_parsed')}</option>
+                <option value="completed">{t('replays_admin.status_completed')}</option>
+                <option value="error">{t('replays_admin.status_error')}</option>
+                <option value="failed">{t('replays_admin.status_failed')}</option>
+                <option value="rejected">{t('replays_admin.status_rejected')}</option>
+                <option value="due">{t('replays_admin.status_due')}</option>
+                <option value="skipped">{t('replays_admin.status_skipped')}</option>
+                <option value="discarded">{t('replays_admin.status_discarded')}</option>
+                <option value="reported">{t('replays_admin.status_reported')}</option>
               </select>
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-semibold text-gray-600">Game ID:</label>
+              <label className="text-sm font-semibold text-gray-600">{t('replays_admin.game_id_label')}</label>
               <input
                 data-help-id="field-replay-game-id-filter"
                 type="number"
                 name="gameId"
-                placeholder="Filter by game ID"
+                placeholder={t('replays_admin.game_id_placeholder')}
                 value={inputFilters.gameId}
                 onChange={handleFilterInputChange}
                 onKeyDown={handleFilterKeyDown}
@@ -411,12 +409,12 @@ const AdminReplays: React.FC = () => {
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-semibold text-gray-600">Map:</label>
+              <label className="text-sm font-semibold text-gray-600">{t('replays_admin.map_label')}</label>
               <input
                 data-help-id="field-replay-map-filter"
                 type="text"
                 name="map"
-                placeholder="Filter by map name"
+                placeholder={t('replays_admin.map_placeholder')}
                 value={inputFilters.map}
                 onChange={handleFilterInputChange}
                 onKeyDown={handleFilterKeyDown}
@@ -425,12 +423,12 @@ const AdminReplays: React.FC = () => {
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-semibold text-gray-600">Player:</label>
+              <label className="text-sm font-semibold text-gray-600">{t('replays_admin.player_label')}</label>
               <input
                 data-help-id="field-replay-player-filter"
                 type="text"
                 name="player"
-                placeholder="Filter by player nickname"
+                placeholder={t('replays_admin.player_placeholder')}
                 value={inputFilters.player}
                 onChange={handleFilterInputChange}
                 onKeyDown={handleFilterKeyDown}
@@ -443,16 +441,16 @@ const AdminReplays: React.FC = () => {
               onClick={handleResetFilters}
               className="px-4 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500 transition-colors text-sm font-semibold"
             >
-              Reset Filters
+              {t('replays_admin.reset_filters')}
             </button>
 
             <button
               data-help-id="action-refresh-replays"
               onClick={handleRefresh}
               className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-semibold"
-              title="Refresh"
+              title={t('common.refresh')}
             >
-              🔄 Refresh
+              🔄 {t('common.refresh')}
             </button>
           </div>
 
@@ -505,17 +503,17 @@ const AdminReplays: React.FC = () => {
             <table className="w-full border-collapse bg-white shadow-md rounded-lg overflow-hidden text-sm">
               <thead>
                 <tr className="bg-gray-200">
-                  <th className="px-3 py-3 text-left font-semibold text-gray-800">Game ID</th>
-                  <th className="px-3 py-3 text-left font-semibold text-gray-800">Instance UUID</th>
-                  <th className="px-3 py-3 text-left font-semibold text-gray-800">Filename</th>
-                  <th className="px-3 py-3 text-left font-semibold text-gray-800">Replay Date</th>
-                  <th className="px-3 py-3 text-left font-semibold text-gray-800">Confidence</th>
-                  <th className="px-3 py-3 text-left font-semibold text-gray-800">Status</th>
-                  <th className="px-3 py-3 text-left font-semibold text-gray-800">Parse Error</th>
-                  <th className="px-3 py-3 text-left font-semibold text-gray-800">Side 1</th>
-                  <th className="px-3 py-3 text-left font-semibold text-gray-800">Side 2</th>
-                  <th className="px-3 py-3 text-left font-semibold text-gray-800">Map</th>
-                  <th className="px-3 py-3 text-left font-semibold text-gray-800">Actions</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-800">{t('replays_admin.col_game_id')}</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-800">{t('replays_admin.col_instance_uuid')}</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-800">{t('replays_admin.col_filename')}</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-800">{t('replays_admin.col_replay_date')}</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-800">{t('replays_admin.col_confidence')}</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-800">{t('label_status')}</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-800">{t('replays_admin.col_parse_error')}</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-800">{t('replays_admin.col_side1')}</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-800">{t('replays_admin.col_side2')}</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-800">{t('label_map')}</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-800">{t('actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -533,11 +531,11 @@ const AdminReplays: React.FC = () => {
                       </td>
                       <td className="px-3 py-2 text-gray-600 text-sm">{formatReplayDate(replay.detected_at)}</td>
                       <td className="px-3 py-2 text-gray-600 text-center">
-                        {CONFIDENCE_LABELS[replay.integration_confidence] ?? replay.integration_confidence ?? '—'}
+                        {CONFIDENCE_LABEL_KEYS[replay.integration_confidence] ? t(CONFIDENCE_LABEL_KEYS[replay.integration_confidence]) : replay.integration_confidence || '—'}
                       </td>
                       <td className="px-3 py-2">
                         <span className={`px-2 py-1 text-xs font-semibold rounded-full ${STATUS_COLORS[displayStatus] || 'bg-gray-100 text-gray-700'}`}>
-                          {displayStatus}
+                          {t(`replays_admin.status_${displayStatus}`, { defaultValue: displayStatus })}
                         </span>
                       </td>
                       <td className="px-3 py-2 text-red-700 text-xs max-w-[10rem] truncate" title={replay.parse_error_message ?? ''}>
@@ -572,7 +570,7 @@ const AdminReplays: React.FC = () => {
                           <button
                             data-help-id="action-view-replay-summary"
                             className="text-gray-400 hover:text-blue-600 transition-colors text-base"
-                            title="View parse summary"
+                            title={t('replays_admin.view_summary')}
                             onClick={() => openSummary(replay)}
                           >
                             📎
@@ -585,7 +583,7 @@ const AdminReplays: React.FC = () => {
                               disabled={discarding === replay.id}
                               onClick={() => handleForceDiscard(replay.id, replay.replay_filename || replay.id)}
                             >
-                              {discarding === replay.id ? '…' : 'Discard'}
+                              {discarding === replay.id ? '…' : t('replays_admin.discard')}
                             </button>
                           )}
                           {/* Reprocess */}
@@ -654,11 +652,11 @@ const AdminReplays: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={handleCancelEdit}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-800">Edit Setting</h2>
+              <h2 className="text-lg font-semibold text-gray-800">{t('replays_admin.edit_setting')}</h2>
               <p className="text-xs text-gray-500 mt-2 font-mono">{editingSettingKey}</p>
             </div>
             <div className="px-6 py-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">New Value:</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">{t('replays_admin.new_value')}</label>
               <textarea
                 value={editingSettingValue}
                 onChange={(e) => setEditingSettingValue(e.target.value)}
@@ -671,14 +669,14 @@ const AdminReplays: React.FC = () => {
                 onClick={handleCancelEdit}
                 className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleSaveSetting}
                 disabled={savingSettings}
                 className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
-                {savingSettings ? 'Saving...' : 'Save'}
+                {savingSettings ? t('common.saving') : t('common.save')}
               </button>
             </div>
           </div>
@@ -690,21 +688,21 @@ const AdminReplays: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={() => setReprocessModal(null)}>
           <div data-help-id="region-reprocess-replay-modal" className="bg-white rounded-xl shadow-2xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-800">Reprocess replay</h2>
+              <h2 className="text-lg font-semibold text-gray-800">{t('replays_admin.reprocess_title')}</h2>
               <p className="mt-1 text-xs text-gray-500 truncate">{reprocessModal.replay.replay_filename || reprocessModal.replay.id}</p>
             </div>
             <div className="space-y-4 px-6 py-5">
-              <p className="text-sm text-gray-600">Review the values read from the replay. Change them only when the game setup was incorrect.</p>
+              <p className="text-sm text-gray-600">{t('replays_admin.reprocess_info')}</p>
               <label className="flex items-center gap-3 text-sm font-semibold text-gray-700">
                 <input data-help-id="option-reprocess-ranked-mode" type="checkbox" checked={reprocessModal.rankedMode} onChange={(e) => setReprocessModal(current => current && ({ ...current, rankedMode: e.target.checked }))} />
-                Ranked mode
+                {t('replays_admin.ranked_mode')}
               </label>
               <label className="flex items-center gap-3 text-sm font-semibold text-gray-700">
                 <input data-help-id="option-reprocess-tournament" type="checkbox" checked={reprocessModal.tournament} onChange={(e) => setReprocessModal(current => current && ({ ...current, tournament: e.target.checked }))} />
-                Tournament
+                {t('replays_admin.tournament')}
               </label>
               <label className="block text-sm font-semibold text-gray-700">
-                <span className="mb-1 block">Tournament name</span>
+                <span className="mb-1 block">{t('replays_admin.tournament_name')}</span>
                 <input
                   data-help-id="field-reprocess-tournament-name"
                   type="text"
@@ -713,14 +711,14 @@ const AdminReplays: React.FC = () => {
                   maxLength={255}
                   disabled={!reprocessModal.tournament}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 font-normal disabled:bg-gray-100"
-                  placeholder="Exact tournament name"
+                  placeholder={t('replays_admin.tournament_name_placeholder')}
                 />
               </label>
             </div>
             <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
-              <button data-help-id="action-cancel-reprocess-replay" type="button" onClick={() => setReprocessModal(null)} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100">Cancel</button>
+              <button data-help-id="action-cancel-reprocess-replay" type="button" onClick={() => setReprocessModal(null)} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100">{t('common.cancel')}</button>
               <button data-help-id="action-submit-reprocess-replay" type="button" onClick={() => void handleReprocess()} disabled={reprocessing === reprocessModal.replay.id} className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50">
-                {reprocessing === reprocessModal.replay.id ? 'Reprocessing…' : 'Reprocess'}
+                {reprocessing === reprocessModal.replay.id ? t('replays_admin.reprocessing') : t('replays_admin.reprocess')}
               </button>
             </div>
           </div>
@@ -732,7 +730,7 @@ const AdminReplays: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={() => setSummaryModal({ open: false, json: '', filename: '' })}>
           <div data-help-id="region-replay-summary-modal" className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col" style={{ maxHeight: '85vh' }} onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-gray-800 truncate">Parse Summary</h2>
+              <h2 className="text-base font-semibold text-gray-800 truncate">{t('replays_admin.parse_summary')}</h2>
               <span className="text-xs text-gray-500 font-mono truncate ml-4">{summaryModal.filename}</span>
             </div>
             <div className="flex-1 overflow-auto p-4">
@@ -746,7 +744,7 @@ const AdminReplays: React.FC = () => {
                 className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors"
                 onClick={() => setSummaryModal({ open: false, json: '', filename: '' })}
               >
-                Close
+                {t('close_btn')}
               </button>
             </div>
           </div>

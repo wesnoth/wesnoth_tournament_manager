@@ -49,7 +49,7 @@ const AdminRuleTemplates: React.FC = () => {
       setTemplates(res.data || []);
       setError('');
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load rule templates');
+      setError(err.response?.data?.error || t('admin.rule_templates_load_failed'));
     } finally {
       setLoading(false);
     }
@@ -85,7 +85,7 @@ const AdminRuleTemplates: React.FC = () => {
       await fetchTemplates();
       setTimeout(() => setSuccess(''), 2500);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to save rule template');
+      setError(err.response?.data?.error || t('admin.rule_templates_save_failed'));
     } finally {
       setSaving(false);
     }
@@ -109,7 +109,7 @@ const AdminRuleTemplates: React.FC = () => {
       setSuccess(t('admin.rule_templates_deleted'));
       setTimeout(() => setSuccess(''), 2500);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to delete rule template');
+      setError(err.response?.data?.error || t('admin.rule_templates_delete_failed'));
     }
   };
 

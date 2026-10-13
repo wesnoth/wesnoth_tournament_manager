@@ -77,7 +77,7 @@ const AdminTournaments: React.FC = () => {
       await fetchTournaments();
     } catch (err: any) {
       console.error('Error deleting tournament:', err);
-      setError(err.response?.data?.error || 'Failed to delete tournament');
+      setError(err.response?.data?.error || t('tournaments_admin.delete_failed'));
     } finally {
       setLoading(false);
     }

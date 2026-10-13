@@ -76,7 +76,7 @@ const AdminDisputes: React.FC = () => {
       setError('');
     } catch (err: any) {
       console.error('Error fetching disputes:', err);
-      setError(err.response?.data?.error || err.message || 'Error loading disputes');
+      setError(err.response?.data?.error || err.message || t('disputes_admin.load_failed'));
       setDisputes([]);
     } finally {
       setLoading(false);
@@ -98,7 +98,7 @@ const AdminDisputes: React.FC = () => {
         await trackRecalculationJob(jobId);
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Failed to validate dispute');
+      setError(err.response?.data?.error || err.message || t('disputes_admin.validate_failed'));
     } finally {
       setProcessingId(null);
     }
@@ -110,11 +110,11 @@ const AdminDisputes: React.FC = () => {
     setError('');
     try {
       const response = await matchService.rejectDispute(matchId);
-      setMessage(response.data?.message || 'Dispute rejected');
+      setMessage(response.data?.message || t('disputes_admin.rejected'));
       setSelectedDispute(null);
       fetchDisputes();
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Failed to reject dispute');
+      setError(err.response?.data?.error || err.message || t('disputes_admin.reject_failed'));
     } finally {
       setProcessingId(null);
     }
@@ -157,7 +157,7 @@ const AdminDisputes: React.FC = () => {
   return (
     <MainLayout>
       <div data-help-id="region-match-disputes" className="max-w-6xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-6">Manage Match Disputes</h1>
+        <h1 className="text-3xl font-bold text-gray-800 mb-6">{t('disputes_admin.title')}</h1>
 
         {error && recalculationStatus === 'idle' && <p className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</p>}
         <GlobalStatsRecalculationProgress status={recalculationStatus} progress={recalculationProgress} warnings={recalculationWarnings} />
@@ -168,32 +168,32 @@ const AdminDisputes: React.FC = () => {
         ) : (
           <section>
             <div className="mb-6 flex items-center justify-between">
-              <h2 className="text-2xl font-semibold text-gray-800">Disputed Matches ({total})</h2>
-              <span className="text-sm text-gray-500">Page {currentPage} of {totalPages}</span>
+              <h2 className="text-2xl font-semibold text-gray-800">{t('disputes_admin.list_title', { total })}</h2>
+              <span className="text-sm text-gray-500">{t('pagination_page_info', { page: currentPage, totalPages })}</span>
             </div>
 
             {totalPages > 1 && (
               <div className="flex justify-center items-center gap-2 mb-4">
-                <button className="px-3 py-2 border rounded disabled:opacity-50" onClick={() => handlePageChange(1)} disabled={currentPage === 1}>First</button>
-                <button className="px-3 py-2 border rounded disabled:opacity-50" onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1}>Previous</button>
+                <button className="px-3 py-2 border rounded disabled:opacity-50" onClick={() => handlePageChange(1)} disabled={currentPage === 1}>{t('pagination_first')}</button>
+                <button className="px-3 py-2 border rounded disabled:opacity-50" onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1}>{t('pagination_prev')}</button>
                 <span className="px-3 text-sm text-gray-600">{disputes.length} shown</span>
-                <button className="px-3 py-2 border rounded disabled:opacity-50" onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages}>Next</button>
-                <button className="px-3 py-2 border rounded disabled:opacity-50" onClick={() => handlePageChange(totalPages)} disabled={currentPage === totalPages}>Last</button>
+                <button className="px-3 py-2 border rounded disabled:opacity-50" onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages}>{t('pagination_next')}</button>
+                <button className="px-3 py-2 border rounded disabled:opacity-50" onClick={() => handlePageChange(totalPages)} disabled={currentPage === totalPages}>{t('pagination_last')}</button>
               </div>
             )}
 
             <table data-help-id="region-disputed-matches-table" className="w-full border-collapse bg-white shadow-md rounded-lg overflow-hidden">
               <thead>
                 <tr className="bg-gray-200">
-                  <th className="px-4 py-3 text-left font-semibold text-gray-800">Match ID</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-800">Winner</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-800">Loser</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-800">Map</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-800">Winner Faction</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-800">Loser Faction</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-800">Status</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-800">Disputed At</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-800">Actions</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('disputes_admin.col_match_id')}</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('label_winner')}</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('label_loser')}</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('label_map')}</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('disputes_admin.col_winner_faction')}</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('disputes_admin.col_loser_faction')}</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('label_status')}</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('disputes_admin.col_disputed_at')}</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -214,7 +214,7 @@ const AdminDisputes: React.FC = () => {
                           className="px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600"
                           onClick={() => setSelectedDispute(dispute)}
                         >
-                          View Details
+                          {t('disputes_admin.view_details')}
                         </button>
                       </div>
                     </td>
@@ -229,33 +229,33 @@ const AdminDisputes: React.FC = () => {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedDispute(null)}>
             <div data-help-id="region-dispute-review" className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
               <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 border-b-2 border-blue-800 flex justify-between items-center rounded-t-xl">
-                <h2 className="text-2xl font-bold text-white">Dispute Review</h2>
+                <h2 className="text-2xl font-bold text-white">{t('disputes_admin.review_title')}</h2>
                 <button data-help-id="action-close-dispute-review" className="text-3xl text-white hover:text-blue-100 transition-colors" onClick={() => setSelectedDispute(null)}>×</button>
               </div>
               
               <div className="p-8 space-y-6">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-6 border border-blue-200">
-                  <h3 className="text-lg font-bold text-blue-900 mb-5">Match Details</h3>
+                  <h3 className="text-lg font-bold text-blue-900 mb-5">{t('disputes_admin.match_details')}</h3>
                   <div className="flex justify-around items-center mb-6">
                     <div className="text-center bg-white rounded-lg p-4 flex-1 mx-2 shadow-sm">
-                      <p className="text-green-600 text-xs font-semibold uppercase tracking-wide">Winner</p>
+                      <p className="text-green-600 text-xs font-semibold uppercase tracking-wide">{t('label_winner')}</p>
                       <p className="text-xl font-bold text-gray-900 mt-2">{selectedDispute.winner_nickname}</p>
                       <p className="text-sm text-gray-700 mt-1 font-medium">{selectedDispute.winner_faction}</p>
                     </div>
                     <div className="text-gray-400 font-bold text-2xl mx-2">vs</div>
                     <div className="text-center bg-white rounded-lg p-4 flex-1 mx-2 shadow-sm">
-                      <p className="text-red-600 text-xs font-semibold uppercase tracking-wide">Loser</p>
+                      <p className="text-red-600 text-xs font-semibold uppercase tracking-wide">{t('label_loser')}</p>
                       <p className="text-xl font-bold text-gray-900 mt-2">{selectedDispute.loser_nickname}</p>
                       <p className="text-sm text-gray-700 mt-1 font-medium">{selectedDispute.loser_faction}</p>
                     </div>
                   </div>
                   <div className="bg-white rounded-lg p-4 space-y-2 text-sm text-gray-700">
                     <div className="flex justify-between">
-                      <span className="font-semibold text-gray-800">Map:</span>
+                      <span className="font-semibold text-gray-800">{t('disputes_admin.map_label')}</span>
                       <span className="text-gray-900 font-medium">{selectedDispute.map}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="font-semibold text-gray-800">Played:</span>
+                      <span className="font-semibold text-gray-800">{t('disputes_admin.played_label')}</span>
                       <span className="text-gray-900 font-medium">{formatDisputeDate(selectedDispute.created_at)}</span>
                     </div>
                     <div className="flex justify-between">
@@ -266,24 +266,24 @@ const AdminDisputes: React.FC = () => {
                 </div>
 
                 <div className="bg-green-50 rounded-lg p-6 border-l-4 border-green-500">
-                  <h3 className="text-lg font-bold text-green-900 mb-4">Winner's Comments{selectedDispute.disputed_by && selectedDispute.disputed_by === selectedDispute.winner_id ? ' / Dispute Reason' : ''}</h3>
-                  <p className="whitespace-pre-line break-words leading-relaxed text-gray-800">{selectedDispute.winner_comments || 'No comments provided'}</p>
+                  <h3 className="text-lg font-bold text-green-900 mb-4">{selectedDispute.disputed_by && selectedDispute.disputed_by === selectedDispute.winner_id ? t('disputes_admin.winner_comments_reason') : t('disputes_admin.winner_comments')}</h3>
+                  <p className="whitespace-pre-line break-words leading-relaxed text-gray-800">{selectedDispute.winner_comments || t('disputes_admin.no_comments')}</p>
                   {selectedDispute.winner_rating && (
-                    <p className="text-sm text-green-700 mt-4 font-semibold">⭐ Match Rating: {selectedDispute.winner_rating}/5</p>
+                    <p className="text-sm text-green-700 mt-4 font-semibold">⭐ {t('disputes_admin.match_rating', { rating: selectedDispute.winner_rating })}</p>
                   )}
                 </div>
 
                 <div className="bg-red-50 rounded-lg p-6 border-l-4 border-red-500">
                   {/* Disputes opened before `disputed_by` existed could only come from the loser. */}
-                  <h3 className="text-lg font-bold text-red-900 mb-4">Loser's Comments{!selectedDispute.disputed_by || selectedDispute.disputed_by === selectedDispute.loser_id ? ' / Dispute Reason' : ''}</h3>
-                  <p className="whitespace-pre-line break-words leading-relaxed text-gray-800">{selectedDispute.loser_comments || 'No comments provided'}</p>
+                  <h3 className="text-lg font-bold text-red-900 mb-4">{!selectedDispute.disputed_by || selectedDispute.disputed_by === selectedDispute.loser_id ? t('disputes_admin.loser_comments_reason') : t('disputes_admin.loser_comments')}</h3>
+                  <p className="whitespace-pre-line break-words leading-relaxed text-gray-800">{selectedDispute.loser_comments || t('disputes_admin.no_comments')}</p>
                   {selectedDispute.loser_rating && (
-                    <p className="text-sm text-red-700 mt-4 font-semibold">⭐ Match Rating: {selectedDispute.loser_rating}/5</p>
+                    <p className="text-sm text-red-700 mt-4 font-semibold">⭐ {t('disputes_admin.match_rating', { rating: selectedDispute.loser_rating })}</p>
                   )}
                 </div>
 
                 <div className="bg-amber-50 border-l-4 border-amber-500 p-6 rounded-lg">
-                  <p className="text-amber-900 leading-relaxed"><strong className="font-bold">⚠️ Important Notice:</strong> This decision will permanently affect both players' statistics and ELO ratings.</p>
+                  <p className="text-amber-900 leading-relaxed"><strong className="font-bold">⚠️ {t('disputes_admin.notice_label')}</strong> {t('disputes_admin.notice_text')}</p>
                 </div>
               </div>
 
@@ -293,19 +293,19 @@ const AdminDisputes: React.FC = () => {
                   className="px-6 py-2.5 bg-gray-400 text-white rounded-lg hover:bg-gray-500 font-semibold transition-colors shadow-md"
                   onClick={() => setSelectedDispute(null)}
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button 
                   data-help-id="action-validate-dispute-admin"
                   className="px-6 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold transition-colors shadow-md flex items-center gap-2"
                   disabled={processingId === selectedDispute.id}
                   onClick={() => {
-                    if (window.confirm('Validate this dispute? The match will be voided and stats recalculated.')) {
+                    if (window.confirm(t('disputes_admin.confirm_validate'))) {
                       handleValidateDispute(selectedDispute.id);
                     }
                   }}
                 >
-                  ✓ Validate Dispute
+                  ✓ {t('disputes_admin.validate')}
                 </button>
                 <button
                   data-help-id="action-award-dispute-win-admin"
@@ -324,12 +324,12 @@ const AdminDisputes: React.FC = () => {
                   className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold transition-colors shadow-md flex items-center gap-2"
                   disabled={processingId === selectedDispute.id}
                   onClick={() => {
-                    if (window.confirm('Reject this dispute? The match will be confirmed.')) {
+                    if (window.confirm(t('disputes_admin.confirm_reject'))) {
                       handleRejectDispute(selectedDispute.id);
                     }
                   }}
                 >
-                  ✗ Reject Dispute
+                  ✗ {t('disputes_admin.reject')}
                 </button>
               </div>
             </div>

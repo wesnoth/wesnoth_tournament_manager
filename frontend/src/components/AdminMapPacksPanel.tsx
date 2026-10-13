@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../services/api';
 
 interface MapOption {
@@ -20,6 +21,7 @@ const emptyForm = () => ({ name: '', description: '', is_active: true, map_ids: 
 
 /** Administrative and moderator CRUD surface for reusable map collections. */
 const AdminMapPacksPanel: React.FC = () => {
+  const { t } = useTranslation();
   const [packs, setPacks] = useState<MapPack[]>([]);
   const [maps, setMaps] = useState<MapOption[]>([]);
   const [form, setForm] = useState(emptyForm());
@@ -41,7 +43,7 @@ const AdminMapPacksPanel: React.FC = () => {
       setPacks(packsResponse.data || []);
       setMaps(mapsResponse.data || []);
     } catch (requestError: any) {
-      setError(requestError.response?.data?.error || 'Failed to load map packs');
+      setError(requestError.response?.data?.error || t('map_packs_admin.load_failed'));
     } finally {
       setLoading(false);
     }
@@ -83,36 +85,36 @@ const AdminMapPacksPanel: React.FC = () => {
       setError('');
       if (editingId) await api.put(`/admin/map-packs/${editingId}`, form);
       else await api.post('/admin/map-packs', form);
-      setMessage(editingId ? 'Map pack updated successfully' : 'Map pack created successfully');
+      setMessage(editingId ? t('map_packs_admin.updated') : t('map_packs_admin.created'));
       reset();
       await load();
     } catch (requestError: any) {
-      setError(requestError.response?.data?.error || 'Failed to save map pack');
+      setError(requestError.response?.data?.error || t('map_packs_admin.save_failed'));
     } finally {
       setSaving(false);
     }
   };
 
   const remove = async (pack: MapPack) => {
-    if (!window.confirm(`Delete map pack "${pack.name}"? This does not change any tournament.`)) return;
+    if (!window.confirm(t('map_packs_admin.confirm_delete', { name: pack.name }))) return;
     try {
       setError('');
       await api.delete(`/admin/map-packs/${pack.id}`);
-      setMessage('Map pack deleted successfully');
+      setMessage(t('map_packs_admin.deleted'));
       await load();
     } catch (requestError: any) {
-      setError(requestError.response?.data?.error || 'Failed to delete map pack');
+      setError(requestError.response?.data?.error || t('map_packs_admin.delete_failed'));
     }
   };
 
-  if (loading) return <p className="text-gray-600">Loading map packs...</p>;
+  if (loading) return <p className="text-gray-600">{t('map_packs_admin.loading')}</p>;
 
   return (
     <section data-help-id="region-admin-map-packs" className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-semibold text-gray-800">Map Packs</h2>
-          <p className="text-sm text-gray-600">Reusable map collections for fast tournament setup.</p>
+          <h2 className="text-2xl font-semibold text-gray-800">{t('map_packs_admin.title')}</h2>
+          <p className="text-sm text-gray-600">{t('map_packs_admin.subtitle')}</p>
         </div>
         <button
           data-help-id="action-add-map-pack"
@@ -120,7 +122,7 @@ const AdminMapPacksPanel: React.FC = () => {
           onClick={() => showForm ? reset() : setShowForm(true)}
           className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700"
         >
-          {showForm ? 'Cancel' : '+ Add Map Pack'}
+          {showForm ? t('common.cancel') : t('map_packs_admin.add')}
         </button>
       </div>
 
@@ -129,7 +131,7 @@ const AdminMapPacksPanel: React.FC = () => {
 
       {showForm && <form data-help-id="region-map-pack-editor" onSubmit={submit} className="space-y-4 rounded-lg border bg-white p-5 shadow-sm">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <label className="text-sm font-medium text-gray-700">Name
+          <label className="text-sm font-medium text-gray-700">{t('map_packs_admin.name')}
             <input
               data-help-id="field-map-pack-name"
               value={form.name}
@@ -147,10 +149,10 @@ const AdminMapPacksPanel: React.FC = () => {
               checked={form.is_active}
               onChange={event => setForm({ ...form, is_active: event.target.checked })}
             />
-            Available in tournament setup
+            {t('map_packs_admin.available_in_setup')}
           </label>
         </div>
-        <label className="block text-sm font-medium text-gray-700">Description
+        <label className="block text-sm font-medium text-gray-700">{t('map_packs_admin.description')}
           <textarea
             data-help-id="field-map-pack-description"
             value={form.description}
@@ -161,7 +163,7 @@ const AdminMapPacksPanel: React.FC = () => {
           />
         </label>
         <fieldset>
-          <legend className="mb-2 text-sm font-semibold text-gray-700">Maps ({form.map_ids.length} selected)</legend>
+          <legend className="mb-2 text-sm font-semibold text-gray-700">{t('map_packs_admin.maps_selected', { count: form.map_ids.length })}</legend>
           <div data-help-id="region-map-pack-maps" className="grid max-h-80 grid-cols-1 gap-2 overflow-y-auto rounded border p-3 md:grid-cols-2 lg:grid-cols-3">
             {maps.map(map => <label key={map.id} className={`flex items-center gap-2 rounded p-2 ${map.is_active ? 'hover:bg-gray-50' : 'bg-gray-100 text-gray-500'}`}>
               <input
@@ -171,8 +173,8 @@ const AdminMapPacksPanel: React.FC = () => {
                 onChange={() => toggleMap(map.id)}
               />
               <span className="text-sm">{map.name}</span>
-              {map.is_ranked && <span className="text-xs text-blue-700">Ranked</span>}
-              {!map.is_active && <span className="text-xs">Inactive</span>}
+              {map.is_ranked && <span className="text-xs text-blue-700">{t('map_packs_admin.ranked')}</span>}
+              {!map.is_active && <span className="text-xs">{t('map_packs_admin.inactive')}</span>}
             </label>)}
           </div>
         </fieldset>
@@ -183,26 +185,26 @@ const AdminMapPacksPanel: React.FC = () => {
             disabled={saving || form.name.trim().length < 2 || form.map_ids.length === 0}
             className="rounded bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50"
           >
-            {saving ? 'Saving...' : editingId ? 'Update Map Pack' : 'Create Map Pack'}
+            {saving ? t('common.saving') : editingId ? t('map_packs_admin.update') : t('map_packs_admin.create')}
           </button>
-          <button data-help-id="action-cancel-map-pack" type="button" onClick={reset} className="rounded bg-gray-200 px-4 py-2 text-gray-800">Cancel</button>
+          <button data-help-id="action-cancel-map-pack" type="button" onClick={reset} className="rounded bg-gray-200 px-4 py-2 text-gray-800">{t('common.cancel')}</button>
         </div>
       </form>}
 
       <div className="space-y-3">
-        {packs.length === 0 ? <p className="text-gray-600">No map packs found.</p> : packs.map(pack => <article key={pack.id} className="rounded-lg border-l-4 border-purple-500 bg-white p-4 shadow-sm">
+        {packs.length === 0 ? <p className="text-gray-600">{t('map_packs_admin.empty')}</p> : packs.map(pack => <article key={pack.id} className="rounded-lg border-l-4 border-purple-500 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap justify-between gap-4">
             <div>
               <h3 className="text-lg font-semibold text-gray-800">{pack.name}</h3>
               {pack.description && <p className="mt-1 text-sm text-gray-600">{pack.description}</p>}
               <p className="mt-2 text-sm text-gray-700">{pack.maps.map(map => map.name).join(', ')}</p>
               <span className={`mt-2 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${pack.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}`}>
-                {pack.is_active ? 'Available' : 'Inactive'} · {pack.maps.length} maps
+                {pack.is_active ? t('map_packs_admin.available') : t('map_packs_admin.pack_inactive')} · {t('map_packs_admin.maps_count', { count: pack.maps.length })}
               </span>
             </div>
             <div className="flex items-start gap-2">
-              <button data-help-id="action-edit-map-pack" type="button" onClick={() => edit(pack)} className="rounded bg-yellow-500 px-3 py-1 text-sm font-semibold text-black">Edit</button>
-              <button data-help-id="action-delete-map-pack" type="button" onClick={() => remove(pack)} className="rounded bg-red-600 px-3 py-1 text-sm font-semibold text-white">Delete</button>
+              <button data-help-id="action-edit-map-pack" type="button" onClick={() => edit(pack)} className="rounded bg-yellow-500 px-3 py-1 text-sm font-semibold text-black">{t('edit')}</button>
+              <button data-help-id="action-delete-map-pack" type="button" onClick={() => remove(pack)} className="rounded bg-red-600 px-3 py-1 text-sm font-semibold text-white">{t('btn_delete')}</button>
             </div>
           </div>
         </article>)}

@@ -5,6 +5,7 @@
  */
 
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import MarkdownTranslationEditor from './MarkdownTranslationEditor';
 import { renderWikiMarkdown } from '../utils/wikiMarkdown';
 
@@ -56,6 +57,7 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
   token,
   userId
 }) => {
+  const { t } = useTranslation();
   const [slug, setSlug] = useState(editingArticle?.slug || '');
   const [currentLanguage, setCurrentLanguage] = useState<Language>('en');
   const [translations, setTranslations] = useState<Translations>(
@@ -86,7 +88,7 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
   const copyFromEnglish = () => {
     const enTranslation = translations.en;
     if (!enTranslation) {
-      setError('English translation is empty');
+      setError(t('wiki_editor.english_empty'));
       return;
     }
 
@@ -102,14 +104,14 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
   const handleSave = async () => {
     // Validate slug
     if (!slug.trim()) {
-      setError('Slug is required');
+      setError(t('wiki_editor.slug_required'));
       return;
     }
 
     // Validate English translation
     const enTrans = translations.en;
     if (!enTrans || !enTrans.title?.trim() || !enTrans.content_markdown?.trim()) {
-      setError('English translation must have title and content');
+      setError(t('wiki_editor.english_incomplete'));
       return;
     }
 
@@ -124,7 +126,7 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
         author_id: userId
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Save failed';
+      const msg = err instanceof Error ? err.message : t('wiki_editor.save_failed');
       setError(msg);
       throw err;
     } finally {
@@ -136,7 +138,7 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
     <div className="wiki-editor grid grid-cols-2 gap-6 p-6">
       {/* Left Panel: Editor */}
       <div className="editor-panel flex flex-col">
-        <h2 className="text-2xl font-bold mb-4">{editingArticle ? 'Edit Article' : 'New Article'}</h2>
+        <h2 className="text-2xl font-bold mb-4">{editingArticle ? t('wiki_editor.edit_article') : t('wiki_editor.new_article')}</h2>
 
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
@@ -148,7 +150,7 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
         <div className="space-y-4 mb-6 pb-6 border-b border-gray-200">
           {/* Slug */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Slug</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('wiki_editor.slug')}</label>
             <input
               type="text"
               value={slug}
@@ -157,7 +159,7 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
               disabled={!!editingArticle}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
             />
-            <p className="text-xs text-gray-500 mt-1">URL-friendly identifier (lowercase, hyphens, underscores)</p>
+            <p className="text-xs text-gray-500 mt-1">{t('wiki_editor.slug_help')}</p>
           </div>
 
           {/* Publish Status */}
@@ -169,7 +171,7 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
                 onChange={(e) => setIsPublished(e.target.checked)}
                 className="w-4 h-4 text-primary rounded"
               />
-              <span className="ml-2 text-sm text-gray-700">Publish</span>
+              <span className="ml-2 text-sm text-gray-700">{t('wiki_editor.publish')}</span>
             </label>
           </div>
         </div>
@@ -192,7 +194,7 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
             disabled={isSaving || isLoading}
             className="flex-1 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed font-medium"
           >
-            {isSaving || isLoading ? 'Saving...' : 'Save Article'}
+            {isSaving || isLoading ? t('common.saving') : t('wiki_editor.save_article')}
           </button>
           {onCancel && (
             <button
@@ -200,7 +202,7 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
               disabled={isSaving || isLoading}
               className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
           )}
         </div>
@@ -209,7 +211,7 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
       {/* Right Panel: Preview */}
       <div className="preview-panel flex flex-col bg-gray-50 rounded-lg p-4 border border-gray-200 overflow-hidden">
         <div className="mb-3">
-          <h3 className="text-lg font-semibold text-gray-900">Preview ({currentLanguage.toUpperCase()})</h3>
+          <h3 className="text-lg font-semibold text-gray-900">{t('wiki_editor.preview', { language: currentLanguage.toUpperCase() })}</h3>
           <p className="text-sm text-gray-600">{currentTranslation.title}</p>
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -217,7 +219,7 @@ const WikiEditor: React.FC<WikiEditorProps> = ({
             <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: renderWikiMarkdown(currentTranslation.content_markdown || '').html }} />
           ) : (
             <div className="text-center py-12">
-              <p className="text-gray-500">Start writing to see preview here</p>
+              <p className="text-gray-500">{t('wiki_editor.preview_empty')}</p>
             </div>
           )}
         </div>
