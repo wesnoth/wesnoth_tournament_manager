@@ -8,6 +8,7 @@ import { query } from '../config/database.js';
 import { v4 as uuidv4 } from 'uuid';
 import discordService from './discordService.js';
 import { isValidDiscordSnowflake } from './discord.js';
+import type { NotificationRecipient, NotificationRenderer } from './notificationText.js';
 
 const DISCORD_ENABLED = process.env.DISCORD_ENABLED === 'true';
 
@@ -353,8 +354,11 @@ export async function sendDiscordNotification(
  * @param userIds Application user IDs that should receive the notification.
  * @param tournamentId Tournament or proposal owner used by the notification record.
  * @param type Notification type consumed by the in-app notification UI.
- * @param title Short notification title.
- * @param message Human-readable notification body.
+ * @param render Builds the title and body for one recipient. Each recipient's
+ * profile language and timezone are loaded here, so the stored text is in
+ * their language and their clock. The text is fixed when stored: a later
+ * profile change does not rewrite it. A recipient without a profile row gets
+ * English and UTC.
  * @param messageExtra Optional additional content stored separately.
  * @param seriesId Optional phase-engine series identifier.
  * @param gameId Optional phase-engine game identifier.
@@ -375,15 +379,23 @@ export async function storeNotificationForUsers(
     | 'challenge_counter_proposal'
     | 'challenge_updated'
     | 'challenge_cancelled',
-  title: string,
-  message: string,
+  render: NotificationRenderer,
   messageExtra?: string | null,
   seriesId?: string | null,
   gameId?: string | null
 ): Promise<boolean> {
   try {
+    if (!userIds.length) return true;
+    const profiles = await query(
+      `SELECT id, language, timezone FROM users_extension WHERE id IN (${userIds.map(() => '?').join(', ')})`,
+      userIds
+    );
+    const recipients = new Map<string, NotificationRecipient>(
+      (profiles.rows || []).map((row: any) => [row.id, { language: row.language, timezone: row.timezone }])
+    );
     for (const userId of userIds) {
       const notificationId = uuidv4();
+      const { title, message } = render(recipients.get(userId) || { language: null, timezone: null });
       await query(
         `INSERT INTO user_notifications
            (id, user_id, tournament_id, game_id, series_id, type, title, message, message_extra, is_read)

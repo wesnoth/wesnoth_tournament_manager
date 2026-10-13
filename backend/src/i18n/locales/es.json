@@ -20,5 +20,56 @@
     "tournament_creation": "Has alcanzado el límite de creación de torneos. Inténtalo de nuevo después de {{retryAt}}.",
     "p2p_challenge": "Has alcanzado el límite de acciones de challenges P2P. Inténtalo de nuevo después de {{retryAt}}.",
     "tournament_schedule": "Has alcanzado el límite de acciones de horarios de torneo. Inténtalo de nuevo después de {{retryAt}}."
+  },
+  "notifications": {
+    "challenge_proposal": {
+      "title": "Nueva propuesta de reto",
+      "message": "{{actor}} te reta y propone estos horarios:"
+    },
+    "challenge_confirmed": {
+      "title": "Horario del reto confirmado",
+      "message": "{{actor}} ha confirmado estos horarios:"
+    },
+    "challenge_rejected": {
+      "title": "Horario del reto rechazado",
+      "message": "{{actor}} ha rechazado tu propuesta."
+    },
+    "challenge_counter_proposal": {
+      "title": "Contrapropuesta de reto",
+      "message": "{{actor}} ha rechazado tu propuesta y propone estos horarios:"
+    },
+    "challenge_updated": {
+      "title": "Horario del reto actualizado",
+      "message": "{{actor}} ha cambiado los horarios propuestos:"
+    },
+    "challenge_cancelled": {
+      "title": "Propuesta de reto cancelada",
+      "message": "{{actor}} ha cancelado la propuesta de reto."
+    },
+    "schedule_proposal": {
+      "title": "Propuesta de horario - {{tournament}}",
+      "message": "{{actor}} ha propuesto estos horarios para tu serie del torneo:",
+      "message_team": "{{actor}} ({{team}}) ha propuesto estos horarios para la serie {{home}} contra {{away}}:"
+    },
+    "schedule_confirmed": {
+      "title": "Horario confirmado - {{tournament}}",
+      "message": "{{actor}} ha confirmado estos horarios para tu serie del torneo:",
+      "message_team": "{{actor}} ({{team}}) ha confirmado estos horarios para la serie {{home}} contra {{away}}:"
+    },
+    "schedule_rejected": {
+      "title": "Horario rechazado - {{tournament}}",
+      "message": "{{actor}} ha rechazado el horario de tu serie del torneo.",
+      "message_team": "{{actor}} ({{team}}) ha rechazado el horario de la serie {{home}} contra {{away}}."
+    },
+    "schedule_changed": {
+      "title": "Horario cambiado - {{tournament}}",
+      "message": "{{actor}} ha cambiado los horarios propuestos para tu serie del torneo:",
+      "message_team": "{{actor}} ({{team}}) ha cambiado los horarios propuestos para la serie {{home}} contra {{away}}:"
+    },
+    "schedule_cancelled": {
+      "title": "Horario cancelado - {{tournament}}",
+      "message": "{{actor}} ha cancelado la propuesta de horario de tu serie del torneo.",
+      "message_team": "{{actor}} ({{team}}) ha cancelado la propuesta de horario de la serie {{home}} contra {{away}}."
+    }
   }
 }

@@ -477,7 +477,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
                 )}
               </div>
 
-              <p className="text-gray-700 mb-2">{notification.message}</p>
+              <p className="text-gray-700 mb-2 whitespace-pre-line">{notification.message}</p>
 
               {notification.message_extra && (
                 <div className="bg-gray-100 rounded p-3 mb-2 border-l-4 border-blue-500">

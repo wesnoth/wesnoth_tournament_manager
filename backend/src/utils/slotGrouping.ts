@@ -61,17 +61,6 @@ export function groupSlotsIntoRanges(slotDatetimes: string[]): TimeRange[] {
 }
 
 /**
- * Format time ranges with line breaks (for Discord embeds and database messages)
- * @param ranges Array of time ranges
- * @returns String with newline-separated ranges
- */
-export function formatTimeRangesForDiscord(ranges: TimeRange[]): string {
-  if (ranges.length === 0) return 'No time slots';
-
-  return formatTimeRangesForDiscordInTimezone(ranges, 'UTC');
-}
-
-/**
  * Format schedule ranges in one user's timezone.
  * The stored slots are instants in UTC; formatting them from Date values keeps
  * both the calendar day and the clock time correct when a timezone crosses
@@ -111,52 +100,4 @@ export function formatTimeRangesForDiscordByTimezone(
   return timezoneEntries
     .map(({ label, timezone }) => `**${label} (${timezone})**\n${formatTimeRangesForDiscordInTimezone(ranges, timezone || 'UTC')}`)
     .join('\n\n');
-}
-
-/**
- * Build a formatted notification message with title and time ranges
- * Used for both Discord and database messages
- * @param notificationType Type of notification (proposal, confirmed, rejected, counter)
- * @param actorName Name of the actor (team or player)
- * @param ranges Array of time ranges
- * @param notes Optional notes from proposer
- * @returns Formatted message string
- */
-export function buildNotificationMessage(
-  notificationType: 'proposal' | 'confirmed' | 'rejected' | 'counter' | 'changed' | 'cancelled',
-  actorName: string,
-  ranges: TimeRange[],
-  notes?: string | null
-): string {
-  let message = '';
-  
-  switch (notificationType) {
-    case 'proposal':
-      message = `📋 **Schedule Proposal** - ${actorName} proposes:\n${formatTimeRangesForDiscord(ranges)}`;
-      break;
-    case 'confirmed':
-      message = `✅ **Schedule Confirmed** - ${actorName} confirms:\n${formatTimeRangesForDiscord(ranges)}`;
-      break;
-    case 'rejected':
-      message = `❌ **Schedule Rejected** - ${actorName} rejects the proposal`;
-      break;
-    case 'counter':
-      message = `🔄 **Counter Proposal** - ${actorName} rejects the proposal and proposes:\n${formatTimeRangesForDiscord(ranges)}`;
-      break;
-    case 'changed':
-      message = `✏️ **Proposal Changed** - ${actorName} has updated the proposed slots:\n${formatTimeRangesForDiscord(ranges)}`;
-      break;
-    case 'cancelled':
-      message = `🚫 **Proposal Cancelled** - ${actorName} has withdrawn the proposal`;
-      if (ranges.length > 0) {
-        message += `:\n${formatTimeRangesForDiscord(ranges)}`;
-      }
-      break;
-  }
-
-  if (notes) {
-    message += `\n\n💬 **Notes**: ${notes}`;
-  }
-
-  return message;
 }

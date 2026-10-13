@@ -3,6 +3,7 @@ import { query } from '../config/database.js';
 import { authMiddleware, AuthRequest, optionalAuthMiddleware } from '../middleware/auth.js';
 import { sendDiscordNotification, storeNotificationForUsers } from '../services/discordNotificationService.js';
 import { groupSlotsIntoRanges, formatTimeRangesForDiscordByTimezone } from '../utils/slotGrouping.js';
+import { seriesNotification } from '../services/notificationText.js';
 import {
   createSeriesProposal,
   getSeriesProposal,
@@ -101,7 +102,9 @@ type SeriesNotificationAction = 'schedule_proposal' | 'schedule_confirmed' | 'sc
  * includes the actor's teammate, so both members know what their team did. In
  * team series the messages and the Discord embed name both teams with their
  * members (maintainer decisions, 2026-10-11 and 2026-10-12); 1v1 series use
- * nicknames.
+ * nicknames. The in-app text is written in each recipient's profile language
+ * and timezone (see notificationText.ts); the Discord embed stays in English
+ * because the tournament thread is shared.
  */
 const notifySeriesParticipants = async (
   seriesId: string,
@@ -162,30 +165,6 @@ const notifySeriesParticipants = async (
   const teams = (actor?.tournament_mode || rows[0]?.tournament_mode) === 'team'
     ? await resolveSeriesTeams(tournamentId, rows, actorUserId)
     : null;
-  // "Ana (Red) ... the series Red (Ana, Bob) vs Blue (Cid, Dan)." for teams,
-  // "Ana ... your tournament series." for 1v1. Team names alone are ambiguous
-  // to players who do not know the rosters, so each side lists its members.
-  const teamWithMembers = (team: TeamNotificationContext) =>
-    team.memberNames.length ? `${team.teamName} (${team.memberNames.join(', ')})` : team.teamName;
-  const actorLabel = teams ? `${actorName} (${teams.actorTeam.teamName})` : actorName;
-  const seriesLabel = teams
-    ? `the series ${teamWithMembers(teams.actorTeam)} vs ${teamWithMembers(teams.opponentTeam)}`
-    : 'your tournament series';
-  const messageByAction: Record<SeriesNotificationAction, string> = {
-    schedule_proposal: `${actorLabel} proposed a schedule for ${seriesLabel}.`,
-    schedule_confirmed: `${actorLabel} confirmed the schedule for ${seriesLabel}.`,
-    schedule_rejected: `${actorLabel} rejected the schedule for ${seriesLabel}.`,
-    schedule_changed: `${actorLabel} changed the schedule for ${seriesLabel}.`,
-    schedule_cancelled: `${actorLabel} cancelled the schedule proposal for ${seriesLabel}.`,
-  };
-  const titleByAction: Record<SeriesNotificationAction, string> = {
-    schedule_proposal: '🗓️ Schedule Proposal',
-    schedule_confirmed: '✅ Schedule Confirmed',
-    schedule_rejected: '❌ Schedule Rejected',
-    schedule_changed: '🔄 Schedule Changed',
-    schedule_cancelled: '🚫 Schedule Cancelled',
-  };
-
   await sendDiscordNotification(tournamentId, action, {
     actionByUserName: actorName,
     fromUserName: actorName,
@@ -205,8 +184,19 @@ const notifySeriesParticipants = async (
     recipientIds,
     tournamentId,
     action,
-    `${titleByAction[action]} - ${actor?.tournament_name || 'Tournament'}`,
-    `${messageByAction[action]}${notificationNotes ? ` ${notificationNotes}` : ''}`,
+    // Notes are stored in message_extra only, which the UI shows on its own.
+    seriesNotification(action, {
+      tournament: actor?.tournament_name || rows[0]?.tournament_name || 'Tournament',
+      actor: actorName,
+      // Rejections and cancellations name no slots.
+      ranges: action === 'schedule_rejected' || action === 'schedule_cancelled' ? undefined : ranges,
+      teams: teams
+        ? [
+            { name: teams.actorTeam.teamName, members: teams.actorTeam.memberNames },
+            { name: teams.opponentTeam.teamName, members: teams.opponentTeam.memberNames },
+          ]
+        : undefined,
+    }),
     notificationNotes || null,
     seriesId
   ).catch(error => console.error(`⚠️ [SCHEDULING][NOTIFICATIONS] Failed action=${action} tournamentId=${tournamentId} seriesId=${seriesId} proposalId=${proposalId}:`, error));

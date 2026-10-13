@@ -20,5 +20,56 @@
     "tournament_creation": "Достигнут лимит создания турниров. Повторите попытку после {{retryAt}}.",
     "p2p_challenge": "Достигнут лимит действий с P2P-вызовами. Повторите попытку после {{retryAt}}.",
     "tournament_schedule": "Достигнут лимит действий с расписанием турниров. Повторите попытку после {{retryAt}}."
+  },
+  "notifications": {
+    "challenge_proposal": {
+      "title": "Новое предложение вызова",
+      "message": "{{actor}} вызывает вас и предлагает это время:"
+    },
+    "challenge_confirmed": {
+      "title": "Время вызова подтверждено",
+      "message": "{{actor}} подтвердил(а) это время:"
+    },
+    "challenge_rejected": {
+      "title": "Время вызова отклонено",
+      "message": "{{actor}} отклонил(а) ваше предложение."
+    },
+    "challenge_counter_proposal": {
+      "title": "Встречное предложение вызова",
+      "message": "{{actor}} отклонил(а) ваше предложение и предлагает это время:"
+    },
+    "challenge_updated": {
+      "title": "Время вызова изменено",
+      "message": "{{actor}} изменил(а) предложенное время:"
+    },
+    "challenge_cancelled": {
+      "title": "Предложение вызова отменено",
+      "message": "{{actor}} отменил(а) предложение вызова."
+    },
+    "schedule_proposal": {
+      "title": "Предложение времени - {{tournament}}",
+      "message": "{{actor}} предложил(а) это время для вашей серии турнира:",
+      "message_team": "{{actor}} ({{team}}) предложил(а) это время для серии {{home}} против {{away}}:"
+    },
+    "schedule_confirmed": {
+      "title": "Время подтверждено - {{tournament}}",
+      "message": "{{actor}} подтвердил(а) это время для вашей серии турнира:",
+      "message_team": "{{actor}} ({{team}}) подтвердил(а) это время для серии {{home}} против {{away}}:"
+    },
+    "schedule_rejected": {
+      "title": "Время отклонено - {{tournament}}",
+      "message": "{{actor}} отклонил(а) время вашей серии турнира.",
+      "message_team": "{{actor}} ({{team}}) отклонил(а) время серии {{home}} против {{away}}."
+    },
+    "schedule_changed": {
+      "title": "Время изменено - {{tournament}}",
+      "message": "{{actor}} изменил(а) предложенное время для вашей серии турнира:",
+      "message_team": "{{actor}} ({{team}}) изменил(а) предложенное время для серии {{home}} против {{away}}:"
+    },
+    "schedule_cancelled": {
+      "title": "Время отменено - {{tournament}}",
+      "message": "{{actor}} отменил(а) предложение времени для вашей серии турнира.",
+      "message_team": "{{actor}} ({{team}}) отменил(а) предложение времени для серии {{home}} против {{away}}."
+    }
   }
 }

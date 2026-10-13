@@ -93,7 +93,7 @@ Long administrative operations (global recalculation, balance history rebuild) r
 
 ## Localization and help
 
-The interface is available in English, Spanish, German, Russian, and Chinese. English is the reference locale; `npm run verify` blocks a push when another locale is missing a key or an interpolation variable, or when the frontend uses a literal translation key that `en.json` does not define. Stored values (levels, statuses) are identifiers, never translated text. The user documentation is the in-app wiki; controls carry stable `data-help-id` hooks so its articles and screenshots can be generated and kept in sync.
+The interface is available in English, Spanish, German, Russian, and Chinese. English is the reference locale; `npm run verify` blocks a push when another locale is missing a key or an interpolation variable, or when the frontend uses a literal translation key that `en.json` does not define. Stored values (levels, statuses) are identifiers, never translated text. In-app notifications are the exception: each one is stored as text written in the recipient's profile language and timezone when it is created, while Discord messages stay in English because the channels are shared. The user documentation is the in-app wiki; controls carry stable `data-help-id` hooks so its articles and screenshots can be generated and kept in sync.
 
 ## Configuration
 

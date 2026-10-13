@@ -20,5 +20,56 @@
     "tournament_creation": "创建锦标赛已达到频率限制。请在 {{retryAt}} 之后重试。",
     "p2p_challenge": "P2P 挑战操作已达到频率限制。请在 {{retryAt}} 之后重试。",
     "tournament_schedule": "锦标赛赛程操作已达到频率限制。请在 {{retryAt}} 之后重试。"
+  },
+  "notifications": {
+    "challenge_proposal": {
+      "title": "新的挑战提议",
+      "message": "{{actor}} 向你发起挑战，并提议以下时间："
+    },
+    "challenge_confirmed": {
+      "title": "挑战时间已确认",
+      "message": "{{actor}} 已确认以下时间："
+    },
+    "challenge_rejected": {
+      "title": "挑战时间被拒绝",
+      "message": "{{actor}} 拒绝了你的提议。"
+    },
+    "challenge_counter_proposal": {
+      "title": "挑战反提议",
+      "message": "{{actor}} 拒绝了你的提议，并提议以下时间："
+    },
+    "challenge_updated": {
+      "title": "挑战时间已更新",
+      "message": "{{actor}} 更新了提议的时间："
+    },
+    "challenge_cancelled": {
+      "title": "挑战提议已取消",
+      "message": "{{actor}} 取消了挑战提议。"
+    },
+    "schedule_proposal": {
+      "title": "时间提议 - {{tournament}}",
+      "message": "{{actor}} 为你的锦标赛系列赛提议了以下时间：",
+      "message_team": "{{actor}}（{{team}}）为 {{home}} 对 {{away}} 的系列赛提议了以下时间："
+    },
+    "schedule_confirmed": {
+      "title": "时间已确认 - {{tournament}}",
+      "message": "{{actor}} 确认了你的锦标赛系列赛的以下时间：",
+      "message_team": "{{actor}}（{{team}}）确认了 {{home}} 对 {{away}} 的系列赛的以下时间："
+    },
+    "schedule_rejected": {
+      "title": "时间被拒绝 - {{tournament}}",
+      "message": "{{actor}} 拒绝了你的锦标赛系列赛的时间安排。",
+      "message_team": "{{actor}}（{{team}}）拒绝了 {{home}} 对 {{away}} 的系列赛的时间安排。"
+    },
+    "schedule_changed": {
+      "title": "时间已更改 - {{tournament}}",
+      "message": "{{actor}} 更改了你的锦标赛系列赛的提议时间：",
+      "message_team": "{{actor}}（{{team}}）更改了 {{home}} 对 {{away}} 的系列赛的提议时间："
+    },
+    "schedule_cancelled": {
+      "title": "时间已取消 - {{tournament}}",
+      "message": "{{actor}} 取消了你的锦标赛系列赛的时间提议。",
+      "message_team": "{{actor}}（{{team}}）取消了 {{home}} 对 {{away}} 的系列赛的时间提议。"
+    }
   }
 }

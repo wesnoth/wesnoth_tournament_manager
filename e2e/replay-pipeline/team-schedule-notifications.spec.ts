@@ -9,6 +9,10 @@ import { createStartedTeamTournament, getPendingTeamGames } from '../support/tou
  * Everyone in the series except the actor is notified, including the actor's
  * teammate, and the in-app message names both teams with their members. Discord is not checked:
  * it is disabled on the local stack, and it receives the same team fields.
+ *
+ * The text is written in each recipient's profile language and timezone (audit
+ * finding 39). These players use English, so the English sentences are
+ * checked; the other languages are covered by notificationText.test.ts.
  */
 const red = { name: 'Red E2E', members: ['clmates', 'KhorneflakesBA'] as [string, string] };
 const blue = { name: 'Blue E2E', members: ['turkish001', 'Olosta'] as [string, string] };
@@ -66,9 +70,12 @@ test('team series notifications reach the teammate and name both teams with thei
   const proposed = notificationsFor(seriesId, 'schedule_proposal');
   expect(proposed.map((n) => n.nickname.toLowerCase()).sort()).toEqual(['clmates', 'olosta', 'turkish001']);
   for (const notification of proposed) {
-    expect(notification.message).toBe(
-      `KhorneflakesBA (${teams[0].name}) proposed a schedule for the series ${roster(teams[0])} vs ${roster(teams[1])}.`,
+    // The mariadb batch client prints a stored newline as the two characters "\n".
+    const [sentence, ...slotLines] = notification.message.split(/\n|\\n/);
+    expect(sentence).toBe(
+      `KhorneflakesBA (${teams[0].name}) proposed these times for the series ${roster(teams[0])} vs ${roster(teams[1])}:`,
     );
+    expect(slotLines).toHaveLength(1);
   }
 
   // turkish001 (Blue) rejects: the series is named from the rejecting side.

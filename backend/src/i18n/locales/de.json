@@ -20,5 +20,56 @@
     "tournament_creation": "Du hast das Limit für die Turniererstellung erreicht. Versuche es nach {{retryAt}} erneut.",
     "p2p_challenge": "Du hast das Limit für P2P-Herausforderungsaktionen erreicht. Versuche es nach {{retryAt}} erneut.",
     "tournament_schedule": "Du hast das Limit für Turnierterminaktionen erreicht. Versuche es nach {{retryAt}} erneut."
+  },
+  "notifications": {
+    "challenge_proposal": {
+      "title": "Neuer Herausforderungsvorschlag",
+      "message": "{{actor}} fordert dich heraus und schlägt diese Zeiten vor:"
+    },
+    "challenge_confirmed": {
+      "title": "Termin der Herausforderung bestätigt",
+      "message": "{{actor}} hat diese Zeiten bestätigt:"
+    },
+    "challenge_rejected": {
+      "title": "Termin der Herausforderung abgelehnt",
+      "message": "{{actor}} hat deinen Vorschlag abgelehnt."
+    },
+    "challenge_counter_proposal": {
+      "title": "Gegenvorschlag zur Herausforderung",
+      "message": "{{actor}} hat deinen Vorschlag abgelehnt und schlägt diese Zeiten vor:"
+    },
+    "challenge_updated": {
+      "title": "Termin der Herausforderung geändert",
+      "message": "{{actor}} hat die vorgeschlagenen Zeiten geändert:"
+    },
+    "challenge_cancelled": {
+      "title": "Herausforderungsvorschlag zurückgezogen",
+      "message": "{{actor}} hat den Herausforderungsvorschlag zurückgezogen."
+    },
+    "schedule_proposal": {
+      "title": "Terminvorschlag - {{tournament}}",
+      "message": "{{actor}} hat diese Zeiten für deine Turnierserie vorgeschlagen:",
+      "message_team": "{{actor}} ({{team}}) hat diese Zeiten für die Serie {{home}} gegen {{away}} vorgeschlagen:"
+    },
+    "schedule_confirmed": {
+      "title": "Termin bestätigt - {{tournament}}",
+      "message": "{{actor}} hat diese Zeiten für deine Turnierserie bestätigt:",
+      "message_team": "{{actor}} ({{team}}) hat diese Zeiten für die Serie {{home}} gegen {{away}} bestätigt:"
+    },
+    "schedule_rejected": {
+      "title": "Termin abgelehnt - {{tournament}}",
+      "message": "{{actor}} hat den Termin für deine Turnierserie abgelehnt.",
+      "message_team": "{{actor}} ({{team}}) hat den Termin für die Serie {{home}} gegen {{away}} abgelehnt."
+    },
+    "schedule_changed": {
+      "title": "Termin geändert - {{tournament}}",
+      "message": "{{actor}} hat die vorgeschlagenen Zeiten für deine Turnierserie geändert:",
+      "message_team": "{{actor}} ({{team}}) hat die vorgeschlagenen Zeiten für die Serie {{home}} gegen {{away}} geändert:"
+    },
+    "schedule_cancelled": {
+      "title": "Termin zurückgezogen - {{tournament}}",
+      "message": "{{actor}} hat den Terminvorschlag für deine Turnierserie zurückgezogen.",
+      "message_team": "{{actor}} ({{team}}) hat den Terminvorschlag für die Serie {{home}} gegen {{away}} zurückgezogen."
+    }
   }
 }

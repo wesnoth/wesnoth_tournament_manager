@@ -20,5 +20,56 @@
     "tournament_creation": "You have reached the tournament creation rate limit. Try again after {{retryAt}}.",
     "p2p_challenge": "You have reached the P2P challenge action rate limit. Try again after {{retryAt}}.",
     "tournament_schedule": "You have reached the tournament schedule action rate limit. Try again after {{retryAt}}."
+  },
+  "notifications": {
+    "challenge_proposal": {
+      "title": "New challenge proposal",
+      "message": "{{actor}} challenges you and proposes these times:"
+    },
+    "challenge_confirmed": {
+      "title": "Challenge schedule confirmed",
+      "message": "{{actor}} confirmed these times:"
+    },
+    "challenge_rejected": {
+      "title": "Challenge schedule rejected",
+      "message": "{{actor}} rejected your proposal."
+    },
+    "challenge_counter_proposal": {
+      "title": "Challenge counter-proposal",
+      "message": "{{actor}} rejected your proposal and proposes these times:"
+    },
+    "challenge_updated": {
+      "title": "Challenge schedule updated",
+      "message": "{{actor}} updated the proposed times:"
+    },
+    "challenge_cancelled": {
+      "title": "Challenge proposal cancelled",
+      "message": "{{actor}} cancelled the challenge proposal."
+    },
+    "schedule_proposal": {
+      "title": "Schedule proposal - {{tournament}}",
+      "message": "{{actor}} proposed these times for your tournament series:",
+      "message_team": "{{actor}} ({{team}}) proposed these times for the series {{home}} vs {{away}}:"
+    },
+    "schedule_confirmed": {
+      "title": "Schedule confirmed - {{tournament}}",
+      "message": "{{actor}} confirmed these times for your tournament series:",
+      "message_team": "{{actor}} ({{team}}) confirmed these times for the series {{home}} vs {{away}}:"
+    },
+    "schedule_rejected": {
+      "title": "Schedule rejected - {{tournament}}",
+      "message": "{{actor}} rejected the schedule for your tournament series.",
+      "message_team": "{{actor}} ({{team}}) rejected the schedule for the series {{home}} vs {{away}}."
+    },
+    "schedule_changed": {
+      "title": "Schedule changed - {{tournament}}",
+      "message": "{{actor}} changed the proposed times for your tournament series:",
+      "message_team": "{{actor}} ({{team}}) changed the proposed times for the series {{home}} vs {{away}}:"
+    },
+    "schedule_cancelled": {
+      "title": "Schedule cancelled - {{tournament}}",
+      "message": "{{actor}} cancelled the schedule proposal for your tournament series.",
+      "message_team": "{{actor}} ({{team}}) cancelled the schedule proposal for the series {{home}} vs {{away}}."
+    }
   }
 }

@@ -301,7 +301,7 @@ const Navbar: React.FC = () => {
                               <p className="font-semibold text-sm text-gray-800 truncate">
                                 {notif.title}
                               </p>
-                              <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+                              <p className="text-xs text-gray-600 mt-1 line-clamp-2 whitespace-pre-line">
                                 {notif.message}
                               </p>
                               {notif.message_extra && (

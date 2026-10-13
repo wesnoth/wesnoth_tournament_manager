@@ -13,7 +13,8 @@ import {
   updateP2PProposal,
 } from '../services/p2pSchedulingService.js';
 import { getSchedulingConflictsForUsers } from '../services/schedulingConflictService.js';
-import { buildNotificationMessage, formatTimeRangesForDiscordByTimezone, groupSlotsIntoRanges } from '../utils/slotGrouping.js';
+import { formatTimeRangesForDiscordByTimezone, groupSlotsIntoRanges } from '../utils/slotGrouping.js';
+import { challengeNotification } from '../services/notificationText.js';
 import { sendUserActionRateLimitError } from '../utils/userActionRateLimitResponse.js';
 import { clientErrorMessage } from '../utils/clientError.js';
 import { cancelWaiting, getWaitingForUser, listWaitingPlayers, publishWaiting } from '../services/p2pWaitingLobbyService.js';
@@ -195,14 +196,12 @@ router.post('/proposals', authMiddleware, async (req: AuthRequest, res: Response
     const proposer = await getUserSummary(proposedByUserId);
     const challenged = await getUserSummary(challenged_user_id);
     const ranges = groupSlotsIntoRanges(slot_datetimes);
-    const message = buildNotificationMessage('proposal', proposer.nickname, ranges, notes);
 
     await storeNotificationForUsers(
       [challenged_user_id],
       proposalId,
       'challenge_proposal',
-      '🗓️ New Challenge Proposal',
-      message,
+      challengeNotification('challenge_proposal', proposer.nickname, ranges),
       notes || null
     );
 
@@ -258,20 +257,17 @@ router.post('/proposals/:proposalId/confirm-slots', authMiddleware, async (req: 
       .filter((slot) => slot.status === 'confirmed')
       .map((slot) => new Date(slot.slot_datetime).toISOString());
     const ranges = groupSlotsIntoRanges(confirmedSlots);
-    const message = buildNotificationMessage(
-      result.status === 'confirmed' ? 'confirmed' : 'rejected',
-      confirmer.nickname,
-      ranges
-    );
-
-    const title = result.status === 'confirmed'
-      ? '✅ Challenge Schedule Confirmed'
-      : '❌ Challenge Schedule Rejected';
     const type = result.status === 'confirmed'
       ? 'challenge_confirmed'
       : 'challenge_rejected';
 
-    await storeNotificationForUsers([proposerId], proposalId, type, title, message, null);
+    await storeNotificationForUsers(
+      [proposerId],
+      proposalId,
+      type,
+      challengeNotification(type, confirmer.nickname, type === 'challenge_confirmed' ? ranges : undefined),
+      null
+    );
 
     const discordTitle = result.status === 'confirmed'
       ? `⚔️ ${confirmer.nickname} has accepted ${proposer.nickname}'s challenge`
@@ -328,14 +324,12 @@ router.post('/proposals/:proposalId/counter-propose', authMiddleware, async (req
     const actor = await getUserSummary(userId);
     const challenged = await getUserSummary(recipientId);
     const ranges = groupSlotsIntoRanges(slot_datetimes);
-    const message = buildNotificationMessage('counter', actor.nickname, ranges, notes);
 
     await storeNotificationForUsers(
       [recipientId],
       result.proposalId,
       'challenge_counter_proposal',
-      '🔄 Challenge Counter Proposal',
-      message,
+      challengeNotification('challenge_counter_proposal', actor.nickname, ranges),
       notes || null
     );
 
@@ -391,8 +385,7 @@ router.post('/proposals/:proposalId/cancel', authMiddleware, async (req: AuthReq
       [targetUserId],
       proposalId,
       'challenge_cancelled',
-      '🚫 Challenge Proposal Cancelled',
-      `${actor.nickname} cancelled a challenge proposal`,
+      challengeNotification('challenge_cancelled', actor.nickname),
       null
     );
 
@@ -451,12 +444,15 @@ router.put('/proposals/:proposalId', authMiddleware, async (req: AuthRequest, re
     const challenged = await getUserSummary(challengedUserId);
 
     const newRanges = groupSlotsIntoRanges(slot_datetimes);
-    const message = buildNotificationMessage('changed', updater.nickname, newRanges, notes);
-
-    const title = '🔄 Challenge Schedule Updated';
     const type = 'challenge_updated';
 
-    await storeNotificationForUsers([challengedUserId], proposalId, type, title, message, null);
+    await storeNotificationForUsers(
+      [challengedUserId],
+      proposalId,
+      type,
+      challengeNotification(type, updater.nickname, newRanges),
+      null
+    );
 
     const discordTitle = `🔄 ${updater.nickname} has updated the challenge to ${challenged.nickname}`;
 
