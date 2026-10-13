@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { localStack, runSql, sqlLiteral } from '../support/localStack';
 import { loginAs } from '../support/login';
@@ -11,8 +13,9 @@ import { createStartedTeamTournament, getPendingTeamGames } from '../support/tou
  * it is disabled on the local stack, and it receives the same team fields.
  *
  * The text is written in each recipient's profile language and timezone (audit
- * finding 39). These players use English, so the English sentences are
- * checked; the other languages are covered by notificationText.test.ts.
+ * finding 39). The expected sentence is built from the backend locale file of
+ * each recipient's language, so the spec holds whatever languages the local
+ * players have (the maintainer gave them mixed languages, clmates in English).
  */
 const red = { name: 'Red E2E', members: ['clmates', 'KhorneflakesBA'] as [string, string] };
 const blue = { name: 'Blue E2E', members: ['turkish001', 'Olosta'] as [string, string] };
@@ -27,14 +30,30 @@ function futureSlot(): string {
   return slot.toISOString();
 }
 
-function notificationsFor(seriesId: string, type: string): Array<{ nickname: string; message: string }> {
+const localesDir = path.join(__dirname, '../../backend/src/i18n/locales');
+const catalogs = new Map<string, any>();
+
+/** The backend sentence for `key` in `language`, as the notification service renders it. */
+function sentence(language: string, key: string, values: Record<string, string>): string {
+  if (!catalogs.has(language)) catalogs.set(language, JSON.parse(readFileSync(path.join(localesDir, `${language}.json`), 'utf8')));
+  const template = key.split('.').reduce((node, part) => node?.[part], catalogs.get(language)) as string;
+  return template.replace(/{{\s*(\w+)\s*}}/g, (_, name: string) => values[name]);
+}
+
+interface StoredNotification {
+  nickname: string;
+  language: string;
+  message: string;
+}
+
+function notificationsFor(seriesId: string, type: string): StoredNotification[] {
   return runSql(
-    `SELECT ue.nickname, n.message FROM ${localStack.tournamentDb}.user_notifications n
+    `SELECT ue.nickname, COALESCE(ue.language, 'en') AS language, n.message FROM ${localStack.tournamentDb}.user_notifications n
      JOIN ${localStack.tournamentDb}.users_extension ue
        ON ue.id COLLATE utf8mb4_general_ci = n.user_id COLLATE utf8mb4_general_ci
      WHERE n.series_id = ${sqlLiteral(seriesId)} AND n.type = ${sqlLiteral(type)}
      ORDER BY ue.nickname;`,
-  ) as Array<{ nickname: string; message: string }>;
+  ) as StoredNotification[];
 }
 
 test('team series notifications reach the teammate and name both teams with their members', async ({ page }) => {
@@ -71,10 +90,13 @@ test('team series notifications reach the teammate and name both teams with thei
   expect(proposed.map((n) => n.nickname.toLowerCase()).sort()).toEqual(['clmates', 'olosta', 'turkish001']);
   for (const notification of proposed) {
     // The mariadb batch client prints a stored newline as the two characters "\n".
-    const [sentence, ...slotLines] = notification.message.split(/\n|\\n/);
-    expect(sentence).toBe(
-      `KhorneflakesBA (${teams[0].name}) proposed these times for the series ${roster(teams[0])} vs ${roster(teams[1])}:`,
-    );
+    const [firstLine, ...slotLines] = notification.message.split(/\n|\\n/);
+    expect(firstLine).toBe(sentence(notification.language, 'notifications.schedule_proposal.message_team', {
+      actor: 'KhorneflakesBA',
+      team: teams[0].name,
+      home: roster(teams[0]),
+      away: roster(teams[1]),
+    }));
     expect(slotLines).toHaveLength(1);
   }
 
@@ -83,8 +105,11 @@ test('team series notifications reach the teammate and name both teams with thei
   const rejected = notificationsFor(seriesId, 'schedule_rejected');
   expect(rejected.map((n) => n.nickname.toLowerCase()).sort()).toEqual(['clmates', 'khorneflakesba', 'olosta']);
   for (const notification of rejected) {
-    expect(notification.message).toBe(
-      `turkish001 (${teams[1].name}) rejected the schedule for the series ${roster(teams[1])} vs ${roster(teams[0])}.`,
-    );
+    expect(notification.message).toBe(sentence(notification.language, 'notifications.schedule_rejected.message_team', {
+      actor: 'turkish001',
+      team: teams[1].name,
+      home: roster(teams[1]),
+      away: roster(teams[0]),
+    }));
   }
 });
