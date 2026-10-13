@@ -76,7 +76,7 @@ const ChallengeFromPlayerModal: React.FC<ChallengeFromPlayerModalProps> = ({
         // Auto-open schedule modal when data loaded
         setShowScheduleModal(true);
       } catch (err) {
-        setError(t('events_modal_error_availability') || 'Failed to load players availability');
+        setError(t('events_modal_error_availability'));
       } finally {
         setLoading(false);
       }
@@ -105,7 +105,7 @@ const ChallengeFromPlayerModal: React.FC<ChallengeFromPlayerModalProps> = ({
         <div className="bg-white rounded-lg shadow-lg max-w-md w-full mx-4">
           <div className="border-b border-gray-200 p-4 flex justify-between items-center">
             <h2 className="text-xl font-bold text-gray-800">
-              {t('events_modal_challenge_title') || 'Challenge Player'}
+              {t('events_modal_challenge_title')}
             </h2>
             <button
               onClick={onClose}
@@ -125,7 +125,7 @@ const ChallengeFromPlayerModal: React.FC<ChallengeFromPlayerModalProps> = ({
             {!error && (
               <>
                 <p className="text-gray-700">
-                  {t('events_modal_challenge_description') || 'You are about to challenge'}
+                  {t('events_modal_challenge_description')}
                 </p>
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded">
                   <p className="font-semibold text-gray-800">{opponentNickname}</p>
@@ -133,7 +133,7 @@ const ChallengeFromPlayerModal: React.FC<ChallengeFromPlayerModalProps> = ({
                 <p className="text-sm text-gray-600">
                   {loading
                     ? t('loading') + '...'
-                    : t('events_modal_loading_availability') || 'Loading player availability...'}
+                    : t('events_modal_loading_availability')}
                 </p>
               </>
             )}

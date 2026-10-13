@@ -727,8 +727,8 @@ const TournamentCompetitionView: React.FC<Props> = ({
             <input data-help-id="field-tournament-competition-map" type="text" name="map" value={inputFilters.map} onChange={handleFilterInputChange} onKeyDown={handleFilterKeyDown} placeholder={t('filter_by_map')} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 font-normal focus:border-green-500 focus:outline-none" />
           </label>
           <label className="min-w-[170px] text-sm font-semibold text-gray-700">
-            {t('filter_faction') || 'Faction'}
-            <input data-help-id="field-tournament-competition-faction" type="text" name="faction" value={inputFilters.faction} onChange={handleFilterInputChange} onKeyDown={handleFilterKeyDown} placeholder={t('filter_faction') || 'Faction'} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 font-normal focus:border-green-500 focus:outline-none" />
+            {t('filter_faction')}
+            <input data-help-id="field-tournament-competition-faction" type="text" name="faction" value={inputFilters.faction} onChange={handleFilterInputChange} onKeyDown={handleFilterKeyDown} placeholder={t('filter_faction')} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 font-normal focus:border-green-500 focus:outline-none" />
           </label>
           <button data-help-id="action-reset-tournament-competition-filters" type="button" onClick={resetFilters} className="rounded bg-red-500 px-4 py-2 text-white transition-colors hover:bg-red-600">{t('reset_filters')}</button>
           <button data-help-id="action-refresh-tournament-competition" type="button" onClick={applyFilters} className="rounded bg-gray-200 px-4 py-2 font-semibold text-gray-700 transition-colors hover:bg-gray-300" title={t('common.refresh')}>↻</button>
@@ -997,7 +997,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
                       onClick={() => setSelectedGameConfirmation({ game, action: 'report' })}
                       className="rounded bg-orange-500 px-2 py-1 text-xs font-semibold text-white hover:bg-orange-600"
                     >
-                      {t('match_inform') || 'Inform Match'}
+                      {t('match_inform')}
                     </button>}
                     {!pendingReplay && !game.organizer_action && isCurrentUserLoser && confirmationStatus !== 'confirmed' && confirmationStatus !== 'disputed' && <button
                         data-help-id="action-report-phase-game-result"
@@ -1005,7 +1005,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
                         onClick={() => setSelectedGameConfirmation({ game, action: 'respond' })}
                         className="rounded bg-orange-500 px-2 py-1 text-xs font-semibold text-white hover:bg-orange-600"
                       >
-                        {t('report_match_link') || 'Report Match'}
+                        {t('report_match_link')}
                       </button>}
                     {!pendingReplay && confirmationStatus === 'disputed' && <span className="rounded-full bg-red-500 px-3 py-1 text-xs font-semibold text-white">{t('competition.disputed')}</span>}
                     {pendingReplay && game.pending_replay_url && <a href={game.pending_replay_url} target="_blank" rel="noopener noreferrer" className="rounded bg-yellow-600 px-2 py-1 text-xs font-semibold text-white hover:bg-yellow-700">{t('competition.replay')} ⬇</a>}

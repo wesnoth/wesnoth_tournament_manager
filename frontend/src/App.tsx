@@ -1,6 +1,6 @@
 import React, { useEffect, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { I18nextProvider } from 'react-i18next';
+import { I18nextProvider, useTranslation } from 'react-i18next';
 import i18n from './i18n/config';
 import { useAuthStore } from './store/authStore';
 import Navbar from './components/Navbar';
@@ -42,6 +42,7 @@ const AdminWiki = React.lazy(() => import('./pages/AdminWiki'));
 const AdminRuleTemplates = React.lazy(() => import('./pages/AdminRuleTemplates'));
 
 const App: React.FC = () => {
+  const { t } = useTranslation();
   const { isAdmin, token, validateToken, isValidating } = useAuthStore();
   const [authChecked, setAuthChecked] = React.useState(false);
   const [maintenanceMode, setMaintenanceMode] = React.useState(false);
@@ -98,7 +99,7 @@ const App: React.FC = () => {
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
           <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+          <p className="mt-4 text-gray-600">{t('common.loading')}</p>
         </div>
       </div>
     );

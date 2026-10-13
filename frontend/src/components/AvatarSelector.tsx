@@ -55,10 +55,10 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
     return (
       <div className="w-full">
         <label className="block text-sm font-medium text-gray-700 mb-3">
-          {t('profile.avatar') || 'Avatar'}
+          {t('profile.avatar')}
         </label>
         <div className="flex items-center justify-center py-8 bg-gray-50 rounded-lg border border-gray-200">
-          {t('common.loading') || 'Loading...'}
+          {t('common.loading')}
         </div>
       </div>
     );
@@ -67,7 +67,7 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
   return (
     <div data-help-id="region-avatar-selector" className="w-full">
       <label className="block text-sm font-medium text-gray-700 mb-3">
-        {t('profile.avatar') || 'Avatar'}
+        {t('profile.avatar')}
       </label>
 
       <div className="mb-4 flex items-center justify-center">
@@ -80,7 +80,7 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
               onError={handleImageError}
             />
           ) : (
-            <span className="text-sm text-gray-500">{t('profile.noAvatarSelected') || 'No Avatar'}</span>
+            <span className="text-sm text-gray-500">{t('profile.noAvatarSelected')}</span>
           )}
         </div>
       </div>
@@ -88,7 +88,7 @@ export const AvatarSelector: React.FC<AvatarSelectorProps> = ({
       <div className="bg-white border border-gray-300 rounded-lg p-4">
         {avatars.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
-            {t('common.noResults') || 'No avatars available'}
+            {t('common.noResults')}
           </div>
         ) : (
           <div className="grid grid-cols-4 gap-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8">

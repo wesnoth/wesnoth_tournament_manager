@@ -559,7 +559,7 @@ const handleConfirmDelete = async () => {
   const handleConfirmParticipation = async (participantId: string) => {
     try {
       await tournamentService.confirmParticipation(id!, participantId);
-      setSuccess(t('success_participation_confirmed') || 'Participation confirmed!');
+      setSuccess(t('success_participation_confirmed'));
       fetchTournamentData();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
@@ -858,22 +858,22 @@ const handleConfirmDelete = async () => {
       {showDeleteConfirmModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">{t('tournaments.confirm_delete_title') || 'Confirm Tournament Deletion'}</h2>
-            <p className="text-gray-600 mb-6">{t('tournaments.no_participants_message') || 'No participants have registered for this tournament. Delete it?'}</p>
+            <h2 className="text-xl font-bold text-gray-800 mb-4">{t('tournaments.confirm_delete_title')}</h2>
+            <p className="text-gray-600 mb-6">{t('tournaments.no_participants_message')}</p>
             <div className="flex justify-end gap-3">
               <button
                 data-help-id="action-cancel-delete-tournament"
                 className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors"
                 onClick={() => setShowDeleteConfirmModal(false)}
               >
-                {t('cancel_btn') || 'Cancel'}
+                {t('cancel_btn')}
               </button>
               <button
                 data-help-id="action-confirm-delete-tournament"
                 className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors"
                 onClick={handleConfirmDelete}
               >
-                {t('delete_btn') || 'Delete'}
+                {t('delete_btn')}
               </button>
             </div>
           </div>

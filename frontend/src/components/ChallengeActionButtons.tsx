@@ -129,7 +129,7 @@ const ChallengeActionButtons: React.FC<ChallengeActionButtonsProps> = ({
         className="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-700 text-white rounded font-semibold transition-colors"
         title={t('challenge.manage_title')}
       >
-        ⚙️ {t('events_manage_challenge') || 'Manage Challenge'}
+        ⚙️ {t('events_manage_challenge')}
       </button>
 
       {proposal && participants.length > 0 && (

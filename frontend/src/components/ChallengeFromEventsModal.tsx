@@ -56,7 +56,7 @@ const ChallengeFromEventsModal: React.FC<ChallengeFromEventsModalProps> = ({
             .map((u: any) => ({ id: u.id, nickname: u.nickname || u.id }))
         );
       } catch (err) {
-        setError(t('events_modal_error_users') || 'Failed to load users');
+        setError(t('events_modal_error_users'));
       } finally {
         setLoading(false);
       }
@@ -100,7 +100,7 @@ const ChallengeFromEventsModal: React.FC<ChallengeFromEventsModalProps> = ({
         // Auto-open schedule modal when opponent selected and data loaded
         setShowScheduleModal(true);
       } catch (err) {
-        setError(t('events_modal_error_availability') || 'Failed to load players availability');
+        setError(t('events_modal_error_availability'));
       } finally {
         setLoadingOpponent(false);
       }
@@ -144,7 +144,7 @@ const ChallengeFromEventsModal: React.FC<ChallengeFromEventsModalProps> = ({
         <div className="bg-white rounded-lg shadow-lg max-w-md w-full mx-4">
           <div className="border-b border-gray-200 p-4 flex justify-between items-center">
             <h2 className="text-xl font-bold text-gray-800">
-              {t('events_modal_challenge_title') || 'Challenge Player'}
+              {t('events_modal_challenge_title')}
             </h2>
             <button
               onClick={onClose}
@@ -158,12 +158,12 @@ const ChallengeFromEventsModal: React.FC<ChallengeFromEventsModalProps> = ({
             {/* Search Input */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                {t('events_modal_select_opponent') || 'Select Opponent'}
+                {t('events_modal_select_opponent')}
               </label>
               <div className="relative">
                 <input
                   type="text"
-                  placeholder={t('events_modal_search_player') || 'Search player...'}
+                  placeholder={t('events_modal_search_player')}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -188,7 +188,7 @@ const ChallengeFromEventsModal: React.FC<ChallengeFromEventsModalProps> = ({
                 {/* No Results */}
                 {search.trim() && filteredUsers.length === 0 && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 p-3 text-center text-gray-500 text-sm">
-                    {t('events_modal_no_players') || 'No players found'}
+                    {t('events_modal_no_players')}
                   </div>
                 )}
               </div>

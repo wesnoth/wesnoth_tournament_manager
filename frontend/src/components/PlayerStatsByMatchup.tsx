@@ -34,8 +34,8 @@ const SideToggle: React.FC<{ side: number; onChange: (s: number) => void }> = ({
   );
   return (
     <div className="flex items-center gap-2">
-      <span className="text-sm font-medium text-gray-600">{t('side') || 'Side'}:</span>
-      {btn(0, t('all') || 'All')}
+      <span className="text-sm font-medium text-gray-600">{t('side')}:</span>
+      {btn(0, t('all'))}
       {btn(1, 'Side 1')}
       {btn(2, 'Side 2')}
     </div>
@@ -91,12 +91,12 @@ const PlayerStatsByMatchup: React.FC<Props> = ({ playerId }) => {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <h3 className="text-2xl font-semibold text-gray-800 mb-4">{t('matchup_analysis') || 'Matchup Analysis'}</h3>
-      <p className="text-gray-600 text-sm mb-6">{t('matchup_analysis_explanation') || 'Your performance against each faction matchup'}</p>
+      <h3 className="text-2xl font-semibold text-gray-800 mb-4">{t('matchup_analysis')}</h3>
+      <p className="text-gray-600 text-sm mb-6">{t('matchup_analysis_explanation')}</p>
 
       <div className="bg-white rounded-lg shadow-md p-4 mb-6 flex flex-wrap items-center gap-6">
         <label className="flex items-center gap-2">
-          {t('minimum_games') || 'Minimum Games'}:
+          {t('minimum_games')}:
           <input
             type="number" min="1" max="100" value={minGames}
             onChange={(e) => setMinGames(e.target.value)}
@@ -121,12 +121,12 @@ const PlayerStatsByMatchup: React.FC<Props> = ({ playerId }) => {
           <table className="w-full border-collapse bg-white">
             <thead className="bg-gray-100 border-b-2 border-gray-300">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">{t('your_faction') || 'Your Faction'}</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">{t('opponent_faction') || 'Opponent Faction'}</th>
-                <th className="px-4 py-3 text-center font-semibold text-gray-700">{t('total_games') || 'Games'}</th>
-                <th className="px-4 py-3 text-center font-semibold text-gray-700">{t('record') || 'Record'}</th>
-                <th className="px-4 py-3 text-center font-semibold text-gray-700">{t('winrate') || 'Win Rate'}</th>
-                <th className="px-4 py-3 text-center font-semibold text-gray-700">{t('avg_elo_change') || 'Avg ELO'}</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">{t('your_faction')}</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">{t('opponent_faction')}</th>
+                <th className="px-4 py-3 text-center font-semibold text-gray-700">{t('total_games')}</th>
+                <th className="px-4 py-3 text-center font-semibold text-gray-700">{t('record')}</th>
+                <th className="px-4 py-3 text-center font-semibold text-gray-700">{t('winrate')}</th>
+                <th className="px-4 py-3 text-center font-semibold text-gray-700">{t('avg_elo_change')}</th>
               </tr>
             </thead>
             <tbody>

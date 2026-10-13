@@ -347,9 +347,9 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
                   : 'border-transparent text-gray-600 hover:text-gray-800'
               }`}
             >
-              {filterOption === 'all' && (t('all') || 'All')}
-              {filterOption === 'pending' && (t('pending') || 'Pending')}
-              {filterOption === 'accepted' && (t('accepted') || 'Accepted')}
+              {filterOption === 'all' && (t('all'))}
+              {filterOption === 'pending' && (t('pending'))}
+              {filterOption === 'accepted' && (t('accepted'))}
             </button>
           ))}
         </div>
@@ -389,9 +389,9 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
                 : 'border-transparent text-gray-600 hover:text-gray-800'
             }`}
           >
-            {filterOption === 'all' && (t('all') || 'All')}
-            {filterOption === 'pending' && (t('pending') || 'Pending')}
-            {filterOption === 'accepted' && (t('accepted') || 'Accepted')}
+            {filterOption === 'all' && (t('all'))}
+            {filterOption === 'pending' && (t('pending'))}
+            {filterOption === 'accepted' && (t('accepted'))}
           </button>
         ))}
       </div>
@@ -530,7 +530,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
                   className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors font-semibold"
                   title={t('notifications.go_to_events')}
                 >
-                  → {t('label_go_events') || 'Go to Events'}
+                  → {t('label_go_events')}
                 </button>
               ) : notification.tournament_id ? (
                 <button
@@ -539,7 +539,7 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
                   className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors font-semibold"
                   title={t('notifications.go_to_tournament')}
                 >
-                  → {t('label_go_tournament') || 'Go to Tournament'}
+                  → {t('label_go_tournament')}
                 </button>
               ) : null}
             </div>

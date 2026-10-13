@@ -37,9 +37,9 @@ const Statistics: React.FC = () => {
 
   return (
     <div data-help-id="region-statistics" className="w-full max-w-6xl mx-auto px-4 py-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-4">{t('statistics') || 'Balance Statistics'}</h1>
+      <h1 className="text-4xl font-bold text-gray-800 mb-4">{t('statistics')}</h1>
       <p className="text-lg text-gray-600 mb-8">
-        {t('statistics_intro') || 'Detailed analysis of faction and map balance across all matches'}
+        {t('statistics_intro')}
       </p>
 
       <BalanceEventImpactPanel 
@@ -58,28 +58,28 @@ const Statistics: React.FC = () => {
           className={`px-4 py-3 font-semibold text-gray-600 border-b-2 border-transparent hover:text-gray-800 transition-colors cursor-pointer whitespace-nowrap ${activeTab === 'faction' ? 'text-blue-600 border-blue-600' : ''}`}
           onClick={() => setActiveTab('faction')}
         >
-          {t('faction_balance') || 'Faction Balance'}
+          {t('faction_balance')}
         </button>
         <button 
           data-help-id="action-statistics-tab-map"
           className={`px-4 py-3 font-semibold text-gray-600 border-b-2 border-transparent hover:text-gray-800 transition-colors cursor-pointer whitespace-nowrap ${activeTab === 'map' ? 'text-blue-600 border-blue-600' : ''}`}
           onClick={() => setActiveTab('map')}
         >
-          {t('map_balance') || 'Map Balance'}
+          {t('map_balance')}
         </button>
         <button 
           data-help-id="action-statistics-tab-matchups"
           className={`px-4 py-3 font-semibold text-gray-600 border-b-2 border-transparent hover:text-gray-800 transition-colors cursor-pointer whitespace-nowrap ${activeTab === 'matchups' ? 'text-blue-600 border-blue-600' : ''}`}
           onClick={() => setActiveTab('matchups')}
         >
-          {t('matchup_balance') || 'Matchup Analysis'}
+          {t('matchup_balance')}
         </button>
         <button 
           data-help-id="action-statistics-tab-faction-vs-faction"
           className={`px-4 py-3 font-semibold text-gray-600 border-b-2 border-transparent hover:text-gray-800 transition-colors cursor-pointer whitespace-nowrap ${activeTab === 'faction-vs-faction' ? 'text-blue-600 border-blue-600' : ''}`}
           onClick={() => setActiveTab('faction-vs-faction')}
         >
-          {t('faction_vs_faction') || 'Faction vs Faction'}
+          {t('faction_vs_faction')}
         </button>
       </div>
 

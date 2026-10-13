@@ -44,7 +44,7 @@ const StarDisplay: React.FC<StarDisplayProps> = ({ rating, size = 'md', showLabe
     return (
       <span 
         className="inline-flex items-center gap-1 group" 
-        title={t('common.no_rating') || 'No rating'}
+        title={t('common.no_rating')}
       >
         <svg
           className={`${sizeClasses[size]} text-gray-300`}

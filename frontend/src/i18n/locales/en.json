@@ -1847,5 +1847,33 @@
     "uploading": "Uploading...",
     "insert_image": "Insert image",
     "content_placeholder": "Write Markdown here ({{language}})..."
+  },
+  "match_status": {
+    "confirmed": "Confirmed",
+    "reported": "Reported",
+    "unconfirmed": "Unconfirmed",
+    "disputed": "Disputed",
+    "cancelled": "Cancelled",
+    "won": "Won",
+    "lost": "Lost"
+  },
+  "misc": {
+    "team_position": "{{nickname}} (position {{position}})",
+    "new_faction": "+ New faction",
+    "new_map": "+ New map",
+    "match_confirmation_failed": "Failed to update match confirmation",
+    "download_count": "Download ({{count}})",
+    "downloads_title": "Downloads: {{count}}",
+    "unknown_map": "Unknown map",
+    "login_failed": "Login failed. Please check your credentials.",
+    "report_replay_failed": "Failed to report replay",
+    "load_article_failed": "Failed to load article",
+    "load_articles_failed": "Failed to load the list of articles"
+  },
+  "profile_data": {
+    "load_profile_failed": "Error loading profile",
+    "load_profile_data_failed": "Error loading profile data",
+    "load_matches_failed": "Error loading matches",
+    "load_opponents_failed": "Error loading opponent data"
   }
 }

@@ -25,10 +25,10 @@ const UserProfileNav: React.FC = () => {
             data-help-id="action-nav-settings"
             className="flex items-center gap-2 px-3 py-2 bg-white/10 border border-white/20 text-white text-sm font-medium rounded hover:bg-white/20 hover:border-white/40 active:bg-white/25 transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-md:px-2.5"
             onClick={() => handleNavigate('/profile')}
-            title={t('sidebar.settings') || 'Settings'}
+            title={t('sidebar.settings')}
           >
             <span className="text-lg flex items-center justify-center min-w-5 max-sm:text-base">⚙️</span>
-            <span className="hidden md:inline">{t('sidebar.settings') || 'Settings'}</span>
+            <span className="hidden md:inline">{t('sidebar.settings')}</span>
           </button>
 
           {/* My Tournaments */}
@@ -156,7 +156,7 @@ const UserProfileNav: React.FC = () => {
                 title={t('admin_news')}
               >
                 <span className="text-lg flex items-center justify-center min-w-5 max-sm:text-base">📢</span>
-                <span className="hidden md:inline">{t('admin_news') || 'News'}</span>
+                <span className="hidden md:inline">{t('admin_news')}</span>
               </button>
 
               {/* Wiki */}
@@ -213,10 +213,10 @@ const UserProfileNav: React.FC = () => {
               <button 
                 className="flex items-center gap-2 px-3 py-2 bg-orange-500/10 border border-orange-500/30 text-white text-sm font-medium rounded hover:bg-orange-500/20 hover:border-orange-500/50 active:bg-orange-500/25 transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-md:px-2.5"
                 onClick={() => handleNavigate('/admin/balance-events')}
-                title={t('admin_balance_events') || 'Balance Events'}
+                title={t('admin_balance_events')}
               >
                 <span className="text-lg flex items-center justify-center min-w-5 max-sm:text-base">⚖️</span>
-                <span className="hidden md:inline">{t('admin_balance_events') || 'Balance Events'}</span>
+                <span className="hidden md:inline">{t('admin_balance_events')}</span>
               </button>
             </>
           )}

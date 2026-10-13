@@ -121,7 +121,7 @@ export const TeamReplacementModal: React.FC<TeamReplacementModalProps> = ({
                 .filter(m => m.participation_status === 'accepted')
                 .map((member) => (
                   <option key={member.participant_id} value={member.participant_id}>
-                    {member.nickname} (Pos: {member.team_position})
+                    {t('misc.team_position', { nickname: member.nickname, position: member.team_position })}
                   </option>
                 ))}
             </select>

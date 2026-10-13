@@ -219,12 +219,12 @@ const User: React.FC = () => {
   }
 
   const tabs: { id: ProfileTab; label: string }[] = [
-    { id: 'overall', label: t('overall_statistics') || 'Overall' },
-    { id: 'matches', label: t('matches_label') || 'Matches' },
-    { id: 'opponents', label: t('my_opponents') || 'Opponents' },
-    { id: 'by-map', label: t('performance_by_map') || 'By Map' },
-    { id: 'by-faction', label: t('performance_by_faction') || 'By Faction' },
-    { id: 'by-matchup', label: t('matchup_analysis') || 'Matchup Analysis' },
+    { id: 'overall', label: t('overall_statistics') },
+    { id: 'matches', label: t('matches_label') },
+    { id: 'opponents', label: t('my_opponents') },
+    { id: 'by-map', label: t('performance_by_map') },
+    { id: 'by-faction', label: t('performance_by_faction') },
+    { id: 'by-matchup', label: t('matchup_analysis') },
   ];
 
   return (
@@ -360,8 +360,8 @@ const User: React.FC = () => {
                             <option value="confirmed">{t('match_status_confirmed')}</option>
                             <option value="disputed">{t('match_status_disputed')}</option>
                             <option value="cancelled">{t('match_status_cancelled')}</option>
-                            <option value="reported">{t('match_status_reported') || 'Reported'}</option>
-                            <option value="pending_report">{t('match_status_pending_report') || 'Pending report'}</option>
+                            <option value="reported">{t('match_status_reported')}</option>
+                            <option value="pending_report">{t('match_status_pending_report')}</option>
                           </select>
                         </div>
 
@@ -417,9 +417,9 @@ const User: React.FC = () => {
                 <div data-help-id="region-user-tab-opponents" className="bg-white rounded-lg shadow-md p-8">
                   <div>
                     <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-                      <h2 className="text-2xl font-bold text-gray-800">{t('my_opponents') || 'Opponents'}</h2>
+                      <h2 className="text-2xl font-bold text-gray-800">{t('my_opponents')}</h2>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-600">{t('side') || 'Side'}:</span>
+                        <span className="text-sm font-medium text-gray-600">{t('side')}:</span>
                         {([0, 1, 2] as const).map((val) => (
                           <button key={val} onClick={() => setOpponentSide(val)}
                             className={`px-3 py-1 text-sm font-semibold rounded transition-colors ${
@@ -427,7 +427,7 @@ const User: React.FC = () => {
                                 ? val === 0 ? 'bg-gray-700 text-white' : val === 1 ? 'bg-amber-500 text-white' : 'bg-purple-600 text-white'
                                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                             }`}>
-                            {val === 0 ? (t('all') || 'All') : `Side ${val}`}
+                            {val === 0 ? (t('all')) : `Side ${val}`}
                           </button>
                         ))}
                       </div>
@@ -442,7 +442,7 @@ const User: React.FC = () => {
                     )}
 
                     {!opponentStatsLoading && !opponentStatsError && opponentStats.length === 0 && (
-                      <div className="text-center py-8 text-gray-500">{t('no_opponent_data') || 'No opponent data available'}</div>
+                      <div className="text-center py-8 text-gray-500">{t('no_opponent_data')}</div>
                     )}
 
                     {!opponentStatsLoading && !opponentStatsError && opponentStats.length > 0 && (
@@ -450,7 +450,7 @@ const User: React.FC = () => {
                         <div className="mb-6">
                           <input
                             type="text"
-                            placeholder={t('filter_by_opponent') || 'Filter by opponent...'}
+                            placeholder={t('filter_by_opponent')}
                             value={filterOpponent}
                             onChange={(e) => setFilterOpponent(e.target.value)}
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -465,39 +465,39 @@ const User: React.FC = () => {
                                   className="px-4 py-2 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200"
                                   onClick={() => handleSort('opponent_name')}
                                 >
-                                  {t('opponent_name') || 'Opponent'}
+                                  {t('opponent_name')}
                                   {sortColumn === 'opponent_name' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                                 </th>
                                 <th className="px-4 py-2 text-right font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('current_elo')}>
-                                  {t('current_elo') || 'Current ELO'}
+                                  {t('current_elo')}
                                   {sortColumn === 'current_elo' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                                 </th>
                                 <th className="px-4 py-2 text-right font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('total_matches')}>
-                                  {t('total_matches_label') || 'Total'}
+                                  {t('total_matches_label')}
                                   {sortColumn === 'total_matches' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                                 </th>
                                 <th className="px-4 py-2 text-right font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('wins')}>
-                                  {t('wins') || 'Wins'}
+                                  {t('wins')}
                                   {sortColumn === 'wins' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                                 </th>
                                 <th className="px-4 py-2 text-right font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('losses')}>
-                                  {t('losses') || 'Losses'}
+                                  {t('losses')}
                                   {sortColumn === 'losses' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                                 </th>
                                 <th className="px-4 py-2 text-right font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('win_percentage')}>
-                                  {t('win_percentage') || 'Win %'}
+                                  {t('win_percentage')}
                                   {sortColumn === 'win_percentage' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                                 </th>
                                 <th className="px-4 py-2 text-right font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('elo_gained')}>
-                                  {t('elo_gained') || 'ELO Gained'}
+                                  {t('elo_gained')}
                                   {sortColumn === 'elo_gained' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                                 </th>
                                 <th className="px-4 py-2 text-right font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('elo_lost')}>
-                                  {t('elo_lost') || 'ELO Lost'}
+                                  {t('elo_lost')}
                                   {sortColumn === 'elo_lost' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                                 </th>
                                 <th className="px-4 py-2 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('last_match_date')}>
-                                  {t('last_match') || 'Last Match'}
+                                  {t('last_match')}
                                   {sortColumn === 'last_match_date' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                                 </th>
                               </tr>

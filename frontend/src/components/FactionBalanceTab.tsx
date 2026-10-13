@@ -124,7 +124,7 @@ const FactionBalanceTab: React.FC<FactionBalanceTabProps> = ({ beforeData = null
   const minimumGamesControl = (
     <div className="bg-gray-100 p-4 rounded-lg mb-6 border border-gray-200 flex items-center gap-4">
       <label className="flex items-center gap-2 font-semibold text-gray-800">
-        {t('minimum_games') || 'Minimum games'}:
+        {t('minimum_games')}:
         <input type="number" min="1" max="1000000" value={pendingMinGames}
           onChange={e => setPendingMinGames(e.target.value)}
           onKeyDown={handleMinGamesKeyDown}
@@ -235,31 +235,31 @@ const FactionBalanceTab: React.FC<FactionBalanceTabProps> = ({ beforeData = null
 
     return (
       <div className="bg-white rounded-lg p-6 shadow-md">
-        <h3 className="text-xl font-semibold text-gray-800 mb-3">{t('faction_balance_comparison') || 'Faction Balance - Before & After'}</h3>
+        <h3 className="text-xl font-semibold text-gray-800 mb-3">{t('faction_balance_comparison')}</h3>
         <p className="text-blue-600 text-sm mb-6 p-3 bg-blue-50 rounded border-l-4 border-blue-500">
-          {t('before_event') || 'Before'}: {beforeAgg.reduce((s, f) => s + f.total_games, 0)} faction-games ({Math.round(beforeAgg.reduce((s, f) => s + f.total_games, 0) / 2)} matches){beforeLabel ? ` · ${beforeLabel}` : ''} |{' '}
-          {t('after_event') || 'After'}: {afterAgg.reduce((s, f) => s + f.total_games, 0)} faction-games ({Math.round(afterAgg.reduce((s, f) => s + f.total_games, 0) / 2)} matches){afterLabel ? ` · ${afterLabel}` : ''}
+          {t('before_event')}: {beforeAgg.reduce((s, f) => s + f.total_games, 0)} faction-games ({Math.round(beforeAgg.reduce((s, f) => s + f.total_games, 0) / 2)} matches){beforeLabel ? ` · ${beforeLabel}` : ''} |{' '}
+          {t('after_event')}: {afterAgg.reduce((s, f) => s + f.total_games, 0)} faction-games ({Math.round(afterAgg.reduce((s, f) => s + f.total_games, 0) / 2)} matches){afterLabel ? ` · ${afterLabel}` : ''}
         </p>
         {minimumGamesControl}
         <div className="overflow-x-auto border border-gray-200 rounded-lg">
           <table className="w-full border-collapse bg-white">
             <thead className="bg-gray-100 border-b-2 border-gray-300">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('faction') || 'Faction'}</th>
-                <th className="px-4 py-3 text-center font-semibold text-gray-600" colSpan={4}>{t('before_event') || 'Before'}</th>
-                <th className="px-4 py-3 text-center font-semibold text-gray-800" colSpan={4}>{t('after_event') || 'After'}</th>
-                <th className="px-4 py-3 text-center font-semibold text-gray-800">{t('change') || 'Change'}</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('faction')}</th>
+                <th className="px-4 py-3 text-center font-semibold text-gray-600" colSpan={4}>{t('before_event')}</th>
+                <th className="px-4 py-3 text-center font-semibold text-gray-800" colSpan={4}>{t('after_event')}</th>
+                <th className="px-4 py-3 text-center font-semibold text-gray-800">{t('change')}</th>
               </tr>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="px-4 py-2 text-left text-xs text-gray-500"></th>
-                <th className="px-3 py-2 text-center text-xs text-gray-500">{t('total_games') || 'G'}</th>
-                <th className="px-3 py-2 text-center text-xs text-gray-500">{t('winrate') || 'WR%'}</th>
-                <th className="px-3 py-2 text-center text-xs text-gray-500">{t('side1_winrate') || 'S1'}</th>
-                <th className="px-3 py-2 text-center text-xs text-gray-500">{t('side2_winrate') || 'S2'}</th>
-                <th className="px-3 py-2 text-center text-xs text-gray-500">{t('total_games') || 'G'}</th>
-                <th className="px-3 py-2 text-center text-xs text-gray-500">{t('winrate') || 'WR%'}</th>
-                <th className="px-3 py-2 text-center text-xs text-gray-500">{t('side1_winrate') || 'S1'}</th>
-                <th className="px-3 py-2 text-center text-xs text-gray-500">{t('side2_winrate') || 'S2'}</th>
+                <th className="px-3 py-2 text-center text-xs text-gray-500">{t('total_games')}</th>
+                <th className="px-3 py-2 text-center text-xs text-gray-500">{t('winrate')}</th>
+                <th className="px-3 py-2 text-center text-xs text-gray-500">{t('side1_winrate')}</th>
+                <th className="px-3 py-2 text-center text-xs text-gray-500">{t('side2_winrate')}</th>
+                <th className="px-3 py-2 text-center text-xs text-gray-500">{t('total_games')}</th>
+                <th className="px-3 py-2 text-center text-xs text-gray-500">{t('winrate')}</th>
+                <th className="px-3 py-2 text-center text-xs text-gray-500">{t('side1_winrate')}</th>
+                <th className="px-3 py-2 text-center text-xs text-gray-500">{t('side2_winrate')}</th>
                 <th className="px-3 py-2 text-center text-xs text-gray-500">Δ WR%</th>
               </tr>
             </thead>
@@ -350,22 +350,22 @@ const FactionBalanceTab: React.FC<FactionBalanceTabProps> = ({ beforeData = null
   // Default global view
   return (
     <div className="bg-white rounded-lg p-6 shadow-md">
-      <h3 className="text-xl font-semibold text-gray-800 mb-3">{t('faction_balance_title') || 'Global Faction Balance'}</h3>
-      <p className="text-gray-600 text-sm mb-6 pb-3 px-3 bg-blue-50 border-l-4 border-blue-500 rounded">{t('faction_balance_explanation') || 'Detailed analysis of faction balance across all tournaments'}</p>
+      <h3 className="text-xl font-semibold text-gray-800 mb-3">{t('faction_balance_title')}</h3>
+      <p className="text-gray-600 text-sm mb-6 pb-3 px-3 bg-blue-50 border-l-4 border-blue-500 rounded">{t('faction_balance_explanation')}</p>
       {minimumGamesControl}
       <div className="overflow-x-auto border border-gray-200 rounded-lg">
         <table className="w-full border-collapse bg-white">
           <thead className="bg-gray-100 border-b-2 border-gray-300">
             <tr>
-              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('faction') || 'Faction'}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('total_games') || 'Games'}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('wins') || 'Wins'}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('losses') || 'Losses'}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('winrate') || 'Win Rate'}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('side1_winrate') || 'Side 1 WR'}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('side2_winrate') || 'Side 2 WR'}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('maps_played') || 'Maps'}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('imbalance') || 'Imbalance'}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('faction')}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('total_games')}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('wins')}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('losses')}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('winrate')}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('side1_winrate')}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('side2_winrate')}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('maps_played')}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('imbalance')}</th>
             </tr>
           </thead>
           <tbody>

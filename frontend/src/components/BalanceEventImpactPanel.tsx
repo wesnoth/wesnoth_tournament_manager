@@ -158,7 +158,7 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
       onComparisonDataChange?.(beforeAgg, afterAgg);
     } catch (err: any) {
       console.error(`[BalanceEventImpactPanel] Error loading impact:`, err);
-      setError(err.response?.data?.error || t('error_loading_impact') || 'Error loading impact data');
+      setError(err.response?.data?.error || t('error_loading_impact'));
       setBeforeData([]);
       setAfterData([]);
       onIntervalChange?.('', '');
@@ -182,7 +182,7 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
   return (
     <div data-help-id="region-statistics-mode" className="w-full bg-white rounded-lg border border-gray-200 p-6 mb-8">
       <div className="mb-6">
-        <h3 className="text-xl font-semibold text-gray-800 mb-3">{t('select_balance_event') || 'Select Balance Event'}</h3>
+        <h3 className="text-xl font-semibold text-gray-800 mb-3">{t('select_balance_event')}</h3>
         
         <select 
           data-help-id="option-statistics-mode"
@@ -197,7 +197,7 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
           }}
           className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
-          <option value="">{t('all_accumulated') || 'All (Accumulated)'}</option>
+          <option value="">{t('all_accumulated')}</option>
           {events.map(event => (
             <option key={event.id} value={event.id}>
               {formatDate(event.event_date)} - {event.event_type}
@@ -211,7 +211,7 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
       {selectedEvent && (
         <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
           <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200">
-            <h4 className="text-lg font-semibold text-gray-800">{t('event_details') || 'Event Details'}</h4>
+            <h4 className="text-lg font-semibold text-gray-800">{t('event_details')}</h4>
             <span 
               className="px-3 py-1 rounded-full text-white text-sm font-semibold"
               style={{ background: eventTypeColor[selectedEvent.event_type] || '#3498db' }}
@@ -225,42 +225,42 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {selectedEvent.faction_name && (
               <div className="flex flex-col">
-                <span className="text-sm font-semibold text-gray-600">{t('faction') || 'Faction'}:</span>
+                <span className="text-sm font-semibold text-gray-600">{t('faction')}:</span>
                 <span className="text-gray-800">{selectedEvent.faction_name}</span>
               </div>
             )}
             {selectedEvent.map_name && (
               <div className="flex flex-col">
-                <span className="text-sm font-semibold text-gray-600">{t('map') || 'Map'}:</span>
+                <span className="text-sm font-semibold text-gray-600">{t('map')}:</span>
                 <span className="text-gray-800">{selectedEvent.map_name}</span>
               </div>
             )}
             {selectedEvent.patch_version && (
               <div className="flex flex-col">
-                <span className="text-sm font-semibold text-gray-600">{t('patch_version') || 'Patch'}:</span>
+                <span className="text-sm font-semibold text-gray-600">{t('patch_version')}:</span>
                 <span className="text-gray-800">{selectedEvent.patch_version}</span>
               </div>
             )}
             <div className="flex flex-col">
-              <span className="text-sm font-semibold text-gray-600">{t('date') || 'Date'}:</span>
+              <span className="text-sm font-semibold text-gray-600">{t('date')}:</span>
               <span className="text-gray-800">{formatDate(selectedEvent.event_date)}</span>
             </div>
           </div>
 
           <div className="mt-4 rounded-md bg-blue-50 border-l-4 border-blue-500 px-4 py-3 text-sm text-blue-800">
             <div>
-              {t('before_event') || 'Before'}:{' '}
+              {t('before_event')}:{' '}
               {selectedEvent.previous_event_date
                 ? `${formatDate(addDays(selectedEvent.previous_event_date))} – ${formatDate(selectedEvent.event_date)}`
                 : '—'}
             </div>
             <div>
-              {t('after_event') || 'After'}:{' '}
+              {t('after_event')}:{' '}
               {`${formatDate(addDays(selectedEvent.event_date))} – ${formatDate(selectedEvent.next_event_date || selectedEvent.snapshot_after_date)}`}
             </div>
           </div>
 
-          {loading && <div className="mt-4 text-center text-gray-500">{t('loading') || 'Loading...'}</div>}
+          {loading && <div className="mt-4 text-center text-gray-500">{t('loading')}</div>}
           {error && <div className="mt-4 p-3 bg-red-100 text-red-700 rounded-md">{error}</div>}
         </div>
       )}

@@ -111,12 +111,12 @@ const ScheduleDisplay: React.FC<ScheduleDisplayProps> = ({
         {timezone && (
           <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">{t('timezone') || 'Timezone'}:</span>
+              <span className="text-sm text-gray-600">{t('timezone')}:</span>
               <span className="text-sm font-semibold text-gray-800">{timezone}</span>
             </div>
             {shouldConvert && (
               <div className="flex items-center gap-2 text-xs text-gray-600 bg-blue-50 px-2 py-1 rounded">
-                <span>{t('availability.viewing_as') || 'Viewing as'}:</span>
+                <span>{t('availability.viewing_as')}:</span>
                 <span className="font-semibold text-blue-700">{viewerTimezone}</span>
               </div>
             )}
@@ -126,7 +126,7 @@ const ScheduleDisplay: React.FC<ScheduleDisplayProps> = ({
         {/* Keep complete time ranges readable by reducing columns on narrow screens. */}
         <div>
           {hasSchedule && (
-            <div className="text-sm text-gray-600 mb-2">{t('availability.title') || 'Available'}:</div>
+            <div className="text-sm text-gray-600 mb-2">{t('availability.title')}:</div>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-2">
             {DAYS.map((day) => {

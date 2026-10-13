@@ -175,7 +175,7 @@ const Events: React.FC = () => {
         return schedules.map((schedule: any) => ({
           id: `tournament-series-${schedule.series_id}`,
           type: 'tournament' as const,
-          title: `${t('events_tournament_schedule') || 'Tournament Schedule'}: ${schedule.tournament_name || tournament?.name || ''}`,
+          title: `${t('events_tournament_schedule')}: ${schedule.tournament_name || tournament?.name || ''}`,
           tournamentName: schedule.tournament_name || tournament?.name || '',
           players: [schedule.player1_name, schedule.player2_name].filter(Boolean),
           datetime: schedule.scheduled_datetime,
@@ -202,7 +202,7 @@ const Events: React.FC = () => {
         .map((p: any) => ({
           id: `p2p-${p.id}`,
           type: 'p2p',
-          title: t('events_p2p_challenge') || 'P2P Challenge',
+          title: t('events_p2p_challenge'),
           tournamentName: '',
           players: [p.proposed_by_nickname, p.challenged_nickname].filter(Boolean),
           datetime: p.first_slot_datetime,
@@ -218,7 +218,7 @@ const Events: React.FC = () => {
       setEvents(merged);
     } catch (err) {
       console.error('Error loading events:', err);
-      setError(t('events_error_loading') || 'Failed to load events');
+      setError(t('events_error_loading'));
     } finally {
       setLoading(false);
     }
@@ -375,20 +375,20 @@ const Events: React.FC = () => {
     <div data-help-id="region-events" className="bg-gradient-to-br from-gray-100 to-gray-300 min-h-screen py-8 px-4">
       <div className="max-w-7xl mx-auto space-y-6">
         <div data-help-id="region-events-header" className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-3xl font-bold text-gray-800">{t('events_title') || 'Events'}</h1>
+          <h1 className="text-3xl font-bold text-gray-800">{t('events_title')}</h1>
           <button
             data-help-id="action-events-challenge"
             className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 font-semibold"
             onClick={() => setShowChallengeModal(true)}
           >
-            {t('events_button_challenge') || 'Challenge'}
+            {t('events_button_challenge')}
           </button>
         </div>
 
         <div className="bg-blue-50 border-l-4 border-blue-500 p-3 rounded text-sm text-blue-800">
-          <span className="font-semibold">{t('events_viewing_as') || 'Viewing as'}:</span> {userTimezone || 'UTC'}{' '}
+          <span className="font-semibold">{t('events_viewing_as')}:</span> {userTimezone || 'UTC'}{' '}
           <span className="text-xs text-blue-600">
-            ({t('events_viewing_note') || 'All times converted to your timezone'})
+            ({t('events_viewing_note')})
           </span>
         </div>
 
@@ -401,8 +401,8 @@ const Events: React.FC = () => {
             value={viewMode}
             onChange={(e) => setViewMode(e.target.value as 'calendar' | 'list')}
           >
-            <option value="calendar">{t('events_view_calendar') || 'Calendar view'}</option>
-            <option value="list">{t('events_view_list') || 'List view'}</option>
+            <option value="calendar">{t('events_view_calendar')}</option>
+            <option value="list">{t('events_view_list')}</option>
           </select>
 
           <select
@@ -411,16 +411,16 @@ const Events: React.FC = () => {
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value as 'all' | EventSourceType)}
           >
-            <option value="all">{t('events_filter_type_all') || 'All'}</option>
-            <option value="tournament">{t('events_filter_type_tournament') || 'Tournament'}</option>
-            <option value="p2p">{t('events_filter_type_p2p') || 'P2P'}</option>
+            <option value="all">{t('events_filter_type_all')}</option>
+            <option value="tournament">{t('events_filter_type_tournament')}</option>
+            <option value="p2p">{t('events_filter_type_p2p')}</option>
           </select>
 
           <input
             data-help-id="field-events-tournament-name"
             type="text"
             className="px-3 py-2 border border-gray-300 rounded"
-            placeholder={t('events_filter_tournament_name') || 'Tournament name'}
+            placeholder={t('events_filter_tournament_name')}
             value={tournamentNameFilter}
             onChange={(e) => setTournamentNameFilter(e.target.value)}
           />
@@ -429,7 +429,7 @@ const Events: React.FC = () => {
             data-help-id="field-events-player"
             type="text"
             className="px-3 py-2 border border-gray-300 rounded"
-            placeholder={t('events_filter_players') || 'Players'}
+            placeholder={t('events_filter_players')}
             value={playerFilter}
             onChange={(e) => setPlayerFilter(e.target.value)}
           />
@@ -458,7 +458,7 @@ const Events: React.FC = () => {
               onChange={(e) => setMyEventsOnly(e.target.checked)}
               className="w-4 h-4"
             />
-            <span className="text-sm font-medium">{t('events_filter_my_events') || 'My Events'}</span>
+            <span className="text-sm font-medium">{t('events_filter_my_events')}</span>
           </label>
         </div>
 
@@ -472,7 +472,7 @@ const Events: React.FC = () => {
 
         {!loading && !error && filteredEvents.length === 0 && (
           <div className="bg-white rounded-lg shadow p-6 text-gray-600">
-            {t('events_empty') || 'No events found with current filters'}
+            {t('events_empty')}
           </div>
         )}
 
@@ -481,11 +481,11 @@ const Events: React.FC = () => {
             <table className="w-full min-w-[900px] text-sm">
               <thead className="bg-gray-50 text-gray-700">
                 <tr>
-                  <th className="text-left px-4 py-3">{t('events_table_type') || 'Type'}</th>
-                  <th className="text-left px-4 py-3">{t('events_table_name') || 'Name'}</th>
-                  <th className="text-left px-4 py-3">{t('events_table_players') || 'Players'}</th>
-                  <th className="text-left px-4 py-3">{t('events_table_datetime') || 'Date/Time'}</th>
-                  <th className="text-left px-4 py-3">{t('events_table_status') || 'Status'}</th>
+                  <th className="text-left px-4 py-3">{t('events_table_type')}</th>
+                  <th className="text-left px-4 py-3">{t('events_table_name')}</th>
+                  <th className="text-left px-4 py-3">{t('events_table_players')}</th>
+                  <th className="text-left px-4 py-3">{t('events_table_datetime')}</th>
+                  <th className="text-left px-4 py-3">{t('events_table_status')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -494,8 +494,8 @@ const Events: React.FC = () => {
                     <tr data-help-id={event.type === 'tournament' ? 'region-event-tournament-schedule' : undefined} className="border-t border-gray-100">
                       <td className="px-4 py-3">
                         {event.type === 'tournament'
-                          ? (t('events_filter_type_tournament') || 'Tournament')
-                          : (t('events_filter_type_p2p') || 'P2P')}
+                          ? (t('events_filter_type_tournament'))
+                          : (t('events_filter_type_p2p'))}
                       </td>
                       <td className="px-4 py-3">{event.title}</td>
                       <td className="px-4 py-3">{event.players.join(' vs ')}</td>
@@ -516,7 +516,7 @@ const Events: React.FC = () => {
                               onClick={() => navigate(`/tournament/${event.raw.tournament_id}?tab=competition&seriesId=${event.raw.series_id}`)}
                               className="rounded bg-gray-700 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-800"
                             >
-                              {t('events_open_tournament') || 'Open tournament'}
+                              {t('events_open_tournament')}
                             </button>
                             {((event.isTeamMode && event.userTeamParticipates)
                               || (!event.isTeamMode && (event.raw.player1_id === userId || event.raw.player2_id === userId))) && (
@@ -525,7 +525,7 @@ const Events: React.FC = () => {
                                 onClick={() => openSeriesSchedule(event)}
                                 className="rounded bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700"
                               >
-                                {t('events_open_schedule') || 'Open schedule'}
+                                {t('events_open_schedule')}
                               </button>
                             )}
                           </div>
@@ -574,8 +574,8 @@ const Events: React.FC = () => {
                     <article data-help-id={event.type === 'p2p' ? 'region-p2p-event-item' : event.type === 'tournament' ? 'region-event-tournament-schedule' : 'region-event-item'} key={event.id} className="border border-gray-200 rounded p-3 bg-gray-50">
                       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                         {event.type === 'tournament'
-                          ? (t('events_filter_type_tournament') || 'Tournament')
-                          : (t('events_filter_type_p2p') || 'P2P')}
+                          ? (t('events_filter_type_tournament'))
+                          : (t('events_filter_type_p2p'))}
                       </p>
                       <h3 className="font-semibold text-gray-800 mt-1">{event.title}</h3>
                       <p className="text-sm text-gray-700 mt-1">{event.players.join(' vs ')}</p>
@@ -588,7 +588,7 @@ const Events: React.FC = () => {
                        renderScheduleSlots(event.raw, userTimezone)
                      )}
                      <p className="text-xs text-gray-500 mt-2">
-                       {t('events_table_status') || 'Status'}: {getEventStatusLabel(event.status)}
+                       {t('events_table_status')}: {getEventStatusLabel(event.status)}
                        {event.type === 'p2p' && event.visibility ? ` • ${event.visibility}` : ''}
                      </p>
                      <div className="mt-3 pt-3 border-t border-gray-300 space-y-2">
@@ -599,7 +599,7 @@ const Events: React.FC = () => {
                              onClick={() => navigate(`/tournament/${event.raw.tournament_id}?tab=competition&seriesId=${event.raw.series_id}`)}
                              className="rounded bg-gray-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-gray-800"
                            >
-                           {t('events_open_tournament') || 'Open tournament'}
+                           {t('events_open_tournament')}
                            </button>
                            {((event.isTeamMode && event.userTeamParticipates)
                              || (!event.isTeamMode && (event.raw.player1_id === userId || event.raw.player2_id === userId))) && (
@@ -608,7 +608,7 @@ const Events: React.FC = () => {
                                onClick={() => openSeriesSchedule(event)}
                                className="rounded bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700"
                              >
-                             {t('events_open_schedule') || 'Open schedule'}
+                             {t('events_open_schedule')}
                              </button>
                            )}
                          </div>

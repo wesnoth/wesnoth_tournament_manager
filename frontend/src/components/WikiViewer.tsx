@@ -63,7 +63,7 @@ const WikiViewer: React.FC<WikiViewerProps> = ({
               onError?.(msg);
             }
           } else {
-            const msg = 'Failed to load article';
+            const msg = t('misc.load_article_failed');
             setError(msg);
             onError?.(msg);
           }

@@ -1847,5 +1847,33 @@
     "uploading": "正在上传...",
     "insert_image": "插入图片",
     "content_placeholder": "在此输入 Markdown（{{language}}）..."
+  },
+  "match_status": {
+    "confirmed": "已确认",
+    "reported": "已上报",
+    "unconfirmed": "未确认",
+    "disputed": "有争议",
+    "cancelled": "已取消",
+    "won": "胜",
+    "lost": "负"
+  },
+  "misc": {
+    "team_position": "{{nickname}}（位置 {{position}}）",
+    "new_faction": "+ 新建阵营",
+    "new_map": "+ 新建地图",
+    "match_confirmation_failed": "无法更新对局确认",
+    "download_count": "下载（{{count}}）",
+    "downloads_title": "下载次数：{{count}}",
+    "unknown_map": "未知地图",
+    "login_failed": "登录失败，请检查你的凭据。",
+    "report_replay_failed": "无法上报录像",
+    "load_article_failed": "无法加载文章",
+    "load_articles_failed": "无法加载文章列表"
+  },
+  "profile_data": {
+    "load_profile_failed": "加载个人资料时出错",
+    "load_profile_data_failed": "加载个人资料数据时出错",
+    "load_matches_failed": "加载对局时出错",
+    "load_opponents_failed": "加载对手数据时出错"
   }
 }

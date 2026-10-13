@@ -93,7 +93,7 @@ export const CountrySelector: React.FC<CountrySelectorProps> = ({
     if (selectedCountry) {
       return selectedCountry.name;
     }
-    return t('common.select') || 'Select Country';
+    return t('common.select');
   }, [selectedCountry, t]);
 
   const handleSelect = useCallback((code: string) => {
@@ -105,7 +105,7 @@ export const CountrySelector: React.FC<CountrySelectorProps> = ({
   return (
     <div className="w-full">
       <label htmlFor="country-select" className="block text-sm font-medium text-gray-700 mb-2">
-        {t('profile.country') || 'Country'}
+        {t('profile.country')}
       </label>
 
       <div className="relative">
@@ -150,7 +150,7 @@ export const CountrySelector: React.FC<CountrySelectorProps> = ({
               <input
                 type="text"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder={t('common.search') || 'Search...'}
+                placeholder={t('common.search')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 autoFocus
@@ -161,11 +161,11 @@ export const CountrySelector: React.FC<CountrySelectorProps> = ({
             <div className="overflow-y-auto flex-1">
               {isLoading ? (
                 <div className="p-4 text-center text-gray-500">
-                  {t('common.loading') || 'Loading...'}
+                  {t('common.loading')}
                 </div>
               ) : filteredCountries.length === 0 ? (
                 <div className="p-4 text-center text-gray-500">
-                  {t('common.noResults') || 'No countries found'}
+                  {t('common.noResults')}
                 </div>
               ) : (
                 <ul className="divide-y divide-gray-100" role="listbox">

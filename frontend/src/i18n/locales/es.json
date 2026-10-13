@@ -1847,5 +1847,33 @@
     "uploading": "Subiendo...",
     "insert_image": "Insertar imagen",
     "content_placeholder": "Escribe aquí en Markdown ({{language}})..."
+  },
+  "match_status": {
+    "confirmed": "Confirmada",
+    "reported": "Registrada",
+    "unconfirmed": "Sin confirmar",
+    "disputed": "En disputa",
+    "cancelled": "Cancelada",
+    "won": "Ganada",
+    "lost": "Perdida"
+  },
+  "misc": {
+    "team_position": "{{nickname}} (posición {{position}})",
+    "new_faction": "+ Nueva facción",
+    "new_map": "+ Nuevo mapa",
+    "match_confirmation_failed": "No se pudo actualizar la confirmación de la partida",
+    "download_count": "Descargar ({{count}})",
+    "downloads_title": "Descargas: {{count}}",
+    "unknown_map": "Mapa desconocido",
+    "login_failed": "No se pudo iniciar sesión. Revisa tus credenciales.",
+    "report_replay_failed": "No se pudo registrar la repetición",
+    "load_article_failed": "No se pudo cargar el artículo",
+    "load_articles_failed": "No se pudo cargar la lista de artículos"
+  },
+  "profile_data": {
+    "load_profile_failed": "Error al cargar el perfil",
+    "load_profile_data_failed": "Error al cargar los datos del perfil",
+    "load_matches_failed": "Error al cargar las partidas",
+    "load_opponents_failed": "Error al cargar los datos de rivales"
   }
 }

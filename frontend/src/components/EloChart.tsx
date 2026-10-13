@@ -191,8 +191,8 @@ const EloChart: React.FC<EloChartProps> = ({ matches, currentPlayerId }) => {
   if (!chartData || chartData.length === 0) {
     return (
       <div className="bg-white rounded-lg shadow-md p-8 mb-8">
-        <h3 className="text-2xl font-semibold text-gray-800 mb-6">{t('label_elo_evolution') || 'ELO Evolution'}</h3>
-        <div className="text-center text-gray-500 italic py-8">{t('no_data_available') || 'No match data available'}</div>
+        <h3 className="text-2xl font-semibold text-gray-800 mb-6">{t('label_elo_evolution')}</h3>
+        <div className="text-center text-gray-500 italic py-8">{t('no_data_available')}</div>
       </div>
     );
   }
@@ -201,21 +201,21 @@ const EloChart: React.FC<EloChartProps> = ({ matches, currentPlayerId }) => {
   const maxElo = Math.max(...chartData.map((point) => point.elo)) + 50;
 
   const granularityLabelMap: Record<Granularity, string> = {
-    day: t('time_group_day') || 'Day',
-    week: t('time_group_week') || 'Week',
-    month: t('time_group_month') || 'Month',
-    quarter: t('time_group_quarter') || 'Quarter',
-    year: t('time_group_year') || 'Year',
+    day: t('time_group_day'),
+    week: t('time_group_week'),
+    month: t('time_group_month'),
+    quarter: t('time_group_quarter'),
+    year: t('time_group_year'),
   };
 
   return (
     <div className="bg-white rounded-lg shadow-md p-8 mb-8">
-      <h3 className="text-2xl font-semibold text-gray-800 mb-4">{t('label_elo_evolution') || 'ELO Evolution'}</h3>
+      <h3 className="text-2xl font-semibold text-gray-800 mb-4">{t('label_elo_evolution')}</h3>
 
       <div className="flex flex-wrap items-center gap-4 mb-6">
         <div className="flex items-center gap-2">
           <label htmlFor="elo-window" className="text-sm font-semibold text-gray-700">
-            {t('label_time_range') || 'Time range'}
+            {t('label_time_range')}
           </label>
       <select
             data-help-id="field-elo-time-range"
@@ -224,17 +224,17 @@ const EloChart: React.FC<EloChartProps> = ({ matches, currentPlayerId }) => {
             onChange={(event) => setWindow(event.target.value as TimeWindow)}
             className="border border-gray-300 rounded px-3 py-1.5 text-sm text-gray-700"
           >
-            <option value="1m">{t('time_window_1m') || 'Last 30 days'}</option>
-            <option value="3m">{t('time_window_3m') || 'Last 3 months'}</option>
-            <option value="6m">{t('time_window_6m') || 'Last 6 months'}</option>
-            <option value="1y">{t('time_window_1y') || 'Last year'}</option>
-            <option value="3y">{t('time_window_3y') || 'Last 3 years'}</option>
-            <option value="all">{t('time_window_all') || 'All history'}</option>
+            <option value="1m">{t('time_window_1m')}</option>
+            <option value="3m">{t('time_window_3m')}</option>
+            <option value="6m">{t('time_window_6m')}</option>
+            <option value="1y">{t('time_window_1y')}</option>
+            <option value="3y">{t('time_window_3y')}</option>
+            <option value="all">{t('time_window_all')}</option>
           </select>
         </div>
 
         <div className="text-sm text-gray-600">
-          <span className="font-semibold">{t('label_grouped_by') || 'Grouped by'}:</span> {granularityLabelMap[granularity]}
+          <span className="font-semibold">{t('label_grouped_by')}:</span> {granularityLabelMap[granularity]}
         </div>
       </div>
 
@@ -247,7 +247,7 @@ const EloChart: React.FC<EloChartProps> = ({ matches, currentPlayerId }) => {
               stroke="#666"
               domain={[Math.max(minElo, 800), maxElo]}
               tick={{ fontSize: 12 }}
-              label={{ value: t('label_elo_rating') || 'ELO Rating', angle: -90, position: 'insideLeft' }}
+              label={{ value: t('label_elo_rating'), angle: -90, position: 'insideLeft' }}
             />
             <Tooltip
               contentStyle={{
@@ -256,7 +256,7 @@ const EloChart: React.FC<EloChartProps> = ({ matches, currentPlayerId }) => {
                 borderRadius: '4px',
                 padding: '8px',
               }}
-              formatter={(value: number) => [`${value} ELO`, t('label_elo_rating') || 'Rating']}
+              formatter={(value: number) => [`${value} ELO`, t('label_elo_rating')]}
               labelFormatter={(_, payload: readonly any[]) => payload?.[0]?.payload?.rangeLabel || ''}
             />
             <Line
@@ -274,15 +274,15 @@ const EloChart: React.FC<EloChartProps> = ({ matches, currentPlayerId }) => {
 
       <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="text-center p-4 bg-gray-50 rounded">
-          <span className="text-sm font-semibold text-gray-700">{t('label_total_matches') || 'Total Matches'}:</span>
+          <span className="text-sm font-semibold text-gray-700">{t('label_total_matches')}:</span>
           <span className="text-lg font-bold text-blue-600">{rawData.length}</span>
         </div>
         <div className="text-center p-4 bg-gray-50 rounded">
-          <span className="text-sm font-semibold text-gray-700">{t('label_current_elo') || 'Current ELO'}:</span>
+          <span className="text-sm font-semibold text-gray-700">{t('label_current_elo')}:</span>
           <span className="text-lg font-bold text-blue-600">{rawData[rawData.length - 1]?.elo || 'N/A'}</span>
         </div>
         <div className="text-center p-4 bg-gray-50 rounded">
-          <span className="text-sm font-semibold text-gray-700">{t('label_elo_range') || 'ELO Range'}:</span>
+          <span className="text-sm font-semibold text-gray-700">{t('label_elo_range')}:</span>
           <span className="text-lg font-bold text-blue-600">
             {Math.min(...rawData.map((point) => point.elo))} - {Math.max(...rawData.map((point) => point.elo))}
           </span>

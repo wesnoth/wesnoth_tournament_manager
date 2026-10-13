@@ -185,12 +185,12 @@ const Rankings: React.FC = () => {
 
   return (
     <div className="w-full max-w-6xl mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold text-gray-800 mb-6">{t('navbar_rankings') || 'Rankings'}</h1>
+      <h1 className="text-3xl font-bold text-gray-800 mb-6">{t('navbar_rankings')}</h1>
 
       {/* Ranking Criteria Info */}
       <div className="mb-8">
-        <h3 className="text-xl font-semibold text-gray-700 mb-2">{t('ranking_criteria_title') || 'Ranking Criteria'}</h3>
-        <p className="text-gray-600">{t('ranking_criteria_description') || 'Players must have a minimum ELO of 1400, have played a minimum of 10 games and have activity in the last 30 days.'}</p>
+        <h3 className="text-xl font-semibold text-gray-700 mb-2">{t('ranking_criteria_title')}</h3>
+        <p className="text-gray-600">{t('ranking_criteria_description')}</p>
       </div>
 
       {/* Rankings Content */}
@@ -396,7 +396,7 @@ const Rankings: React.FC = () => {
           </table>
         </div>
       ) : (
-        <p className="text-center text-gray-500 py-8">{t('no_data') || 'No ranking data available'}</p>
+        <p className="text-center text-gray-500 py-8">{t('no_data')}</p>
       )}
 
       {/* Pagination Controls - Bottom */}

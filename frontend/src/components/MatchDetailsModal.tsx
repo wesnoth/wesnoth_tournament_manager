@@ -110,13 +110,13 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
               <div>
                 <label className="text-gray-600 text-sm font-semibold">{t('label_status')}:</label>
                 <div className="text-sm">
-                  {match.status === 'confirmed' && <span className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">✓ Confirmed</span>}
-                  {match.status === 'reported' && <span className="inline-block px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-semibold">📋 Reported</span>}
-                  {match.status === 'unconfirmed' && <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-semibold">⏳ Unconfirmed</span>}
-                  {match.status === 'disputed' && <span className="inline-block px-3 py-1 bg-red-100 text-red-800 rounded-full text-xs font-semibold">⚠ Disputed</span>}
-                  {match.status === 'cancelled' && <span className="inline-block px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-semibold">✗ Cancelled</span>}
+                  {match.status === 'confirmed' && <span className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">✓ {t('match_status.confirmed')}</span>}
+                  {match.status === 'reported' && <span className="inline-block px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-semibold">📋 {t('match_status.reported')}</span>}
+                  {match.status === 'unconfirmed' && <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-semibold">⏳ {t('match_status.unconfirmed')}</span>}
+                  {match.status === 'disputed' && <span className="inline-block px-3 py-1 bg-red-100 text-red-800 rounded-full text-xs font-semibold">⚠ {t('match_status.disputed')}</span>}
+                  {match.status === 'cancelled' && <span className="inline-block px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-semibold">✗ {t('match_status.cancelled')}</span>}
                   {match.status === 'pending_report' && <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-semibold">⏳ {t('replay_need_confirmation')}</span>}
-                  {!match.status && <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-semibold">⏳ Unconfirmed</span>}
+                  {!match.status && <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-semibold">⏳ {t('match_status.unconfirmed')}</span>}
                 </div>
               </div>
             </div>
@@ -224,9 +224,9 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, isOpen, on
                               );
                             }
                           }}
-                          title={`Downloads: ${match.replay_downloads || 0}`}
+                          title={t('misc.downloads_title', { count: match.replay_downloads || 0 })}
                         >
-                          ⬇️ Download ({match.replay_downloads || 0})
+                          ⬇️ {t('misc.download_count', { count: match.replay_downloads || 0 })}
                         </a>
                       </td>
                     </tr>

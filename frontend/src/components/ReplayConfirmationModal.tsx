@@ -51,7 +51,7 @@ export const ReplayConfirmationModal: React.FC<ReplayConfirmationModalProps> = (
       onSuccess();
       onClose();
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to report replay';
+      const errorMsg = err instanceof Error ? err.message : t('misc.report_replay_failed');
       setError(errorMsg);
     } finally {
       setIsSubmitting(false);
@@ -83,35 +83,35 @@ export const ReplayConfirmationModal: React.FC<ReplayConfirmationModalProps> = (
         <div className={`text-white p-6 border-b ${isCancel ? 'bg-gradient-to-r from-gray-600 to-gray-700' : 'bg-gradient-to-r from-blue-500 to-blue-600'}`}>
           <h2 className="text-2xl font-bold">
             {isCancel
-              ? (t('label_cancel_replay_title') || 'Cancel Replay — Game Not Finished')
-              : (t('label_confirm_match_report') || 'Confirm Match Report')}
+              ? (t('label_cancel_replay_title'))
+              : (t('label_confirm_match_report'))}
           </h2>
           <p className={`text-sm mt-1 ${isCancel ? 'text-gray-300' : 'text-blue-100'}`}>
             {isCancel
-              ? (t('label_cancel_replay_subtitle') || 'This game was saved mid-match and not completed')
-              : (t('label_unconfirmed_replay') || 'Auto-detected Replay')}
+              ? (t('label_cancel_replay_subtitle'))
+              : (t('label_unconfirmed_replay'))}
           </p>
         </div>
 
         <div className="p-6 space-y-6">
           {isCancel && (
             <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 text-sm text-amber-800">
-              <div className="font-bold mb-1">⚠️ {t('label_both_players_must_confirm') || 'Both players must confirm'}</div>
-              <p>{t('label_cancel_replay_explanation') || 'If the other player also clicks "Cancel Replay", the replay will be removed from the pending list. If they report a win/loss instead, the match proceeds normally.'}</p>
+              <div className="font-bold mb-1">⚠️ {t('label_both_players_must_confirm')}</div>
+              <p>{t('label_cancel_replay_explanation')}</p>
             </div>
           )}
 
           {/* Match Summary */}
           <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
             <h3 className="font-semibold text-gray-700 mb-4 flex items-center gap-2">
-              🎮 {t('label_match_details') || 'Match Details'}
+              🎮 {t('label_match_details')}
             </h3>
             
             <div className="space-y-3">
               {/* Players */}
               <div className="flex items-center justify-between gap-4 p-4 bg-white rounded border border-gray-200">
                 <div className="flex-1">
-                  <div className="text-sm text-gray-600 mb-1">{t('label_you') || 'You'}</div>
+                  <div className="text-sm text-gray-600 mb-1">{t('label_you')}</div>
                   <div className="font-semibold text-gray-800">{yourName}</div>
                   {!isCancel && <div className="text-xs text-gray-500 mt-1">{yourFaction}</div>}
                 </div>
@@ -123,7 +123,7 @@ export const ReplayConfirmationModal: React.FC<ReplayConfirmationModalProps> = (
                         ? 'bg-green-100 text-green-700' 
                         : 'bg-red-100 text-red-700'
                     }`}>
-                      {isWinner ? '✓ Won' : '✗ Lost'}
+                      {isWinner ? `✓ ${t('match_status.won')}` : `✗ ${t('match_status.lost')}`}
                     </div>
                   </div>
                 )}
@@ -131,13 +131,13 @@ export const ReplayConfirmationModal: React.FC<ReplayConfirmationModalProps> = (
                 {isCancel && (
                   <div className="text-center">
                     <div className="text-2xl font-bold px-4 py-2 rounded bg-gray-100 text-gray-600">
-                      🚫 Cancelled
+                      🚫 {t('match_status.cancelled')}
                     </div>
                   </div>
                 )}
                 
                 <div className="flex-1">
-                  <div className="text-sm text-gray-600 mb-1">{t('label_opponent') || 'Opponent'}</div>
+                  <div className="text-sm text-gray-600 mb-1">{t('label_opponent')}</div>
                   <div className="font-semibold text-gray-800">{opponentName}</div>
                   {!isCancel && <div className="text-xs text-gray-500 mt-1">{opponentFaction}</div>}
                 </div>
@@ -145,7 +145,7 @@ export const ReplayConfirmationModal: React.FC<ReplayConfirmationModalProps> = (
 
               {/* Map */}
               <div className="p-4 bg-white rounded border border-gray-200">
-                <div className="text-sm text-gray-600 mb-1">📍 {t('label_map') || 'Map'}</div>
+                <div className="text-sm text-gray-600 mb-1">📍 {t('label_map')}</div>
                 <div className="font-semibold text-gray-800">{map}</div>
               </div>
             </div>
@@ -155,13 +155,13 @@ export const ReplayConfirmationModal: React.FC<ReplayConfirmationModalProps> = (
           {!isCancel && (
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                {t('label_comments') || 'Comments'} <span className="text-gray-500 font-normal text-xs">(optional)</span>
+                {t('label_comments')} <span className="text-gray-500 font-normal text-xs">(optional)</span>
               </label>
               <textarea
                 data-help-id="field-replay-confirmation-comments"
                 value={comments}
                 onChange={(e) => setComments(e.target.value)}
-                placeholder={t('label_additional_notes') || 'Share your thoughts about this match...'}
+                placeholder={t('label_additional_notes')}
                 maxLength={500}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                 rows={4}
@@ -177,7 +177,7 @@ export const ReplayConfirmationModal: React.FC<ReplayConfirmationModalProps> = (
           {!isCancel && (
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-3">
-                {t('label_rate_opponent') || 'Rate Opponent'} <span className="text-gray-500 font-normal text-xs">(optional)</span>
+                {t('label_rate_opponent')} <span className="text-gray-500 font-normal text-xs">(optional)</span>
               </label>
               <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                 <StarRating 
@@ -191,7 +191,7 @@ export const ReplayConfirmationModal: React.FC<ReplayConfirmationModalProps> = (
           {/* Error message */}
           {error && (
             <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-              <strong>{t('label_error') || 'Error'}:</strong> {error}
+              <strong>{t('label_error')}:</strong> {error}
             </div>
           )}
 
@@ -203,7 +203,7 @@ export const ReplayConfirmationModal: React.FC<ReplayConfirmationModalProps> = (
               disabled={isSubmitting}
               className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {t('button_cancel') || 'Cancel'}
+              {t('button_cancel')}
             </button>
             <button
               data-help-id="action-submit-replay-confirmation"
@@ -220,13 +220,13 @@ export const ReplayConfirmationModal: React.FC<ReplayConfirmationModalProps> = (
               }`}
             >
               {isSubmitting ? (
-                <>⏳ {t('label_submitting') || 'Submitting'}...</>
+                <>⏳ {t('label_submitting')}...</>
               ) : isCancel ? (
-                <>🚫 {t('button_confirm_cancel_replay') || 'Confirm — Game Not Finished'}</>
+                <>🚫 {t('button_confirm_cancel_replay')}</>
               ) : isWinner ? (
-                <>✓ {t('button_confirm_win') || 'Confirm Win'}</>
+                <>✓ {t('button_confirm_win')}</>
               ) : (
-                <>✗ {t('button_confirm_loss') || 'Confirm Loss'}</>
+                <>✗ {t('button_confirm_loss')}</>
               )}
             </button>
           </div>

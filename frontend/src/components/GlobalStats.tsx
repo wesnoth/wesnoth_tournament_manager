@@ -50,7 +50,7 @@ const GlobalStats: React.FC = () => {
         setStats(response.data);
       } catch (err) {
         console.error('Error fetching global statistics:', err);
-        setError(t('error_loading_statistics') || 'Failed to load statistics');
+        setError(t('error_loading_statistics'));
       } finally {
         setLoading(false);
       }
@@ -66,7 +66,7 @@ const GlobalStats: React.FC = () => {
   if (loading) {
     return (
       <section className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-sm font-semibold mb-4">{t('global_statistics') || 'Site Statistics'}</h3>
+        <h3 className="text-sm font-semibold mb-4">{t('global_statistics')}</h3>
         <div className="text-center text-gray-600 text-sm">{t('loading')}</div>
       </section>
     );
@@ -75,7 +75,7 @@ const GlobalStats: React.FC = () => {
   if (error || !stats) {
     return (
       <section className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-sm font-semibold mb-4">{t('global_statistics') || 'Site Statistics'}</h3>
+        <h3 className="text-sm font-semibold mb-4">{t('global_statistics')}</h3>
         <div className="text-center text-red-600 text-xs">{error}</div>
       </section>
     );
@@ -83,36 +83,36 @@ const GlobalStats: React.FC = () => {
 
   return (
     <section className="bg-white rounded-lg shadow p-6">
-      <h3 className="text-sm font-semibold mb-4">{t('global_statistics') || 'Site Statistics'}</h3>
+      <h3 className="text-sm font-semibold mb-4">{t('global_statistics')}</h3>
 
       <div className="space-y-1 text-xs">
         {/* Users */}
         <div className="font-semibold text-gray-700 text-xs uppercase mb-2 mt-3">{t('global_stats.users')}</div>
-        <StatRow label={t('total') || 'Total'} value={stats.users_total} />
-        <StatRow label={t('active') || 'Active'} value={stats.users_active} />
-        <StatRow label={t('ranked') || 'Ranked'} value={stats.users_ranked} />
-        <StatRow label={`${t('new') || 'New'} (${t('month')})`} value={stats.users_new_month} />
-        <StatRow label={`${t('new') || 'New'} (${t('year')})`} value={stats.users_new_year} />
+        <StatRow label={t('total')} value={stats.users_total} />
+        <StatRow label={t('active')} value={stats.users_active} />
+        <StatRow label={t('ranked')} value={stats.users_ranked} />
+        <StatRow label={`${t('new')} (${t('month')})`} value={stats.users_new_month} />
+        <StatRow label={`${t('new')} (${t('year')})`} value={stats.users_new_year} />
 
         {/* Ranked Matches */}
         <div className="font-semibold text-gray-700 text-xs uppercase mb-2 mt-3">{t('global_stats.ranked_matches')}</div>
-        <StatRow label={t('today') || 'Today'} value={stats.matches_today} />
-        <StatRow label={t('week') || 'Week'} value={stats.matches_week} />
-        <StatRow label={t('month') || 'Month'} value={stats.matches_month} />
-        <StatRow label={t('year') || 'Year'} value={stats.matches_year} />
-        <StatRow label={t('total') || 'Total'} value={stats.matches_total} />
+        <StatRow label={t('today')} value={stats.matches_today} />
+        <StatRow label={t('week')} value={stats.matches_week} />
+        <StatRow label={t('month')} value={stats.matches_month} />
+        <StatRow label={t('year')} value={stats.matches_year} />
+        <StatRow label={t('total')} value={stats.matches_total} />
 
         {/* Tournament Matches */}
         <div className="font-semibold text-gray-700 text-xs uppercase mb-2 mt-3">{t('global_stats.tournament_matches')}</div>
-        <StatRow label={`${t('month') || 'Month'}`} value={stats.tournament_matches_month} />
-        <StatRow label={`${t('year') || 'Year'}`} value={stats.tournament_matches_year} />
-        <StatRow label={t('total') || 'Total'} value={stats.tournament_matches_total} />
+        <StatRow label={`${t('month')}`} value={stats.tournament_matches_month} />
+        <StatRow label={`${t('year')}`} value={stats.tournament_matches_year} />
+        <StatRow label={t('total')} value={stats.tournament_matches_total} />
 
         {/* Tournaments */}
         <div className="font-semibold text-gray-700 text-xs uppercase mb-2 mt-3">{t('global_stats.tournaments')}</div>
-        <StatRow label={`${t('month') || 'Month'}`} value={stats.tournaments_month} />
-        <StatRow label={`${t('year') || 'Year'}`} value={stats.tournaments_year} />
-        <StatRow label={t('total') || 'Total'} value={stats.tournaments_total} />
+        <StatRow label={`${t('month')}`} value={stats.tournaments_month} />
+        <StatRow label={`${t('year')}`} value={stats.tournaments_year} />
+        <StatRow label={t('total')} value={stats.tournaments_total} />
       </div>
     </section>
   );

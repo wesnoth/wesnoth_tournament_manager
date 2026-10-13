@@ -171,7 +171,7 @@ export const UnrankedFactionSelect: React.FC<UnrankedFactionSelectProps> = ({
             disabled={disabled}
             type="button"
           >
-            + New Faction
+            {t('misc.new_faction')}
           </button>
         )}
       </div>

@@ -213,7 +213,7 @@ const Navbar: React.FC = () => {
             {t('navbar_ranking')}
           </Link>
           <Link to="/statistics" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm">
-            {t('statistics') || 'Statistics'}
+            {t('statistics')}
           </Link>
           <Link to="/tournaments" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm">
             {t('navbar_tournaments')}
@@ -272,7 +272,7 @@ const Navbar: React.FC = () => {
                   }}
                 >
                   <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 font-semibold text-gray-800">
-                    {getTranslation('notifications_title', 'Notifications')}
+                    {t('notifications_title')}
                   </div>
 
                   {/* Recent Notifications List */}
@@ -314,11 +314,11 @@ const Navbar: React.FC = () => {
                               </p>
                               {notif.type?.startsWith?.('challenge_') ? (
                                 <p className="text-xs text-blue-600 font-semibold mt-1">
-                                  → {t('navbar_events') || 'Events'}
+                                  → {t('navbar_events')}
                                 </p>
                               ) : notif.tournament_id ? (
                                 <p className="text-xs text-green-600 font-semibold mt-1">
-                                  → {t('label_go_tournament') || 'Go to Tournament'}
+                                  → {t('label_go_tournament')}
                                 </p>
                               ) : null}
                             </div>
@@ -330,7 +330,7 @@ const Navbar: React.FC = () => {
                       ))
                     ) : (
                       <div className="px-4 py-6 text-center text-gray-500 text-sm">
-                        {getTranslation('notifications_empty', 'No notifications')}
+                        {t('notifications_empty')}
                       </div>
                     )}
                   </div>
@@ -370,9 +370,9 @@ const Navbar: React.FC = () => {
                 type="button"
                 className="bg-red-600 text-white px-3 py-2 rounded font-semibold hover:bg-red-700 transition-colors max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm flex-shrink-0 whitespace-nowrap"
                 onClick={handleLogout}
-                title={t('navbar_logout') || 'Logout'}
+                title={t('navbar_logout')}
               >
-                {t('navbar_logout') || 'Logout'}
+                {t('navbar_logout')}
               </button>
             </div>
           )}

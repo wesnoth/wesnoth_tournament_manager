@@ -201,7 +201,7 @@ const Matches: React.FC = () => {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center min-h-screen"><p>{t('loading') || 'Loading...'}</p></div>;
+    return <div className="flex items-center justify-center min-h-screen"><p>{t('loading')}</p></div>;
   }
 
   const paginatedMatches = allMatches;
@@ -209,9 +209,9 @@ const Matches: React.FC = () => {
   if (error) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
-        <p className="text-gray-700">{t('matches_load_error') || 'Unable to load matches.'}</p>
+        <p className="text-gray-700">{t('matches_load_error')}</p>
         <button className="rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600" onClick={handleRefresh}>
-          {t('retry') || 'Retry'}
+          {t('retry')}
         </button>
       </div>
     );
@@ -327,7 +327,7 @@ const Matches: React.FC = () => {
           </div>
 
           <div className="flex flex-col gap-2 flex-shrink-0 min-w-[200px]">
-            <label htmlFor="faction" className="font-semibold text-gray-700 text-sm">{t('filter_faction') || 'Faction'}</label>
+            <label htmlFor="faction" className="font-semibold text-gray-700 text-sm">{t('filter_faction')}</label>
             <select
               data-help-id="option-matches-faction-filter"
               id="faction"

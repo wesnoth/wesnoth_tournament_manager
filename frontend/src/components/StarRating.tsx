@@ -89,7 +89,7 @@ const StarRating: React.FC<StarRatingProps> = ({ value, onChange, ratingLabels }
           type="button"
           onClick={() => onChange('')}
           className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1 rounded hover:bg-gray-100 transition-colors"
-          title={t('common.clear') || 'Clear'}
+          title={t('common.clear')}
         >
           ✕
         </button>

@@ -81,7 +81,7 @@ const Login: React.FC = () => {
       } else if (data?.error === 'account_locked') {
         setLockoutInfo({ remainingSeconds: data.remainingSeconds });
       } else {
-        setError(data?.error || 'Login failed. Please check your credentials.');
+        setError(data?.error || t('misc.login_failed'));
       }
     } finally {
       setLoading(false);

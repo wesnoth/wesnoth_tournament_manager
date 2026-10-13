@@ -197,7 +197,7 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
   const minimumGamesControl = (
     <div className="bg-gray-100 p-4 rounded-lg mb-6 border border-gray-200 flex items-center gap-4">
       <label className="flex items-center gap-2 font-semibold text-gray-800">
-        {t('minimum_games') || 'Minimum games'}:
+        {t('minimum_games')}:
         <input type="number" min="1" max="1000000" value={pendingMinGames}
           onChange={e => setPendingMinGames(e.target.value)}
           onKeyDown={handleMinGamesKeyDown}
@@ -246,24 +246,24 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
 
     return (
       <div className="bg-white rounded-lg p-6 shadow-md">
-        <h3 className="text-xl font-semibold text-gray-800 mb-3">{t('map_balance_comparison') || 'Map Balance - Before & After'}</h3>
+        <h3 className="text-xl font-semibold text-gray-800 mb-3">{t('map_balance_comparison')}</h3>
         <p className="text-blue-600 text-sm mb-3 p-3 bg-blue-50 rounded border-l-4 border-blue-500">
-          {t('before_event') || 'Before'}: {beforeStats.reduce((sum, map) => sum + map.total_games, 0)} {t('matches_evaluated') || 'matches'} |
-          {t('after_event') || 'After'}: {afterStats.reduce((sum, map) => sum + map.total_games, 0)} {t('matches_evaluated') || 'matches'}
+          {t('before_event')}: {beforeStats.reduce((sum, map) => sum + map.total_games, 0)} {t('matches_evaluated')} |
+          {t('after_event')}: {afterStats.reduce((sum, map) => sum + map.total_games, 0)} {t('matches_evaluated')}
         </p>
         {minimumGamesControl}
-        <p className="text-gray-500 text-xs mb-6 italic">{t('balance_lower_better') || '(Lower imbalance = better balance)'}</p>
+        <p className="text-gray-500 text-xs mb-6 italic">{t('balance_lower_better')}</p>
         
         <div className="overflow-x-auto border border-gray-200 rounded-lg">
           <table className="w-full border-collapse bg-white">
             <thead className="bg-gray-100 border-b-2 border-gray-300">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('map') || 'Map'}</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('total_games') || 'Games'}</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('factions_used') || 'Factions'}</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('winrate_range') || 'WR Range'}</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('change') || 'Change'}</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('imbalance') || 'Imbalance'}</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('map')}</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('total_games')}</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('factions_used')}</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('winrate_range')}</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('change')}</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('imbalance')}</th>
               </tr>
             </thead>
             <tbody>
@@ -342,21 +342,21 @@ const MapBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ before
   // Default global view
   return (
     <div className="bg-white rounded-lg p-6 shadow-md">
-      <h3 className="text-xl font-semibold text-gray-800 mb-3">{t('map_balance_title') || 'Map Balance Analysis'}</h3>
-      <p className="text-gray-600 text-sm mb-6 pb-3 px-3 bg-blue-50 border-l-4 border-blue-500 rounded">{t('map_balance_explanation') || 'Analysis of map balance across all factions'}</p>
+      <h3 className="text-xl font-semibold text-gray-800 mb-3">{t('map_balance_title')}</h3>
+      <p className="text-gray-600 text-sm mb-6 pb-3 px-3 bg-blue-50 border-l-4 border-blue-500 rounded">{t('map_balance_explanation')}</p>
       {minimumGamesControl}
-      <p className="text-gray-500 text-xs mb-6 italic">{t('balance_lower_better') || '(Lower imbalance = better balance)'}</p>
+      <p className="text-gray-500 text-xs mb-6 italic">{t('balance_lower_better')}</p>
       
       <div className="overflow-x-auto border border-gray-200 rounded-lg">
         <table className="w-full border-collapse bg-white">
           <thead className="bg-gray-100 border-b-2 border-gray-300">
             <tr>
-              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('map') || 'Map'}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('total_games') || 'Games'}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('factions_used') || 'Factions'}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('winrate_range') || 'WR Range'}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('imbalance') || 'Imbalance'}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('change') || 'Change'}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('map')}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('total_games')}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('factions_used')}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('winrate_range')}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('imbalance')}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('change')}</th>
             </tr>
           </thead>
           <tbody>

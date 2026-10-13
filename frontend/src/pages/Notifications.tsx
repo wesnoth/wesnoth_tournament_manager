@@ -25,7 +25,7 @@ const Notifications: React.FC = () => {
       <div className="bg-gradient-to-br from-gray-100 to-gray-300 min-h-screen py-8 px-4">
         <div className="max-w-6xl mx-auto">
           <h1 className="text-4xl font-bold text-gray-800 mb-8 text-center">
-            {t('sidebar.my_notifications') || 'My Notifications'}
+            {t('sidebar.my_notifications')}
           </h1>
 
           <div className="bg-white rounded-lg shadow-md p-8">

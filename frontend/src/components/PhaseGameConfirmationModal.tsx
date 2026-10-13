@@ -32,11 +32,11 @@ const PhaseGameConfirmationModal: React.FC<PhaseGameConfirmationModalProps> = ({
   if (!isOpen || !game) return null;
 
   const title = action === 'report'
-    ? (t('match_inform') || 'Inform Match')
-    : (t('report_match_link') || 'Report Match');
+    ? (t('match_inform'))
+    : (t('report_match_link'));
   const submitLabel = action === 'report'
-    ? (t('match_inform') || 'Inform Match')
-    : (t('report_match_link') || 'Report Match');
+    ? (t('match_inform'))
+    : (t('report_match_link'));
   const canDispute = Number(game.replay_confidence) === 1;
 
   const handleSubmit = async (responseAction: 'report' | 'confirm' | 'dispute') => {
@@ -51,7 +51,7 @@ const PhaseGameConfirmationModal: React.FC<PhaseGameConfirmationModalProps> = ({
       onSuccess();
       onClose();
     } catch (requestError: any) {
-      setError(requestError.response?.data?.error || 'Failed to update match confirmation');
+      setError(requestError.response?.data?.error || t('misc.match_confirmation_failed'));
     } finally {
       setSubmitting(false);
     }
@@ -69,13 +69,13 @@ const PhaseGameConfirmationModal: React.FC<PhaseGameConfirmationModalProps> = ({
         <div className="space-y-5 p-5">
           <div>
             <label className="mb-2 block text-sm font-semibold text-gray-700">
-              {t('label_rate_opponent') || "Rate opponent's performance"}
+              {t('label_rate_opponent')}
             </label>
             <StarRating value={rating} onChange={(value) => setRating(value)} />
           </div>
           <div>
             <label className="mb-2 block text-sm font-semibold text-gray-700">
-              {t('label_comments') || 'Comments'}
+              {t('label_comments')}
             </label>
             <textarea
               data-help-id="field-phase-game-confirmation-comments"
@@ -84,7 +84,7 @@ const PhaseGameConfirmationModal: React.FC<PhaseGameConfirmationModalProps> = ({
               maxLength={500}
               rows={4}
               className="w-full resize-none rounded border border-gray-300 px-3 py-2"
-              placeholder={t('label_additional_notes') || 'Optional comments...'}
+              placeholder={t('label_additional_notes')}
             />
             <div className="mt-1 text-right text-xs text-gray-500">{comments.length}/500</div>
           </div>
@@ -92,14 +92,14 @@ const PhaseGameConfirmationModal: React.FC<PhaseGameConfirmationModalProps> = ({
         </div>
         <div className="flex gap-3 border-t border-gray-200 p-5">
           <button data-help-id="action-cancel-phase-game-confirmation" type="button" onClick={onClose} disabled={submitting} className="flex-1 rounded border border-gray-300 px-4 py-2 font-semibold text-gray-700">
-            {t('button_cancel') || 'Cancel'}
+            {t('button_cancel')}
           </button>
           {action === 'respond' ? <>
             <button data-help-id="action-confirm-phase-game-result" type="button" onClick={() => handleSubmit('confirm')} disabled={submitting} className="flex-1 rounded bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-              {submitting ? 'Processing...' : (t('match_confirm_result') || 'Confirm Match')}
+              {submitting ? 'Processing...' : (t('match_confirm_result'))}
             </button>
             {canDispute && <button data-help-id="action-dispute-phase-game-result" type="button" onClick={() => handleSubmit('dispute')} disabled={submitting} className="flex-1 rounded bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700 disabled:opacity-50">
-              {submitting ? 'Processing...' : (t('match_dispute_result') || 'Dispute Match')}
+              {submitting ? 'Processing...' : (t('match_dispute_result'))}
             </button>}
           </> : <button data-help-id="action-report-phase-game-result" type="button" onClick={() => handleSubmit('report')} disabled={submitting} className="flex-1 rounded bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
             {submitting ? 'Processing...' : submitLabel}

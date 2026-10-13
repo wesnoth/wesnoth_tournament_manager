@@ -37,6 +37,8 @@ const Profile: React.FC = () => {
   const [schedulingCollapsed, setSchedulingCollapsed] = useState(true);
   const [savingScheduling, setSavingScheduling] = useState(false);
   const [schedulingMessage, setSchedulingMessage] = useState('');
+  // Styled from this flag, not from the message text, which is translated.
+  const [schedulingMessageIsError, setSchedulingMessageIsError] = useState(false);
 
   const languages = useMemo(() => [
     { code: 'en', name: 'English', countryCode: 'gb' },
@@ -92,7 +94,7 @@ const Profile: React.FC = () => {
       i18n.changeLanguage(lang);
       localStorage.setItem('language', lang);
       setLanguageDropdownOpen(false);
-      setProfileMessage(t('profile_language_updated') || 'Language updated');
+      setProfileMessage(t('profile_language_updated'));
       setTimeout(() => setProfileMessage(''), 3000);
     } catch (err: any) {
       setProfileError(err?.response?.data?.error || t('profile.error_language_update', 'Error updating language'));
@@ -105,7 +107,7 @@ const Profile: React.FC = () => {
       const res = await userService.updateProfile({ country: countryCode });
       setSelectedCountry(countryCode);
       setProfile(res.data);
-      setProfileMessage(t('profile.country_updated') || 'Country updated');
+      setProfileMessage(t('profile.country_updated'));
       setTimeout(() => setProfileMessage(''), 3000);
     } catch (err: any) {
       setProfileError(err?.response?.data?.error || t('profile.error_update_country_failed'));
@@ -118,7 +120,7 @@ const Profile: React.FC = () => {
       const res = await userService.updateProfile({ avatar: avatarId });
       setSelectedAvatar(avatarId);
       setProfile(res.data);
-      setProfileMessage(t('profile.avatar_updated') || 'Avatar updated');
+      setProfileMessage(t('profile.avatar_updated'));
       setTimeout(() => setProfileMessage(''), 3000);
     } catch (err: any) {
       setProfileError(err?.response?.data?.error || t('profile.error_update_avatar_failed'));
@@ -211,9 +213,11 @@ const Profile: React.FC = () => {
         timezone,
         availability_schedule: availabilitySchedule
       });
+      setSchedulingMessageIsError(false);
       setSchedulingMessage(t('profile.scheduling_saved', 'Scheduling preferences saved successfully'));
       setTimeout(() => setSchedulingMessage(''), 3000);
     } catch (err: any) {
+      setSchedulingMessageIsError(true);
       setSchedulingMessage(err?.response?.data?.error || err?.response?.data?.details?.[0] || t('profile.error_scheduling_update', 'Error updating scheduling preferences'));
     } finally {
       setSavingScheduling(false);
@@ -312,7 +316,7 @@ const Profile: React.FC = () => {
                   data-help-id="action-toggle-profile-preferences" className="p-8 cursor-pointer flex justify-between items-center hover:bg-gray-50 transition-colors"
                   onClick={() => setPreferencesCollapsed(!preferencesCollapsed)}
                 >
-                  <h2 className="text-2xl font-semibold text-gray-800 pb-0">{t('profile.preferences_title') || 'Preferences'}</h2>
+                  <h2 className="text-2xl font-semibold text-gray-800 pb-0">{t('profile.preferences_title')}</h2>
                   <svg 
                     className={`w-6 h-6 text-gray-600 transition-transform ${preferencesCollapsed ? 'rotate-180' : ''}`}
                     fill="none" 
@@ -337,7 +341,7 @@ const Profile: React.FC = () => {
 
               <section data-help-id="region-profile-avatar" className="bg-white rounded-lg shadow-md mb-8">
                 <div data-help-id="action-toggle-profile-avatar" className="p-8 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between" onClick={() => setAvatarSectionCollapsed(!avatarSectionCollapsed)}>
-                  <h2 className="text-2xl font-semibold text-gray-800 pb-0">{t('profile.avatar') || 'Avatar'}</h2>
+                  <h2 className="text-2xl font-semibold text-gray-800 pb-0">{t('profile.avatar')}</h2>
                   <svg 
                     className={`w-6 h-6 text-gray-600 transition-transform ${avatarSectionCollapsed ? 'rotate-180' : ''}`}
                     fill="none" 
@@ -391,7 +395,7 @@ const Profile: React.FC = () => {
                   data-help-id="action-toggle-profile-scheduling" className="p-8 cursor-pointer flex justify-between items-center hover:bg-gray-50 transition-colors"
                   onClick={() => setSchedulingCollapsed(!schedulingCollapsed)}
                 >
-                  <h2 className="text-2xl font-semibold text-gray-800 pb-0">{t('availability.title') || 'Scheduling Preferences'}</h2>
+                  <h2 className="text-2xl font-semibold text-gray-800 pb-0">{t('availability.title')}</h2>
                   <svg 
                     className={`w-6 h-6 text-gray-600 transition-transform ${schedulingCollapsed ? 'rotate-180' : ''}`}
                     fill="none" 
@@ -405,7 +409,7 @@ const Profile: React.FC = () => {
                   <div data-help-id="region-profile-scheduling-body" className="p-8 pt-0 border-t border-gray-200">
                     {schedulingMessage && (
                       <p className={`mb-4 px-4 py-3 rounded-lg border-l-4 ${
-                        schedulingMessage.includes('Error') || schedulingMessage.includes('error')
+                        schedulingMessageIsError
                           ? 'bg-red-100 text-red-800 border-red-600'
                           : 'bg-green-100 text-green-800 border-green-600'
                       }`}>
@@ -428,7 +432,7 @@ const Profile: React.FC = () => {
                         disabled={savingScheduling}
                         className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-green-700 text-white rounded-lg font-semibold hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                       >
-                        {savingScheduling ? t('common.saving') : t('common.save') || 'Save'}
+                        {savingScheduling ? t('common.saving') : t('common.save')}
                       </button>
                     </div>
                   </div>

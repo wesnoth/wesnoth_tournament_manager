@@ -178,7 +178,7 @@ export const UnrankedMapSelect: React.FC<UnrankedMapSelectProps> = ({
             disabled={disabled}
             type="button"
           >
-            + New Map
+            {t('misc.new_map')}
           </button>
         )}
       </div>

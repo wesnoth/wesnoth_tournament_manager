@@ -23,7 +23,7 @@ const TimezoneSelector: React.FC<TimezoneSelecterProps> = ({ value, onChange }) 
   return (
     <div data-help-id="region-profile-timezone" className="relative">
       <label className="block text-sm font-semibold text-gray-700 mb-2">
-        {t('timezone') || 'Timezone'}
+        {t('timezone')}
       </label>
 
       <button
@@ -38,7 +38,7 @@ const TimezoneSelector: React.FC<TimezoneSelecterProps> = ({ value, onChange }) 
         <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg">
           <input
             type="text"
-            placeholder={t('search_timezone') || 'Search...'}
+            placeholder={t('search_timezone')}
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             className="w-full px-4 py-2 border-b border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-200"
@@ -63,7 +63,7 @@ const TimezoneSelector: React.FC<TimezoneSelecterProps> = ({ value, onChange }) 
               ))
             ) : (
               <div className="px-4 py-2 text-gray-500 text-sm">
-                {t('no_results') || 'No results'}
+                {t('no_results')}
               </div>
             )}
           </div>

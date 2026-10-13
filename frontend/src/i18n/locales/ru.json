@@ -1847,5 +1847,33 @@
     "uploading": "Загрузка...",
     "insert_image": "Вставить изображение",
     "content_placeholder": "Пишите здесь в Markdown ({{language}})..."
+  },
+  "match_status": {
+    "confirmed": "Подтверждён",
+    "reported": "Внесён",
+    "unconfirmed": "Не подтверждён",
+    "disputed": "Оспорен",
+    "cancelled": "Отменён",
+    "won": "Победа",
+    "lost": "Поражение"
+  },
+  "misc": {
+    "team_position": "{{nickname}} (позиция {{position}})",
+    "new_faction": "+ Новая фракция",
+    "new_map": "+ Новая карта",
+    "match_confirmation_failed": "Не удалось обновить подтверждение матча",
+    "download_count": "Скачать ({{count}})",
+    "downloads_title": "Скачиваний: {{count}}",
+    "unknown_map": "Неизвестная карта",
+    "login_failed": "Не удалось войти. Проверьте учётные данные.",
+    "report_replay_failed": "Не удалось отправить реплей",
+    "load_article_failed": "Не удалось загрузить статью",
+    "load_articles_failed": "Не удалось загрузить список статей"
+  },
+  "profile_data": {
+    "load_profile_failed": "Ошибка загрузки профиля",
+    "load_profile_data_failed": "Ошибка загрузки данных профиля",
+    "load_matches_failed": "Ошибка загрузки матчей",
+    "load_opponents_failed": "Ошибка загрузки данных о соперниках"
   }
 }

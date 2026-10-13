@@ -36,10 +36,10 @@ const HelpPage: React.FC = () => {
           setArticles(data);
           setErrorList(null);
         } else {
-          setErrorList('Failed to load articles list');
+          setErrorList(t('misc.load_articles_failed'));
         }
       } catch (err) {
-        setErrorList('Error loading articles list');
+        setErrorList(t('misc.load_articles_failed'));
       } finally {
         setLoadingList(false);
       }

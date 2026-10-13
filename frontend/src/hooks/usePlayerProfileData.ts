@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+// i18next.t resolves the active language at call time, so the callbacks need no extra dependency.
+import i18next from 'i18next';
 import { userService, publicService } from '../services/api';
 import { playerStatisticsService } from '../services/playerStatisticsService';
 
@@ -83,7 +85,7 @@ export function usePlayerProfileData({
       setProfile(profileRes.data);
     } catch (err) {
       console.error('Error loading player profile data:', err);
-      setError('Error loading profile');
+      setError(i18next.t('profile_data.load_profile_failed'));
     } finally {
       setLoading(false);
     }
@@ -102,7 +104,7 @@ export function usePlayerProfileData({
       }
     } catch (err) {
       console.error('Error loading profile tab data:', err);
-      setError('Error loading profile data');
+      setError(i18next.t('profile_data.load_profile_data_failed'));
     }
   }, [activeTab, playerId]);
 
@@ -124,7 +126,7 @@ export function usePlayerProfileData({
       });
     } catch (err) {
       console.error('Error loading player matches:', err);
-      setError('Error loading matches');
+      setError(i18next.t('profile_data.load_matches_failed'));
     }
   }, [activeTab, matchFilters, matchPage, mode, playerId]);
 
@@ -154,7 +156,7 @@ export function usePlayerProfileData({
       setOpponentStats(normalized);
     } catch (err) {
       console.error('Error loading opponent statistics:', err);
-      setOpponentStatsError('Error loading opponent data');
+      setOpponentStatsError(i18next.t('profile_data.load_opponents_failed'));
     } finally {
       setOpponentStatsLoading(false);
     }

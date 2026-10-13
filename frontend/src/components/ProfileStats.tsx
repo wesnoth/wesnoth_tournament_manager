@@ -116,7 +116,7 @@ const ProfileStats: React.FC<ProfileStatsProps> = ({ player }) => {
         </div>
 
         <div className="bg-white rounded-lg shadow-md p-6 max-md:p-3 max-md:flex-shrink-0 max-md:min-w-[110px]">
-          <div className="text-sm max-md:text-xs font-semibold text-gray-600 mb-2">{t('label_avg_elo_change') || 'Avg ELO Change'}</div>
+          <div className="text-sm max-md:text-xs font-semibold text-gray-600 mb-2">{t('label_avg_elo_change')}</div>
           <div className={`text-3xl max-md:text-xl font-bold ${(player.avg_elo_change || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             {(player.avg_elo_change || 0) >= 0 ? '+' : ''}{Number(player.avg_elo_change || 0).toFixed(1)}
           </div>

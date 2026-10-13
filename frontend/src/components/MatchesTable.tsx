@@ -201,7 +201,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
               <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('winner')}>{t('label_winner')}</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('loser')}>{t('label_loser')}</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('map')}>{t('label_map')}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('status')}>{t('label_status_actions') || 'Status / Actions'}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('status')}>{t('label_status_actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -239,7 +239,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
               {t('label_map')}{sortColumn === 'map' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
             </th>
             <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('status')}>
-              {t('label_status_actions') || 'Status / Actions'}{sortColumn === 'status' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
+              {t('label_status_actions')}{sortColumn === 'status' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
             </th>
           </tr>
         </thead>
@@ -247,11 +247,11 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
           {sortedMatches.map((match) => {
             // Special rendering for confidence=1 replays (including 'due' replays)
             if (match.source_type === 'replay_confidence_1' || match.source_type === 'replay_confidence_1_due') {
-              const map = match.map || 'Unknown Map';
-              const faction1 = match.winner_faction || 'Unknown';
-              const faction2 = match.loser_faction || 'Unknown';
-              const player1Name = match.winner_nickname || 'Player 1';
-              const player2Name = match.loser_nickname || 'Player 2';
+              const map = match.map || t('misc.unknown_map');
+              const faction1 = match.winner_faction || t('unknown');
+              const faction2 = match.loser_faction || t('unknown');
+              const player1Name = match.winner_nickname || t('label_player1');
+              const player2Name = match.loser_nickname || t('label_player2');
               const side1 = match.winner_side || 1;
               const side2 = match.loser_side || 2;
               const date = new Date(match.created_at).toLocaleDateString(i18next.language, {
@@ -311,7 +311,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                     <div className="space-y-2">
                       <div>
                         <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${isDueReplay ? 'bg-red-200 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                          {isDueReplay ? t('replay_due') || 'Due Replay' : t('replay_need_confirmation')}
+                          {isDueReplay ? t('replay_due') : t('replay_need_confirmation')}
                         </span>
                       </div>
                       {!isDueReplay && match.cancel_requested_by && (
@@ -322,7 +322,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                       {isDueReplay ? (
                         // Due replay: read-only mode
                         <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 italic">
-                          {t('replay_due_expired') || 'Confirmation period expired. Download only.'}
+                          {t('replay_due_expired')}
                         </div>
                       ) : match.is_admin_view ? (
                         // Admin view: only discard
@@ -545,9 +545,9 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                             data-help-id="action-report-match-result"
                             className="px-2 py-1 bg-orange-500 text-white text-xs rounded hover:bg-orange-600 transition"
                             onClick={() => onOpenConfirmation && onOpenConfirmation(match)}
-                            title={t('match_inform') || 'Inform Match'}
+                            title={t('match_inform')}
                           >
-                            {t('match_inform') || 'Inform Match'}
+                            {t('match_inform')}
                           </button>
                         );
                       }
@@ -559,9 +559,9 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                             data-help-id="action-confirm-match-result"
                             className="px-2 py-1 bg-orange-500 text-white text-xs rounded hover:bg-orange-600 transition"
                             onClick={() => onOpenConfirmation && onOpenConfirmation(match)}
-                            title={t('report_match_link') || 'Confirm/Dispute'}
+                            title={t('report_match_link')}
                           >
-                            {t('report_match_link') || 'Confirm/Dispute'}
+                            {t('report_match_link')}
                           </button>
                         );
                       }

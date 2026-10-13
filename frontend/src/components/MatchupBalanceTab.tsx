@@ -170,7 +170,7 @@ const MatchupBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ be
   const minimumGamesControl = (
     <div className="bg-gray-100 p-4 rounded-lg mb-6 border border-gray-200 flex items-center gap-4">
       <label className="flex items-center gap-2 font-semibold text-gray-800">
-        {t('minimum_games') || 'Minimum games'}:
+        {t('minimum_games')}:
         <input type="number" min="1" max="1000000" value={pendingMinGames}
           onChange={e => setPendingMinGames(e.target.value)}
           onKeyDown={handleMinGamesKeyDown}
@@ -205,15 +205,15 @@ const MatchupBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ be
   const TableHead = () => (
     <thead className="bg-gray-100 border-b-2 border-gray-300">
       <tr>
-        <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('map') || 'Map'}</th>
+        <th className="px-4 py-3 text-left font-semibold text-gray-800">{t('map')}</th>
         <th className="px-4 py-3 text-left font-semibold text-amber-700 bg-amber-50">{t('match_feed.side_1')}</th>
         <th className="px-2 py-3 text-center font-semibold text-gray-800">{t('vs')}</th>
         <th className="px-4 py-3 text-left font-semibold text-purple-700 bg-purple-50">{t('match_feed.side_2')}</th>
-        <th className="px-4 py-3 text-center font-semibold text-gray-800">{t('total_games') || 'G'}</th>
-        <th className="px-4 py-3 text-center font-semibold text-amber-700 bg-amber-50">{t('side_1_wr') || 'S1 WR'}</th>
-        <th className="px-4 py-3 text-center font-semibold text-purple-700 bg-purple-50">{t('side_2_wr') || 'S2 WR'}</th>
-        <th className="px-4 py-3 text-center font-semibold text-gray-800">{t('change') || 'Change'}</th>
-        <th className="px-4 py-3 text-center font-semibold text-gray-800">{t('imbalance') || 'Imbalance'}</th>
+        <th className="px-4 py-3 text-center font-semibold text-gray-800">{t('total_games')}</th>
+        <th className="px-4 py-3 text-center font-semibold text-amber-700 bg-amber-50">{t('side_1_wr')}</th>
+        <th className="px-4 py-3 text-center font-semibold text-purple-700 bg-purple-50">{t('side_2_wr')}</th>
+        <th className="px-4 py-3 text-center font-semibold text-gray-800">{t('change')}</th>
+        <th className="px-4 py-3 text-center font-semibold text-gray-800">{t('imbalance')}</th>
       </tr>
     </thead>
   );
@@ -238,10 +238,10 @@ const MatchupBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ be
 
     return (
       <div className="bg-white rounded-lg p-6 shadow-md">
-        <h3 className="text-xl font-semibold text-gray-800 mb-3">{t('unbalanced_matchups_comparison') || 'Matchup Analysis — Before & After'}</h3>
+        <h3 className="text-xl font-semibold text-gray-800 mb-3">{t('unbalanced_matchups_comparison')}</h3>
         <p className="text-blue-600 text-sm mb-3 p-3 bg-blue-50 rounded border-l-4 border-blue-500">
-          {t('before_event') || 'Before'}: {beforeStats.reduce((s, r) => s + r.games, 0)}g |{' '}
-          {t('after_event')  || 'After'}:  {afterStats.reduce((s, r)  => s + r.games, 0)}g
+          {t('before_event')}: {beforeStats.reduce((s, r) => s + r.games, 0)}g |{' '}
+          {t('after_event')}:  {afterStats.reduce((s, r)  => s + r.games, 0)}g
         </p>
         {minimumGamesControl}
         <div className="overflow-x-auto border border-gray-200 rounded-lg">
@@ -321,17 +321,17 @@ const MatchupBalanceTab: React.FC<{ beforeData?: any; afterData?: any }> = ({ be
 
   return (
     <div className="bg-white rounded-lg p-6 shadow-md">
-      <h3 className="text-xl font-semibold text-gray-800 mb-3">{t('unbalanced_matchups') || 'Matchup Analysis'}</h3>
+      <h3 className="text-xl font-semibold text-gray-800 mb-3">{t('unbalanced_matchups')}</h3>
       <p className="text-gray-600 text-sm mb-6 pb-3 px-3 bg-blue-50 border-l-4 border-blue-500 rounded">
-        {t('matchup_balance_explanation') || 'Shows all faction matchups that meet the minimum number of games, ordered by imbalance. Higher imbalance indicates a larger difference between Side 1 and Side 2 win rates.'}
+        {t('matchup_balance_explanation')}
       </p>
       <div>
         {minimumGamesControl}
-        <span className="text-sm text-gray-500">{filtered.length} {t('matchups') || 'matchups'}</span>
+        <span className="text-sm text-gray-500">{filtered.length} {t('matchups')}</span>
       </div>
 
       {filtered.length === 0 ? (
-        <p className="text-center text-gray-500 italic py-8 bg-gray-50 rounded-lg">{t('no_data_available') || 'No data available'}</p>
+        <p className="text-center text-gray-500 italic py-8 bg-gray-50 rounded-lg">{t('no_data_available')}</p>
       ) : (
         <div className="overflow-x-auto border border-gray-200 rounded-lg">
           <table className="w-full border-collapse bg-white">

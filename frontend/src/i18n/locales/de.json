@@ -1847,5 +1847,33 @@
     "uploading": "Wird hochgeladen...",
     "insert_image": "Bild einfügen",
     "content_placeholder": "Hier Markdown schreiben ({{language}})..."
+  },
+  "match_status": {
+    "confirmed": "Bestätigt",
+    "reported": "Gemeldet",
+    "unconfirmed": "Unbestätigt",
+    "disputed": "Angefochten",
+    "cancelled": "Abgebrochen",
+    "won": "Gewonnen",
+    "lost": "Verloren"
+  },
+  "misc": {
+    "team_position": "{{nickname}} (Position {{position}})",
+    "new_faction": "+ Neue Fraktion",
+    "new_map": "+ Neue Karte",
+    "match_confirmation_failed": "Spielbestätigung konnte nicht aktualisiert werden",
+    "download_count": "Herunterladen ({{count}})",
+    "downloads_title": "Downloads: {{count}}",
+    "unknown_map": "Unbekannte Karte",
+    "login_failed": "Anmeldung fehlgeschlagen. Bitte prüfe deine Zugangsdaten.",
+    "report_replay_failed": "Replay konnte nicht gemeldet werden",
+    "load_article_failed": "Artikel konnte nicht geladen werden",
+    "load_articles_failed": "Artikelliste konnte nicht geladen werden"
+  },
+  "profile_data": {
+    "load_profile_failed": "Fehler beim Laden des Profils",
+    "load_profile_data_failed": "Fehler beim Laden der Profildaten",
+    "load_matches_failed": "Fehler beim Laden der Spiele",
+    "load_opponents_failed": "Fehler beim Laden der Gegnerdaten"
   }
 }
