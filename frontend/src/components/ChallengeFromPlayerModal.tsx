@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ScheduleProposalModalP2P from './ScheduleProposalModalP2P';
 import { publicService, userService } from '../services/api';
-import { useAuthStore } from '../store/authStore';
 
 interface Participant {
   id: string;
@@ -27,7 +26,6 @@ const ChallengeFromPlayerModal: React.FC<ChallengeFromPlayerModalProps> = ({
   opponentNickname,
 }) => {
   const { t } = useTranslation();
-  const { userId } = useAuthStore();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');

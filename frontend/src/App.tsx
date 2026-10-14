@@ -43,7 +43,7 @@ const AdminRuleTemplates = React.lazy(() => import('./pages/AdminRuleTemplates')
 
 const App: React.FC = () => {
   const { t } = useTranslation();
-  const { isAdmin, token, validateToken, isValidating } = useAuthStore();
+  const { token, validateToken, isValidating } = useAuthStore();
   const [authChecked, setAuthChecked] = React.useState(false);
   const [maintenanceMode, setMaintenanceMode] = React.useState(false);
   const [globalRecalculationInProgress, setGlobalRecalculationInProgress] = React.useState(false);

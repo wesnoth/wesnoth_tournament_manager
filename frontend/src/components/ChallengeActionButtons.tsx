@@ -98,6 +98,8 @@ const ChallengeActionButtons: React.FC<ChallengeActionButtonsProps> = ({
       setViewingTimezone(viewerProfile?.timezone || 'UTC');
     } catch (err) {
       console.error('Error loading proposal:', err);
+      // Close the request so the next click re-runs the effect and retries.
+      setShowManageModal(false);
     } finally {
       setLoadingData(false);
     }
@@ -125,8 +127,10 @@ const ChallengeActionButtons: React.FC<ChallengeActionButtonsProps> = ({
     <>
       <button
         onClick={() => setShowManageModal(true)}
+        disabled={loadingData}
+        aria-busy={loadingData}
         data-help-id="action-manage-challenge"
-        className="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-700 text-white rounded font-semibold transition-colors"
+        className="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-700 text-white rounded font-semibold transition-colors disabled:opacity-60 disabled:cursor-wait"
         title={t('challenge.manage_title')}
       >
         ⚙️ {t('events_manage_challenge')}

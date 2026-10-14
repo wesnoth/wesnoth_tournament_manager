@@ -137,12 +137,6 @@ const FactionBalanceTab: React.FC<FactionBalanceTabProps> = ({ beforeData = null
     </div>
   );
 
-  const getWinrateColorClass = (winrate: number) => {
-    if (winrate > 55) return 'high';
-    if (winrate < 45) return 'low';
-    return 'balanced';
-  };
-
   const aggregateFactionData = (data: ComparisonData[]) => {
     const factionMap = new Map<string, { 
       faction_id: string;

@@ -58,8 +58,6 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
   const { t } = useTranslation();
   const [events, setEvents] = useState<BalanceEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<BalanceEvent | null>(null);
-  const [beforeData, setBeforeData] = useState<AggregatedData[]>([]);
-  const [afterData, setAfterData] = useState<AggregatedData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -141,9 +139,6 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
         };
       }).filter((d: AggregatedData) => d.total_games > 0);
 
-      setBeforeData(beforeAgg);
-      setAfterData(afterAgg);
-
       // The API returns event boundaries, while the UI displays the actual
       // non-overlapping match intervals: the event day belongs to Before and
       // the following day starts After.
@@ -159,8 +154,6 @@ const BalanceEventImpactPanel: React.FC<BalanceEventImpactProps> = ({ eventId, o
     } catch (err: any) {
       console.error(`[BalanceEventImpactPanel] Error loading impact:`, err);
       setError(err.response?.data?.error || t('error_loading_impact'));
-      setBeforeData([]);
-      setAfterData([]);
       onIntervalChange?.('', '');
     } finally {
       setLoading(false);

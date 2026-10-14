@@ -259,7 +259,6 @@ const Events: React.FC = () => {
     const ranges: Array<{ start: Date; end: Date }> = [];
     if (sortedSlots.length > 0) {
       let currentStart = sortedSlots[0].dateObj;
-      let currentEnd = sortedSlots[0].dateObj;
 
       for (let i = 1; i < sortedSlots.length; i++) {
         const current = sortedSlots[i].dateObj;
@@ -270,7 +269,6 @@ const Events: React.FC = () => {
 
         if (current.getTime() === prevEnd.getTime()) {
           // Contiguous - extend current range
-          currentEnd = current;
         } else {
           // Gap found - save range and start new one
           const endTime = new Date(
@@ -278,7 +276,6 @@ const Events: React.FC = () => {
           );
           ranges.push({ start: currentStart, end: endTime });
           currentStart = current;
-          currentEnd = current;
         }
       }
       // Add last range

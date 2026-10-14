@@ -81,7 +81,6 @@ export const TeamReplacementModal: React.FC<TeamReplacementModalProps> = ({
     }
   };
 
-  const selectedMember = teamMembers.find(m => m.participant_id === selectedMemberId);
 
   if (!isOpen) return null;
 

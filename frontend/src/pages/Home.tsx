@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { userService, matchService, publicService } from '../services/api';
 import { processMultiLanguageItems } from '../utils/languageFallback';
-import { getLevelTranslationKey } from '../utils/levelTranslation';
 import PlayerLink from '../components/PlayerLink';
 import GlobalStats from '../components/GlobalStats';
 import { renderWikiMarkdown } from '../utils/wikiMarkdown';

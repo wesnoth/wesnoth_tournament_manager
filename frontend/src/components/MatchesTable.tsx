@@ -31,12 +31,11 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
   onReplayReported,
 }) => {
   const { t } = useTranslation();
-  const { isAuthenticated, userId, user, isAdmin } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore();
   const currentUserNickname = user?.nickname?.toLowerCase() || '';
 
   const [sortColumn, setSortColumn] = React.useState<SortColumn>('');
   const [sortDirection, setSortDirection] = React.useState<SortDirection>('desc');
-  const [reportingReplayId, setReportingReplayId] = React.useState<string | null>(null);
   const [showConfirmationModal, setShowConfirmationModal] = React.useState(false);
   const [selectedReplay, setSelectedReplay] = React.useState<any>(null);
   const [modalChoice, setModalChoice] = React.useState<'I won' | 'I lost' | 'cancel'>('I won');

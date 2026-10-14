@@ -25,7 +25,7 @@ const Navbar: React.FC = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated, isAdmin, user, logout } = useAuthStore();
+  const { isAuthenticated, user, logout } = useAuthStore();
   const [languageDropdownOpen, setLanguageDropdownOpen] = useState(false);
   const [notificationsDropdownOpen, setNotificationsDropdownOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);

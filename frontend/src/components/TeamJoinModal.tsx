@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api, userService } from '../services/api';
+import { api } from '../services/api';
 import OpponentSelector from './OpponentSelector';
 import { useTranslation } from 'react-i18next';
 
@@ -32,9 +32,7 @@ export const TeamJoinModal: React.FC<TeamJoinModalProps> = ({
   const [teamName, setTeamName] = useState('');
   const [teammateId, setTeammateId] = useState('');
   const [teammateName, setTeammateName] = useState('');
-  const [showSuggestions, setShowSuggestions] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [searching, setSearching] = useState(false);
   const [existingTeams, setExistingTeams] = useState<Array<{id: string; name: string; member_count: number}>>([]);
   const [showTeamSuggestions, setShowTeamSuggestions] = useState(false);
   const [joinMode, setJoinMode] = useState<'create' | 'join'>('create');

@@ -202,7 +202,7 @@ const ChallengeFromEventsModal: React.FC<ChallengeFromEventsModalProps> = ({
             )}
 
             {/* Loading state */}
-            {loadingOpponent && (
+            {(loading || loadingOpponent) && (
               <div className="p-3 text-center text-gray-600 text-sm">
                 {t('loading')}...
               </div>
