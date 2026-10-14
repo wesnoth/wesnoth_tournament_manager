@@ -51,7 +51,7 @@ const TournamentParticipantsTable: React.FC<TournamentParticipantsTableProps> = 
   return (
     participants.length > 0 ? (
       <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table data-help-id="region-tournament-participants-table" className="w-full text-sm">
         <thead className="bg-gray-100">
           <tr>
             <th className="px-4 py-3 text-left font-semibold text-gray-700 border-b-2 border-gray-300">{t('label_nickname')}</th>
@@ -63,7 +63,7 @@ const TournamentParticipantsTable: React.FC<TournamentParticipantsTableProps> = 
         </thead>
         <tbody>
           {participants.map((p) => (
-            <tr key={p.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+            <tr data-help-id="region-tournament-participant-row" key={p.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
               <td className="px-4 py-3 text-gray-700"><PlayerLink nickname={p.nickname} userId={p.user_id} /></td>
               <td className="px-4 py-3 text-gray-700">
                 <span 
