@@ -1279,7 +1279,15 @@
     "bracket": "Cuadro",
     "add_mapping": "Añadir asignación",
     "valid_summary": "Fases ordenadas: {{count}}. El servidor comprueba que el grafo de clasificación no tiene ciclos.",
-    "error_removed_group": "Una asignación apunta a un grupo eliminado. Vuelve a aplicar una plantilla o edita las asignaciones."
+    "error_removed_group": "Una asignación apunta a un grupo eliminado. Vuelve a aplicar una plantilla o edita las asignaciones.",
+    "default_swiss": "Suizo",
+    "default_league": "Liga",
+    "default_elimination": "Cuadro de eliminación",
+    "default_swiss_groups": "Grupos suizos",
+    "default_elimination_brackets": "Cuadros de eliminación",
+    "default_grand_final": "Gran final",
+    "default_group": "Grupo {{number}}",
+    "default_phase": "Fase {{number}}"
   },
   "schedule_grid": {
     "proposed": "Propuesta",

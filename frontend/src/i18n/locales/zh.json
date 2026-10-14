@@ -1279,7 +1279,15 @@
     "bracket": "对阵表",
     "add_mapping": "添加映射",
     "valid_summary": "有序阶段：{{count}}。服务器会校验晋级图无环。",
-    "error_removed_group": "某个映射引用了已移除的小组。请重新应用模板或编辑映射。"
+    "error_removed_group": "某个映射引用了已移除的小组。请重新应用模板或编辑映射。",
+    "default_swiss": "瑞士制",
+    "default_league": "联赛",
+    "default_elimination": "淘汰赛",
+    "default_swiss_groups": "瑞士制小组",
+    "default_elimination_brackets": "淘汰赛对阵表",
+    "default_grand_final": "总决赛",
+    "default_group": "第 {{number}} 组",
+    "default_phase": "阶段 {{number}}"
   },
   "schedule_grid": {
     "proposed": "已提议",

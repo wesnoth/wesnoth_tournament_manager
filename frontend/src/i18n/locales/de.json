@@ -1279,7 +1279,15 @@
     "bracket": "K.-o.-Baum",
     "add_mapping": "Zuordnung hinzufügen",
     "valid_summary": "Geordnete Phasen: {{count}}. Der Server prüft, dass der Aufstiegsgraph keine Zyklen hat.",
-    "error_removed_group": "Eine Zuordnung verweist auf eine entfernte Gruppe. Wende eine Vorlage erneut an oder bearbeite die Zuordnungen."
+    "error_removed_group": "Eine Zuordnung verweist auf eine entfernte Gruppe. Wende eine Vorlage erneut an oder bearbeite die Zuordnungen.",
+    "default_swiss": "Schweizer System",
+    "default_league": "Liga",
+    "default_elimination": "K.-o.-Baum",
+    "default_swiss_groups": "Schweizer Gruppen",
+    "default_elimination_brackets": "K.-o.-Bäume",
+    "default_grand_final": "Großes Finale",
+    "default_group": "Gruppe {{number}}",
+    "default_phase": "Phase {{number}}"
   },
   "schedule_grid": {
     "proposed": "Vorgeschlagen",

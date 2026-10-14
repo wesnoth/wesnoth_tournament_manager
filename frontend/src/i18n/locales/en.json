@@ -1279,7 +1279,15 @@
     "bracket": "Bracket",
     "add_mapping": "Add mapping",
     "valid_summary": "Ordered phases: {{count}}. The server checks that the advancement graph has no cycles.",
-    "error_removed_group": "A mapping refers to a removed group. Reapply a template or edit mappings."
+    "error_removed_group": "A mapping refers to a removed group. Reapply a template or edit mappings.",
+    "default_swiss": "Swiss",
+    "default_league": "League",
+    "default_elimination": "Elimination bracket",
+    "default_swiss_groups": "Swiss groups",
+    "default_elimination_brackets": "Elimination brackets",
+    "default_grand_final": "Grand final",
+    "default_group": "Group {{number}}",
+    "default_phase": "Phase {{number}}"
   },
   "schedule_grid": {
     "proposed": "Proposed",

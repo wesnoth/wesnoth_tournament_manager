@@ -20,7 +20,24 @@ interface Props {
 
 const id = () => crypto.randomUUID();
 
-function phase(name: string, order: number, format: PhaseFormat, groupCount = 1): TournamentPhaseDefinition {
+/**
+ * Default names written into a new format. Phase and group names are saved
+ * with the tournament as editable data, so they are produced in the
+ * organizer's interface language when the template is applied; nothing else
+ * reads them, and switching language later does not rename saved phases.
+ */
+interface DefaultNames {
+  swiss: string;
+  league: string;
+  elimination: string;
+  swissGroups: string;
+  eliminationBrackets: string;
+  grandFinal: string;
+  group: (number: number) => string;
+  phase: (number: number) => string;
+}
+
+function phase(name: string, order: number, format: PhaseFormat, names: DefaultNames, groupCount = 1): TournamentPhaseDefinition {
   return {
     id: id(),
     name,
@@ -28,18 +45,18 @@ function phase(name: string, order: number, format: PhaseFormat, groupCount = 1)
     format,
     assignment_method: 'seeded_snake',
     default_best_of: 3,
-    groups: Array.from({ length: groupCount }, (_, index) => ({ id: id(), name: groupCount === 1 ? name : `Group ${index + 1}`, order: index + 1 })),
+    groups: Array.from({ length: groupCount }, (_, index) => ({ id: id(), name: groupCount === 1 ? name : names.group(index + 1), order: index + 1 })),
     swiss: format === 'swiss' ? { round_count: 3, avoid_rematches: true } : undefined,
     round_robin: format === 'round_robin' ? { cycle_count: 1, open_rounds_together: true } : undefined,
     elimination: format === 'single_elimination' ? { bracket_size: null, seeding_policy: 'seeded', reseed_each_round: false } : undefined,
   };
 }
 
-function template(code: string): TournamentFormatDefinition {
+function template(code: string, names: DefaultNames): TournamentFormatDefinition {
   if (code === 'swiss_brackets_final') {
-    const swiss = phase('Swiss groups', 1, 'swiss', 4);
-    const brackets = phase('Elimination brackets', 2, 'single_elimination', 2);
-    const final = phase('Grand final', 3, 'single_elimination', 1);
+    const swiss = phase(names.swissGroups, 1, 'swiss', names, 4);
+    const brackets = phase(names.eliminationBrackets, 2, 'single_elimination', names, 2);
+    const final = phase(names.grandFinal, 3, 'single_elimination', names, 1);
     const rules = swiss.groups.flatMap((source, sourceIndex) => [1, 2].map((rank) => ({
       id: id(),
       source_group_id: source.id,
@@ -53,20 +70,30 @@ function template(code: string): TournamentFormatDefinition {
     }));
     return { phases: [swiss, brackets, final], advancement_rules: rules };
   }
-  if (code === 'league') return { phases: [phase('League', 1, 'round_robin')], advancement_rules: [] };
-  if (code === 'elimination') return { phases: [phase('Elimination bracket', 1, 'single_elimination')], advancement_rules: [] };
-  return { phases: [phase('Swiss', 1, 'swiss')], advancement_rules: [] };
+  if (code === 'league') return { phases: [phase(names.league, 1, 'round_robin', names)], advancement_rules: [] };
+  if (code === 'elimination') return { phases: [phase(names.elimination, 1, 'single_elimination', names)], advancement_rules: [] };
+  return { phases: [phase(names.swiss, 1, 'swiss', names)], advancement_rules: [] };
 }
 
 const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, initialTemplate = 'swiss', entryOptions = [] }) => {
   const { t } = useTranslation();
+  const names: DefaultNames = {
+    swiss: t('phase_builder.default_swiss'),
+    league: t('phase_builder.default_league'),
+    elimination: t('phase_builder.default_elimination'),
+    swissGroups: t('phase_builder.default_swiss_groups'),
+    eliminationBrackets: t('phase_builder.default_elimination_brackets'),
+    grandFinal: t('phase_builder.default_grand_final'),
+    group: (number) => t('phase_builder.default_group', { number }),
+    phase: (number) => t('phase_builder.default_phase', { number }),
+  };
   const [advanced, setAdvanced] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState(initialTemplate);
   const [showMappings, setShowMappings] = useState(false);
   const [generationError, setGenerationError] = useState('');
   const [sameSourcePairs, setSameSourcePairs] = useState<Array<{ target_group_id: string; seed_one: number; seed_two: number }>>([]);
   useEffect(() => {
-    if (!value) onChange(template(initialTemplate));
+    if (!value) onChange(template(initialTemplate, names));
   }, [value, onChange, initialTemplate]);
   const definition = value || { phases: [], advancement_rules: [] };
   const updateMappings = (advancement_rules: TournamentFormatDefinition['advancement_rules']) => {
@@ -79,10 +106,10 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
     id: group.id,
     // Group names can be stale when a phase changes from one group to several;
     // render labels from the current phase and group order instead.
-    label: item.groups.length === 1 ? item.name : `${item.name} / Group ${group.order}`,
+    label: item.groups.length === 1 ? item.name : `${item.name} / ${names.group(group.order)}`,
     phaseOrder: item.order,
     groupOrder: group.order,
-  }))), [definition]);
+  }))), [definition, t]);
   const validMappings = definition.advancement_rules.every(rule => groupIds.has(rule.source_group_id) && groupIds.has(rule.target_group_id));
   const rulesInEntryOrder = definition.advancement_rules;
   const duplicateTargetRuleIds = useMemo(() => {
@@ -134,7 +161,7 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
         ...next,
         groups: next.groups.map((group, groupIndex) => ({
           ...group,
-          name: next.groups.length === 1 ? next.name : `Group ${groupIndex + 1}`,
+          name: next.groups.length === 1 ? next.name : names.group(groupIndex + 1),
           order: groupIndex + 1,
         })),
       }
@@ -146,7 +173,7 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
     const current = definition.phases[index];
     const groups = Array.from({ length: count }, (_, groupIndex) => ({
       ...(current.groups[groupIndex] || { id: id() }),
-      name: count === 1 ? current.name : `Group ${groupIndex + 1}`,
+      name: count === 1 ? current.name : names.group(groupIndex + 1),
       order: groupIndex + 1,
     }));
     replacePhase(index, { ...current, groups });
@@ -189,7 +216,7 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
               && !window.confirm(t('phase_builder.confirm_template'))) return;
             setSelectedTemplate(nextTemplate);
             setSameSourcePairs([]);
-            onChange(template(nextTemplate));
+            onChange(template(nextTemplate, names));
           }}>
             <option value="swiss">{t('format_summary.swiss')}</option>
             <option value="league">{t('phase_builder.template_league')}</option>
@@ -321,7 +348,7 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
       {(advanced || showMappings) && <div className="space-y-3">
         {advanced && <button data-help-id="action-add-tournament-phase" type="button" disabled={disabled} onClick={() => {
           setSameSourcePairs([]);
-          onChange({ ...definition, phases: [...definition.phases, phase(`Phase ${definition.phases.length + 1}`, definition.phases.length + 1, 'single_elimination')] });
+          onChange({ ...definition, phases: [...definition.phases, phase(names.phase(definition.phases.length + 1), definition.phases.length + 1, 'single_elimination', names)] });
         }} className="px-3 py-2 bg-blue-600 text-white rounded-md">{t('phase_builder.add_phase')}</button>}
         <div data-help-id="region-tournament-advancement-mappings" className="p-3 bg-white border rounded-md space-y-2">
           <h4 className="font-medium">{t('phase_builder.mappings_title')}</h4>

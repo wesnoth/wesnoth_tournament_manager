@@ -1279,7 +1279,15 @@
     "bracket": "Сетка",
     "add_mapping": "Добавить сопоставление",
     "valid_summary": "Этапов по порядку: {{count}}. Сервер проверяет, что граф выхода не содержит циклов.",
-    "error_removed_group": "Сопоставление ссылается на удалённую группу. Примените шаблон заново или измените сопоставления."
+    "error_removed_group": "Сопоставление ссылается на удалённую группу. Примените шаблон заново или измените сопоставления.",
+    "default_swiss": "Швейцарская система",
+    "default_league": "Лига",
+    "default_elimination": "Сетка на выбывание",
+    "default_swiss_groups": "Швейцарские группы",
+    "default_elimination_brackets": "Сетки на выбывание",
+    "default_grand_final": "Суперфинал",
+    "default_group": "Группа {{number}}",
+    "default_phase": "Этап {{number}}"
   },
   "schedule_grid": {
     "proposed": "Предложено",
