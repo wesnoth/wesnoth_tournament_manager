@@ -294,7 +294,7 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
           </div>
         ))}
       </div>
-      {directPassSummaries.map(summary => <div key={`direct-capacity-${summary.target.id}`} className="p-3 bg-white border rounded-md space-y-2">
+      {directPassSummaries.map(summary => <div data-help-id="region-tournament-direct-pass-reserve" key={`direct-capacity-${summary.target.id}`} className="p-3 bg-white border rounded-md space-y-2">
         <h4 className="font-medium">{t('phase_builder.reserve_title', { phase: summary.target.name })}</h4>
         <p className="text-xs text-gray-600">{t('phase_builder.reserve_help')}</p>
         <div className="grid gap-2 md:grid-cols-2">
@@ -320,7 +320,7 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
       </div>)}
       {definition.phases.slice(0, -1).map((source, sourceIndex) => {
         const target = definition.phases[sourceIndex + 1];
-        return <div key={`advancement-${source.id}`} className="p-3 bg-white border rounded-md space-y-2">
+        return <div data-help-id="region-tournament-advancement-qualifiers" key={`advancement-${source.id}`} className="p-3 bg-white border rounded-md space-y-2">
           <h4 className="font-medium">{t('phase_builder.advancement_title', { source: source.name, target: target.name })}</h4>
           <p className="text-xs text-gray-600">{t('phase_builder.advancement_help')}</p>
           <p className="text-sm text-gray-700">{t('phase_builder.configured_total', { total: source.groups.reduce((total, group) => total + Number(group.advance_count || 0), 0) })}</p>
