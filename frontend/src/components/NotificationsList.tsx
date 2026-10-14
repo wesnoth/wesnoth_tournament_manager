@@ -286,18 +286,16 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
     }
   };
 
-  /** Map persisted notification categories to their UI icon. */
-  const getNotificationIcon = (type: string) => {
-    switch (type) {
-      case 'schedule_proposal':
-        return '📅';
-      case 'schedule_confirmed':
-        return '✅';
-      case 'schedule_cancelled':
-        return '❌';
-      default:
-        return '📬';
-    }
+  /**
+   * Split the title into the icon shown in the large slot and the text beside
+   * it. The server writes the icon at the start of every stored title (see
+   * backend notificationText.ts), and the navbar dropdown shows the title as is,
+   * so the list takes that leading pictograph instead of adding a second one.
+   * Titles without one (older or other notification kinds) get a generic icon.
+   */
+  const splitNotificationTitle = (title: string): { icon: string; text: string } => {
+    const match = title.match(/^(\p{Extended_Pictographic}\uFE0F?)\s*/u);
+    return match ? { icon: match[1], text: title.slice(match[0].length) } : { icon: '📬', text: title };
   };
 
   /** Format API timestamps for the user's local display. */
@@ -470,8 +468,8 @@ const NotificationsList: React.FC<NotificationsListProps> = ({
           <div className="flex-1 flex items-start justify-between gap-4">
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-2xl">{getNotificationIcon(notification.type)}</span>
-                <h3 className="font-semibold text-gray-900">{notification.title}</h3>
+                <span className="text-2xl">{splitNotificationTitle(notification.title).icon}</span>
+                <h3 className="font-semibold text-gray-900">{splitNotificationTitle(notification.title).text}</h3>
                 {!notification.is_read && (
                   <span className="inline-block w-2 h-2 bg-blue-600 rounded-full ml-auto" />
                 )}
