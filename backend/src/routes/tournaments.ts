@@ -8,7 +8,6 @@ import { randomUUID } from 'crypto';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
 import { checkUserIsForumModerator } from '../services/phpbbAuth.js';
 import { isTournamentOrganizer } from '../services/tournamentAuthorizationService.js';
-import { preparePhaseCompetition, startPhaseCompetition } from '../tournament-engine/competitionCompiler.js';
 import { parseForumTopicUrl } from '../tournament-engine/forumTopic.js';
 import { assertValidTournamentFormat, saveTournamentFormat, writeTournamentFormat } from '../tournament-engine/formatService.js';
 import type { TournamentFormatDefinition } from '../tournament-engine/types.js';
@@ -1457,7 +1456,7 @@ router.post('/:id/request-join', authMiddleware, async (req: AuthRequest, res) =
 
         // Create new team with safe UUID (avoiding REJECTED_TEAM_ID collision)
         const newTeamId = await generateSafeTeamId();
-        const createTeamResult = await query(
+        await query(
           `INSERT INTO tournament_teams (id, tournament_id, name, created_by)
            VALUES (?, ?, ?, ?)`,
           [newTeamId, id, normalizedTeamName, req.userId]
@@ -2078,7 +2077,6 @@ router.put('/:tournamentId/teams/:teamId/rename', authMiddleware, async (req: Au
     if (tournResult.rows.length === 0) return res.status(404).json({ error: 'Tournament not found' });
     if (teamResult.rows.length === 0) return res.status(404).json({ error: 'Team not found' });
 
-    const tournament = tournResult.rows[0];
     const userId = req.userId!;
     const username = req.username!;
 

@@ -8,7 +8,7 @@
  * Otherwise GET /images will match /:slug with slug="images"
  */
 
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { AuthRequest, moderatorOrAdminMiddleware } from '../middleware/auth.js';
 import { clientErrorMessage } from '../utils/clientError.js';
 import multer from 'multer';

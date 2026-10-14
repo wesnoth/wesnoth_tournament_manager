@@ -19,7 +19,6 @@
 
 import { query } from '../config/database.js';
 import { queryForum, getCompetitiveGameData } from '../config/forumDatabase.js';
-import ReplayParser from '../services/replayParser.js';
 import { parseRankedReplay, ParsedRankedReplay } from '../utils/replayRankedParser.js';
 import type { CreateMatchInput } from '../services/matchCreationService.js';
 import { integrateReplayResult, ReplayResultDataError } from '../services/replayResultService.js';
@@ -153,13 +152,8 @@ interface ParseSummary {
 }
 
 export class ParseNewReplaysRefactorized {
-  private readonly parser: ReplayParser;
   private isRunning: boolean = false;
   private lastRunAt: Date | null = null;
-
-  constructor() {
-    this.parser = new ReplayParser();
-  }
 
   private normalizeNickname(nickname: string | null | undefined): string {
     return (nickname || '').trim().toLowerCase();

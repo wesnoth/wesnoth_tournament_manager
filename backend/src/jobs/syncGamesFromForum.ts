@@ -28,17 +28,6 @@ import { parseWesnothVersions, getBaseVersion } from '../utils/versionParser.js'
 import { v4 as uuidv4 } from 'uuid';
 import { shouldPauseReplayProcessing } from '../services/systemPauseService.js';
 
-interface ForumGame {
-  INSTANCE_UUID: string;
-  GAME_ID: number;
-  wesnoth_version: string;
-  game_name: string;
-  start_time: string;
-  end_time: string;
-  replay_filename: string;
-  oos: number;
-  is_reload: number;
-}
 
 export class SyncGamesFromForumJob {
   private isRunning: boolean = false;

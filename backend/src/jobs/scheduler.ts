@@ -138,7 +138,7 @@ export const initializeScheduledJobs = (): void => {
              AND is_blocked = 0
              AND (last_match_date IS NULL OR last_match_date < DATE_SUB(NOW(), INTERVAL 30 DAY))`
         );
-        console.log(`✅ [CRON] Marked inactive players as inactive`);
+        console.log(`✅ [CRON] Marked ${result.rowCount ?? 0} player(s) as inactive`);
       } catch (error) {
         console.error('❌ [CRON] Failed to check inactive players:', error);
       }

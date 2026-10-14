@@ -6,7 +6,6 @@ import { getUserIP, getUserAgent, logAuditEvent } from '../middleware/audit.js';
 import { isClientSafeError } from '../utils/clientError.js';
 import {
   getBalanceTrend,
-  getBalanceEventSnapshotImpact,
   getBalanceEventIntervalImpact,
   createFactionMapStatisticsSnapshot,
   SnapshotLockTimeoutError,

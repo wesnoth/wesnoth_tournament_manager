@@ -1,7 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../config/database.js';
 import { assertSlotsAreAvailable } from './schedulingConflictService.js';
-import { validateTimezone, validateAvailabilitySchedule } from '../utils/timezoneUtils.js';
 import {
   consumeUserActionRateLimit,
   releaseUserActionRateLimit,
@@ -40,7 +39,6 @@ const getTimezoneOffset = (fromTz: string, toTz: string, referenceDate: Date = n
       hour12: false
     });
     
-    const utcDateStr = referenceDate.toISOString().split('T')[0]; // YYYY-MM-DD
     const utcHour = referenceDate.getUTCHours();
     
     // Get toTz local time with date

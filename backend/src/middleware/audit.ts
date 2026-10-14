@@ -1,5 +1,5 @@
 import { query } from '../config/database.js';
-import { Request, Response } from 'express';
+import { Request } from 'express';
 import { AuthRequest } from './auth.js';
 import { generateUUID } from '../utils/uuid.js';
 

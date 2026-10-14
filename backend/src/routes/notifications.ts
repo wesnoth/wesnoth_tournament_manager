@@ -1,7 +1,6 @@
 import { Router, Response } from 'express';
 import { query } from '../config/database.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
-import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 

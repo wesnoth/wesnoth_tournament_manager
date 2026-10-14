@@ -355,7 +355,7 @@ export async function importArticle(
 
     for (const image of images) {
       try {
-        const imageId = await saveImageToDatabase(image.filename, image.data);
+        await saveImageToDatabase(image.filename, image.data);
         // Map relative path to new absolute URL
         imageUrlMapping.set(`./images/${image.filename}`, `/api/public/wiki/images/${image.filename}`);
         importedImageFilenames.push(image.filename);

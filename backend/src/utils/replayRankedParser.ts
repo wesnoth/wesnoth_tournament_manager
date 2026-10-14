@@ -24,7 +24,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
-import { getGamePlayers } from '../config/forumDatabase.js';
 
 export interface RankedAddonConfig {
   ranked_mode: boolean;
