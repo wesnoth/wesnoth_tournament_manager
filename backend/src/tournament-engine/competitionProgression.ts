@@ -7,7 +7,7 @@ import {
   notifyTournamentFinished,
 } from '../services/tournamentPhaseDiscordService.js';
 import { compileNextPhaseCompetition } from './competitionCompiler.js';
-import { orderThirdPlaceStandings } from './pairingAlgorithms.js';
+import { opponentMatchPercentage, orderThirdPlaceStandings, selectSwissByeEntry } from './pairingAlgorithms.js';
 
 export interface PhaseGameResultMetadata {
   map: string | null;
@@ -64,10 +64,18 @@ export function phaseGameDisplayMetadata(parseSummary: any): PhaseGameResultMeta
  * Recalculate materialized percentage tiebreakers from completed series and games.
  * Percentages use 0..100 storage. A player with no relevant games has zero; this
  * prevents NaN values and keeps deterministic initial ordering by preclassification.
+ * OMP measures opponents by their played series only: bye and league-rest
+ * points are read per entry and removed (see opponentMatchPercentage).
  */
 async function recalculateTiebreakers(connection: any, groupId: string): Promise<void> {
   const [standingRows] = await connection.execute(
-    `SELECT entry_id, matches_played, points FROM tournament_phase_standings WHERE group_id = ?`,
+    `SELECT entry_id, matches_played, points,
+            (SELECT COALESCE(SUM(byes.points_awarded), 0)
+             FROM tournament_byes byes
+             JOIN tournament_phase_rounds bye_rounds ON bye_rounds.id = byes.round_id
+             WHERE bye_rounds.group_id = tournament_phase_standings.group_id
+               AND byes.entry_id = tournament_phase_standings.entry_id) AS bye_points
+     FROM tournament_phase_standings WHERE group_id = ?`,
     [groupId]
   );
   const [seriesRows] = await connection.execute(
@@ -117,7 +125,9 @@ async function recalculateTiebreakers(connection: any, groupId: string): Promise
     const omp = faced.length
       ? faced.reduce((sum, opponentId) => {
         const opponent = standings.get(opponentId) as any;
-        return sum + percentage(Number(opponent?.points || 0), Number(opponent?.matches_played || 0));
+        return sum + opponentMatchPercentage(
+          Number(opponent?.points || 0), Number(opponent?.bye_points || 0), Number(opponent?.matches_played || 0)
+        );
       }, 0) / faced.length
       : 0;
     const ogp = faced.length ? faced.reduce((sum, opponentId) => sum + (gwp.get(opponentId) || 0), 0) / faced.length : 0;
@@ -167,9 +177,15 @@ async function rankGroup(connection: any, groupId: string, finalize: boolean): P
   }
 }
 
+/**
+ * Pair a later Swiss round from the standings just finalized for the previous
+ * round. With an odd field the bye is chosen first (lowest-ranked entry without
+ * an earlier bye, see selectSwissByeEntry); the rest are paired top-down,
+ * avoiding rematches when an unplayed opponent exists.
+ */
 async function createSwissRoundPairings(connection: any, roundId: string, bestOf: number, groupId: string): Promise<void> {
   const [standings] = await connection.execute(
-    `SELECT standings.entry_id
+    `SELECT standings.entry_id, standings.byes
      FROM tournament_phase_standings standings
      JOIN tournament_entries entries ON entries.id = standings.entry_id
      WHERE standings.group_id = ?
@@ -187,7 +203,11 @@ async function createSwissRoundPairings(connection: any, roundId: string, bestOf
     [groupId]
   );
   const played = new Set(playedRows.map((row: any) => `${row.entry1}:${row.entry2}`));
-  const waiting = standings.map((row: any) => row.entry_id as string);
+  const ranked = standings.map((row: any) => row.entry_id as string);
+  const byeEntry = selectSwissByeEntry(
+    ranked, new Set(standings.filter((row: any) => Number(row.byes) > 0).map((row: any) => row.entry_id as string))
+  );
+  const waiting = ranked.filter((entryId: string) => entryId !== byeEntry);
   let position = 1;
   while (waiting.length > 1) {
     const first = waiting.shift()!;
@@ -218,8 +238,7 @@ async function createSwissRoundPairings(connection: any, roundId: string, bestOf
     );
     position += 1;
   }
-  if (waiting.length === 1) {
-    const byeEntry = waiting[0];
+  if (byeEntry) {
     await connection.execute(
       `INSERT INTO tournament_byes (id, round_id, entry_id, points_awarded) VALUES (?, ?, ?, 1.00)`,
       [randomUUID(), roundId, byeEntry]

@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import type { PoolConnection } from 'mysql2/promise';
 import { pool } from '../config/database.js';
 import { notifyPhaseStarted } from '../services/tournamentPhaseDiscordService.js';
-import { buildEliminationSeedOrder } from './pairingAlgorithms.js';
+import { buildEliminationSeedOrder, buildSwissFirstRoundPairs } from './pairingAlgorithms.js';
 
 interface EntryRow {
   id: string;
@@ -161,20 +161,21 @@ async function compileSwiss(
     rounds.push(await createRound(connection, group.id, roundNumber, roundCount, phase.default_best_of, overrides));
   }
   const firstRound = rounds[0];
-  for (let index = 0, position = 1; index < entryIds.length; index += 2) {
-    if (!entryIds[index + 1]) {
-      await connection.execute(
-        `INSERT INTO tournament_byes (id, round_id, entry_id, points_awarded) VALUES (?, ?, ?, 1.00)`,
-        [randomUUID(), firstRound.id, entryIds[index]]
-      );
-      await connection.execute(
-        `UPDATE tournament_phase_standings SET byes = byes + 1, points = points + 1 WHERE group_id = ? AND entry_id = ?`,
-        [group.id, entryIds[index]]
-      );
-      continue;
-    }
-    await createDirectSeries(connection, firstRound.id, position, firstRound.bestOf, entryIds[index], entryIds[index + 1]);
-    position += 1;
+  // entryIds is in group-seed order (strongest first); the FIDE split and the
+  // lowest-seed bye are described on buildSwissFirstRoundPairs.
+  const { pairs, byeEntryId } = buildSwissFirstRoundPairs(entryIds);
+  for (const [index, [entry1, entry2]] of pairs.entries()) {
+    await createDirectSeries(connection, firstRound.id, index + 1, firstRound.bestOf, entry1, entry2);
+  }
+  if (byeEntryId) {
+    await connection.execute(
+      `INSERT INTO tournament_byes (id, round_id, entry_id, points_awarded) VALUES (?, ?, ?, 1.00)`,
+      [randomUUID(), firstRound.id, byeEntryId]
+    );
+    await connection.execute(
+      `UPDATE tournament_phase_standings SET byes = byes + 1, points = points + 1 WHERE group_id = ? AND entry_id = ?`,
+      [group.id, byeEntryId]
+    );
   }
 }
 
