@@ -4,7 +4,7 @@
 
 Originally (2026-09-08) this work was deferred until the tournament active at that time had finished, and this document recorded the investigation and the proposed sequence only.
 
-Update (2026-10-10): the maintainer confirmed that no version 1 tournaments remain and authorized the code-only steps. Steps 2 and 3 are implemented and were merged into `prod` on 2026-10-11; step 1 is implemented with its database-backed integration coverage still pending; its validator gaps (audit findings 29, 30, and 32) were fixed on 2026-10-11. Each step distinguishes implementation, local verification, TEST validation, and release; none of them implies a production release. Steps 4 and 5 (schema contraction and field consolidation) still require the read-only production audit, a tested restore, and explicit authorization; production commands remain outside this authorization.
+Update (2026-10-10): the maintainer confirmed that no version 1 tournaments remain and authorized the code-only steps. Steps 2 and 3 are implemented and were merged into `prod` on 2026-10-11; step 1 is implemented, its validator gaps (audit findings 29, 30, and 32) were fixed on 2026-10-11, and its database-backed integration coverage was added on 2026-10-15 (the tournament lifecycle suite, `npm run verify:lifecycle`; see `TESTING.md`). Each step distinguishes implementation, local verification, TEST validation, and release; none of them implies a production release. Steps 4 and 5 (schema contraction and field consolidation) still require the read-only production audit, a tested restore, and explicit authorization; production commands remain outside this authorization.
 
 The cleanup must be delivered as several small releases. Destructive schema changes come only after the application no longer reads or writes the affected fields and production observations confirm that the compatibility paths are unused.
 
@@ -162,13 +162,13 @@ Before removing aggregate or administrative compatibility fields, add audit quer
 
 ### 1. Close the version 2 creation contract
 
-Implemented on 2026-10-10, validation pending: creation requires a valid `format_definition`, validates it before writing, and commits the tournament, organizers, allowed assets, and phase graph in one transaction. Migration `20261009_120000` sets the default to version 2. Merged into `prod` on 2026-10-11. The integration-test item below remains open. The atomic write guarantees that a created graph is complete, not that it is executable: audit findings 29 (disconnected graphs accepted), 30 (legacy Swiss round limit stricter than the editor), and 32 (malformed definitions throw) were fixed on 2026-10-11 (`b3d19a8f`), validated on TEST, and merged into `prod` the same day; the Swiss round limit is 10 by maintainer decision. Rejected formats now report every issue to the organizer in the creation and editing forms. The step closes when the integration coverage below exists.
+Implemented on 2026-10-10, validation pending: creation requires a valid `format_definition`, validates it before writing, and commits the tournament, organizers, allowed assets, and phase graph in one transaction. Migration `20261009_120000` sets the default to version 2. Merged into `prod` on 2026-10-11. The integration coverage below was added on 2026-10-15, on `test` and pending TEST validation. The atomic write guarantees that a created graph is complete, not that it is executable: audit findings 29 (disconnected graphs accepted), 30 (legacy Swiss round limit stricter than the editor), and 32 (malformed definitions throw) were fixed on 2026-10-11 (`b3d19a8f`), validated on TEST, and merged into `prod` the same day; the Swiss round limit is 10 by maintainer decision. Rejected formats now report every issue to the organizer in the creation and editing forms. The suite covers individual and team tournaments in Swiss, league, elimination, and mixed graphs with qualifiers and a direct pass, plus rejected creations that must write nothing; it also asserts that no version 1 aggregate or relationship field is written. Writing it fixed three engine rules by maintainer decision (2026-10-15): FIDE first-round Swiss pairing, no repeated Swiss byes, and bye points excluded from OMP.
 
 - Require a valid phase `format_definition` in the tournament creation API.
 - Create the root tournament and its phase graph atomically.
 - Change the database and application defaults to version 2 only after the atomic path exists.
 - Reject incomplete version 2 tournaments instead of silently retaining a version 1 root row.
-- Add integration coverage for individual and team tournaments across Swiss, round robin, elimination, and mixed phase graphs.
+- Add integration coverage for individual and team tournaments across Swiss, round robin, elimination, and mixed phase graphs. Done 2026-10-15.
 
 This release establishes that new data cannot recreate the legacy state after cleanup starts.
 
@@ -227,8 +227,8 @@ Run the final candidate against both a restored production clone and a clean dat
 For each supported individual and team format, validate:
 
 - Creation, registration, preparation, and start.
-- Swiss pairing, odd-player Swiss byes, and out-of-order round completion where supported.
-- Round-robin groups, including odd-player rest rounds with no awarded point.
+- Swiss pairing (FIDE split in the first round), odd-player Swiss byes given to the lowest-ranked entry without an earlier bye, and out-of-order round completion where supported.
+- Round-robin groups, including odd-player rest rounds; a rest keeps its point in the standings but, like a Swiss bye, is excluded from OMP.
 - Elimination progression and automatic byes without standings points.
 - Played wins, ordinary organizer-recorded wins, and administrative series awards.
 - OMP, GWP, and OGP recalculation and group result notification.
@@ -237,7 +237,7 @@ For each supported individual and team format, validate:
 - Qualification between phases, final standings, tournament completion, and Discord events.
 - Public, participant, organizer, moderator, and administrator views.
 
-The existing engine self-test and source-based group progression test are insufficient for schema contraction. Add database-backed integration tests that assert transactions, stored graph state, standing rows, and progression after each result.
+The engine self-test and source-based group progression test are insufficient for schema contraction on their own. The database-backed tournament lifecycle suite (`npm run verify:lifecycle`) asserts transactions, stored graph state, standing rows, and progression after each result, and must pass against both databases before steps 4 and 5.
 
 ## Deployment and rollback
 
