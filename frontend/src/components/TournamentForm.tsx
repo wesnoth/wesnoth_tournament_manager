@@ -10,6 +10,7 @@ import type { TournamentFormatDefinition } from '../types/tournament';
 import TournamentPhaseBuilder from './TournamentPhaseBuilder';
 import TournamentMapPackSelector from './TournamentMapPackSelector';
 import EditableIntegerInput from './EditableIntegerInput';
+import { summaryFieldsForFormat } from '../utils/tournamentFormatTemplates';
 
 interface RuleTemplate {
   id: string;
@@ -91,22 +92,7 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
   };
 
   const handlePhaseFormatChange = (definition: TournamentFormatDefinition) => {
-    const first = definition.phases[0];
-    const hasElimination = definition.phases.some(item => item.format === 'single_elimination');
-    const legacyType: TournamentType = definition.phases.length > 1 && hasElimination
-      ? 'swiss_elimination'
-      : first?.format === 'round_robin' ? 'league'
-        : first?.format === 'single_elimination' ? 'elimination' : 'swiss';
-    onFormDataChange({
-      ...formData,
-      format_definition: definition,
-      tournament_type: legacyType,
-      general_rounds: first?.format === 'round_robin'
-        ? (first.round_robin?.cycle_count || 1)
-        : (first?.swiss?.round_count || (legacyType === 'elimination' ? 0 : 1)),
-      final_rounds: definition.phases.length > 1 && hasElimination ? 1 : 0,
-      general_rounds_format: `bo${first?.default_best_of || 3}` as MatchFormat,
-    });
+    onFormDataChange({ ...formData, format_definition: definition, ...summaryFieldsForFormat(definition) });
   };
 
   useEffect(() => {

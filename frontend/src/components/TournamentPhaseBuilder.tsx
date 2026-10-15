@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { tournamentService } from '../services/api';
 import EditableIntegerInput from './EditableIntegerInput';
 import { MAX_SWISS_ROUNDS } from '../utils/formatIssues';
+import { buildFormatTemplate as template, buildPhaseDefinition as phase, newDefinitionId, type DefaultNames } from '../utils/tournamentFormatTemplates';
 
 interface Props {
   value?: TournamentFormatDefinition;
@@ -18,62 +19,7 @@ interface Props {
   entryOptions?: Array<{ id: string; name: string }>;
 }
 
-const id = () => crypto.randomUUID();
-
-/**
- * Default names written into a new format. Phase and group names are saved
- * with the tournament as editable data, so they are produced in the
- * organizer's interface language when the template is applied; nothing else
- * reads them, and switching language later does not rename saved phases.
- */
-interface DefaultNames {
-  swiss: string;
-  league: string;
-  elimination: string;
-  swissGroups: string;
-  eliminationBrackets: string;
-  grandFinal: string;
-  group: (number: number) => string;
-  phase: (number: number) => string;
-}
-
-function phase(name: string, order: number, format: PhaseFormat, names: DefaultNames, groupCount = 1): TournamentPhaseDefinition {
-  return {
-    id: id(),
-    name,
-    order,
-    format,
-    assignment_method: 'seeded_snake',
-    default_best_of: 3,
-    groups: Array.from({ length: groupCount }, (_, index) => ({ id: id(), name: groupCount === 1 ? name : names.group(index + 1), order: index + 1 })),
-    swiss: format === 'swiss' ? { round_count: 3, avoid_rematches: true } : undefined,
-    round_robin: format === 'round_robin' ? { cycle_count: 1, open_rounds_together: true } : undefined,
-    elimination: format === 'single_elimination' ? { bracket_size: null, seeding_policy: 'seeded', reseed_each_round: false } : undefined,
-  };
-}
-
-function template(code: string, names: DefaultNames): TournamentFormatDefinition {
-  if (code === 'swiss_brackets_final') {
-    const swiss = phase(names.swissGroups, 1, 'swiss', names, 4);
-    const brackets = phase(names.eliminationBrackets, 2, 'single_elimination', names, 2);
-    const final = phase(names.grandFinal, 3, 'single_elimination', names, 1);
-    const rules = swiss.groups.flatMap((source, sourceIndex) => [1, 2].map((rank) => ({
-      id: id(),
-      source_group_id: source.id,
-      source_rank: rank,
-      target_group_id: brackets.groups[sourceIndex % 2].id,
-      target_seed: Math.floor(sourceIndex / 2) * 2 + rank,
-    })));
-    brackets.groups.forEach((source, index) => rules.push({
-      id: id(), source_group_id: source.id, source_rank: 1,
-      target_group_id: final.groups[0].id, target_seed: index + 1,
-    }));
-    return { phases: [swiss, brackets, final], advancement_rules: rules };
-  }
-  if (code === 'league') return { phases: [phase(names.league, 1, 'round_robin', names)], advancement_rules: [] };
-  if (code === 'elimination') return { phases: [phase(names.elimination, 1, 'single_elimination', names)], advancement_rules: [] };
-  return { phases: [phase(names.swiss, 1, 'swiss', names)], advancement_rules: [] };
-}
+const id = newDefinitionId;
 
 const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, initialTemplate = 'swiss', entryOptions = [] }) => {
   const { t } = useTranslation();
