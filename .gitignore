@@ -50,6 +50,7 @@ Thumbs.db
 !/e2e/auth.setup.ts
 !/e2e/support/
 !/e2e/replay-pipeline/
+!/e2e/tournament-lifecycle/
 !/e2e/tournaments/
 /e2e/tournaments/*
 !/e2e/tournaments/ranked-elimination.spec.ts
@@ -87,6 +88,7 @@ frontend/public/wesnoth-avatars/manifest.json
 !/scripts/verify.sh
 !/scripts/check-i18n-parity.mjs
 !/scripts/check-i18n-keys.mjs
+!/scripts/check-ui-api-contract.mjs
 wesnoth_avatars.json
 playwright-report/
 wiki-artifacts/

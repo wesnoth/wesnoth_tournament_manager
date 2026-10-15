@@ -30,8 +30,8 @@ export default defineConfig({
         storageState: 'e2e/.auth/user.json',
       },
       testMatch: /.*\.spec\.ts/,
-      // Replay-pipeline specs need the local stack and its forum tables.
-      testIgnore: /replay-pipeline\//,
+      // Replay-pipeline and lifecycle specs need the local stack.
+      testIgnore: /(replay-pipeline|tournament-lifecycle)\//,
     },
     {
       // Real replay pipeline against the local stack (backend + frontend on
@@ -44,6 +44,15 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         baseURL: process.env.E2E_LOCAL_BASE_URL || 'http://localhost:5173',
       },
+    },
+    {
+      // Tournament lifecycle through the UI's own API calls against the local
+      // stack (backend on localhost and the MariaDB instance it uses). No
+      // browser page is opened; every request is checked against the frontend
+      // endpoint catalog (scripts/check-ui-api-contract.mjs). Scenarios share
+      // players, so run serially: npm run verify:lifecycle
+      name: 'tournament-lifecycle',
+      testMatch: /tournament-lifecycle\/.*\.spec\.ts/,
     },
   ],
 });
