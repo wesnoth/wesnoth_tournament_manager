@@ -67,7 +67,7 @@ The obsolete PostgreSQL-style migration set in `backend/src/migrations/` was rem
 
 Do not delete the SQL history under `backend/migrations/`. Fresh installations and upgrades need the complete active migration chain, including the migration that removes the old competition tables.
 
-The documentation was consolidated on 2026-10-08: `README.md` no longer describes version 1 tables, and `DB_SCHEMA.md` and `docs/tournament-phase-engine.md` were removed. Documentation follow-up (2026-10-17, audit finding 42): update the stale sentence in `ARCHITECTURE.md` (Tournaments) that says the version 1 tables still exist for history. Their removal is already represented in migration `20260805_150000` and the canonical schema; distinguish those removed tables from the residual columns still awaiting contraction. This is a repository consistency finding, not a deployed-schema check.
+The documentation was consolidated on 2026-10-08: `README.md` no longer describes version 1 tables, and `DB_SCHEMA.md` and `docs/tournament-phase-engine.md` were removed. Documentation follow-up (2026-10-17, audit finding 42): `ARCHITECTURE.md` (Tournaments) said the version 1 tables still existed for history. It now states that migration `20260805_150000` removed them and that only residual columns await contraction. This was a repository consistency fix, not a deployed-schema check.
 
 ## Fields that require a product decision
 
