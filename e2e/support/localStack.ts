@@ -33,9 +33,47 @@ export const localStack = {
     || '/home/clmates/programación/localdatabase/replay-fixtures',
   /** Backend API base URL, for admin endpoints that have no UI flow. */
   apiUrl: process.env.E2E_API_URL || 'http://localhost:7100/api',
+  /** Frontend dev server the replay-pipeline browser specs open. */
+  frontendUrl: process.env.E2E_LOCAL_BASE_URL || 'http://localhost:5173',
   /** Must match a version accepted by the backend's WESNOTH_VERSION filter. */
   wesnothVersion: process.env.E2E_WESNOTH_VERSION || '1.19-dev',
 };
+
+/** Host names that can only reach this machine. */
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * Refuse to run local-stack specs unless the operator opted in and every URL
+ * they talk to is on this machine.
+ *
+ * The replay-pipeline and lifecycle suites write fixtures, tournaments, and
+ * temporary triggers straight into the database, so running them by mistake on
+ * a server (for example `npm run verify:lifecycle` in a deployed clone) would
+ * pollute real data. Two independent checks guard against that: an explicit
+ * `E2E_LOCAL_STACK=1` that is never set by the npm scripts themselves, and a
+ * loopback-only rule for the API and frontend URLs, so a variable exported in
+ * a server's shell profile is still not enough to reach a remote backend.
+ * The database container is not checked: `docker exec` can only reach
+ * containers on this machine anyway.
+ *
+ * It runs from the `local-stack-guard` Playwright project, which both local
+ * projects depend on, and again before every database or API call, so
+ * `--no-deps` or importing these helpers from another project cannot skip it.
+ */
+export function assertLocalStack(): void {
+  if (process.env.E2E_LOCAL_STACK !== '1') {
+    throw new Error(
+      'Local-stack E2E suites write to the database and must only run against the local stack. '
+      + 'Set E2E_LOCAL_STACK=1 to confirm (see TESTING.md).',
+    );
+  }
+  for (const [name, url] of [['E2E_API_URL', localStack.apiUrl], ['E2E_LOCAL_BASE_URL', localStack.frontendUrl]]) {
+    const host = new URL(url).hostname;
+    if (!LOOPBACK_HOSTS.has(host)) {
+      throw new Error(`${name} points to ${host}; local-stack E2E suites only run against localhost.`);
+    }
+  }
+}
 
 /**
  * Quote a value as a MariaDB string literal.
@@ -62,6 +100,7 @@ export function sqlLiteral(value: string | number | null): string {
  * the `mariadb` batch client prints them (`NULL` becomes `null`).
  */
 export function runSql(sql: string): Array<Record<string, string | null>> {
+  assertLocalStack();
   const output = execFileSync(
     'docker',
     ['exec', '-i', localStack.dbContainer, 'sh', '-c', 'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" --batch'],

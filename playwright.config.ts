@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { localStack } from './e2e/support/localStack';
 
 const baseURL = process.env.E2E_BASE_URL || 'https://tournament-test.wesnoth.org';
 
@@ -23,6 +24,12 @@ export default defineConfig({
       testMatch: /.*\.setup\.ts/,
     },
     {
+      // Refuses the local-stack projects below unless E2E_LOCAL_STACK=1 and
+      // their URLs are loopback (e2e/support/localStack.ts, assertLocalStack).
+      name: 'local-stack-guard',
+      testMatch: /support\/localStack\.guard\.ts/,
+    },
+    {
       name: 'chromium',
       dependencies: ['setup'],
       use: {
@@ -39,10 +46,11 @@ export default defineConfig({
       // so no stored login. The replay fixtures share players (and their ELO),
       // so run serially: npx playwright test --project=local-replays --workers=1
       name: 'local-replays',
+      dependencies: ['local-stack-guard'],
       testMatch: /replay-pipeline\/.*\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: process.env.E2E_LOCAL_BASE_URL || 'http://localhost:5173',
+        baseURL: localStack.frontendUrl,
       },
     },
     {
@@ -52,6 +60,7 @@ export default defineConfig({
       // endpoint catalog (scripts/check-ui-api-contract.mjs). Scenarios share
       // players, so run serially: npm run verify:lifecycle
       name: 'tournament-lifecycle',
+      dependencies: ['local-stack-guard'],
       testMatch: /tournament-lifecycle\/.*\.spec\.ts/,
     },
   ],

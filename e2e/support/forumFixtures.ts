@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { localStack, runSql, sqlLiteral } from './localStack';
+import { assertLocalStack, localStack, runSql, sqlLiteral } from './localStack';
 
 /** A side as recorded in the replay WML. */
 export interface ReplaySide {
@@ -157,6 +157,7 @@ export function injectLegacyGame(options: {
  * only keeps the fixture internally consistent.
  */
 function copyReplayFixture(sourceName: string, replayName: string, gameName?: string): void {
+  assertLocalStack();
   const source = path.join(localStack.replayFixturesDir, sourceName);
   if (!fs.existsSync(source)) {
     throw new Error(`Replay fixture not found: ${source} (set E2E_REPLAY_FIXTURES_DIR)`);

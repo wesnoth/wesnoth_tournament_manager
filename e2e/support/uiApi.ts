@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { request, type APIRequestContext } from '@playwright/test';
-import { localStack } from './localStack';
+import { assertLocalStack, localStack } from './localStack';
 
 /**
  * HTTP client for API-driven end-to-end tests that must stay on the routes
@@ -79,6 +79,7 @@ export async function uiRequest<T = any>(
   template: string,
   options: UiRequestOptions = {},
 ): Promise<{ status: number; data: T }> {
+  assertLocalStack();
   assertUiEndpoint(method, template);
   const resolved = template.replace(/:([A-Za-z]\w*)/g, (_, name: string) => {
     const value = options.params?.[name];
