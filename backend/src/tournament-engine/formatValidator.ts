@@ -54,6 +54,9 @@ function validateStructure(definition: TournamentFormatDefinition, issues: Forma
       continue;
     }
     if (!isOptionalString(phase.name)) issue(issues, `${path}.name`, 'invalid_type', 'Phase name must be text');
+    // Optional, but the writer trims it like the name, so a non-string value
+    // must be reported here rather than throw during persistence.
+    if (!isOptionalString(phase.description)) issue(issues, `${path}.description`, 'invalid_type', 'Phase description must be text');
     for (const key of ['swiss', 'round_robin', 'elimination'] as const) {
       if (phase[key] != null && !isRecord(phase[key])) {
         issue(issues, `${path}.${key}`, 'invalid_type', 'Phase settings must be an object');

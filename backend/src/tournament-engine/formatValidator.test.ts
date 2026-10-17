@@ -98,6 +98,7 @@ describe('malformed definitions (finding 32)', () => {
     ['missing groups', { phases: [{ ...swissPhase(1, ['a']), groups: undefined }], advancement_rules: [] }, 'groups_required'],
     ['a null group', { phases: [{ ...swissPhase(1, ['a']), groups: [null] }], advancement_rules: [] }, 'invalid_group'],
     ['a numeric phase name', { phases: [{ ...swissPhase(1, ['a']), name: 7 }], advancement_rules: [] }, 'invalid_type'],
+    ['a numeric phase description', { phases: [{ ...swissPhase(1, ['a']), description: 42 }], advancement_rules: [] }, 'invalid_type'],
     ['a numeric group name', { phases: [{ ...swissPhase(1, ['a']), groups: [{ id: 'a', name: 7, order: 1 }] }], advancement_rules: [] }, 'invalid_type'],
     ['entry ids given as a string', { phases: [{ ...swissPhase(1, ['a']), groups: [{ id: 'a', name: 'A', order: 1, entry_ids: 'x' }] }], advancement_rules: [] }, 'invalid_type'],
     ['round overrides given as an object', { phases: [{ ...swissPhase(1, ['a']), round_overrides: {} }], advancement_rules: [] }, 'invalid_type'],

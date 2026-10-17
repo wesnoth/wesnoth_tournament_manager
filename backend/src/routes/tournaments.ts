@@ -9,7 +9,7 @@ import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
 import { checkUserIsForumModerator } from '../services/phpbbAuth.js';
 import { isTournamentOrganizer } from '../services/tournamentAuthorizationService.js';
 import { parseForumTopicUrl } from '../tournament-engine/forumTopic.js';
-import { assertValidTournamentFormat, saveTournamentFormat, writeTournamentFormat } from '../tournament-engine/formatService.js';
+import { assertValidTournamentFormat, FormatConflictError, writeTournamentFormat } from '../tournament-engine/formatService.js';
 import type { TournamentFormatDefinition } from '../tournament-engine/types.js';
 import { consumeUserActionRateLimit } from '../services/userActionRateLimitService.js';
 import { sendUserActionRateLimitError } from '../utils/userActionRateLimitResponse.js';
@@ -1016,11 +1016,10 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'No fields to update' });
     }
 
-    // Validate the phase graph before anything is written. The summary fields
-    // are committed in their own transaction below and the format is saved
-    // after it, so a format rejected only at that point would leave the
-    // configuration half updated. saveTournamentFormat validates again, which
-    // is cheap and keeps it safe for its other callers.
+    // Validate the phase graph before opening the transaction, so a malformed
+    // format is answered with its issues without taking the row lock. Checks
+    // that need the stored state (status, existing direct passes) run inside
+    // writeTournamentFormat, in the same transaction as the summary fields.
     if (format_definition !== undefined) {
       if (!format_definition || typeof format_definition !== 'object') {
         return res.status(400).json({ error: 'A phase format (format_definition) is required' });
@@ -1060,15 +1059,19 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
           [randomUUID(), id, nextVersion, nextRulesContent, req.userId]
         );
       }
+      // The phase graph is written in the same transaction as the summary
+      // fields and rule history (audit finding 40): if the graph is refused
+      // (direct-pass conflict, status) or its persistence fails, the whole
+      // edit rolls back instead of keeping half of the configuration.
+      if (format_definition !== undefined) {
+        await writeTournamentFormat(updateConnection, id, format_definition as TournamentFormatDefinition);
+      }
       await updateConnection.commit();
     } catch (transactionError) {
       await updateConnection.rollback();
       throw transactionError;
     } finally {
       updateConnection.release();
-    }
-    if (format_definition !== undefined) {
-      await saveTournamentFormat(id, format_definition as TournamentFormatDefinition);
     }
     const updated = await query('SELECT * FROM tournaments WHERE id = ?', [id]);
 
@@ -1099,6 +1102,7 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
     // return the validator issues so the form can say what to fix, as
     // creation and PUT /:id/format already do.
     if (error.issues) return res.status(400).json({ error: error.message, issues: error.issues });
+    if (error instanceof FormatConflictError) return res.status(409).json({ error: error.message });
     console.error('Update tournament error:', error);
     res.status(500).json({ error: 'Failed to update tournament' });
   }

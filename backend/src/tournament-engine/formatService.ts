@@ -1,7 +1,21 @@
 import type { PoolConnection } from 'mysql2/promise';
 import { pool, query } from '../config/database.js';
+import { DomainError } from '../utils/clientError.js';
 import { validateTournamentFormat } from './formatValidator.js';
 import type { PhaseDefinition, TournamentFormatDefinition } from './types.js';
+
+/**
+ * A valid definition that the tournament's current state cannot accept: the
+ * tournament is past registration, or existing direct passes would lose their
+ * target group or exceed its new capacity. Routes answer it with 409, since
+ * the organizer must change the tournament (not the format) before retrying.
+ */
+export class FormatConflictError extends DomainError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FormatConflictError';
+  }
+}
 
 async function insertSettings(connection: PoolConnection, phase: PhaseDefinition): Promise<void> {
   if (phase.format === 'swiss' && phase.swiss) {
@@ -93,7 +107,7 @@ export async function writeTournamentFormat(
   );
   if (tournaments.length === 0) throw new Error('Tournament not found');
   if (!['registration_open', 'registration_closed'].includes(tournaments[0].status)) {
-    throw new Error('Tournament format can only be edited before preparation');
+    throw new FormatConflictError('Tournament format can only be edited before preparation');
   }
 
   // Direct nominations live on tournament-owned participants/teams and must
@@ -114,7 +128,7 @@ export async function writeTournamentFormat(
   for (const nomination of existingNominations) {
     const target = nextDirectCapacities.get(nomination.group_id);
     if (!target?.isLaterPhase || target.capacity < Number(nomination.nomination_count)) {
-      throw new Error('Remove or reassign existing direct passes before removing their target group or reducing its capacity');
+      throw new FormatConflictError('Remove or reassign existing direct passes before removing their target group or reducing its capacity');
     }
   }
 

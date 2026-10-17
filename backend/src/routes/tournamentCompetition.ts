@@ -7,7 +7,7 @@ import { checkUserIsForumModerator } from '../services/phpbbAuth.js';
 import { validateTournamentFormat } from '../tournament-engine/formatValidator.js';
 import { generateAdvancementRules } from '../tournament-engine/advancementGenerator.js';
 import { findDirectPassPlacement, rebalanceRoundOneDirectPasses } from '../tournament-engine/directPassPlacement.js';
-import { getTournamentFormat, saveTournamentFormat } from '../tournament-engine/formatService.js';
+import { FormatConflictError, getTournamentFormat, saveTournamentFormat } from '../tournament-engine/formatService.js';
 import type { TournamentFormatDefinition } from '../tournament-engine/types.js';
 import { pool, query } from '../config/database.js';
 import { finalizeTournamentFromPhase, recordPhaseGameResult, recalculateGroupStandings } from '../tournament-engine/competitionProgression.js';
@@ -805,7 +805,7 @@ router.put('/:id/format', authMiddleware, async (req: AuthRequest, res) => {
   } catch (error: any) {
     if (error.issues) return res.status(400).json({ error: error.message, issues: error.issues });
     if (isClientSafeError(error) && (error.message === 'Tournament not found')) return res.status(404).json({ error: error.message });
-    if (isClientSafeError(error) && (error.message?.includes('before preparation'))) return res.status(409).json({ error: error.message });
+    if (error instanceof FormatConflictError) return res.status(409).json({ error: error.message });
     console.error('Save tournament competition format error:', error);
     return res.status(500).json({ error: 'Failed to save tournament format' });
   }
