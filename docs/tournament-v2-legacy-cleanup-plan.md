@@ -168,7 +168,7 @@ Implemented on 2026-10-10, validation pending: creation requires a valid `format
 
 **Review follow-up (2026-10-17):** the original validator fixes remain effective for their tested cases, but malformed phase descriptions still passed validation and failed during persistence (audit finding 32). Configuration edits validated before writing, yet committed root fields and rule history separately from the graph, so nomination conflicts or persistence failures could leave a rejected edit partly saved (finding 40). Both were fixed the same day on `test`, pending TEST validation: the validator reports a non-text phase description, and a configuration edit writes the summary fields, rule history, and phase graph in one transaction; a graph that the stored direct passes or the tournament status cannot accept is answered with 409. The lifecycle suite's configuration-edit scenario checks a refused, a malformed, and an accepted edit against the stored configuration.
 
-The creation suite's negative cases are rejected before any write. They do not prove rollback after a partial insert (finding 41); add a failure inside persistence and check that all creation-owned data rolls back before treating transaction validation as complete.
+The creation suite's negative cases are rejected before any write, so on their own they did not prove rollback after a partial insert (finding 41). A further scenario now injects a database failure on the last statement of a valid creation and checks that every creation-owned row rolls back.
 
 - Require a valid phase `format_definition` in the tournament creation API.
 - Create the root tournament and its phase graph atomically.
@@ -245,11 +245,16 @@ For each supported individual and team format, validate:
 
 The engine self-test and source-based group progression test are insufficient for schema contraction on their own. The database-backed tournament lifecycle suite (`npm run verify:lifecycle`) asserts transactions, stored graph state, standing rows, and progression after each result, and must pass against both databases before steps 4 and 5.
 
-### Outstanding coverage from the 2026-10-17 review
+### Coverage added after the 2026-10-17 review
 
-Audit finding 41 limits the current evidence: lifecycle assertions omit the legacy replay relationships and `matches.round_id`, and the scenarios do not create scheduling proposals. A zero proposal-link count without exercising scheduling is not proof that scheduling no longer writes those columns.
+Audit finding 41 found that the lifecycle assertions omitted the legacy replay relationships and `matches.round_id`, and that no scenario created a scheduling proposal, so a zero proposal-link count proved nothing about the scheduling path. Implemented the same day on `test`:
 
-Before steps 4 and 5, supplement the lifecycle suite with creation rollback after a partial insert and actual scheduling/replay write scenarios that inspect every relationship proposed for removal. Existing replay-pipeline coverage can contribute; its presence does not imply that these specific assertions are covered. Configuration-edit rollback for nomination conflicts and malformed graphs is covered by the lifecycle suite (finding 40). Keep results from the restored clone and clean installation separate from local static verification and historical deployment results.
+- `npm run verify` refuses any reference to the step 4 relationship columns in the application sources, which covers every code path rather than the exercised ones.
+- The lifecycle legacy-field assertion includes replay and match links, and a scheduling scenario proposes and confirms slots for a phase-engine series before checking the stored proposal.
+- The replay-pipeline tournament scenarios apply the same assertion after real replay ingestion, including ranked tournament matches.
+- Creation rollback after a partial insert and configuration-edit rollback (finding 40) are covered by the lifecycle suite.
+
+These are local results against the development database. Before steps 4 and 5, the suites must still pass against a restored production clone and a clean installation, recorded separately from local verification and historical deployment results.
 
 ## Deployment and rollback
 

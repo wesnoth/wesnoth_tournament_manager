@@ -3,6 +3,7 @@ import type { TournamentFormatDefinition } from '../../frontend/src/types/tourna
 import { buildFormatTemplate, buildPhaseDefinition } from '../../frontend/src/utils/tournamentFormatTemplates';
 import { signIn, uiRequest } from '../support/uiApi';
 import { createTournament, englishDefaultNames, tournamentRow } from '../support/tournamentLifecycle';
+import { faultHits, installFault, removeFault } from '../support/faultInjection';
 import { localStack, runSql, sqlLiteral } from '../support/localStack';
 
 /**
@@ -24,7 +25,12 @@ function graphRowCounts(): Record<string, number> {
        (SELECT COUNT(*) FROM ${db}.tournament_phases) AS phases,
        (SELECT COUNT(*) FROM ${db}.tournament_phase_groups) AS phase_groups,
        (SELECT COUNT(*) FROM ${db}.tournament_advancement_rules) AS advancement_rules,
-       (SELECT COUNT(*) FROM ${db}.tournament_organizers) AS organizers;`,
+       (SELECT COUNT(*) FROM ${db}.tournament_swiss_settings) AS swiss_settings,
+       (SELECT COUNT(*) FROM ${db}.tournament_elimination_settings) AS elimination_settings,
+       (SELECT COUNT(*) FROM ${db}.tournament_organizers) AS organizers,
+       (SELECT COUNT(*) FROM ${db}.tournament_rule_versions) AS rule_versions,
+       (SELECT COUNT(*) FROM ${db}.tournament_unranked_factions) AS unranked_factions,
+       (SELECT COUNT(*) FROM ${db}.tournament_unranked_maps) AS unranked_maps;`,
   )[0];
   return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, Number(value)]));
 }
@@ -82,4 +88,41 @@ test('rejected formats write nothing', async () => {
     expect(graphRowCounts(), `${label} leaves no rows`).toEqual(before);
     expect(runSql(`SELECT COUNT(*) AS count FROM ${db}.tournaments WHERE name = ${sqlLiteral(name)};`)[0].count).toBe('0');
   }
+});
+
+/**
+ * Rollback after a partial write (audit finding 41). The rejected formats
+ * above fail validation before the transaction starts; here the format is
+ * valid and the failure comes from the database after the root row, the
+ * organizer, the allowed assets, and every phase and group are already
+ * inserted: a trigger refuses the last advancement rule, the final statement
+ * of the graph. Everything the creation wrote must roll back with it.
+ */
+test('a failure after a partial creation rolls everything back', async () => {
+  const organizer = await signIn(organizerName);
+  const definition = buildFormatTemplate('swiss_brackets_final', englishDefaultNames());
+  const lastRule = definition.advancement_rules.at(-1)!;
+  const name = `Lifecycle rollback ${Date.now()}`;
+  const before = graphRowCounts();
+  installFault({
+    name: 'creation_last_rule',
+    table: 'tournament_advancement_rules',
+    event: 'INSERT',
+    when: `NEW.id = ${sqlLiteral(lastRule.id)}`,
+  });
+  let rejection: Error | null = null;
+  try {
+    await createTournament(organizer, { name, mode: 'unranked', definition, maxParticipants: 16 });
+  } catch (error) {
+    rejection = error as Error;
+  } finally {
+    removeFault('creation_last_rule');
+  }
+  // The fault fired once, on the last statement, so everything before it had been written.
+  expect(faultHits('creation_last_rule')).toBe(1);
+  // An infrastructure failure: generic 500, no SQL detail for the client.
+  expect(rejection?.message).toMatch(/returned 500: /);
+  expect(rejection?.message).not.toContain('E2E injected failure');
+  expect(graphRowCounts(), 'no creation-owned row survives').toEqual(before);
+  expect(runSql(`SELECT COUNT(*) AS count FROM ${db}.tournaments WHERE name = ${sqlLiteral(name)};`)[0].count).toBe('0');
 });

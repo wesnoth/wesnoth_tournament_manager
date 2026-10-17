@@ -3,7 +3,7 @@ import { buildFormatTemplate } from '../../frontend/src/utils/tournamentFormatTe
 import { signIn } from '../support/uiApi';
 import {
   closePrepareStart, competition, createTournament, englishDefaultNames, entriesBySeed, finalResults,
-  groupByes, groupSeries, groupStandings, legacyFieldWrites, participants, phaseGames, pickPlayers,
+  groupByes, groupSeries, groupStandings, legacyFieldWrites, noLegacyWrites, participants, phaseGames, pickPlayers,
   recordWinner, registerPlayers, signInAll, tournamentRow,
 } from '../support/tournamentLifecycle';
 
@@ -108,5 +108,5 @@ test('individual Swiss with an odd field runs from creation to final standings',
     { seed: 4, placement: 4, label: null, champion: false },
     { seed: 5, placement: 5, label: null, champion: false },
   ]);
-  expect(legacyFieldWrites(tournamentId)).toEqual({ participant_aggregates: 0, team_aggregates: 0, proposal_links: 0 });
+  expect(legacyFieldWrites(tournamentId)).toEqual(noLegacyWrites);
 });

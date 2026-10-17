@@ -346,11 +346,21 @@ export function finalResults(tournamentId: string): Array<{ seed: number; placem
   ).map((row) => ({ seed: Number(row.initial_seed), placement: Number(row.placement), label: row.placement_label, champion: row.is_champion === '1' }));
 }
 
+/** What `legacyFieldWrites` must return for every phase-engine tournament. */
+export const noLegacyWrites = {
+  participant_aggregates: 0, team_aggregates: 0, proposal_links: 0, replay_links: 0, match_round_links: 0,
+};
+
 /**
  * Values in the version 1 aggregate and relationship fields of one tournament
  * (cleanup plan step 5 and the step 4 columns). The phase engine never writes
  * them, so after a full lifecycle every count must be zero; a non-zero count
  * means a v2 path still depends on a field the cleanup intends to drop.
+ *
+ * A zero only proves something for the paths the scenario exercised: proposal
+ * links need a scheduled series (scheduling.spec.ts), and replay and match
+ * links need replay ingestion, which the replay-pipeline suite drives. The
+ * static check scripts/check-legacy-columns.mjs covers every source path.
  */
 export function legacyFieldWrites(tournamentId: string): Record<string, number> {
   const id = sqlLiteral(tournamentId);
@@ -371,7 +381,11 @@ export function legacyFieldWrites(tournamentId: string): Record<string, number> 
               JOIN ${db}.tournament_phase_rounds r ON r.id = s.round_id
               JOIN ${db}.tournament_phase_groups g ON g.id = r.group_id
               JOIN ${db}.tournament_phases p ON p.id = g.phase_id
-              WHERE p.tournament_id = ${id})) AS proposal_links;`,
+              WHERE p.tournament_id = ${id})) AS proposal_links,
+       (SELECT COUNT(*) FROM ${db}.replays
+          WHERE tournament_id = ${id}
+            AND (tournament_round_match_id IS NOT NULL OR tournament_match_id IS NOT NULL)) AS replay_links,
+       (SELECT COUNT(*) FROM ${db}.matches WHERE tournament_id = ${id} AND round_id IS NOT NULL) AS match_round_links;`,
   )[0];
   return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, Number(value)]));
 }

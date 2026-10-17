@@ -4,7 +4,7 @@ import { buildPhaseDefinition, newDefinitionId } from '../../frontend/src/utils/
 import { signIn, uiRequest } from '../support/uiApi';
 import {
   closePrepareStart, competition, createTournament, englishDefaultNames, entriesBySeed, finalResults,
-  groupSeries, groupStandings, legacyFieldWrites, participants, phaseGames, pickPlayers, recordWinner,
+  groupSeries, groupStandings, legacyFieldWrites, noLegacyWrites, participants, phaseGames, pickPlayers, recordWinner,
   registerPlayers, signInAll, startPhase, tournamentRow,
 } from '../support/tournamentLifecycle';
 
@@ -111,5 +111,5 @@ test('individual leagues into an elimination bracket with a direct pass', async 
   expect(finalResults(tournamentId).map((row) => [row.placement, row.seed, row.label])).toEqual([
     [1, 1, 'Champion'], [2, 3, 'Runner-up'], [3, 4, 'Third place'], [4, 5, null], [5, 2, null],
   ]);
-  expect(legacyFieldWrites(tournamentId)).toEqual({ participant_aggregates: 0, team_aggregates: 0, proposal_links: 0 });
+  expect(legacyFieldWrites(tournamentId)).toEqual(noLegacyWrites);
 });

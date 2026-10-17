@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { cleanupInjectedReplays, getPlayerRating, injectLegacyGame, waitForReplayOutcome } from '../support/forumFixtures';
 import { loginAs } from '../support/login';
+import { legacyFieldWrites, noLegacyWrites } from '../support/tournamentLifecycle';
 import { createStartedSwissTournament, getPendingTournamentGames, getTournamentGame } from '../support/tournamentSetup';
 
 /**
@@ -133,5 +134,10 @@ for (const scenario of scenarios) {
       expect(after.matches, `${nickname} matches`).toBe(before.matches + (expectsElo ? 2 : 0));
       if (!expectsElo) expect(after.elo, `${nickname} ELO`).toBe(before.elo);
     }
+
+    // Replay ingestion links replays and ranked matches through the phase
+    // engine only; the version 1 columns cleanup step 4 drops stay empty
+    // (audit finding 41).
+    expect(legacyFieldWrites(tournamentId)).toEqual(noLegacyWrites);
   });
 }

@@ -1,7 +1,8 @@
 import { localStack, runSql, sqlLiteral } from './localStack';
 
 /**
- * Database fault injection for the replay-pipeline specs (audit findings 3–4).
+ * Database fault injection for the replay-pipeline and lifecycle specs (audit
+ * findings 3–4 and 41).
  *
  * The failure paths of replay integration (rollback after the ELO update,
  * deadlock retries, post-commit tournament follow-up) cannot be reached by
@@ -29,7 +30,7 @@ export interface FaultOptions {
   name: string;
   /** Table whose `BEFORE <event>` trigger raises the error. */
   table: 'replays' | 'users_extension' | 'tournaments' | 'faction_map_statistics_history'
-    | 'global_stats_recalculation_jobs';
+    | 'global_stats_recalculation_jobs' | 'tournament_advancement_rules';
   /** Statement that fires the trigger; default UPDATE. INSERT triggers have no OLD row. */
   event?: 'UPDATE' | 'INSERT';
   /** SQL condition over OLD/NEW that selects the targeted row. */

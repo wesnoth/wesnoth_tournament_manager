@@ -4,7 +4,7 @@ import { buildPhaseDefinition, newDefinitionId } from '../../frontend/src/utils/
 import { signIn } from '../support/uiApi';
 import {
   closePrepareStart, competition, createTournament, englishDefaultNames, entriesBySeed, finalResults,
-  groupSeries, groupStandings, legacyFieldWrites, participants, phaseGames, pickPlayers, recordWinner,
+  groupSeries, groupStandings, legacyFieldWrites, noLegacyWrites, participants, phaseGames, pickPlayers, recordWinner,
   registerTeams, signInAll, startPhase, tournamentRow,
 } from '../support/tournamentLifecycle';
 
@@ -92,5 +92,5 @@ test('team Swiss into a best-of-three final', async () => {
   expect(finalResults(tournamentId).map((row) => [row.placement, row.seed, row.label])).toEqual([
     [1, 1, 'Champion'], [2, 2, 'Runner-up'],
   ]);
-  expect(legacyFieldWrites(tournamentId)).toEqual({ participant_aggregates: 0, team_aggregates: 0, proposal_links: 0 });
+  expect(legacyFieldWrites(tournamentId)).toEqual(noLegacyWrites);
 });

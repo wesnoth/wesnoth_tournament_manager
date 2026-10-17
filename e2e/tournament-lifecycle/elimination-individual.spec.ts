@@ -3,7 +3,7 @@ import { buildFormatTemplate } from '../../frontend/src/utils/tournamentFormatTe
 import { signIn } from '../support/uiApi';
 import {
   awardSeries, closePrepareStart, competition, createTournament, englishDefaultNames, entriesBySeed,
-  finalResults, groupByes, groupSeries, groupStandings, legacyFieldWrites, phaseGames, pickPlayers,
+  finalResults, groupByes, groupSeries, groupStandings, legacyFieldWrites, noLegacyWrites, phaseGames, pickPlayers,
   recordWinner, registerPlayers, signInAll, tournamentRow, type PhaseGameRow,
 } from '../support/tournamentLifecycle';
 import { localStack, runSql, sqlLiteral } from '../support/localStack';
@@ -123,5 +123,5 @@ test('individual elimination with structural byes, an award, and a third-place s
     { seed: 6, placement: 5, label: null, champion: false },
     { seed: 5, placement: 6, label: null, champion: false },
   ]);
-  expect(legacyFieldWrites(tournamentId)).toEqual({ participant_aggregates: 0, team_aggregates: 0, proposal_links: 0 });
+  expect(legacyFieldWrites(tournamentId)).toEqual(noLegacyWrites);
 });

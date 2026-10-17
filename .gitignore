@@ -89,6 +89,7 @@ frontend/public/wesnoth-avatars/manifest.json
 !/scripts/check-i18n-parity.mjs
 !/scripts/check-i18n-keys.mjs
 !/scripts/check-ui-api-contract.mjs
+!/scripts/check-legacy-columns.mjs
 wesnoth_avatars.json
 playwright-report/
 wiki-artifacts/

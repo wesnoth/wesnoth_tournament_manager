@@ -3,7 +3,7 @@ import { buildFormatTemplate } from '../../frontend/src/utils/tournamentFormatTe
 import { signIn } from '../support/uiApi';
 import {
   awardSeries, closePrepareStart, competition, createTournament, englishDefaultNames, entriesBySeed,
-  finalResults, groupByes, groupSeries, groupStandings, legacyFieldWrites, phaseGames, pickPlayers,
+  finalResults, groupByes, groupSeries, groupStandings, legacyFieldWrites, noLegacyWrites, phaseGames, pickPlayers,
   recordWinner, registerPlayers, signInAll, tournamentRow,
 } from '../support/tournamentLifecycle';
 
@@ -85,5 +85,5 @@ test('individual league with rests, out-of-order rounds, and an award', async ()
   expect(finalResults(tournamentId).map((row) => [row.placement, row.seed, row.label])).toEqual([
     [1, 1, 'Champion'], [2, 2, 'Runner-up'], [3, 3, null], [4, 4, null], [5, 5, null],
   ]);
-  expect(legacyFieldWrites(tournamentId)).toEqual({ participant_aggregates: 0, team_aggregates: 0, proposal_links: 0 });
+  expect(legacyFieldWrites(tournamentId)).toEqual(noLegacyWrites);
 });
