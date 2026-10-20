@@ -9,7 +9,7 @@ import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
 import { checkUserIsForumModerator } from '../services/phpbbAuth.js';
 import { isTournamentOrganizer } from '../services/tournamentAuthorizationService.js';
 import { parseForumTopicUrl } from '../tournament-engine/forumTopic.js';
-import { assertValidTournamentFormat, FormatConflictError, writeTournamentFormat } from '../tournament-engine/formatService.js';
+import { assertValidTournamentFormat, FormatConflictError, writeTournamentFormat, type ReleasedDirectPass } from '../tournament-engine/formatService.js';
 import type { TournamentFormatDefinition } from '../tournament-engine/types.js';
 import { consumeUserActionRateLimit } from '../services/userActionRateLimitService.js';
 import { sendUserActionRateLimitError } from '../utils/userActionRateLimitResponse.js';
@@ -827,7 +827,8 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
       rules_template_id,
       rules_content,
       forum_topic_url,
-      format_definition
+      format_definition,
+      release_removed_direct_passes
     } = req.body;
 
     if ('status' in req.body || 'started_at' in req.body || 'tournament_mode' in req.body) {
@@ -1036,6 +1037,7 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
       WHERE id = ?
     `;
 
+    let releasedDirectPasses: ReleasedDirectPass[] = [];
     const updateConnection = await pool.getConnection();
     try {
       await updateConnection.beginTransaction();
@@ -1063,8 +1065,13 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
       // fields and rule history (audit finding 40): if the graph is refused
       // (direct-pass conflict, status) or its persistence fails, the whole
       // edit rolls back instead of keeping half of the configuration.
+      // Direct passes into removed groups are released only when the
+      // organizer confirmed it in the phase editor (the explicit flag);
+      // otherwise the edit is refused with 409.
       if (format_definition !== undefined) {
-        await writeTournamentFormat(updateConnection, id, format_definition as TournamentFormatDefinition);
+        releasedDirectPasses = await writeTournamentFormat(updateConnection, id, format_definition as TournamentFormatDefinition, {
+          releaseRemovedDirectPasses: release_removed_direct_passes === true,
+        });
       }
       await updateConnection.commit();
     } catch (transactionError) {
@@ -1072,6 +1079,17 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
       throw transactionError;
     } finally {
       updateConnection.release();
+    }
+    // Same audit shape as removing a direct pass from the participants tab,
+    // so every way a pass disappears leaves one event per entry.
+    for (const pass of releasedDirectPasses) {
+      await logAuditEvent({
+        event_type: 'DIRECT_PASS_UPDATED', user_id: req.userId!, ip_address: getUserIP(req), user_agent: getUserAgent(req),
+        details: {
+          tournament_id: id, entity_type: pass.entity_type, entity_id: pass.entity_id, target_group_id: null,
+          released_group_id: pass.group_id, reason: 'format_group_removed',
+        },
+      });
     }
     const updated = await query('SELECT * FROM tournaments WHERE id = ?', [id]);
 
@@ -1095,7 +1113,8 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
 
     res.json({
       message: 'Tournament updated successfully',
-      tournament: updated.rows[0]
+      tournament: updated.rows[0],
+      released_direct_passes: releasedDirectPasses.length,
     });
   } catch (error: any) {
     // An invalid phase graph is the organizer's input, not a server fault:

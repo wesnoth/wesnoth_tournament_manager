@@ -811,6 +811,7 @@
   "success_registration_closed": "Anmeldung erfolgreich geschlossen.",
   "success_round_started": "Runde {{number}} erfolgreich gestartet!",
   "success_tournament_configuration_updated": "Turnierkonfiguration aktualisiert!",
+  "success_direct_passes_released": "Freigegebene direkte Einzüge: {{count}}.",
   "success_tournament_prepared": "Turnier vorbereitet. Sie können es jetzt starten.",
   "success_tournament_started": "Turnier gestartet! Runden erstellt.",
   "tabs": {
@@ -1287,7 +1288,9 @@
     "default_elimination_brackets": "K.-o.-Bäume",
     "default_grand_final": "Großes Finale",
     "default_group": "Gruppe {{number}}",
-    "default_phase": "Phase {{number}}"
+    "default_phase": "Phase {{number}}",
+    "confirm_release_direct_passes": "Diese Änderung entfernt Gruppen, denen bereits direkte Einzüge zugewiesen sind. Beim Speichern werden sie freigegeben ({{count}}): {{names}}. Diese Teilnahmen beginnen in der ersten Phase. Fortfahren?",
+    "reserved_assigned_floor": "Bereits zugewiesen: {{count}}. Um darunter zu gehen, entferne Einzüge im Tab Teilnehmer."
   },
   "schedule_grid": {
     "proposed": "Vorgeschlagen",

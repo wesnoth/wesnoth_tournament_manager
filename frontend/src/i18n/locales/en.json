@@ -819,6 +819,7 @@
   "success_registration_closed": "Registration closed successfully!",
   "success_round_started": "Round {{number}} started successfully!",
   "success_tournament_configuration_updated": "Tournament configuration updated!",
+  "success_direct_passes_released": "Direct passes released: {{count}}.",
   "success_tournament_prepared": "Tournament prepared! You can now start it.",
   "success_tournament_started": "Tournament started! Rounds created.",
   "tabs": {
@@ -1287,7 +1288,9 @@
     "default_elimination_brackets": "Elimination brackets",
     "default_grand_final": "Grand final",
     "default_group": "Group {{number}}",
-    "default_phase": "Phase {{number}}"
+    "default_phase": "Phase {{number}}",
+    "confirm_release_direct_passes": "This change removes groups that already have assigned direct passes. Saving will release them ({{count}}): {{names}}. Those entries will start from the first phase. Continue?",
+    "reserved_assigned_floor": "Already assigned: {{count}}. To go lower, remove passes in the Participants tab."
   },
   "schedule_grid": {
     "proposed": "Proposed",

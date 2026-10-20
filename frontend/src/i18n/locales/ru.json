@@ -811,6 +811,7 @@
   "success_registration_closed": "Регистрация успешно закрыта.",
   "success_round_started": "Раунд {{number}} успешно начат!",
   "success_tournament_configuration_updated": "Конфигурация турнира обновлена!",
+  "success_direct_passes_released": "Снято прямых проходов: {{count}}.",
   "success_tournament_prepared": "Турнир подготовлен. Теперь вы можете его начать.",
   "success_tournament_started": "Турнир начат! Раунды созданы.",
   "tabs": {
@@ -1287,7 +1288,9 @@
     "default_elimination_brackets": "Сетки на выбывание",
     "default_grand_final": "Суперфинал",
     "default_group": "Группа {{number}}",
-    "default_phase": "Этап {{number}}"
+    "default_phase": "Этап {{number}}",
+    "confirm_release_direct_passes": "Это изменение удаляет группы, в которых уже назначены прямые проходы. При сохранении они будут сняты ({{count}}): {{names}}. Эти участники начнут с первого этапа. Продолжить?",
+    "reserved_assigned_floor": "Уже назначено: {{count}}. Чтобы уменьшить ниже, снимите проходы на вкладке «Участники»."
   },
   "schedule_grid": {
     "proposed": "Предложено",

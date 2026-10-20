@@ -15,6 +15,10 @@ import { localStack, runSql, sqlLiteral } from '../support/localStack';
  * state is known (a direct pass would lose its target capacity) or a
  * malformed one must leave every part of the configuration as it was, and an
  * accepted edit must store all of its parts together.
+ *
+ * Removing a group that holds direct passes is refused unless the request
+ * carries the phase editor's release consent; then the passes are cleared in
+ * the same transaction and each one is audited.
  */
 const organizerName = process.env.E2E_TOURNAMENT_ORGANIZER || 'Blair';
 const db = localStack.tournamentDb;
@@ -64,10 +68,15 @@ test('configuration edits commit the summary, rules, and phase graph together or
   });
 
   const original = configuration(tournamentId);
-  const edit = (format: unknown, marker: string) => uiRequest<{ error?: string; issues?: Array<{ code: string }> }>(
+  const edit = (format: unknown, marker: string, releaseRemovedDirectPasses?: boolean) => uiRequest<{
+    error?: string; issues?: Array<{ code: string }>; released_direct_passes?: number;
+  }>(
     organizer, 'PUT', '/tournaments/:id', {
       params: { id: tournamentId },
-      body: { description: `# Edited ${marker}`, rules_content: `Rules ${marker}`, format_definition: format },
+      body: {
+        description: `# Edited ${marker}`, rules_content: `Rules ${marker}`, format_definition: format,
+        ...(releaseRemovedDirectPasses === undefined ? {} : { release_removed_direct_passes: releaseRemovedDirectPasses }),
+      },
     }).catch((error: Error) => error);
 
   // A valid graph that removes the reserved slot: refused against the stored direct pass.
@@ -78,6 +87,11 @@ test('configuration edits commit the summary, rules, and phase graph together or
   expect(conflict).toBeInstanceOf(Error);
   expect((conflict as Error).message).toMatch(/returned 409: .*direct passes/);
   expect(configuration(tournamentId), 'a refused graph keeps the summary and rules too').toEqual(original);
+  // The release consent covers removed groups only: it never decides which
+  // pass of a surviving group to drop.
+  const conflictWithConsent = await edit(withoutSlot, 'conflict', true);
+  expect((conflictWithConsent as Error).message).toMatch(/returned 409: .*direct passes/);
+  expect(configuration(tournamentId)).toEqual(original);
 
   // A malformed phase description: answered with its issue, nothing written.
   const malformed = structuredClone(definition) as unknown as { phases: Array<Record<string, unknown>> };
@@ -99,4 +113,32 @@ test('configuration edits commit the summary, rules, and phase graph together or
     rule_versions: String(Number(original.rule_versions) + 1),
     phases: `${original.phases!.split('|')[0]}|2:Renamed bracket:Top two of each league`,
   });
+
+  // Removing the bracket phase drops the group that holds the direct pass.
+  // Without the editor's consent the edit is refused; with it the pass is
+  // released in the same transaction and audited.
+  const directPass = () => runSql(
+    `SELECT direct_group_id, direct_round_number, direct_pass_note FROM ${db}.tournament_participants WHERE id = ${sqlLiteral(nominee.id)};`,
+  )[0];
+  const leaguesOnly = structuredClone(accepted);
+  // A final phase must have a single group, so the league keeps only its first one.
+  leaguesOnly.phases = [{ ...leaguesOnly.phases[0], groups: [{ ...leaguesOnly.phases[0].groups[0], advance_count: null }] }];
+  leaguesOnly.advancement_rules = [];
+  const beforeRemoval = configuration(tournamentId);
+  const refusedRemoval = await edit(leaguesOnly, 'removal');
+  expect((refusedRemoval as Error).message).toMatch(/returned 409: .*removing their target group/);
+  expect(configuration(tournamentId)).toEqual(beforeRemoval);
+  expect(directPass().direct_group_id).toBe(target.id);
+
+  const released = await edit(leaguesOnly, 'removal', true);
+  expect(released).not.toBeInstanceOf(Error);
+  expect((released as { data: { released_direct_passes?: number } }).data.released_direct_passes).toBe(1);
+  expect(directPass()).toEqual({ direct_group_id: null, direct_round_number: null, direct_pass_note: null });
+  expect(configuration(tournamentId).phases).toBe(beforeRemoval.phases!.split('|')[0]);
+  const audit = runSql(
+    `SELECT COUNT(*) AS events FROM ${db}.audit_logs WHERE event_type = 'DIRECT_PASS_UPDATED'
+       AND JSON_VALUE(details, '$.entity_id') = ${sqlLiteral(nominee.id)}
+       AND JSON_VALUE(details, '$.reason') = 'format_group_removed';`,
+  )[0];
+  expect(audit.events).toBe('1');
 });

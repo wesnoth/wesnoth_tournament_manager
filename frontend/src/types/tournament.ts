@@ -59,6 +59,12 @@ export interface TournamentFormData {
   organizer_ids?: string[];
   forum_topic_url?: string | null;
   format_definition?: TournamentFormatDefinition;
+  /**
+   * Set once the organizer confirmed in the phase editor that removing a
+   * phase or group releases the direct passes assigned to it. Without it the
+   * backend refuses such an edit with 409 instead of clearing the passes.
+   */
+  release_removed_direct_passes?: boolean;
 }
 
 export interface TournamentRuleVersion {

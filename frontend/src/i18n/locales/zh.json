@@ -811,6 +811,7 @@
   "success_registration_closed": "报名已成功关闭！",
   "success_round_started": "第 {{number}} 轮已成功开始！",
   "success_tournament_configuration_updated": "锦标赛配置已更新！",
+  "success_direct_passes_released": "已释放的直接晋级：{{count}}。",
   "success_tournament_prepared": "锦标赛已准备好！你现在可以开始它。",
   "success_tournament_started": "锦标赛已开始！回合已创建。",
   "tabs": {
@@ -1287,7 +1288,9 @@
     "default_elimination_brackets": "淘汰赛对阵表",
     "default_grand_final": "总决赛",
     "default_group": "第 {{number}} 组",
-    "default_phase": "阶段 {{number}}"
+    "default_phase": "阶段 {{number}}",
+    "confirm_release_direct_passes": "此更改将删除已分配直接晋级的分组。保存后将释放这些名额（{{count}}）：{{names}}。这些参赛者将从第一阶段开始。继续吗？",
+    "reserved_assigned_floor": "已分配：{{count}}。如需更低，请在“参与者”标签页中移除直接晋级。"
   },
   "schedule_grid": {
     "proposed": "已提议",

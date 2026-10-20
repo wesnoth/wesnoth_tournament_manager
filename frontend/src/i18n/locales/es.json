@@ -819,6 +819,7 @@
   "success_registration_closed": "Inscripciones cerradas correctamente.",
   "success_round_started": "La ronda {{number}} se inició correctamente!",
   "success_tournament_configuration_updated": "¡Configuración del torneo actualizada!",
+  "success_direct_passes_released": "Pases directos liberados: {{count}}.",
   "success_tournament_prepared": "Torneo preparado. Ahora puedes iniciarlo.",
   "success_tournament_started": "¡Torneo iniciado! Rondas creadas.",
   "tabs": {
@@ -1287,7 +1288,9 @@
     "default_elimination_brackets": "Cuadros de eliminación",
     "default_grand_final": "Gran final",
     "default_group": "Grupo {{number}}",
-    "default_phase": "Fase {{number}}"
+    "default_phase": "Fase {{number}}",
+    "confirm_release_direct_passes": "Este cambio elimina grupos que ya tienen pases directos asignados. Al guardar se liberarán ({{count}}): {{names}}. Esas inscripciones empezarán desde la primera fase. ¿Continuar?",
+    "reserved_assigned_floor": "Ya asignados: {{count}}. Para bajar de ahí, quita pases en la pestaña Participantes."
   },
   "schedule_grid": {
     "proposed": "Propuesta",

@@ -90,17 +90,36 @@ export async function saveTournamentFormat(tournamentId: string, definition: Tou
   }
 }
 
+/** An entry whose direct pass was cleared because its target group no longer accepts direct entry. */
+export interface ReleasedDirectPass {
+  entity_type: 'participant' | 'team';
+  entity_id: string;
+  group_id: string;
+}
+
 /**
  * Replace the phase graph inside the caller's transaction and mark the
  * tournament as a phase-engine (version 2) tournament. The definition must
  * already be validated. Tournament creation calls this in its own transaction
  * so a tournament is never stored without its graph.
+ *
+ * Existing direct passes must stay placeable. A pass whose target group is
+ * gone (its phase or group was removed) or no longer accepts direct entry
+ * (the group became part of the first phase) is refused with
+ * FormatConflictError, unless `releaseRemovedDirectPasses` is set: the
+ * organizer confirmed the release in the editor, so those passes are cleared
+ * in this same transaction and returned for auditing. A surviving later-phase
+ * group whose capacity drops below its assigned passes is always refused,
+ * because nothing says which of its passes the organizer would give up.
+ *
+ * @returns the passes released by this write (empty unless the option is set).
  */
 export async function writeTournamentFormat(
   connection: PoolConnection,
   tournamentId: string,
-  definition: TournamentFormatDefinition
-): Promise<void> {
+  definition: TournamentFormatDefinition,
+  options: { releaseRemovedDirectPasses?: boolean } = {}
+): Promise<ReleasedDirectPass[]> {
   const [tournaments] = await connection.execute<any[]>(
     `SELECT status, tournament_mode FROM tournaments WHERE id = ? FOR UPDATE`,
     [tournamentId]
@@ -119,17 +138,42 @@ export async function writeTournamentFormat(
       isLaterPhase: phase.order > 1,
     });
   }
-  const [existingNominations] = await connection.execute<any[]>(
-    `SELECT direct_group_id AS group_id, COUNT(*) AS nomination_count FROM (
-       SELECT direct_group_id FROM tournament_participants WHERE tournament_id = ? AND direct_group_id IS NOT NULL
-       UNION ALL
-       SELECT direct_group_id FROM tournament_teams WHERE tournament_id = ? AND direct_group_id IS NOT NULL
-     ) nominations GROUP BY direct_group_id`, [tournamentId, tournamentId]);
+  // Rows are locked so a concurrent direct-pass save cannot slip a nomination
+  // in between this check and the release below.
+  const [participantNominations] = await connection.execute<any[]>(
+    `SELECT id AS entity_id, direct_group_id AS group_id FROM tournament_participants
+     WHERE tournament_id = ? AND direct_group_id IS NOT NULL FOR UPDATE`, [tournamentId]);
+  const [teamNominations] = await connection.execute<any[]>(
+    `SELECT id AS entity_id, direct_group_id AS group_id FROM tournament_teams
+     WHERE tournament_id = ? AND direct_group_id IS NOT NULL FOR UPDATE`, [tournamentId]);
+  const existingNominations: ReleasedDirectPass[] = [
+    ...participantNominations.map((row: any) => ({ entity_type: 'participant' as const, entity_id: row.entity_id, group_id: row.group_id })),
+    ...teamNominations.map((row: any) => ({ entity_type: 'team' as const, entity_id: row.entity_id, group_id: row.group_id })),
+  ];
+  const nominationCounts = new Map<string, number>();
   for (const nomination of existingNominations) {
-    const target = nextDirectCapacities.get(nomination.group_id);
-    if (!target?.isLaterPhase || target.capacity < Number(nomination.nomination_count)) {
+    nominationCounts.set(nomination.group_id, (nominationCounts.get(nomination.group_id) || 0) + 1);
+  }
+  const released: ReleasedDirectPass[] = [];
+  for (const [groupId, count] of nominationCounts) {
+    const target = nextDirectCapacities.get(groupId);
+    if (target?.isLaterPhase) {
+      if (target.capacity < count) {
+        throw new FormatConflictError('Remove existing direct passes before reducing the capacity of their target group');
+      }
+      continue;
+    }
+    if (!options.releaseRemovedDirectPasses) {
       throw new FormatConflictError('Remove or reassign existing direct passes before removing their target group or reducing its capacity');
     }
+    released.push(...existingNominations.filter(nomination => nomination.group_id === groupId));
+  }
+  for (const pass of released) {
+    await connection.execute(
+      `UPDATE ${pass.entity_type === 'team' ? 'tournament_teams' : 'tournament_participants'}
+       SET direct_group_id = NULL, direct_round_number = NULL, direct_series_position = NULL,
+           direct_slot_number = NULL, direct_pass_note = NULL
+       WHERE id = ?`, [pass.entity_id]);
   }
 
   await connection.execute(`DELETE FROM tournament_phases WHERE tournament_id = ?`, [tournamentId]);
@@ -177,6 +221,7 @@ export async function writeTournamentFormat(
     `UPDATE tournaments SET competition_model_version = 2, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
     [tournamentId]
   );
+  return released;
 }
 
 /** Return the declarative graph in the same shape accepted by the write endpoint. */

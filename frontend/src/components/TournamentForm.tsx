@@ -7,7 +7,7 @@ import { tournamentService, userService } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import type { MatchFormat, TournamentFormData, TournamentMode, TournamentType } from '../types/tournament';
 import type { TournamentFormatDefinition } from '../types/tournament';
-import TournamentPhaseBuilder from './TournamentPhaseBuilder';
+import TournamentPhaseBuilder, { type PhaseBuilderChangeOptions } from './TournamentPhaseBuilder';
 import TournamentMapPackSelector from './TournamentMapPackSelector';
 import EditableIntegerInput from './EditableIntegerInput';
 import { summaryFieldsForFormat } from '../utils/tournamentFormatTemplates';
@@ -34,7 +34,7 @@ interface TournamentFormProps {
   onUnrankedMapsChange: (mapIds: string[]) => void;
   isLoading?: boolean;
   onCancel?: () => void;
-  entryOptions?: Array<{ id: string; name: string }>;
+  entryOptions?: Array<{ id: string; name: string; direct_group_id?: string | null }>;
 }
 
 const toLocalDateTimeValue = (dateValue: string): string => {
@@ -91,8 +91,15 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
     onFormDataChange(updatedData);
   };
 
-  const handlePhaseFormatChange = (definition: TournamentFormatDefinition) => {
-    onFormDataChange({ ...formData, format_definition: definition, ...summaryFieldsForFormat(definition) });
+  const handlePhaseFormatChange = (definition: TournamentFormatDefinition, options?: PhaseBuilderChangeOptions) => {
+    onFormDataChange({
+      ...formData,
+      format_definition: definition,
+      ...summaryFieldsForFormat(definition),
+      // Sticky for the whole edit: once a removal released passes, a later
+      // change in the same session must not withdraw that consent.
+      ...(options?.releasesDirectPasses || formData.release_removed_direct_passes ? { release_removed_direct_passes: true } : {}),
+    });
   };
 
   useEffect(() => {

@@ -456,6 +456,7 @@ const handleConfirmDelete = async () => {
           rules_content: editData.rules_content,
           forum_topic_url: editData.forum_topic_url,
           format_definition: editData.format_definition,
+          release_removed_direct_passes: editData.release_removed_direct_passes,
         };
         await tournamentService.updateTournament(id!, updateObj);
       }
@@ -520,9 +521,11 @@ const handleConfirmDelete = async () => {
         rules_content: editData.rules_content,
         forum_topic_url: editData.forum_topic_url,
         format_definition: editData.format_definition,
+        release_removed_direct_passes: editData.release_removed_direct_passes,
       };
       // Save tournament configuration
-      await tournamentService.updateTournament(id!, updateObj);
+      const updateResponse = await tournamentService.updateTournament(id!, updateObj);
+      const releasedDirectPasses = Number(updateResponse.data?.released_direct_passes || 0);
 
       // Empty arrays intentionally clear the corresponding allowed asset set.
       await tournamentService.updateTournamentAssets(
@@ -531,7 +534,9 @@ const handleConfirmDelete = async () => {
         unrankedMaps.map((map) => map.id)
       );
 
-      setSuccess(t('success_tournament_configuration_updated'));
+      setSuccess(releasedDirectPasses > 0
+        ? `${t('success_tournament_configuration_updated')} ${t('success_direct_passes_released', { count: releasedDirectPasses })}`
+        : t('success_tournament_configuration_updated'));
       setEditMode(false);
       fetchTournamentData();
       setTimeout(() => setSuccess(''), 3000);
@@ -751,7 +756,7 @@ const handleConfirmDelete = async () => {
             setUnrankedMaps(selected);
           }}
           onCancel={() => { setEditMode(false); setFormatIssues([]); }}
-          entryOptions={(tournament?.tournament_mode === 'team' ? teams : participants).map(entry => ({ id: entry.id, name: entry.nickname }))}
+          entryOptions={(tournament?.tournament_mode === 'team' ? teams : participants).map(entry => ({ id: entry.id, name: entry.nickname, direct_group_id: entry.direct_group_id }))}
         />
       )}
 

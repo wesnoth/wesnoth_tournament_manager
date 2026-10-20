@@ -11,12 +11,19 @@ import EditableIntegerInput from './EditableIntegerInput';
 import { MAX_SWISS_ROUNDS } from '../utils/formatIssues';
 import { buildFormatTemplate as template, buildPhaseDefinition as phase, newDefinitionId, type DefaultNames } from '../utils/tournamentFormatTemplates';
 
+/** Extra facts about a builder change that the definition alone cannot carry. */
+export interface PhaseBuilderChangeOptions {
+  /** The organizer confirmed releasing direct passes held in removed groups. */
+  releasesDirectPasses?: boolean;
+}
+
 interface Props {
   value?: TournamentFormatDefinition;
-  onChange: (value: TournamentFormatDefinition) => void;
+  onChange: (value: TournamentFormatDefinition, options?: PhaseBuilderChangeOptions) => void;
   disabled?: boolean;
   initialTemplate?: 'swiss' | 'league' | 'elimination';
-  entryOptions?: Array<{ id: string; name: string }>;
+  /** Registered entries; `direct_group_id` names the holders of direct passes in confirmations. */
+  entryOptions?: Array<{ id: string; name: string; direct_group_id?: string | null }>;
 }
 
 const id = newDefinitionId;
@@ -100,7 +107,23 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
     };
   });
 
-  const replacePhase = (index: number, next: TournamentPhaseDefinition) => {
+  /**
+   * Ask before a change drops groups that hold assigned direct passes. The
+   * passes live on the entries, not in the definition, so the backend clears
+   * them on save only when the form says the organizer agreed. Returns
+   * whether to proceed and whether passes will be released. The count falls
+   * back to the stored per-group totals when the entry list lacks a holder.
+   */
+  const confirmDirectPassRelease = (droppedGroups: TournamentPhaseDefinition['groups'], baseMessage?: string) => {
+    const dropped = new Set(droppedGroups.map(group => group.id));
+    const holders = entryOptions.filter(entry => entry.direct_group_id && dropped.has(entry.direct_group_id)).map(entry => entry.name);
+    const count = Math.max(holders.length, droppedGroups.reduce((total, group) => total + Number(group.direct_assigned_count || 0), 0));
+    if (count === 0) return { proceed: baseMessage ? window.confirm(baseMessage) : true, releases: false };
+    const releaseMessage = t('phase_builder.confirm_release_direct_passes', { count, names: holders.join(', ') || '—' });
+    return { proceed: window.confirm(baseMessage ? `${baseMessage}\n\n${releaseMessage}` : releaseMessage), releases: true };
+  };
+
+  const replacePhase = (index: number, next: TournamentPhaseDefinition, options?: PhaseBuilderChangeOptions) => {
     setSameSourcePairs([]);
     const phases = definition.phases.map((item, itemIndex) => itemIndex === index
       ? {
@@ -112,17 +135,19 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
         })),
       }
       : item);
-    onChange({ ...definition, phases });
+    onChange({ ...definition, phases }, options);
   };
 
   const changeGroupCount = (index: number, count: number) => {
     const current = definition.phases[index];
+    const release = confirmDirectPassRelease(current.groups.slice(count));
+    if (!release.proceed) return;
     const groups = Array.from({ length: count }, (_, groupIndex) => ({
       ...(current.groups[groupIndex] || { id: id() }),
       name: count === 1 ? current.name : names.group(groupIndex + 1),
       order: groupIndex + 1,
     }));
-    replacePhase(index, { ...current, groups });
+    replacePhase(index, { ...current, groups }, { releasesDirectPasses: release.releases });
   };
 
   const generateMappings = async (sourceIndex: number) => {
@@ -158,11 +183,13 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
           {t('phase_builder.template')}
           <select data-help-id="option-tournament-format-template" disabled={disabled} className="mt-1 w-full px-3 py-2 border rounded-md bg-white" value={selectedTemplate} onChange={(event) => {
             const nextTemplate = event.target.value as typeof selectedTemplate;
-            if (nextTemplate !== selectedTemplate
-              && !window.confirm(t('phase_builder.confirm_template'))) return;
+            if (nextTemplate === selectedTemplate) return;
+            // A template replaces every group, so every assigned pass goes with it.
+            const release = confirmDirectPassRelease(definition.phases.flatMap(item => item.groups), t('phase_builder.confirm_template'));
+            if (!release.proceed) return;
             setSelectedTemplate(nextTemplate);
             setSameSourcePairs([]);
-            onChange(template(nextTemplate, names));
+            onChange(template(nextTemplate, names), { releasesDirectPasses: release.releases });
           }}>
             <option value="swiss">{t('format_summary.swiss')}</option>
             <option value="league">{t('phase_builder.template_league')}</option>
@@ -218,10 +245,32 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
               type="button"
               disabled={disabled}
               onClick={() => {
+                // Removing the first phase turns the next one into the entry
+                // phase, which cannot take direct passes, so its passes are
+                // released too.
+                const promoted = index === 0 ? definition.phases[1]?.groups || [] : [];
+                const release = confirmDirectPassRelease([...item.groups, ...promoted]);
+                if (!release.proceed) return;
                 const removedGroups = new Set(item.groups.map(group => group.id));
-                const phases = definition.phases.filter(phaseItem => phaseItem.id !== item.id).map((phaseItem, phaseIndex) => ({ ...phaseItem, order: phaseIndex + 1 }));
+                const lastIndex = definition.phases.length - 2;
+                const phases = definition.phases.filter(phaseItem => phaseItem.id !== item.id).map((phaseItem, phaseIndex) => ({
+                  ...phaseItem,
+                  order: phaseIndex + 1,
+                  groups: phaseItem.groups.map(group => ({
+                    ...group,
+                    // The validator rejects qualifiers out of the final phase
+                    // and direct entry into the first one; their panels are
+                    // only shown where they apply, so the organizer could not
+                    // clear these values after the removal.
+                    ...(phaseIndex === lastIndex ? { advance_count: null } : {}),
+                    ...(phaseIndex === 0 ? { direct_advancement_slots: 0 } : {}),
+                  })),
+                }));
                 setSameSourcePairs([]);
-                onChange({ phases, advancement_rules: definition.advancement_rules.filter(rule => !removedGroups.has(rule.source_group_id) && !removedGroups.has(rule.target_group_id)) });
+                onChange(
+                  { phases, advancement_rules: definition.advancement_rules.filter(rule => !removedGroups.has(rule.source_group_id) && !removedGroups.has(rule.target_group_id)) },
+                  { releasesDirectPasses: release.releases },
+                );
               }}
               className="text-sm text-red-700"
             >{t('phase_builder.remove_phase')}</button>}
@@ -245,7 +294,10 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
         <p className="text-xs text-gray-600">{t('phase_builder.reserve_help')}</p>
         <div className="grid gap-2 md:grid-cols-2">
           {summary.target.groups.map(group => <label key={group.id} className="text-sm">{t('phase_builder.reserved_passes', { group: group.name })}
-            <EditableIntegerInput data-help-id="field-group-direct-advancement-capacity" disabled={disabled} min={0} value={group.direct_advancement_slots ?? 0} onValueChange={capacity => {
+            {/* Passes already assigned to this group set the floor: the
+                editor cannot say which of them to drop, so lowering further
+                happens in the participants tab. */}
+            <EditableIntegerInput data-help-id="field-group-direct-advancement-capacity" disabled={disabled} min={Number(group.direct_assigned_count || 0)} value={group.direct_advancement_slots ?? 0} onValueChange={capacity => {
               const phases = definition.phases.map(item => item.id !== summary.target.id ? item : {
                 ...item,
                 groups: item.groups.map(row => row.id === group.id ? { ...row, direct_advancement_slots: capacity } : row),
@@ -253,6 +305,7 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
               setSameSourcePairs([]);
               onChange({ ...definition, phases });
             }} className="mt-1 block w-full border rounded px-2 py-1" />
+            {Number(group.direct_assigned_count || 0) > 0 && <span className="block text-xs text-gray-600">{t('phase_builder.reserved_assigned_floor', { count: Number(group.direct_assigned_count) })}</span>}
           </label>)}
         </div>
         {summary.groups.map(({ group, qualifiers, directPasses, projected, bracketSize, byes, configured }) => (
