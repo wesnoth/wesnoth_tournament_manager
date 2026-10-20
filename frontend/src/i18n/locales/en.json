@@ -1721,7 +1721,11 @@
     "created": "Created: {{date}}",
     "factions_title": "Factions",
     "add_faction_button": "+ Add faction",
-    "no_factions": "No factions found. Add one to get started."
+    "no_factions": "No factions found. Add one to get started.",
+    "active_tournaments": "Active tournaments ({{count}}):",
+    "no_active_tournaments": "No active tournaments",
+    "more_tournaments": "+{{count}} more",
+    "show_fewer_tournaments": "Show fewer"
   },
   "wiki_admin": {
     "fetch_articles_failed": "Failed to fetch articles",

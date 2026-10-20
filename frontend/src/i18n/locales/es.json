@@ -1721,7 +1721,11 @@
     "created": "Creado: {{date}}",
     "factions_title": "Facciones",
     "add_faction_button": "+ Añadir facción",
-    "no_factions": "No hay facciones. Añade una para empezar."
+    "no_factions": "No hay facciones. Añade una para empezar.",
+    "active_tournaments": "Torneos activos ({{count}}):",
+    "no_active_tournaments": "Sin torneos activos",
+    "more_tournaments": "+{{count}} más",
+    "show_fewer_tournaments": "Mostrar menos"
   },
   "wiki_admin": {
     "fetch_articles_failed": "No se pudieron cargar los artículos",

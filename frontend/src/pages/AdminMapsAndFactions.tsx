@@ -1,7 +1,7 @@
 /** Administrative CRUD UI for canonical maps, factions, and their translations. */
 
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../services/api';
 import MainLayout from '../components/MainLayout';
@@ -9,12 +9,20 @@ import AdminMapPacksPanel from '../components/AdminMapPacksPanel';
 import i18next from 'i18next';
 import { useTranslation } from 'react-i18next';
 
+/** A tournament that is not finished and selected the asset (it blocks deletion). */
+interface ActiveTournamentRef {
+  id: string;
+  name: string;
+  status: string;
+}
+
 interface Map {
   id: string;
   name: string;
   is_active: boolean;
   is_ranked: boolean;
   created_at: string;
+  active_tournaments?: ActiveTournamentRef[];
 }
 
 interface Faction {
@@ -23,7 +31,43 @@ interface Faction {
   is_active: boolean;
   is_ranked: boolean;
   created_at: string;
+  active_tournaments?: ActiveTournamentRef[];
 }
+
+/**
+ * Active tournaments that selected a map or faction, linked to their pages.
+ * They are the ones that make Delete deactivate the asset instead, so the
+ * admin sees them before deciding.
+ */
+const VISIBLE_ACTIVE_TOURNAMENTS = 5;
+
+const AssetActiveTournaments: React.FC<{ tournaments?: ActiveTournamentRef[] }> = ({ tournaments = [] }) => {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  if (tournaments.length === 0) {
+    return <p className="text-xs text-gray-500 mt-1">{t('maps_admin.no_active_tournaments')}</p>;
+  }
+  // A widely used asset can belong to many open tournaments, so the list is
+  // collapsed to the first few until the admin asks for the rest.
+  const hidden = tournaments.length - VISIBLE_ACTIVE_TOURNAMENTS;
+  const visible = expanded ? tournaments : tournaments.slice(0, VISIBLE_ACTIVE_TOURNAMENTS);
+  return (
+    <p className="text-xs text-gray-700 mt-1">
+      {t('maps_admin.active_tournaments', { count: tournaments.length })}{' '}
+      {visible.map((tournament, index) => (
+        <React.Fragment key={tournament.id}>
+          {index > 0 && ', '}
+          <Link data-help-id="action-open-asset-active-tournament" to={`/tournament/${tournament.id}`} className="text-blue-600 hover:underline">{tournament.name}</Link>
+        </React.Fragment>
+      ))}
+      {hidden > 0 && (
+        <button data-help-id="action-toggle-asset-active-tournaments" type="button" onClick={() => setExpanded(current => !current)} className="ml-2 text-blue-600 hover:underline">
+          {expanded ? t('maps_admin.show_fewer_tournaments') : t('maps_admin.more_tournaments', { count: hidden })}
+        </button>
+      )}
+    </p>
+  );
+};
 
 type LangData = { name: string; description: string };
 type LangFormData = Record<string, LangData>;
@@ -393,6 +437,7 @@ const AdminMapsAndFactions: React.FC = () => {
                       </span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">{t('maps_admin.created', { date: new Date(map.created_at).toLocaleDateString(i18next.language) })}</p>
+                    <AssetActiveTournaments tournaments={map.active_tournaments} />
                   </div>
                   <div className="flex gap-2 flex-shrink-0 ml-4">
                     <button className={`px-3 py-1 text-sm rounded-lg font-semibold ${map.is_active ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-gray-500 text-white hover:bg-gray-600'}`}
@@ -445,6 +490,7 @@ const AdminMapsAndFactions: React.FC = () => {
                       </span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">{t('maps_admin.created', { date: new Date(faction.created_at).toLocaleDateString(i18next.language) })}</p>
+                    <AssetActiveTournaments tournaments={faction.active_tournaments} />
                   </div>
                   <div className="flex gap-2 flex-shrink-0 ml-4">
                     <button className={`px-3 py-1 text-sm rounded-lg font-semibold ${faction.is_active ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-gray-500 text-white hover:bg-gray-600'}`}

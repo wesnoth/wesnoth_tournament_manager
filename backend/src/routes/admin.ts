@@ -1082,6 +1082,34 @@ router.delete('/map-packs/:mapPackId', moderatorOrAdminMiddleware, async (req: A
 // MAPS MANAGEMENT
 // ============================================================
 
+/**
+ * Group the active tournaments that selected each map or faction, keyed by
+ * asset id, for the admin lists. "Active" matches getMapUsage/getFactionUsage
+ * (not finished or cancelled), so the list shows exactly the tournaments that
+ * turn a delete into a deactivation. Names come from the tournaments table,
+ * the selection's stored asset name is not needed here.
+ */
+async function getActiveTournamentsByAsset(
+  kind: 'map' | 'faction',
+): Promise<Map<string, Array<{ id: string; name: string; status: string }>>> {
+  const table = kind === 'map' ? 'tournament_unranked_maps' : 'tournament_unranked_factions';
+  const column = kind === 'map' ? 'map_id' : 'faction_id';
+  const result = await query(
+    `SELECT DISTINCT sel.${column} AS asset_id, t.id, t.name, t.status
+     FROM ${table} sel
+     JOIN tournaments t ON t.id = sel.tournament_id
+     WHERE t.status NOT IN ('finished', 'cancelled')
+     ORDER BY t.name`,
+  );
+  const byAsset = new Map<string, Array<{ id: string; name: string; status: string }>>();
+  for (const row of result.rows) {
+    const list = byAsset.get(row.asset_id) || [];
+    list.push({ id: row.id, name: row.name, status: row.status });
+    byAsset.set(row.asset_id, list);
+  }
+  return byAsset;
+}
+
 /** Return active tournament references and related data counts for a map. */
 async function getMapUsage(mapId: string, mapName: string): Promise<Record<string, number>> {
   const result = await query(
@@ -1167,7 +1195,8 @@ router.get('/maps', authMiddleware, async (req: AuthRequest, res) => {
       FROM game_maps
       ORDER BY created_at DESC
     `);
-    res.json(result.rows);
+    const activeTournaments = await getActiveTournamentsByAsset('map');
+    res.json(result.rows.map((row: any) => ({ ...row, active_tournaments: activeTournaments.get(row.id) || [] })));
   } catch (error) {
     console.error('Error fetching maps:', error);
     res.status(500).json({ error: 'Failed to fetch maps' });
@@ -1417,7 +1446,8 @@ router.get('/factions', authMiddleware, async (req: AuthRequest, res) => {
       FROM factions
       ORDER BY created_at DESC
     `);
-    res.json(result.rows);
+    const activeTournaments = await getActiveTournamentsByAsset('faction');
+    res.json(result.rows.map((row: any) => ({ ...row, active_tournaments: activeTournaments.get(row.id) || [] })));
   } catch (error) {
     console.error('Error fetching factions:', error);
     res.status(500).json({ error: 'Failed to fetch factions' });

@@ -1721,7 +1721,11 @@
     "created": "创建于：{{date}}",
     "factions_title": "阵营",
     "add_faction_button": "+ 添加阵营",
-    "no_factions": "未找到阵营。请先添加一个。"
+    "no_factions": "未找到阵营。请先添加一个。",
+    "active_tournaments": "进行中的锦标赛（{{count}}）：",
+    "no_active_tournaments": "没有进行中的锦标赛",
+    "more_tournaments": "另外 {{count}} 个",
+    "show_fewer_tournaments": "收起"
   },
   "wiki_admin": {
     "fetch_articles_failed": "无法获取文章",

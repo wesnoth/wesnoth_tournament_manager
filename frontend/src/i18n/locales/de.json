@@ -1721,7 +1721,11 @@
     "created": "Erstellt: {{date}}",
     "factions_title": "Fraktionen",
     "add_faction_button": "+ Fraktion hinzufügen",
-    "no_factions": "Keine Fraktionen gefunden. Füge eine hinzu, um zu beginnen."
+    "no_factions": "Keine Fraktionen gefunden. Füge eine hinzu, um zu beginnen.",
+    "active_tournaments": "Aktive Turniere ({{count}}):",
+    "no_active_tournaments": "Keine aktiven Turniere",
+    "more_tournaments": "+{{count}} weitere",
+    "show_fewer_tournaments": "Weniger anzeigen"
   },
   "wiki_admin": {
     "fetch_articles_failed": "Artikel konnten nicht geladen werden",

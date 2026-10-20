@@ -1721,7 +1721,11 @@
     "created": "Создано: {{date}}",
     "factions_title": "Фракции",
     "add_faction_button": "+ Добавить фракцию",
-    "no_factions": "Фракций нет. Добавьте первую."
+    "no_factions": "Фракций нет. Добавьте первую.",
+    "active_tournaments": "Активные турниры ({{count}}):",
+    "no_active_tournaments": "Нет активных турниров",
+    "more_tournaments": "ещё {{count}}",
+    "show_fewer_tournaments": "Свернуть"
   },
   "wiki_admin": {
     "fetch_articles_failed": "Не удалось загрузить статьи",
