@@ -899,6 +899,7 @@ CREATE TABLE `tournament_unranked_factions` (
   `id` char(36) NOT NULL,
   `tournament_id` char(36) NOT NULL,
   `faction_id` char(36) NOT NULL,
+  `faction_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
   `created_at` datetime DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_tournament_id` (`tournament_id`)
@@ -916,6 +917,7 @@ CREATE TABLE `tournament_unranked_maps` (
   `id` char(36) NOT NULL,
   `tournament_id` char(36) NOT NULL,
   `map_id` char(36) NOT NULL,
+  `map_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
   `created_at` datetime DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_tournament_id` (`tournament_id`)

@@ -512,15 +512,19 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       }
 
       // Allowed factions and maps apply to every tournament mode (ranked, unranked, team).
+      // The name is copied beside the id so the list survives the asset's
+      // later deletion (only active tournaments block deleting an asset).
       for (const factionId of factionIds) {
         await creationConnection.execute(
-          `INSERT INTO tournament_unranked_factions (id, tournament_id, faction_id) VALUES (?, ?, ?)`,
+          `INSERT INTO tournament_unranked_factions (id, tournament_id, faction_id, faction_name)
+           SELECT ?, ?, id, name FROM factions WHERE id = ?`,
           [randomUUID(), tournamentId, factionId]
         );
       }
       for (const mapId of mapIds) {
         await creationConnection.execute(
-          `INSERT INTO tournament_unranked_maps (id, tournament_id, map_id) VALUES (?, ?, ?)`,
+          `INSERT INTO tournament_unranked_maps (id, tournament_id, map_id, map_name)
+           SELECT ?, ?, id, name FROM game_maps WHERE id = ?`,
           [randomUUID(), tournamentId, mapId]
         );
       }
@@ -1199,14 +1203,17 @@ router.put('/:id/assets', authMiddleware, async (req: AuthRequest, res) => {
       await connection.execute('DELETE FROM tournament_unranked_factions WHERE tournament_id = ?', [id]);
       await connection.execute('DELETE FROM tournament_unranked_maps WHERE tournament_id = ?', [id]);
       for (const factionId of uniqueFactionIds) {
+        // Name copied for the same reason as at creation.
         await connection.execute(
-          'INSERT INTO tournament_unranked_factions (id, tournament_id, faction_id) VALUES (?, ?, ?)',
+          `INSERT INTO tournament_unranked_factions (id, tournament_id, faction_id, faction_name)
+           SELECT ?, ?, id, name FROM factions WHERE id = ?`,
           [randomUUID(), id, factionId]
         );
       }
       for (const mapId of uniqueMapIds) {
         await connection.execute(
-          'INSERT INTO tournament_unranked_maps (id, tournament_id, map_id) VALUES (?, ?, ?)',
+          `INSERT INTO tournament_unranked_maps (id, tournament_id, map_id, map_name)
+           SELECT ?, ?, id, name FROM game_maps WHERE id = ?`,
           [randomUUID(), id, mapId]
         );
       }

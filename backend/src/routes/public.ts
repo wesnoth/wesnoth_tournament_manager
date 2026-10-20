@@ -630,23 +630,24 @@ router.get('/tournaments/:id/unranked-assets', async (req, res) => {
 
     const tournament = tournamentResult.rows[0];
 
-    // Get factions for this tournament
+    // Allowed factions and maps of this tournament, read from the names stored
+    // with each selection rather than the game_maps/factions masters: the list
+    // stays as the organizer chose it even after an asset is renamed or
+    // deleted. Rows without a stored name (asset deleted before names were
+    // stored) are skipped.
     const factions = await query(
-      `SELECT f.id, f.name
-       FROM factions f
-       JOIN tournament_unranked_factions tuf ON f.id = tuf.faction_id
-       WHERE tuf.tournament_id = ?
-       ORDER BY f.name ASC`,
+      `SELECT faction_id AS id, faction_name AS name
+       FROM tournament_unranked_factions
+       WHERE tournament_id = ? AND faction_name IS NOT NULL
+       ORDER BY faction_name ASC`,
       [id]
     );
 
-    // Get maps for this tournament
     const maps = await query(
-      `SELECT m.id, m.name
-       FROM game_maps m
-       JOIN tournament_unranked_maps tum ON m.id = tum.map_id
-       WHERE tum.tournament_id = ?
-       ORDER BY m.name ASC`,
+      `SELECT map_id AS id, map_name AS name
+       FROM tournament_unranked_maps
+       WHERE tournament_id = ? AND map_name IS NOT NULL
+       ORDER BY map_name ASC`,
       [id]
     );
 

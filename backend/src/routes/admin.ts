@@ -1089,7 +1089,7 @@ async function getMapUsage(mapId: string, mapName: string): Promise<Record<strin
        (SELECT COUNT(*) FROM tournaments t
         JOIN tournament_unranked_maps tum ON tum.tournament_id = t.id
         WHERE tum.map_id = ?
-          AND t.status IN ('CREATED', 'REGISTRATION_OPEN', 'STARTED', 'MATCHES_ONGOING')) AS active_tournaments,
+          AND t.status NOT IN ('finished', 'cancelled')) AS active_tournaments,
        (SELECT COUNT(*) FROM tournament_unranked_maps WHERE map_id = ?) AS tournament_selections,
        (SELECT COUNT(*) FROM matches WHERE map = ?) AS matches_count,
        (SELECT COUNT(*) FROM faction_map_statistics WHERE map_id = ?) AS statistics_count,
@@ -1110,7 +1110,7 @@ async function getFactionUsage(factionId: string, factionName: string): Promise<
        (SELECT COUNT(*) FROM tournaments t
         JOIN tournament_unranked_factions tuf ON tuf.tournament_id = t.id
         WHERE tuf.faction_id = ?
-          AND t.status IN ('CREATED', 'REGISTRATION_OPEN', 'STARTED', 'MATCHES_ONGOING')) AS active_tournaments,
+          AND t.status NOT IN ('finished', 'cancelled')) AS active_tournaments,
        (SELECT COUNT(*) FROM tournament_unranked_factions WHERE faction_id = ?) AS tournament_selections,
        (SELECT COUNT(*) FROM matches WHERE winner_faction = ? OR loser_faction = ?) AS matches_count,
        (SELECT COUNT(*) FROM faction_map_statistics WHERE faction_id = ? OR opponent_faction_id = ?) AS statistics_count,
@@ -1136,7 +1136,10 @@ async function getFactionUsage(factionId: string, factionName: string): Promise<
 
 /** Whether any current or historical record still refers to the asset. */
 function hasAssetUsage(usage: Record<string, number>): boolean {
-  return Object.values(usage).some((count) => count > 0);
+  // Selections by finished tournaments do not block deletion: each selection
+  // stores the asset name, so those tournaments still list it. Active
+  // tournaments are counted separately and always block.
+  return Object.entries(usage).some(([kind, count]) => kind !== 'tournament_selections' && count > 0);
 }
 
 /** Explain why an asset must be deactivated instead of physically deleted. */
@@ -1254,19 +1257,45 @@ router.patch('/maps/:mapId', authMiddleware, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Map not found' });
     }
 
-    await query(`
-      UPDATE game_maps
-      SET 
-        is_active = COALESCE(?, is_active),
-        is_ranked = COALESCE(?, is_ranked),
-        name = COALESCE(?, name)
-      WHERE id = ?
-    `, [
-      is_active !== undefined ? (is_active ? 1 : 0) : null,
-      is_ranked !== undefined ? (is_ranked ? 1 : 0) : null,
-      name || null,
-      mapId
-    ]);
+    // The rename and its copy in tournament selections commit together.
+    // Tournaments store the map name with each selection (see migration
+    // 20261020_120000), so a rename reaches only tournaments that are not
+    // finished: a correction applies where it still matters, while finished
+    // tournaments keep the name they were played with.
+    let renamedTournamentSelections = 0;
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.execute(`
+        UPDATE game_maps
+        SET 
+          is_active = COALESCE(?, is_active),
+          is_ranked = COALESCE(?, is_ranked),
+          name = COALESCE(?, name)
+        WHERE id = ?
+      `, [
+        is_active !== undefined ? (is_active ? 1 : 0) : null,
+        is_ranked !== undefined ? (is_ranked ? 1 : 0) : null,
+        name || null,
+        mapId
+      ]);
+      if (name && name !== previous.rows[0].name) {
+        const [renamed] = await connection.execute<any>(
+          `UPDATE tournament_unranked_maps sel
+           JOIN tournaments t ON t.id = sel.tournament_id
+           SET sel.map_name = ?
+           WHERE sel.map_id = ? AND t.status NOT IN ('finished', 'cancelled')`,
+          [name, mapId]
+        );
+        renamedTournamentSelections = renamed.affectedRows;
+      }
+      await connection.commit();
+    } catch (transactionError) {
+      await connection.rollback();
+      throw transactionError;
+    } finally {
+      connection.release();
+    }
 
     const result = await query(`
       SELECT id, name, is_active, is_ranked, created_at FROM game_maps WHERE id = ?
@@ -1282,6 +1311,7 @@ router.patch('/maps/:mapId', authMiddleware, async (req: AuthRequest, res) => {
       map_id: mapId,
       previous: { name: before.name, is_active: !!before.is_active, is_ranked: !!before.is_ranked },
       current: { name: after.name, is_active: !!after.is_active, is_ranked: !!after.is_ranked },
+      renamed_tournament_selections: renamedTournamentSelections,
     });
 
     res.json(result.rows[0]);
@@ -1477,19 +1507,45 @@ router.patch('/factions/:factionId', authMiddleware, async (req: AuthRequest, re
       return res.status(404).json({ error: 'Faction not found' });
     }
 
-    await query(`
-      UPDATE factions
-      SET 
-        is_active = COALESCE(?, is_active),
-        is_ranked = COALESCE(?, is_ranked),
-        name = COALESCE(?, name)
-      WHERE id = ?
-    `, [
-      is_active !== undefined ? (is_active ? 1 : 0) : null,
-      is_ranked !== undefined ? (is_ranked ? 1 : 0) : null,
-      name || null,
-      factionId
-    ]);
+    // The rename and its copy in tournament selections commit together.
+    // Tournaments store the faction name with each selection (see migration
+    // 20261020_120000), so a rename reaches only tournaments that are not
+    // finished: a correction applies where it still matters, while finished
+    // tournaments keep the name they were played with.
+    let renamedTournamentSelections = 0;
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.execute(`
+        UPDATE factions
+        SET 
+          is_active = COALESCE(?, is_active),
+          is_ranked = COALESCE(?, is_ranked),
+          name = COALESCE(?, name)
+        WHERE id = ?
+      `, [
+        is_active !== undefined ? (is_active ? 1 : 0) : null,
+        is_ranked !== undefined ? (is_ranked ? 1 : 0) : null,
+        name || null,
+        factionId
+      ]);
+      if (name && name !== previous.rows[0].name) {
+        const [renamed] = await connection.execute<any>(
+          `UPDATE tournament_unranked_factions sel
+           JOIN tournaments t ON t.id = sel.tournament_id
+           SET sel.faction_name = ?
+           WHERE sel.faction_id = ? AND t.status NOT IN ('finished', 'cancelled')`,
+          [name, factionId]
+        );
+        renamedTournamentSelections = renamed.affectedRows;
+      }
+      await connection.commit();
+    } catch (transactionError) {
+      await connection.rollback();
+      throw transactionError;
+    } finally {
+      connection.release();
+    }
 
     const result = await query(`
       SELECT id, name, is_active, is_ranked, created_at FROM factions WHERE id = ?
@@ -1505,6 +1561,7 @@ router.patch('/factions/:factionId', authMiddleware, async (req: AuthRequest, re
       faction_id: factionId,
       previous: { name: before.name, is_active: !!before.is_active, is_ranked: !!before.is_ranked },
       current: { name: after.name, is_active: !!after.is_active, is_ranked: !!after.is_ranked },
+      renamed_tournament_selections: renamedTournamentSelections,
     });
 
     res.json(result.rows[0]);
@@ -1826,7 +1883,7 @@ router.get('/unranked-factions/:id/usage', authMiddleware, async (req: AuthReque
        FROM tournaments t
        JOIN tournament_unranked_factions tuf ON t.id = tuf.tournament_id
        WHERE tuf.faction_id = ?
-       AND t.status IN ('CREATED', 'REGISTRATION_OPEN', 'STARTED', 'MATCHES_ONGOING')
+       AND t.status NOT IN ('finished', 'cancelled')
        ORDER BY t.created_at DESC`,
       [id]
     );
@@ -1837,7 +1894,7 @@ router.get('/unranked-factions/:id/usage', authMiddleware, async (req: AuthReque
        FROM tournaments t
        JOIN tournament_unranked_factions tuf ON t.id = tuf.tournament_id
        WHERE tuf.faction_id = ?
-       AND t.status IN ('COMPLETED', 'CANCELLED', 'CANCELLED_IN_PROGRESS')
+       AND t.status IN ('finished', 'cancelled')
        ORDER BY t.created_at DESC`,
       [id]
     );
@@ -2024,7 +2081,7 @@ router.get('/unranked-maps/:id/usage', authMiddleware, async (req: AuthRequest, 
        FROM tournaments t
        JOIN tournament_unranked_maps tum ON t.id = tum.tournament_id
        WHERE tum.map_id = ?
-       AND t.status IN ('CREATED', 'REGISTRATION_OPEN', 'STARTED', 'MATCHES_ONGOING')
+       AND t.status NOT IN ('finished', 'cancelled')
        ORDER BY t.created_at DESC`,
       [id]
     );
@@ -2035,7 +2092,7 @@ router.get('/unranked-maps/:id/usage', authMiddleware, async (req: AuthRequest, 
        FROM tournaments t
        JOIN tournament_unranked_maps tum ON t.id = tum.tournament_id
        WHERE tum.map_id = ?
-       AND t.status IN ('COMPLETED', 'CANCELLED', 'CANCELLED_IN_PROGRESS')
+       AND t.status IN ('finished', 'cancelled')
        ORDER BY t.created_at DESC`,
       [id]
     );
