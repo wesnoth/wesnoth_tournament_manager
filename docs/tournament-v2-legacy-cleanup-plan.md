@@ -8,6 +8,8 @@ Update (2026-10-10): the maintainer confirmed that no version 1 tournaments rema
 
 Review (2026-10-17, Codex, `test` at `d87c17a1`): code inspection and `npm run verify` support the implemented cleanup, but validation remains incomplete. Audit finding 32 is reopened for malformed phase descriptions; finding 40 records configuration edits that can partially commit before format persistence rejects them. Finding 41 records missing rollback and legacy-relationship coverage, and finding 42 records the stale architecture description. No database-backed E2E suite, restore check, or TEST/production check was repeated. These observations do not authorize or establish readiness for steps 4 and 5.
 
+Production audit (2026-10-20, read-only, run by the maintainer): the version 1 competition tables are absent; all five tournaments are version 2 with a phase graph (three finished, one in progress, one open for registration); `match_schedule_proposals` has no value in its version 1 columns (0 of 2 rows) and `matches.round_id` none (0 of 502); 17 of 650 replays carry version 1 ids, all of them completed, linked to their tournament and phase-engine game, and created between 2026-03-27 and 2026-06-02, so the ids point to rows removed in August. On this evidence the step 4 migration was written (`20261020_130000_drop_v1_relationship_columns.sql`); see step 4 for its validation state.
+
 The cleanup must be delivered as several small releases. Destructive schema changes come only after the application no longer reads or writes the affected fields and production observations confirm that the compatibility paths are unused.
 
 ## Current boundary
@@ -45,11 +47,7 @@ No current application path was found reading or writing these version 1 relatio
 - `replays.tournament_match_id`
 - `matches.round_id`
 
-Their associated indexes are also candidates for removal:
-
-- `idx_round_match_id`
-- `idx_match_id`
-- `idx_replay_trm_id`
+Their indexes go with them: `idx_round_match_id` and `idx_match_id` on `match_schedule_proposals`, and `idx_replay_trm_id` on `replays` (deployed databases also carry `fk_replays_tournament_match_id` there). The `idx_match_id` index of `replays` covers the live `match_id` link and must stay; the migration therefore drops columns, never index names.
 
 `matches_faction_fix_backup_20260429` has no identified application consumer. Treat it as an independent backup-table cleanup so its retention decision and backup evidence are explicit.
 
@@ -203,6 +201,10 @@ Implemented on 2026-10-10 (local verification and local replay E2E); merged into
 Keep conversion reports or historical migration tools outside the runtime path if they are still needed as audit evidence.
 
 ### 4. Apply the low-risk schema contraction
+
+Migration written on 2026-10-20 after the production audit above: `20261020_130000_drop_v1_relationship_columns.sql` drops the five columns by name (their single-column indexes go with them) and `schema.sql` no longer declares them. Validated locally on the development database: migration applied, clean load of `schema.sql` with no column difference against the migrated database, `npm run verify`, the lifecycle suite (12 scenarios), whose legacy assertion now checks that the columns no longer exist, and the replay-pipeline suite (26 scenarios).
+
+Restored-clone validation (2026-10-21): a production dump taken before the release of migration `20261020_120000` was restored into a throwaway MariaDB 11.8.6 instance (the production version). The backend's migration runner applied `20261020_120000` and then this migration on the real data: every row count stayed identical, the 17 replays with version 1 ids kept their tournament and phase-engine links, only the live `replays.idx_match_id` index remained among the candidates, and the migrated tables matched a clean `schema.sql` load. The lifecycle suite passed (12 scenarios) against a backend running on that clone, with a minimal forum authentication database for the clone's users. The replay-pipeline suite was not repeated on the clone because it needs the forum game tables and this step does not touch the forum side; its local run above stands. The comparison also showed older, unrelated drift between production and `schema.sql` (index names, text collations, wiki column types, two backup tables), left for a separate review.
 
 Use one self-contained MariaDB migration under `backend/migrations/` to remove only fields whose code consumers were removed in earlier releases:
 

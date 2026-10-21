@@ -14,8 +14,9 @@ import { localStack, runSql, sqlLiteral } from '../support/localStack';
  * The other lifecycle scenarios never schedule a series, so their zero
  * proposal-link count says nothing about the scheduling write path. Here one
  * player proposes slots for a phase-engine series from the schedule modal, the
- * opponent confirms them, and the stored proposal must reference the series
- * only, never the dropped `tournament_round_match_id` / `tournament_match_id`.
+ * opponent confirms them, and the stored proposal must reference the series.
+ * The version 1 `tournament_round_match_id` / `tournament_match_id` columns no
+ * longer exist (migration 20261020_130000); `legacyFieldWrites` asserts that.
  */
 const organizerName = process.env.E2E_TOURNAMENT_ORGANIZER || 'Blair';
 const db = localStack.tournamentDb;
@@ -54,11 +55,9 @@ test('a scheduled and played series stores only phase-engine links', async () =>
 
   // The stored proposal points at the series and nothing else.
   expect(runSql(
-    `SELECT tournament_series_id, tournament_round_match_id, tournament_match_id, status
+    `SELECT tournament_series_id, status
      FROM ${db}.match_schedule_proposals WHERE id = ${sqlLiteral(proposal.id)};`,
-  )[0]).toEqual({
-    tournament_series_id: game.series_id, tournament_round_match_id: null, tournament_match_id: null, status: 'confirmed',
-  });
+  )[0]).toEqual({ tournament_series_id: game.series_id, status: 'confirmed' });
 
   await recordWinner(organizer, tournamentId, game.game_id, game.entry1_id);
   expect(tournamentRow(tournamentId)).toMatchObject({ status: 'finished', finished: '1' });

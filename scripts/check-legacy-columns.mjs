@@ -2,18 +2,17 @@
 /**
  * Legacy relationship column check (audit finding 41, cleanup plan step 4).
  *
- * Step 4 of docs/tournament-v2-legacy-cleanup-plan.md drops the version 1
- * relationship columns once no application path reads or writes them:
+ * Step 4 of docs/tournament-v2-legacy-cleanup-plan.md dropped the version 1
+ * relationship columns (migration 20261020_130000):
  * `match_schedule_proposals.tournament_round_match_id` / `tournament_match_id`,
  * `replays.tournament_round_match_id` / `tournament_match_id`, and
- * `matches.round_id`. The lifecycle suite can only show that the paths it
- * exercises leave them empty; this check covers every path at once by
- * refusing any reference to them in the application sources, so a regression
- * cannot reintroduce a dependency before (or after) the columns are dropped.
+ * `matches.round_id`. This check refuses any reference to them in the
+ * application sources, so no code path can depend on them again; such code
+ * would fail only at runtime with an unknown-column error.
  *
  * Rules, applied to backend/src and frontend/src TypeScript and JavaScript
- * files (SQL files such as the canonical schema still declare the columns
- * until the contraction migration runs, so they are not scanned):
+ * files (SQL files are not scanned: the migration history must keep naming
+ * the columns it created and dropped):
  * - `tournament_round_match_id` and `tournament_match_id` must not appear at
  *   all; no current table uses these names for anything else.
  * - `round_id` is a live column of the phase-engine tables, so for `matches`

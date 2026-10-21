@@ -348,19 +348,22 @@ export function finalResults(tournamentId: string): Array<{ seed: number; placem
 
 /** What `legacyFieldWrites` must return for every phase-engine tournament. */
 export const noLegacyWrites = {
-  participant_aggregates: 0, team_aggregates: 0, proposal_links: 0, replay_links: 0, match_round_links: 0,
+  participant_aggregates: 0, team_aggregates: 0, legacy_relationship_columns: 0,
 };
 
 /**
- * Values in the version 1 aggregate and relationship fields of one tournament
- * (cleanup plan step 5 and the step 4 columns). The phase engine never writes
- * them, so after a full lifecycle every count must be zero; a non-zero count
- * means a v2 path still depends on a field the cleanup intends to drop.
+ * Values in the version 1 aggregate fields of one tournament (cleanup plan
+ * step 5), plus a schema check for the step 4 relationship columns. The phase
+ * engine never writes the aggregates, so after a full lifecycle every count
+ * must be zero; a non-zero count means a v2 path still depends on a field the
+ * cleanup intends to drop.
  *
- * A zero only proves something for the paths the scenario exercised: proposal
- * links need a scheduled series (scheduling.spec.ts), and replay and match
- * links need replay ingestion, which the replay-pipeline suite drives. The
- * static check scripts/check-legacy-columns.mjs covers every source path.
+ * The step 4 columns (`match_schedule_proposals` and `replays`
+ * `tournament_round_match_id` / `tournament_match_id`, `matches.round_id`)
+ * were dropped by migration 20261020_130000, so instead of counting their
+ * values this asserts they do not exist: a database that still has one has
+ * missed the migration. scripts/check-legacy-columns.mjs keeps every source
+ * path from referencing them again.
  */
 export function legacyFieldWrites(tournamentId: string): Record<string, number> {
   const id = sqlLiteral(tournamentId);
@@ -374,18 +377,11 @@ export function legacyFieldWrites(tournamentId: string): Record<string, number> 
           AND (tournament_wins <> 0 OR tournament_losses <> 0 OR tournament_points <> 0
                OR COALESCE(omp, 0) <> 0 OR COALESCE(gwp, 0) <> 0 OR COALESCE(ogp, 0) <> 0
                OR COALESCE(current_round, 0) > 1)) AS team_aggregates,
-       (SELECT COUNT(*) FROM ${db}.match_schedule_proposals msp
-          WHERE (msp.tournament_round_match_id IS NOT NULL OR msp.tournament_match_id IS NOT NULL)
-            AND msp.tournament_series_id IN (
-              SELECT s.id FROM ${db}.tournament_series s
-              JOIN ${db}.tournament_phase_rounds r ON r.id = s.round_id
-              JOIN ${db}.tournament_phase_groups g ON g.id = r.group_id
-              JOIN ${db}.tournament_phases p ON p.id = g.phase_id
-              WHERE p.tournament_id = ${id})) AS proposal_links,
-       (SELECT COUNT(*) FROM ${db}.replays
-          WHERE tournament_id = ${id}
-            AND (tournament_round_match_id IS NOT NULL OR tournament_match_id IS NOT NULL)) AS replay_links,
-       (SELECT COUNT(*) FROM ${db}.matches WHERE tournament_id = ${id} AND round_id IS NOT NULL) AS match_round_links;`,
+       (SELECT COUNT(*) FROM information_schema.columns
+          WHERE table_schema = '${db}'
+            AND ((table_name IN ('match_schedule_proposals', 'replays')
+                  AND column_name IN ('tournament_round_match_id', 'tournament_match_id'))
+                 OR (table_name = 'matches' AND column_name = 'round_id'))) AS legacy_relationship_columns;`,
   )[0];
   return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, Number(value)]));
 }
