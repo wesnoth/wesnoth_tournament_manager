@@ -2,6 +2,8 @@
 
 ## Status
 
+Current state (2026-10-21): steps 1 to 4 are implemented, validated on TEST, and released to production. Step 4, the only destructive change so far, was validated on two restored production clones before its release (see step 4). Step 5 has not started; each of its items needs its own production evidence and, where listed under the product decisions below, a maintainer decision. The clean-installation run of the suites is deferred by maintainer decision (2026-10-21): installing the application from scratch is not an expected scenario in the short term, so restored production clones remain the validation target. The paragraphs below are the dated history of the cleanup.
+
 Originally (2026-09-08) this work was deferred until the tournament active at that time had finished, and this document recorded the investigation and the proposed sequence only.
 
 Update (2026-10-10): the maintainer confirmed that no version 1 tournaments remain and authorized the code-only steps. Steps 2 and 3 are implemented and were merged into `prod` on 2026-10-11; step 1 is implemented, its validator gaps (audit findings 29, 30, and 32) were fixed on 2026-10-11, and its database-backed integration coverage was added on 2026-10-15 (the tournament lifecycle suite, `npm run verify:lifecycle`; see `TESTING.md`). Each step distinguishes implementation, local verification, TEST validation, and release; none of them implies a production release. Steps 4 and 5 (schema contraction and field consolidation) still require the read-only production audit, a tested restore, and explicit authorization; production commands remain outside this authorization.
@@ -162,9 +164,9 @@ Before removing aggregate or administrative compatibility fields, add audit quer
 
 ### 1. Close the version 2 creation contract
 
-Implemented on 2026-10-10, validation pending: creation requires a valid `format_definition`, validates it before writing, and commits the tournament, organizers, allowed assets, and phase graph in one transaction. Migration `20261009_120000` sets the default to version 2. Merged into `prod` on 2026-10-11. The integration coverage below was added on 2026-10-15, on `test` and pending TEST validation. The atomic write guarantees that a created graph is complete, not that it is executable: audit findings 29 (disconnected graphs accepted), 30 (legacy Swiss round limit stricter than the editor), and 32 (malformed definitions throw) were fixed on 2026-10-11 (`b3d19a8f`), validated on TEST, and merged into `prod` the same day; the Swiss round limit is 10 by maintainer decision. Rejected formats now report every issue to the organizer in the creation and editing forms. The suite covers individual and team tournaments in Swiss, league, elimination, and mixed graphs with qualifiers and a direct pass, plus rejected creations that must write nothing; it also checks participant/team legacy aggregates and scheduling relationship values, with the coverage limits recorded below. Writing it fixed three engine rules by maintainer decision (2026-10-15): FIDE first-round Swiss pairing, no repeated Swiss byes, and bye points excluded from OMP.
+Implemented on 2026-10-10; with the 2026-10-17 follow-up below, validated on TEST on 2026-10-20 and released to production on 2026-10-21. Creation requires a valid `format_definition`, validates it before writing, and commits the tournament, organizers, allowed assets, and phase graph in one transaction. Migration `20261009_120000` sets the default to version 2. Merged into `prod` on 2026-10-11. The integration coverage below was added on 2026-10-15. The atomic write guarantees that a created graph is complete, not that it is executable: audit findings 29 (disconnected graphs accepted), 30 (legacy Swiss round limit stricter than the editor), and 32 (malformed definitions throw) were fixed on 2026-10-11 (`b3d19a8f`), validated on TEST, and merged into `prod` the same day; the Swiss round limit is 10 by maintainer decision. Rejected formats now report every issue to the organizer in the creation and editing forms. The suite covers individual and team tournaments in Swiss, league, elimination, and mixed graphs with qualifiers and a direct pass, plus rejected creations that must write nothing; it also checks participant/team legacy aggregates and scheduling relationship values, with the coverage limits recorded below. Writing it fixed three engine rules by maintainer decision (2026-10-15): FIDE first-round Swiss pairing, no repeated Swiss byes, and bye points excluded from OMP.
 
-**Review follow-up (2026-10-17):** the original validator fixes remain effective for their tested cases, but malformed phase descriptions still passed validation and failed during persistence (audit finding 32). Configuration edits validated before writing, yet committed root fields and rule history separately from the graph, so nomination conflicts or persistence failures could leave a rejected edit partly saved (finding 40). Both were fixed the same day on `test`, pending TEST validation: the validator reports a non-text phase description, and a configuration edit writes the summary fields, rule history, and phase graph in one transaction; a graph that the stored direct passes or the tournament status cannot accept is answered with 409. The lifecycle suite's configuration-edit scenario checks a refused, a malformed, and an accepted edit against the stored configuration.
+**Review follow-up (2026-10-17):** the original validator fixes remain effective for their tested cases, but malformed phase descriptions still passed validation and failed during persistence (audit finding 32). Configuration edits validated before writing, yet committed root fields and rule history separately from the graph, so nomination conflicts or persistence failures could leave a rejected edit partly saved (finding 40). Both were fixed the same day, validated on TEST on 2026-10-20, and released to production on 2026-10-21: the validator reports a non-text phase description, and a configuration edit writes the summary fields, rule history, and phase graph in one transaction; a graph that the stored direct passes or the tournament status cannot accept is answered with 409. The lifecycle suite's configuration-edit scenario checks a refused, a malformed, and an accepted edit against the stored configuration.
 
 The creation suite's negative cases are rejected before any write, so on their own they did not prove rollback after a partial insert (finding 41). A further scenario now injects a database failure on the last statement of a valid creation and checks that every creation-owned row rolls back.
 
@@ -232,7 +234,7 @@ Treat each item as a separate, reviewable change:
 
 ## Validation matrix
 
-Run the final candidate against both a restored production clone and a clean database built from the complete migration history.
+Run the final candidate against a restored production clone. A clean database built from the complete migration history was originally required as well; that run is deferred by maintainer decision (2026-10-21) because a clean installation is not an expected scenario in the short term.
 
 For each supported individual and team format, validate:
 
@@ -258,7 +260,7 @@ Audit finding 41 found that the lifecycle assertions omitted the legacy replay r
 - The replay-pipeline tournament scenarios apply the same assertion after real replay ingestion, including ranked tournament matches.
 - Creation rollback after a partial insert and configuration-edit rollback (finding 40) are covered by the lifecycle suite.
 
-These are local results against the development database. Before steps 4 and 5, the suites must still pass against a restored production clone and a clean installation, recorded separately from local verification and historical deployment results.
+These were local results against the development database. For step 4 the lifecycle suite also passed against two restored production clones (2026-10-21, see step 4); step 5 changes need the same restored-clone run. The clean-installation run is deferred (see the validation matrix).
 
 ## Deployment and rollback
 
@@ -278,4 +280,4 @@ The cleanup is complete when:
 - Scheduling, replay, and ranked match tables contain only current relationships.
 - Participant and team fields have one documented authority for status, seed, and standings.
 - The active migration runner, canonical schema, and schema documentation agree.
-- Upgrade and clean-install tests pass, and production monitoring shows no legacy traffic or schema errors.
+- Upgrade tests pass against a restored production clone (the clean-install run is deferred, see the validation matrix), and production monitoring shows no legacy traffic or schema errors.
