@@ -38,7 +38,7 @@ interface FilterState {
   streamer_only: boolean;
 }
 
-type SortColumn = 'nickname' | 'elo_rating' | 'is_rated' | 'matches_played' | 'total_wins' | 'total_losses' | 'winPercentage'
+type SortColumn = 'nickname' | 'elo_rating' | 'is_rated' | 'matches_played' | 'total_wins' | 'total_losses' | 'win_percentage'
   | 'tournaments_gold' | 'tournaments_silver' | 'tournaments_bronze' | '';
 type SortDirection = 'asc' | 'desc';
 
@@ -417,9 +417,9 @@ const Players: React.FC = () => {
                   {t('label_losses')}
                   {sortColumn === 'total_losses' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                 </th>
-                <th data-help-id="action-sort-players-by-win-percentage" className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700" onClick={() => handleSort('winPercentage')} style={{cursor:'pointer'}}>
+                <th data-help-id="action-sort-players-by-win-percentage" className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700" onClick={() => handleSort('win_percentage')} style={{cursor:'pointer'}}>
                   {t('label_win_pct')}
-                  {sortColumn === 'winPercentage' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
+                  {sortColumn === 'win_percentage' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                 </th>
                 <th data-help-id="action-sort-players-by-tournaments-gold" className="px-2 py-3 text-center cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700 whitespace-nowrap" onClick={() => handleSort('tournaments_gold')}>
                   <LaurelIcon medal="gold" size={20} className="inline-block align-middle" />
