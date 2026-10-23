@@ -63,8 +63,12 @@ export class ReplayResultDataError extends Error {
 
 export interface ReplayResultInput {
   replayId: string;
-  /** The state the caller saw: `new` for the parse job, `parsed` for a manual confirmation. */
-  expectedStatus: 'new' | 'parsed';
+  /**
+   * The state the caller saw: `new` for the parse job, `parsed` for a manual
+   * confirmation, and `parsed` or `due` for an organizer decision (an aged
+   * confidence-one replay still awaits that decision).
+   */
+  expectedStatus: 'new' | 'parsed' | 'due';
   /** Global match and ELO; omitted for tournament unranked and team games. */
   match?: CreateMatchInput | null;
   tournament?: {

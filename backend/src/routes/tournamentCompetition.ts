@@ -10,7 +10,14 @@ import { findDirectPassPlacement, rebalanceRoundOneDirectPasses } from '../tourn
 import { FormatConflictError, getTournamentFormat, saveTournamentFormat } from '../tournament-engine/formatService.js';
 import type { TournamentFormatDefinition } from '../tournament-engine/types.js';
 import { pool, query } from '../config/database.js';
-import { finalizeTournamentFromPhase, recordPhaseGameResult, recalculateGroupStandings } from '../tournament-engine/competitionProgression.js';
+import {
+  finalizeTournamentFromPhase,
+  orientPhaseGameMetadata,
+  phaseGameDisplayMetadata,
+  recordPhaseGameResult,
+  recalculateGroupStandings,
+} from '../tournament-engine/competitionProgression.js';
+import { integrateReplayResult, ReplayAlreadyIntegratedError, ReplayResultDataError } from '../services/replayResultService.js';
 import {
   compileNextPhaseCompetition,
   preparePhaseCompetition,
@@ -600,6 +607,7 @@ router.post('/:id/games/:gameId/replay-decision', authMiddleware, async (req: Au
 
     const replayResult = await query(
       `SELECT replays.id AS replay_id, replays.parse_status, replays.integration_confidence,
+              replays.parse_summary, tournament.tournament_mode,
               games.id AS game_id, games.status AS game_status, games.winner_entry_id AS recorded_winner_entry_id,
               games.entry1_id, games.entry2_id
        FROM replays
@@ -608,6 +616,7 @@ router.post('/:id/games/:gameId/replay-decision', authMiddleware, async (req: Au
        JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
        JOIN tournament_phase_groups groups ON groups.id = rounds.group_id
        JOIN tournament_phases phases ON phases.id = groups.phase_id
+       JOIN tournaments tournament ON tournament.id = phases.tournament_id
        WHERE replays.id = ? AND games.id = ? AND phases.tournament_id = ?
          AND replays.integration_confidence = 1 AND replays.deleted_at IS NULL
        LIMIT 1`,
@@ -627,18 +636,61 @@ router.post('/:id/games/:gameId/replay-decision', authMiddleware, async (req: Au
       return res.json({ success: true, action });
     }
 
+    // A ranked result creates a global match and changes ELO, so it is left
+    // to the players' confirmation or a site administrator. Only unranked
+    // individual and team tournaments allow an organizer resolution, and an
+    // unknown mode is treated as ranked so ELO is never touched by mistake.
+    if (!['unranked', 'team'].includes(replay.tournament_mode)) {
+      return res.status(409).json({ error: 'Ranked tournament replays must be confirmed by the players or an administrator' });
+    }
     if (![replay.entry1_id, replay.entry2_id].includes(winnerEntryId)) {
       return res.status(400).json({ error: 'Winner is not part of this tournament game' });
     }
-    if (replay.game_status !== 'completed') {
-      await recordPhaseGameResult(req.params.id, req.params.gameId, winnerEntryId);
-    } else if (replay.game_status === 'completed' && replay.recorded_winner_entry_id !== winnerEntryId) {
-      return res.status(409).json({ error: 'The recorded game winner differs from the organizer decision' });
+    if (replay.game_status === 'completed') {
+      // The game was already recorded through another path; the replay only
+      // needs closing, provided both decisions agree.
+      if (replay.recorded_winner_entry_id !== winnerEntryId) {
+        return res.status(409).json({ error: 'The recorded game winner differs from the organizer decision' });
+      }
+      await query(
+        `UPDATE replays SET parse_status = 'completed', parsed = 1, need_integration = 0, updated_at = NOW() WHERE id = ?`,
+        [replay.replay_id]
+      );
+      return res.json({ success: true, action, winner_entry_id: winnerEntryId });
     }
-    await query(
-      `UPDATE replays SET parse_status = 'completed', parsed = 1, need_integration = 0, updated_at = NOW() WHERE id = ?`,
-      [replay.replay_id]
+
+    // Same integration as a player confirmation: the game result, its map,
+    // factions and winner side, and the replay completion are written in one
+    // transaction. The replay metadata is oriented to the organizer's
+    // winner, which may be the replay's claimed loser.
+    const summary = typeof replay.parse_summary === 'string' ? JSON.parse(replay.parse_summary) : replay.parse_summary;
+    const metadata = orientPhaseGameMetadata(
+      phaseGameDisplayMetadata(summary),
+      summary?.linkedWinnerEntryId,
+      winnerEntryId
     );
+    try {
+      await integrateReplayResult({
+        replayId: replay.replay_id,
+        expectedStatus: replay.parse_status,
+        match: null,
+        tournament: {
+          tournamentId: req.params.id,
+          gameId: req.params.gameId,
+          winnerEntryId,
+          metadata,
+        },
+      });
+    } catch (error) {
+      if (error instanceof ReplayAlreadyIntegratedError) {
+        return res.status(409).json({ error: 'Replay is no longer awaiting an organizer decision' });
+      }
+      if (error instanceof ReplayResultDataError) {
+        // The message is a fixed domain text from the service, safe to show.
+        return res.status(400).json({ error: error.message });
+      }
+      throw error;
+    }
     return res.json({ success: true, action, winner_entry_id: winnerEntryId });
   } catch (error: any) {
     console.error('Tournament replay decision error:', error);

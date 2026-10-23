@@ -61,6 +61,34 @@ export function phaseGameDisplayMetadata(parseSummary: any): PhaseGameResultMeta
 }
 
 /**
+ * Orient replay display metadata to a winner chosen outside the replay, such
+ * as an organizer resolving a confidence-one replay.
+ *
+ * `phaseGameDisplayMetadata` describes the replay's own victory claim. When
+ * the chosen winner is the replay's loser, the factions swap and the winner
+ * side becomes the other side of a 1v1 (team games carry no side). When the
+ * parse job could not map the replay winner to an entry, the orientation is
+ * unknown, so only the map is kept rather than storing possibly inverted
+ * factions.
+ */
+export function orientPhaseGameMetadata(
+  metadata: PhaseGameResultMetadata,
+  replayWinnerEntryId: string | null | undefined,
+  chosenWinnerEntryId: string
+): PhaseGameResultMetadata {
+  if (!replayWinnerEntryId) {
+    return { map: metadata.map, winnerFaction: null, loserFaction: null, winnerSide: null };
+  }
+  if (replayWinnerEntryId === chosenWinnerEntryId) return metadata;
+  return {
+    map: metadata.map,
+    winnerFaction: metadata.loserFaction,
+    loserFaction: metadata.winnerFaction,
+    winnerSide: metadata.winnerSide === 1 ? 2 : metadata.winnerSide === 2 ? 1 : null,
+  };
+}
+
+/**
  * Recalculate materialized percentage tiebreakers from completed series and games.
  * Percentages use 0..100 storage. A player with no relevant games has zero; this
  * prevents NaN values and keeps deterministic initial ordering by preclassification.

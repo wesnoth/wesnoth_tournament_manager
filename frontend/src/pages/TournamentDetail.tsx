@@ -821,6 +821,7 @@ const handleConfirmDelete = async () => {
             showPhasesGroups={competitionFilters.showPhasesGroups}
             refreshKey={tabRefreshKey}
             tournamentStatus={tournament.status}
+            tournamentMode={tournament.tournament_mode}
           />
         </div>
       )}

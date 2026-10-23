@@ -24,6 +24,12 @@ interface Props {
   refreshKey?: number;
   /** Tournament status; decides whether a completed last phase still needs finishing. */
   tournamentStatus?: string;
+  /**
+   * Tournament mode (`ranked`, `unranked`, `team`). Organizers may resolve a
+   * confidence-one replay only in unranked modes: a ranked result changes
+   * ELO and stays with the players or an administrator.
+   */
+  tournamentMode?: string;
 }
 
 // Bracket spacing assumes equal-height match cards. Each later round doubles
@@ -178,6 +184,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
   showPhasesGroups = true,
   refreshKey = 0,
   tournamentStatus,
+  tournamentMode,
 }) => {
   const { t, i18n } = useTranslation();
   const [phases, setPhases] = useState<any[]>([]);
@@ -266,6 +273,9 @@ const TournamentCompetitionView: React.FC<Props> = ({
       setSavingStreamGameId(null);
     }
   };
+
+  // Mirrors the backend rule; an unknown mode counts as ranked.
+  const canResolveReplay = tournamentMode === 'unranked' || tournamentMode === 'team';
 
   const decideReplay = async (game: any, action: 'resolve' | 'discard', winnerEntryId?: string) => {
     if (action === 'discard' && !window.confirm(t('competition.confirm_discard_replay'))) return;
@@ -1010,8 +1020,10 @@ const TournamentCompetitionView: React.FC<Props> = ({
                     {!pendingReplay && confirmationStatus === 'disputed' && <span className="rounded-full bg-red-500 px-3 py-1 text-xs font-semibold text-white">{t('competition.disputed')}</span>}
                     {pendingReplay && game.pending_replay_url && <a href={game.pending_replay_url} target="_blank" rel="noopener noreferrer" className="rounded bg-yellow-600 px-2 py-1 text-xs font-semibold text-white hover:bg-yellow-700">{t('competition.replay')} ⬇</a>}
                     {pendingReplay && canManage && <>
-                      <button data-help-id="action-resolve-tournament-replay" type="button" onClick={() => void decideReplay(game, 'resolve', game.entry1_id)} className="rounded bg-green-700 px-2 py-1 text-xs font-semibold text-white hover:bg-green-800">{t('competition.resolve_entry', { name: game.entry1_name })}</button>
-                      <button data-help-id="action-resolve-tournament-replay" type="button" onClick={() => void decideReplay(game, 'resolve', game.entry2_id)} className="rounded bg-green-700 px-2 py-1 text-xs font-semibold text-white hover:bg-green-800">{t('competition.resolve_entry', { name: game.entry2_name })}</button>
+                      {canResolveReplay && <>
+                        <button data-help-id="action-resolve-tournament-replay" type="button" onClick={() => void decideReplay(game, 'resolve', game.entry1_id)} className="rounded bg-green-700 px-2 py-1 text-xs font-semibold text-white hover:bg-green-800">{t('competition.resolve_entry', { name: game.entry1_name })}</button>
+                        <button data-help-id="action-resolve-tournament-replay" type="button" onClick={() => void decideReplay(game, 'resolve', game.entry2_id)} className="rounded bg-green-700 px-2 py-1 text-xs font-semibold text-white hover:bg-green-800">{t('competition.resolve_entry', { name: game.entry2_name })}</button>
+                      </>}
                       <button data-help-id="action-discard-tournament-replay" type="button" onClick={() => void decideReplay(game, 'discard')} className="rounded bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700">{t('competition.discard_replay')}</button>
                     </>}
                     {!pendingReplay && game.replay_url
