@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import i18next from 'i18next';
+import TournamentEntryName from './TournamentEntryName';
 
 export interface Tournament {
   id: string;
@@ -26,6 +27,12 @@ export interface Tournament {
   winner_nickname?: string;
   runner_up_id?: string;
   runner_up_nickname?: string;
+  /** Profile of a player champion / runner-up; null for team entries. */
+  winner_user_id?: string | null;
+  runner_up_user_id?: string | null;
+  /** Members of a team champion / runner-up; empty for player entries. */
+  winner_members?: Array<{ user_id: string; nickname: string }>;
+  runner_up_members?: Array<{ user_id: string; nickname: string }>;
 }
 
 export interface FilterState {
@@ -393,8 +400,16 @@ const TournamentList: React.FC<TournamentListProps> = ({
                       {getTournamentModeLabel(tournament.tournament_mode)}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-700">{tournament.winner_nickname || '-'}</td>
-                  <td className="px-4 py-3 text-gray-700">{tournament.runner_up_nickname || '-'}</td>
+                  <td className="px-4 py-3 text-gray-700">
+                    {tournament.winner_nickname
+                      ? <TournamentEntryName name={tournament.winner_nickname} userId={tournament.winner_user_id} members={tournament.winner_members} linkClassName="text-blue-600 hover:text-blue-700" />
+                      : '-'}
+                  </td>
+                  <td className="px-4 py-3 text-gray-700">
+                    {tournament.runner_up_nickname
+                      ? <TournamentEntryName name={tournament.runner_up_nickname} userId={tournament.runner_up_user_id} members={tournament.runner_up_members} linkClassName="text-blue-600 hover:text-blue-700" />
+                      : '-'}
+                  </td>
                   <td className="px-4 py-3 text-gray-700">{formatDate(tournament.updated_at)}</td>
                   <td className="px-4 py-3 text-gray-700 flex gap-2">
                     <button

@@ -7,6 +7,7 @@ import { processMultiLanguageItems } from '../utils/languageFallback';
 import PlayerLink from '../components/PlayerLink';
 import GlobalStats from '../components/GlobalStats';
 import { LaurelIcon } from '../components/TournamentLaurels';
+import TournamentEntryName from '../components/TournamentEntryName';
 import { renderWikiMarkdown } from '../utils/wikiMarkdown';
 import MatchStreams from '../components/MatchStreams';
 import MatchTypeBadge from '../components/MatchTypeBadge';
@@ -611,8 +612,8 @@ const Home: React.FC = () => {
           </section>
 
           {/* Latest finished tournaments: champion and runner-up. Team entries
-              have no single profile, so the team name is shown without a link
-              followed by links to its members. */}
+              have no single profile, so TournamentEntryName shows the team
+              name followed by links to its members. */}
           <section className="bg-white rounded-lg shadow p-6" data-help-id="region-home-latest-tournaments">
             <h3>{t('home.latest_tournaments')}</h3>
             {latestTournaments.length > 0 ? (
@@ -625,25 +626,13 @@ const Home: React.FC = () => {
                     {([['gold', tournament.winner], ['silver', tournament.runner_up]] as const).map(([medal, placement]) => placement && (
                       <div key={medal} className="flex items-center gap-2 text-sm">
                         <LaurelIcon medal={medal} size={18} label={t(medal === 'gold' ? 'laurels.winner' : 'laurels.runner_up')} />
-                        {placement.user_id ? (
-                          <span className="text-blue-600 font-semibold hover:text-blue-700"><PlayerLink nickname={placement.nickname} userId={placement.user_id} /></span>
-                        ) : (
-                          <span className="min-w-0">
-                            <span className="text-gray-700 font-semibold">{placement.nickname}</span>
-                            {placement.members?.length > 0 && (
-                              <span className="text-gray-500">
-                                {' ('}
-                                {placement.members.map((member: any, index: number) => (
-                                  <React.Fragment key={member.user_id}>
-                                    {index > 0 && ', '}
-                                    <span className="text-blue-600 hover:text-blue-700"><PlayerLink nickname={member.nickname} userId={member.user_id} /></span>
-                                  </React.Fragment>
-                                ))}
-                                {')'}
-                              </span>
-                            )}
-                          </span>
-                        )}
+                        <TournamentEntryName
+                          name={placement.nickname}
+                          userId={placement.user_id}
+                          members={placement.members}
+                          className="font-semibold min-w-0"
+                          linkClassName="text-blue-600 hover:text-blue-700"
+                        />
                       </div>
                     ))}
                   </div>

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { PoolConnection } from 'mysql2/promise';
 import { pool, query } from '../config/database.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
-import { getTournamentPlacements } from '../services/tournamentResultService.js';
+import { getTournamentPlacements, type TournamentPlacement } from '../services/tournamentResultService.js';
 import discordService from '../services/discordService.js';
 import { randomUUID } from 'crypto';
 import { logAuditEvent, getUserIP, getUserAgent } from '../middleware/audit.js';
@@ -641,6 +641,9 @@ router.get('/my', authMiddleware, async (req: AuthRequest, res) => {
     // For each tournament, if status = 'finished', fetch winner and runner-up
     const tournaments = await Promise.all(result.rows.map(async (t: any) => {
       let winner_id = null, winner_nickname = null, runner_up_id = null, runner_up_nickname = null;
+      // User ids link player entries; members list team entries (empty for players).
+      let winner_user_id = null, runner_up_user_id = null;
+      let winner_members: TournamentPlacement['members'] = [], runner_up_members: TournamentPlacement['members'] = [];
       
       if (t.status === 'finished') {
         const { winner, runnerUp } = await getTournamentPlacements(t.id);
@@ -648,10 +651,14 @@ router.get('/my', authMiddleware, async (req: AuthRequest, res) => {
         if (winner) {
           winner_id = winner.id;
           winner_nickname = winner.nickname;
+          winner_user_id = winner.user_id;
+          winner_members = winner.members;
         }
         if (runnerUp) {
           runner_up_id = runnerUp.id;
           runner_up_nickname = runnerUp.nickname;
+          runner_up_user_id = runnerUp.user_id;
+          runner_up_members = runnerUp.members;
         }
       }
 
@@ -660,7 +667,11 @@ router.get('/my', authMiddleware, async (req: AuthRequest, res) => {
         winner_id,
         winner_nickname,
         runner_up_id,
-        runner_up_nickname
+        runner_up_nickname,
+        winner_user_id,
+        winner_members,
+        runner_up_user_id,
+        runner_up_members
       };
     }));
 
