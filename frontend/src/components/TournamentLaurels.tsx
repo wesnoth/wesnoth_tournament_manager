@@ -36,7 +36,6 @@ export const LaurelIcon: React.FC<LaurelIconProps> = ({ medal, size, className, 
       alt={label}
       title={label}
       className={className}
-      loading="lazy"
     />
   );
 };

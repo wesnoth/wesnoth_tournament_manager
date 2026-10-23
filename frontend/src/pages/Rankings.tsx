@@ -189,11 +189,11 @@ const Rankings: React.FC = () => {
   const handleRetry = () => setRefreshKey(key => key + 1);
 
   if (loading) {
-    return <div className="w-full max-w-6xl mx-auto px-4 py-8"><p>{t('loading')}</p></div>;
+    return <div className="w-full px-4 py-8"><p>{t('loading')}</p></div>;
   }
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 py-8">
+    <div className="w-full px-4 py-8">
       <h1 className="text-3xl font-bold text-gray-800 mb-6">{t('navbar_rankings')}</h1>
 
       {/* Ranking Criteria Info */}

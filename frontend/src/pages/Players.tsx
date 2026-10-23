@@ -204,7 +204,7 @@ const Players: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="w-full max-w-6xl mx-auto px-4 py-8 bg-white/50 backdrop-blur-sm rounded-lg">
+      <div className="w-full px-4 py-8 bg-white/50 backdrop-blur-sm rounded-lg">
         <h1>{t('players_title')}</h1>
         <div className="animate-pulse">
           <div className="h-12 bg-gray-200 rounded mb-4"></div>
@@ -219,7 +219,7 @@ const Players: React.FC = () => {
   }
 
   return (
-    <div data-help-id="region-players" className="w-full max-w-6xl mx-auto px-4 py-8 bg-white/50 backdrop-blur-sm rounded-lg">
+    <div data-help-id="region-players" className="w-full px-4 py-8 bg-white/50 backdrop-blur-sm rounded-lg">
       <h1>{t('players_title')}</h1>
 
       {error && <p className="bg-red-100 border border-red-300 text-red-700 p-4 rounded-lg mb-6">{error}</p>}
