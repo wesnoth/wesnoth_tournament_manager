@@ -6,6 +6,7 @@ import { userService, matchService, publicService } from '../services/api';
 import { processMultiLanguageItems } from '../utils/languageFallback';
 import PlayerLink from '../components/PlayerLink';
 import GlobalStats from '../components/GlobalStats';
+import { LaurelIcon } from '../components/TournamentLaurels';
 import { renderWikiMarkdown } from '../utils/wikiMarkdown';
 import MatchStreams from '../components/MatchStreams';
 import MatchTypeBadge from '../components/MatchTypeBadge';
@@ -61,6 +62,7 @@ const Home: React.FC = () => {
   const { isAuthenticated } = useAuthStore();
   const [waitingChallenge, setWaitingChallenge] = useState<any>(null);
   const [topPlayers, setTopPlayers] = useState<any[]>([]);
+  const [latestTournaments, setLatestTournaments] = useState<any[]>([]);
   const [recentMatches, setRecentMatches] = useState<any[]>([]);
   const [recentPlayers, setRecentPlayers] = useState<any[]>([]);
   const [playerOfMonth, setPlayerOfMonth] = useState<any>(null);
@@ -251,6 +253,21 @@ const Home: React.FC = () => {
             setNewsItems(localizedNews.slice(0, 5));
           } catch (err) {
             console.error('Error fetching news:', err);
+          }
+        }
+
+        // Latest finished tournaments with their podium, cached like the other home boxes.
+        const cachedLatestTournaments = getCachedData('latest-tournaments');
+        if (cachedLatestTournaments) {
+          setLatestTournaments(cachedLatestTournaments);
+        } else {
+          try {
+            const latestRes = await publicService.getLatestFinishedTournaments();
+            const latest = Array.isArray(latestRes.data) ? latestRes.data : [];
+            setLatestTournaments(latest);
+            setCachedData('latest-tournaments', latest);
+          } catch (err) {
+            console.error('Error fetching latest tournaments:', err);
           }
         }
       } catch (error) {
@@ -585,6 +602,35 @@ const Home: React.FC = () => {
                     <span className="text-gray-700 text-sm">
                       {player.is_rated ? `${player.elo_rating} ${t('label_elo')}` : t('unrated')}
                     </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p>{t('no_data')}</p>
+            )}
+          </section>
+
+          {/* Latest finished tournaments: champion and runner-up. Team entries
+              have no single profile, so their name is shown without a link. */}
+          <section className="bg-white rounded-lg shadow p-6" data-help-id="region-home-latest-tournaments">
+            <h3>{t('home.latest_tournaments')}</h3>
+            {latestTournaments.length > 0 ? (
+              <div className="flex flex-col gap-3">
+                {latestTournaments.map(tournament => (
+                  <div key={tournament.id} className="py-2 border-b border-gray-200">
+                    <Link to={`/tournament/${tournament.id}`} data-help-id="action-open-latest-tournament" title={tournament.name} className="font-semibold text-gray-800 hover:text-blue-700 block mb-1 truncate">
+                      {tournament.name}
+                    </Link>
+                    {([['gold', tournament.winner], ['silver', tournament.runner_up]] as const).map(([medal, placement]) => placement && (
+                      <div key={medal} className="flex items-center gap-2 text-sm">
+                        <LaurelIcon medal={medal} size={18} label={t(medal === 'gold' ? 'laurels.winner' : 'laurels.runner_up')} />
+                        {placement.user_id ? (
+                          <span className="text-blue-600 font-semibold hover:text-blue-700"><PlayerLink nickname={placement.nickname} userId={placement.user_id} /></span>
+                        ) : (
+                          <span className="text-gray-700 font-semibold">{placement.nickname}</span>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>

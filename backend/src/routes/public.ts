@@ -1,6 +1,12 @@
 import { Router } from 'express';
 import { query } from '../config/database.js';
-import { getTournamentPlacements } from '../services/tournamentResultService.js';
+import {
+  getLatestFinishedTournaments,
+  getTournamentPlacements,
+  TOURNAMENT_LAURELS_COLUMNS,
+  TOURNAMENT_LAURELS_SORT_COLUMNS,
+  TOURNAMENT_LAURELS_SUBQUERY,
+} from '../services/tournamentResultService.js';
 import { optionalAuthMiddleware } from '../middleware/auth.js';
 import { getCombinedMatchFeed } from '../services/combinedMatchFeedService.js';
 import fs from 'fs';
@@ -182,6 +188,17 @@ router.get('/tournaments', optionalAuthMiddleware, async (req, res) => {
   }
 });
 
+// Latest finished tournaments with champion and runner-up (home page box).
+// Registered before '/tournaments/:id' so the literal segment is not taken as an id.
+router.get('/tournaments/latest-finished', async (_req, res) => {
+  try {
+    res.json(await getLatestFinishedTournaments(3));
+  } catch (error) {
+    console.error('Error fetching latest finished tournaments:', error);
+    res.status(500).json({ error: 'Failed to fetch latest finished tournaments' });
+  }
+});
+
 // Get tournament by ID (public endpoint)
 router.get('/tournaments/:id', async (req, res) => {
   try {
@@ -333,6 +350,7 @@ router.get('/players', async (req, res) => {
       total_losses:   'total_losses',
       win_percentage: '(total_wins * 1.0 / NULLIF(matches_played, 0))',
       is_rated:       'is_rated',
+      ...TOURNAMENT_LAURELS_SORT_COLUMNS,
     };
     const sortByRaw = (req.query.sortBy as string) || 'nickname';
     const sortByExpr = ALLOWED_SORT_COLUMNS[sortByRaw] ?? 'nickname';
@@ -401,8 +419,10 @@ router.get('/players', async (req, res) => {
                 WHERE ranked_user.is_blocked = 0
                   AND (ranked_user.elo_rating > u.elo_rating
                     OR (ranked_user.elo_rating = u.elo_rating AND ranked_user.id < u.id))
-              ) ELSE NULL END AS global_ranking_position
+              ) ELSE NULL END AS global_ranking_position,
+              ${TOURNAMENT_LAURELS_COLUMNS}
        FROM users_extension u
+       LEFT JOIN (${TOURNAMENT_LAURELS_SUBQUERY}) laurels ON laurels.user_id = u.id
        WHERE ${whereClause}
        ORDER BY ${sortByExpr} ${sortOrder}, u.id ASC
        LIMIT ? OFFSET ?`,
@@ -477,13 +497,15 @@ router.get('/players/:id', async (req, res) => {
         ) ELSE NULL END AS global_ranking_position,
         u.timezone,
         u.availability_schedule,
-        pms.avg_elo_change
+        pms.avg_elo_change,
+        ${TOURNAMENT_LAURELS_COLUMNS}
       FROM users_extension u
       LEFT JOIN player_match_statistics pms ON u.id = pms.player_id 
         AND pms.opponent_id IS NULL 
         AND pms.map_id IS NULL 
         AND pms.faction_id IS NULL
         AND pms.player_side = 0
+      LEFT JOIN (${TOURNAMENT_LAURELS_SUBQUERY}) laurels ON laurels.user_id = u.id
       WHERE u.id = ? AND u.is_blocked = 0`,
       [id]
     );

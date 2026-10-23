@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { getLevelTranslationKey } from '../utils/levelTranslation';
 import UserBadge from './UserBadge';
+import TournamentLaurels from './TournamentLaurels';
 
 interface ProfileStatsProps {
   player: {
@@ -20,6 +21,10 @@ interface ProfileStatsProps {
     country?: string;
     avatar?: string;
     enable_ranked?: boolean;
+    /** Finished tournaments ended in 1st / 2nd / 3rd place (team podiums credit every member). */
+    tournaments_gold?: number;
+    tournaments_silver?: number;
+    tournaments_bronze?: number;
   };
 }
 
@@ -60,16 +65,23 @@ const ProfileStats: React.FC<ProfileStatsProps> = ({ player }) => {
             )}
           </div>
         </div>
-        {(player.country || player.avatar) && (
-          <div className="flex-shrink-0">
+        <div className="flex items-center gap-6 max-md:gap-4 flex-shrink-0">
+          <div data-help-id="region-profile-tournament-laurels">
+            <TournamentLaurels
+              gold={player.tournaments_gold}
+              silver={player.tournaments_silver}
+              bronze={player.tournaments_bronze}
+            />
+          </div>
+          {(player.country || player.avatar) && (
             <UserBadge
               country={player.country}
               avatar={player.avatar}
               username={player.nickname}
               size="large"
             />
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8 max-md:overflow-x-auto max-md:-webkit-overflow-scrolling-touch max-md:flex max-md:gap-2">

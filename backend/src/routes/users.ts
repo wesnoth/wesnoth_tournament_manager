@@ -7,6 +7,11 @@ import { avatarManifestService } from '../services/avatarManifestService.js';
 import { validateTimezone, validateAvailabilitySchedule } from '../utils/timezoneUtils.js';
 import { isValidDiscordSnowflake, validateDiscordId } from '../services/discord.js';
 import { getCombinedMatchFeed } from '../services/combinedMatchFeedService.js';
+import {
+  TOURNAMENT_LAURELS_COLUMNS,
+  TOURNAMENT_LAURELS_SORT_COLUMNS,
+  TOURNAMENT_LAURELS_SUBQUERY,
+} from '../services/tournamentResultService.js';
 
 const router = Router();
 
@@ -41,13 +46,15 @@ router.get('/profile', authMiddleware, async (req: AuthRequest, res) => {
         ) ELSE NULL END AS global_ranking_position,
         u.timezone,
         u.availability_schedule,
-        pms.avg_elo_change
+        pms.avg_elo_change,
+        ${TOURNAMENT_LAURELS_COLUMNS}
       FROM users_extension u
       LEFT JOIN player_match_statistics pms ON u.id = pms.player_id 
         AND pms.opponent_id IS NULL 
         AND pms.map_id IS NULL 
         AND pms.faction_id IS NULL
         AND pms.player_side = 0
+      LEFT JOIN (${TOURNAMENT_LAURELS_SUBQUERY}) laurels ON laurels.user_id = u.id
       WHERE u.id = ?`,
       [req.userId]
     );
@@ -443,6 +450,7 @@ router.get('/ranking/global', async (req, res) => {
       total_losses:   'u.total_losses',
       win_percentage: '(u.total_wins * 1.0 / NULLIF(u.matches_played, 0))',
       trend:          'u.trend',
+      ...TOURNAMENT_LAURELS_SORT_COLUMNS,
     };
     const sortByRaw = (req.query.sortBy as string) || 'elo_rating';
     const sortByExpr = ALLOWED_SORT_COLUMNS[sortByRaw] ?? 'u.elo_rating';
@@ -498,8 +506,10 @@ router.get('/ranking/global', async (req, res) => {
                 WHERE ranked_user.is_blocked = 0
                   AND (ranked_user.elo_rating > u.elo_rating
                     OR (ranked_user.elo_rating = u.elo_rating AND ranked_user.id < u.id))
-              ) ELSE NULL END AS global_ranking_position
+              ) ELSE NULL END AS global_ranking_position,
+              ${TOURNAMENT_LAURELS_COLUMNS}
        FROM users_extension u
+       LEFT JOIN (${TOURNAMENT_LAURELS_SUBQUERY}) laurels ON laurels.user_id = u.id
        WHERE ${whereClause}
        ORDER BY ${sortByExpr} ${sortOrder}, u.id ASC
        LIMIT ? OFFSET ?`,

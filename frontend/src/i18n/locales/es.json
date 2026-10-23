@@ -398,7 +398,8 @@
     "player_of_month": "Jugador del Mes",
     "recent_players": "Jugadores Recientes",
     "top_10_players": "Top 10 Jugadores",
-    "error_loading": "Error al cargar los datos"
+    "error_loading": "Error al cargar los datos",
+    "latest_tournaments": "Últimos torneos"
   },
   "hotfix": "Hotfix",
   "impact_analysis": "Estadísticas de Balance desde Evento",
@@ -1890,5 +1891,13 @@
     "load_profile_data_failed": "Error al cargar los datos del perfil",
     "load_matches_failed": "Error al cargar las partidas",
     "load_opponents_failed": "Error al cargar los datos de rivales"
+  },
+  "laurels": {
+    "title": "Podios en torneos",
+    "gold": "Torneos ganados",
+    "silver": "Subcampeonatos",
+    "bronze": "Terceros puestos",
+    "winner": "Ganador",
+    "runner_up": "Subcampeón"
   }
 }

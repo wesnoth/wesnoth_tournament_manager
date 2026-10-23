@@ -4,6 +4,7 @@ import { publicService } from '../services/api';
 import { getLevelTranslationKey } from '../utils/levelTranslation';
 import UserBadge from '../components/UserBadge';
 import PlayerLink from '../components/PlayerLink';
+import { LaurelIcon } from '../components/TournamentLaurels';
 
 interface PlayerStats {
   id: string;
@@ -21,6 +22,10 @@ interface PlayerStats {
   winPercentage: number;
   country?: string;
   avatar?: string;
+  /** Finished tournaments ended in 1st / 2nd / 3rd place (0 when none). */
+  tournaments_gold: number;
+  tournaments_silver: number;
+  tournaments_bronze: number;
 }
 
 interface FilterState {
@@ -33,7 +38,8 @@ interface FilterState {
   streamer_only: boolean;
 }
 
-type SortColumn = 'nickname' | 'elo_rating' | 'is_rated' | 'matches_played' | 'total_wins' | 'total_losses' | 'winPercentage' | '';
+type SortColumn = 'nickname' | 'elo_rating' | 'is_rated' | 'matches_played' | 'total_wins' | 'total_losses' | 'winPercentage'
+  | 'tournaments_gold' | 'tournaments_silver' | 'tournaments_bronze' | '';
 type SortDirection = 'asc' | 'desc';
 
 const Players: React.FC = () => {
@@ -151,6 +157,9 @@ const Players: React.FC = () => {
             winPercentage,
             country: user.country,
             avatar: user.avatar,
+            tournaments_gold: Number(user.tournaments_gold) || 0,
+            tournaments_silver: Number(user.tournaments_silver) || 0,
+            tournaments_bronze: Number(user.tournaments_bronze) || 0,
           };
         });
 
@@ -412,6 +421,18 @@ const Players: React.FC = () => {
                   {t('label_win_pct')}
                   {sortColumn === 'winPercentage' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
                 </th>
+                <th data-help-id="action-sort-players-by-tournaments-gold" className="px-2 py-3 text-center cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700 whitespace-nowrap" onClick={() => handleSort('tournaments_gold')}>
+                  <LaurelIcon medal="gold" size={20} className="inline-block align-middle" />
+                  {sortColumn === 'tournaments_gold' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
+                </th>
+                <th data-help-id="action-sort-players-by-tournaments-silver" className="px-2 py-3 text-center cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700 whitespace-nowrap" onClick={() => handleSort('tournaments_silver')}>
+                  <LaurelIcon medal="silver" size={20} className="inline-block align-middle" />
+                  {sortColumn === 'tournaments_silver' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
+                </th>
+                <th data-help-id="action-sort-players-by-tournaments-bronze" className="px-2 py-3 text-center cursor-pointer hover:bg-gray-300 transition-colors font-semibold text-gray-700 whitespace-nowrap" onClick={() => handleSort('tournaments_bronze')}>
+                  <LaurelIcon medal="bronze" size={20} className="inline-block align-middle" />
+                  {sortColumn === 'tournaments_bronze' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
+                </th>
               </tr>
           </thead>
           <tbody>
@@ -466,6 +487,9 @@ const Players: React.FC = () => {
                 <td className="px-4 py-3 text-gray-700">
                   <span className="px-2 py-1 bg-purple-50 text-purple-700 rounded font-semibold">{player.winPercentage}%</span>
                 </td>
+                <td className={`px-2 py-3 text-center font-semibold ${player.tournaments_gold ? 'text-gray-800' : 'text-gray-400'}`}>{player.tournaments_gold}</td>
+                <td className={`px-2 py-3 text-center font-semibold ${player.tournaments_silver ? 'text-gray-800' : 'text-gray-400'}`}>{player.tournaments_silver}</td>
+                <td className={`px-2 py-3 text-center font-semibold ${player.tournaments_bronze ? 'text-gray-800' : 'text-gray-400'}`}>{player.tournaments_bronze}</td>
               </tr>
             ))}
           </tbody>

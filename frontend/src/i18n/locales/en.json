@@ -398,7 +398,8 @@
     "player_of_month": "Player of the Month",
     "recent_players": "Recent Players",
     "top_10_players": "Top 10 Players",
-    "error_loading": "Error loading data"
+    "error_loading": "Error loading data",
+    "latest_tournaments": "Latest tournaments"
   },
   "hotfix": "Hotfix",
   "impact_analysis": "Balance Statistics from Event Date",
@@ -1890,5 +1891,13 @@
     "load_profile_data_failed": "Error loading profile data",
     "load_matches_failed": "Error loading matches",
     "load_opponents_failed": "Error loading opponent data"
+  },
+  "laurels": {
+    "title": "Tournament podiums",
+    "gold": "Tournaments won",
+    "silver": "Runner-up finishes",
+    "bronze": "Third-place finishes",
+    "winner": "Winner",
+    "runner_up": "Runner-up"
   }
 }

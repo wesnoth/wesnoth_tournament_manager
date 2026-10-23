@@ -390,7 +390,8 @@
     "player_of_month": "本月玩家",
     "recent_players": "近期玩家",
     "top_10_players": "前10名玩家",
-    "error_loading": "加载数据时出错"
+    "error_loading": "加载数据时出错",
+    "latest_tournaments": "最新锦标赛"
   },
   "hotfix": "热修复",
   "impact_analysis": "从事件开始的平衡统计",
@@ -1890,5 +1891,13 @@
     "load_profile_data_failed": "加载个人资料数据时出错",
     "load_matches_failed": "加载对局时出错",
     "load_opponents_failed": "加载对手数据时出错"
+  },
+  "laurels": {
+    "title": "锦标赛领奖台",
+    "gold": "锦标赛冠军",
+    "silver": "亚军次数",
+    "bronze": "季军次数",
+    "winner": "冠军",
+    "runner_up": "亚军"
   }
 }
