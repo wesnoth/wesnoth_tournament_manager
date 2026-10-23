@@ -7,6 +7,8 @@ export interface TournamentPlacement {
   nickname: string;
   /** User behind a player entry; null for team entries, which have no single profile. */
   user_id: string | null;
+  /** Team entries only: the accepted members in team order; empty for player entries. */
+  members: Array<{ user_id: string; nickname: string }>;
 }
 
 /** Read final phase-engine placements without consulting legacy tournament rows. */
@@ -18,6 +20,7 @@ export async function getTournamentPlacements(tournamentId: string): Promise<{
     `SELECT entries.id,
             COALESCE(teams.name, users.nickname) AS nickname,
             participants.user_id,
+            entries.team_id,
             results.placement
      FROM tournament_results results
      JOIN tournament_entries entries ON entries.id = results.entry_id
@@ -29,10 +32,30 @@ export async function getTournamentPlacements(tournamentId: string): Promise<{
      LIMIT 2`,
     [tournamentId]
   );
-  return {
-    winner: result.rows[0] || null,
-    runnerUp: result.rows[1] || null,
-  };
+  const [winner, runnerUp] = await Promise.all(
+    [result.rows[0], result.rows[1]].map(row => row ? withTeamMembers(row) : null)
+  );
+  return { winner, runnerUp };
+}
+
+/**
+ * Attach the members of a team placement so it can be shown as
+ * "Team name (player A, player B)". Members replaced mid-tournament are moved
+ * out of the team, so the accepted members on the team row are the ones who
+ * finished it (the same rule the laurel counts use).
+ */
+async function withTeamMembers(row: any): Promise<TournamentPlacement> {
+  const { team_id: teamId, ...placement } = row;
+  if (!teamId) return { ...placement, members: [] };
+  const members = await query(
+    `SELECT participants.user_id, users.nickname
+     FROM tournament_participants participants
+     JOIN users_extension users ON users.id = participants.user_id
+     WHERE participants.team_id = ? AND participants.participation_status = 'accepted'
+     ORDER BY participants.team_position, users.nickname`,
+    [teamId]
+  );
+  return { ...placement, members: members.rows };
 }
 
 /**

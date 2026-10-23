@@ -611,7 +611,8 @@ const Home: React.FC = () => {
           </section>
 
           {/* Latest finished tournaments: champion and runner-up. Team entries
-              have no single profile, so their name is shown without a link. */}
+              have no single profile, so the team name is shown without a link
+              followed by links to its members. */}
           <section className="bg-white rounded-lg shadow p-6" data-help-id="region-home-latest-tournaments">
             <h3>{t('home.latest_tournaments')}</h3>
             {latestTournaments.length > 0 ? (
@@ -627,7 +628,21 @@ const Home: React.FC = () => {
                         {placement.user_id ? (
                           <span className="text-blue-600 font-semibold hover:text-blue-700"><PlayerLink nickname={placement.nickname} userId={placement.user_id} /></span>
                         ) : (
-                          <span className="text-gray-700 font-semibold">{placement.nickname}</span>
+                          <span className="min-w-0">
+                            <span className="text-gray-700 font-semibold">{placement.nickname}</span>
+                            {placement.members?.length > 0 && (
+                              <span className="text-gray-500">
+                                {' ('}
+                                {placement.members.map((member: any, index: number) => (
+                                  <React.Fragment key={member.user_id}>
+                                    {index > 0 && ', '}
+                                    <span className="text-blue-600 hover:text-blue-700"><PlayerLink nickname={member.nickname} userId={member.user_id} /></span>
+                                  </React.Fragment>
+                                ))}
+                                {')'}
+                              </span>
+                            )}
+                          </span>
                         )}
                       </div>
                     ))}
