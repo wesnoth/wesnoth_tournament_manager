@@ -21,9 +21,6 @@ export default {
   ],
   theme: {
     extend: {
-      screens: {
-        'nav': '1310px',
-      },
       // Neutral and accent scales follow the active theme (see themes.css).
       // Status colors stay fixed because they carry meaning in every theme.
       colors: {
@@ -88,5 +85,18 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    /*
+     * Navbar layout variants. The navbar decides at runtime whether its links
+     * fit beside the brand (see Navbar.tsx) and marks itself `nav-row` or
+     * `nav-stacked`; these variants style its descendants for each layout.
+     * A fixed breakpoint could not do this: the width the links need varies
+     * by about 400px with the language, the theme fonts and the signed-in
+     * controls.
+     */
+    function navLayoutVariants({ addVariant }) {
+      addVariant('nav-row', '.nav-row &');
+      addVariant('nav-stacked', '.nav-stacked &');
+    },
+  ],
 }

@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../store/authStore';
+import { useThemeStore } from '../store/themeStore';
 import { getHelpSlugFromPath } from '../utils/helpNavigation';
 import { endRejectedSession } from '../services/api';
 import i18next from 'i18next';
@@ -21,11 +22,15 @@ interface NavbarNotification {
   is_read: boolean;
 }
 
+/** Below this viewport width the navbar always uses two rows, as on phones and tablets. */
+const NAV_MIN_ROW_WIDTH = 1310;
+
 const Navbar: React.FC = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const { isAuthenticated, user, logout } = useAuthStore();
+  const activeTheme = useThemeStore((state) => state.activeTheme);
   const [languageDropdownOpen, setLanguageDropdownOpen] = useState(false);
   const [notificationsDropdownOpen, setNotificationsDropdownOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -162,26 +167,114 @@ const Navbar: React.FC = () => {
     setLanguageDropdownOpen(false);
   };
 
+  const navRef = useRef<HTMLElement>(null);
+  const linksRef = useRef<HTMLDivElement>(null);
+  const [stacked, setStacked] = useState(() => window.innerWidth < NAV_MIN_ROW_WIDTH);
+  const stackedRef = useRef(stacked);
+  stackedRef.current = stacked;
+  /**
+   * Navbar width the single-row layout needed when it last overflowed. While
+   * stacked, the row layout is only tried again from this width on, which
+   * keeps a width between the two layouts from flipping back and forth (the
+   * stacked layout uses smaller paddings, so it cannot measure the row itself).
+   */
+  const neededRowWidth = useRef(0);
+
+  /**
+   * Chooses between one row (brand, links and language side by side) and two
+   * rows (brand centered on top). The row layout is kept only while every
+   * link fits in the space beside the brand; the links never shrink, so their
+   * total width against the container width is the overflow test.
+   */
+  const evaluateLayout = useCallback(() => {
+    const nav = navRef.current;
+    const links = linksRef.current;
+    if (!nav || !links) return;
+    if (window.innerWidth < NAV_MIN_ROW_WIDTH) {
+      setStacked(true);
+      return;
+    }
+    if (stackedRef.current) {
+      if (nav.clientWidth >= neededRowWidth.current) setStacked(false);
+      return;
+    }
+    const children = Array.from(links.children) as HTMLElement[];
+    if (children.length === 0) return;
+    const gap = parseFloat(getComputedStyle(links).columnGap) || 0;
+    const content = children.reduce((sum, child) => sum + child.getBoundingClientRect().width, 0)
+      + gap * Math.max(0, children.length - 1);
+    // The links' own container cannot always shrink (its parent keeps its
+    // content width), so overflow is also measured on the row as a whole,
+    // which is what clips the account controls at the right edge.
+    const row = nav.firstElementChild as HTMLElement | null;
+    const overflow = Math.max(content - links.clientWidth, row ? row.scrollWidth - row.clientWidth : 0);
+    // Safety net: the brand row does not shrink, so the links cannot slide
+    // under the brand, but any overlap still forces two rows. The links are
+    // centered, so the first one moves by half of every extra pixel.
+    const brand = nav.querySelector('a[href="/"]')?.getBoundingClientRect();
+    const overlap = brand ? (brand.right - children[0].getBoundingClientRect().left) * 2 : 0;
+    const missing = Math.max(overflow, overlap);
+    if (missing > 1) {
+      // A small margin so a width at the exact limit does not flip on rounding.
+      neededRowWidth.current = nav.clientWidth + missing + 16;
+      setStacked(true);
+    }
+  }, []);
+
+  // Runs before paint, so trying the row layout and falling back to two rows
+  // never shows the overlapping state.
+  useLayoutEffect(() => {
+    evaluateLayout();
+  }, [stacked, evaluateLayout]);
+
+  // Anything that changes the links' widths invalidates the measured limit:
+  // the language, the signed-in controls, the theme fonts and the badge.
+  useLayoutEffect(() => {
+    neededRowWidth.current = 0;
+    evaluateLayout();
+  }, [i18n.language, isAuthenticated, user?.nickname, unreadCount, activeTheme, evaluateLayout]);
+
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const observer = new ResizeObserver(() => evaluateLayout());
+    observer.observe(nav);
+    // Web fonts (the medieval theme's) load after the first measurement and
+    // widen the links, so measure again once they are ready.
+    document.fonts?.ready.then(() => {
+      neededRowWidth.current = 0;
+      evaluateLayout();
+    });
+    return () => observer.disconnect();
+  }, [evaluateLayout]);
+
   const handleLogout = () => {
     logout();
     navigate('/');
   };
 
   return (
-    <nav className="theme-bar w-full bg-primary text-white shadow-sm p-3 min-h-[60px] flex items-center relative z-[999] overflow-hidden max-nav:flex-col max-nav:min-h-auto max-nav:gap-2">
-      <div className="w-full max-w-full mx-auto px-2 flex justify-between items-center gap-2 relative z-[999] max-nav:w-full max-nav:flex-col max-nav:gap-2 overflow-x-auto -webkit-overflow-scrolling-touch">
+    <nav
+      ref={navRef}
+      className={`theme-bar w-full bg-primary text-white shadow-sm p-3 min-h-[60px] flex items-center relative z-[999] overflow-hidden ${
+        stacked ? 'nav-stacked flex-col gap-2' : 'nav-row'
+      }`}
+    >
+      <div className="w-full max-w-full mx-auto px-2 flex justify-between items-center gap-2 relative z-[999] nav-stacked:w-full nav-stacked:flex-col nav-stacked:gap-2 overflow-x-auto -webkit-overflow-scrolling-touch">
         
-        {/* Brand + Language Selector Row */}
-        <div className="flex justify-between items-center gap-4 max-nav:w-full max-nav:gap-2">
+        {/* Brand + Language Selector Row. Stacked, the brand is centered in
+            its own row with the language selector at the right edge: the
+            1fr side columns keep the brand centered on the page. */}
+        <div className="flex flex-shrink-0 justify-between items-center gap-4 nav-stacked:w-full nav-stacked:gap-2 nav-stacked:grid nav-stacked:grid-cols-[1fr_auto_1fr]">
           {/* Brand */}
-          <div className="flex-shrink-0 min-w-fit">
+          <div className="flex-shrink-0 min-w-fit nav-stacked:col-start-2">
             <Link to="/" className="font-heading text-2xl font-bold text-white hover:opacity-90 transition-opacity max-sm:text-xl">
               {t('app_name')}
             </Link>
           </div>
 
           {/* Language Selector for Mobile */}
-          <div className="hidden max-nav:flex gap-1 flex-shrink-0">
+          <div className="hidden nav-stacked:flex gap-1 flex-shrink-0 nav-stacked:col-start-3 nav-stacked:justify-self-end">
             <div className="language-dropdown relative z-[2000]">
               <button 
                 ref={languageBtnMobileRef}
@@ -200,34 +293,38 @@ const Navbar: React.FC = () => {
         </div>
 
         {/* Links and Controls Container */}
-        <div className="flex flex-1 justify-between items-center gap-2 max-nav:w-full max-nav:flex-col-reverse">
+        <div className="flex flex-1 justify-between items-center gap-2 nav-stacked:w-full nav-stacked:flex-col-reverse">
           {/* Links */}
-          <div className="theme-bar-links flex flex-1 justify-center items-center gap-2 max-nav:overflow-x-auto max-nav:-webkit-overflow-scrolling-touch max-nav:scrollbar-none max-nav:w-full max-nav:flex-nowrap min-w-0">
-          <Link to="/" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm">
+          {/* Centered through auto margins on the first and last link rather
+              than justify-center: when the row overflows, justify-center
+              pushes the first links past the left edge, where the
+              horizontal scroll cannot reach them. */}
+          <div ref={linksRef} className="theme-bar-links flex flex-1 items-center gap-2 [&>:first-child]:ml-auto [&>:last-child]:mr-auto nav-stacked:overflow-x-auto nav-stacked:-webkit-overflow-scrolling-touch nav-stacked:scrollbar-none nav-stacked:w-full nav-stacked:flex-nowrap min-w-0">
+          <Link to="/" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs nav-stacked:px-2.5 nav-stacked:py-1.5 nav-stacked:text-sm">
             {t('navbar_home')}
           </Link>
-          <Link to="/players" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm">
+          <Link to="/players" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs nav-stacked:px-2.5 nav-stacked:py-1.5 nav-stacked:text-sm">
             {t('navbar_players')}
           </Link>
-          <Link to="/rankings" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm">
+          <Link to="/rankings" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs nav-stacked:px-2.5 nav-stacked:py-1.5 nav-stacked:text-sm">
             {t('navbar_ranking')}
           </Link>
-          <Link to="/statistics" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm">
+          <Link to="/statistics" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs nav-stacked:px-2.5 nav-stacked:py-1.5 nav-stacked:text-sm">
             {t('statistics')}
           </Link>
-          <Link to="/tournaments" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm">
+          <Link to="/tournaments" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs nav-stacked:px-2.5 nav-stacked:py-1.5 nav-stacked:text-sm">
             {t('navbar_tournaments')}
           </Link>
-          <Link to="/events" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm">
+          <Link to="/events" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs nav-stacked:px-2.5 nav-stacked:py-1.5 nav-stacked:text-sm">
             {t('navbar_events')}
           </Link>
-          <Link to="/matches" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm">
+          <Link to="/matches" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs nav-stacked:px-2.5 nav-stacked:py-1.5 nav-stacked:text-sm">
             {t('navbar_matches')}
           </Link>
-          <Link to="/faq" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm">
+          <Link to="/faq" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs nav-stacked:px-2.5 nav-stacked:py-1.5 nav-stacked:text-sm">
             {t('navbar_faq')}
           </Link>
-          <Link to="/news" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm">
+          <Link to="/news" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs nav-stacked:px-2.5 nav-stacked:py-1.5 nav-stacked:text-sm">
             {t('navbar_news')}
           </Link>
           <button 
@@ -235,7 +332,7 @@ const Navbar: React.FC = () => {
               const helpSlug = getHelpSlugFromPath(location.pathname);
               navigate(`/help/${helpSlug}`);
             }}
-            className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm"
+            className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs nav-stacked:px-2.5 nav-stacked:py-1.5 nav-stacked:text-sm"
             title={t('navbar.help_for', { page: getHelpSlugFromPath(location.pathname) })}
           >
             {t('help')}
@@ -247,7 +344,7 @@ const Navbar: React.FC = () => {
               <button
                 data-help-id="action-open-notifications-bell"
                 ref={notificationsBtnRef}
-                className="relative px-3 py-2 bg-white/10 text-white hover:bg-white/20 rounded transition-all flex items-center gap-2 max-sm:px-2 max-sm:py-1.5 max-nav:px-2.5 max-nav:py-1.5"
+                className="relative px-3 py-2 bg-white/10 text-white hover:bg-white/20 rounded transition-all flex items-center gap-2 max-sm:px-2 max-sm:py-1.5 nav-stacked:px-2.5 nav-stacked:py-1.5"
                 onClick={() => setNotificationsDropdownOpen(!notificationsDropdownOpen)}
                 title={t('notifications_title')}
               >
@@ -359,7 +456,7 @@ const Navbar: React.FC = () => {
                 <button
                   data-help-id="action-open-user-menu"
                   type="button"
-                  className="bg-secondary text-white px-3 py-2 rounded font-semibold hover:bg-blue-700 transition-colors max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm flex-shrink-0 whitespace-nowrap"
+                  className="bg-secondary text-white px-3 py-2 rounded font-semibold hover:bg-blue-700 transition-colors max-sm:px-2 max-sm:py-1.5 max-sm:text-xs nav-stacked:px-2.5 nav-stacked:py-1.5 nav-stacked:text-sm flex-shrink-0 whitespace-nowrap"
                   onClick={() => navigate('/user')}
                 >
                   {user?.nickname || getTranslation('navbar_user_menu', 'User Menu')}
@@ -368,7 +465,7 @@ const Navbar: React.FC = () => {
               <button
                 data-help-id="action-logout"
                 type="button"
-                className="bg-red-600 text-white px-3 py-2 rounded font-semibold hover:bg-red-700 transition-colors max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm flex-shrink-0 whitespace-nowrap"
+                className="bg-red-600 text-white px-3 py-2 rounded font-semibold hover:bg-red-700 transition-colors max-sm:px-2 max-sm:py-1.5 max-sm:text-xs nav-stacked:px-2.5 nav-stacked:py-1.5 nav-stacked:text-sm flex-shrink-0 whitespace-nowrap"
                 onClick={handleLogout}
                 title={t('navbar_logout')}
               >
@@ -380,10 +477,10 @@ const Navbar: React.FC = () => {
           {/* Auth Links */}
           {!isAuthenticated && (
             <>
-              <Link to="/login" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm">
+              <Link to="/login" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs nav-stacked:px-2.5 nav-stacked:py-1.5 nav-stacked:text-sm">
                 {t('navbar_login')}
               </Link>
-              <Link to="/register" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm">
+              <Link to="/register" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs nav-stacked:px-2.5 nav-stacked:py-1.5 nav-stacked:text-sm">
                 {t('navbar_register')}
               </Link>
             </>
@@ -391,7 +488,7 @@ const Navbar: React.FC = () => {
           </div>
 
           {/* Language Selector - Desktop Only */}
-          <div className="hidden nav:flex gap-1 flex-shrink-0 min-w-fit">
+          <div className="hidden nav-row:flex gap-1 flex-shrink-0 min-w-fit">
             <div className="language-dropdown relative z-[2000]">
               <button 
                 ref={languageBtnRef}
@@ -404,7 +501,7 @@ const Navbar: React.FC = () => {
                 alt={currentLanguage.code}
                 className="w-5 h-3 rounded flex-shrink-0 max-sm:w-4 max-sm:h-2.5"
               />
-              <span className="text-sm max-sm:hidden max-nav:text-xs">{currentLanguage.code.toUpperCase()}</span>
+              <span className="text-sm max-sm:hidden nav-stacked:text-xs">{currentLanguage.code.toUpperCase()}</span>
             </button>
             {languageDropdownOpen && languageDropdownPosition && createPortal(
               <div 
