@@ -18,6 +18,9 @@
  *   by components but missing from a theme would render as an invalid color.
  * - Status scales (red, green, amber, yellow...) are deliberately not
  *   themed: they carry meaning (error, success, warning) and must keep it.
+ *   Purple and indigo are themed as secondary accents; a theme may change
+ *   their hue but must keep purple distinct from amber and red, because it
+ *   also encodes meanings (side 2, team tournaments, reservations).
  * - Medieval-only decoration (fonts, background art, bar styling) lives in
  *   selectors scoped to `[data-theme="medieval"]`, so the ranked theme never
  *   downloads those assets.
@@ -55,6 +58,35 @@
   --c-blue-800: 30 64 175;
   --c-blue-900: 30 58 138;
   --c-blue-950: 23 37 84;
+
+  --c-purple-50: 250 245 255;
+  --c-purple-100: 243 232 255;
+  --c-purple-200: 233 213 255;
+  --c-purple-300: 216 180 254;
+  --c-purple-400: 192 132 252;
+  --c-purple-500: 168 85 247;
+  --c-purple-600: 147 51 234;
+  --c-purple-700: 126 34 206;
+  --c-purple-800: 107 33 168;
+  --c-purple-900: 88 28 135;
+  --c-purple-950: 59 7 100;
+
+  --c-indigo-50: 238 242 255;
+  --c-indigo-100: 224 231 255;
+  --c-indigo-200: 199 210 254;
+  --c-indigo-300: 165 180 252;
+  --c-indigo-400: 129 140 248;
+  --c-indigo-500: 99 102 241;
+  --c-indigo-600: 79 70 229;
+  --c-indigo-700: 67 56 202;
+  --c-indigo-800: 55 48 163;
+  --c-indigo-900: 49 46 129;
+  --c-indigo-950: 30 27 75;
+
+  /* Tournament mode badges (TournamentList): full colors behind white text. */
+  --mode-ranked: 25 118 210;
+  --mode-unranked: 255 152 0;
+  --mode-team: 156 39 176;
 
   --c-white: 255 255 255;
   --c-primary: 44 62 80;
@@ -101,6 +133,46 @@
   --c-blue-800: 90 61 36;
   --c-blue-900: 62 42 25;
   --c-blue-950: 42 28 16;
+
+  /*
+   * Secondary accents. Purple marks a meaning in several places (side 2 of
+   * a game, team tournaments, tournament reservations, admins), so it stays
+   * a distinct hue: a muted heraldic purpure that sits with the parchment
+   * and stays clearly apart from the amber side 1 and the red losses.
+   * Indigo becomes the night blue of the wesnoth.org bars.
+   */
+  --c-purple-50: 246 240 245;
+  --c-purple-100: 236 224 234;
+  --c-purple-200: 219 197 215;
+  --c-purple-300: 195 161 189;
+  --c-purple-400: 166 124 159;
+  --c-purple-500: 135 95 129;
+  --c-purple-600: 112 76 106;
+  --c-purple-700: 92 61 87;
+  --c-purple-800: 74 49 70;
+  --c-purple-900: 56 37 54;
+  --c-purple-950: 36 23 34;
+
+  --c-indigo-50: 238 240 246;
+  --c-indigo-100: 221 226 238;
+  --c-indigo-200: 188 197 221;
+  --c-indigo-300: 148 162 198;
+  --c-indigo-400: 108 127 171;
+  --c-indigo-500: 77 97 146;
+  --c-indigo-600: 59 76 122;
+  --c-indigo-700: 47 61 99;
+  --c-indigo-800: 37 48 78;
+  --c-indigo-900: 27 35 58;
+  --c-indigo-950: 15 20 33;
+
+  /*
+   * Tournament mode badges keep three distinct hues (ranked, unranked,
+   * team) in darker tones: night blue, ochre and purpure. All three carry
+   * white text at 5:1 or more, where the ranked theme's orange gives 2.2:1.
+   */
+  --mode-ranked: 59 76 122;
+  --mode-unranked: 154 91 23;
+  --mode-team: 112 76 106;
 
   /* Cards stay a shade lighter than the parchment page, as on wesnoth.org. */
   --c-white: 253 251 247;

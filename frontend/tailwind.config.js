@@ -29,6 +29,8 @@ export default {
       colors: {
         gray: themedScale('gray'),
         blue: themedScale('blue'),
+        purple: themedScale('purple'),
+        indigo: themedScale('indigo'),
         white: themedColor('white'),
         primary: themedColor('primary'),
         secondary: themedColor('secondary'),

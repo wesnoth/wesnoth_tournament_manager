@@ -167,11 +167,16 @@ const TournamentList: React.FC<TournamentListProps> = ({
     return modeMap[mode] || mode;
   };
 
+  /**
+   * Mode badge colors come from the active theme (`--mode-*` in themes.css),
+   * which keeps the three modes distinct in every theme. Inline styles
+   * resolve CSS variables, unlike SVG presentation attributes.
+   */
   const getTournamentModeColor = (mode?: string) => {
     const colorMap: { [key: string]: string } = {
-      'ranked': '#1976d2',
-      'unranked': '#ff9800',
-      'team': '#9c27b0'
+      'ranked': 'rgb(var(--mode-ranked))',
+      'unranked': 'rgb(var(--mode-unranked))',
+      'team': 'rgb(var(--mode-team))'
     };
     return colorMap[mode || ''] || '#999';
   };
