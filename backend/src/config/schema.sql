@@ -1589,6 +1589,7 @@ CREATE TABLE `users_extension` (
   `id` char(36) NOT NULL,
   `nickname` varchar(255) NOT NULL,
   `language` varchar(2) DEFAULT 'en',
+  `theme` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Explicit visual theme choice (medieval or ranked), NULL follows the site default',
   `discord_id` varchar(255) DEFAULT NULL,
   `elo_rating` int(11) DEFAULT 1400,
   `level` varchar(50) DEFAULT 'novice',

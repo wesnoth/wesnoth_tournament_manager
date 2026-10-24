@@ -19,6 +19,7 @@ import {
   getActiveBalanceHistoryRebuildJobId,
   getBalanceHistoryRebuildJob,
 } from '../services/balanceHistoryRebuildJobService.js';
+import { DEFAULT_THEME_SETTING_KEY, isSupportedTheme } from '../services/themeSettingsService.js';
 import { getSystemPauseStatus, globalRecalculationMiddleware, invalidateNonAdminTokens } from '../services/systemPauseService.js';
 
 const router = Router();
@@ -2886,6 +2887,12 @@ router.put('/system-settings/:setting_key', authMiddleware, adminMiddleware, asy
 
     if (!setting_value && setting_value !== '0' && setting_value !== 'false') {
       return res.status(400).json({ error: 'setting_value is required' });
+    }
+
+    // The default theme is read by every page load, so only values the
+    // frontend can render are accepted for it.
+    if (setting_key === DEFAULT_THEME_SETTING_KEY && !isSupportedTheme(setting_value)) {
+      return res.status(400).json({ error: 'Unsupported theme' });
     }
 
     const ip = getUserIP(req);

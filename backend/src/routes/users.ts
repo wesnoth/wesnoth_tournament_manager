@@ -7,6 +7,7 @@ import { avatarManifestService } from '../services/avatarManifestService.js';
 import { validateTimezone, validateAvailabilitySchedule } from '../utils/timezoneUtils.js';
 import { isValidDiscordSnowflake, validateDiscordId } from '../services/discord.js';
 import { getCombinedMatchFeed } from '../services/combinedMatchFeedService.js';
+import { isSupportedTheme } from '../services/themeSettingsService.js';
 import {
   TOURNAMENT_LAURELS_COLUMNS,
   TOURNAMENT_LAURELS_SORT_COLUMNS,
@@ -23,6 +24,7 @@ router.get('/profile', authMiddleware, async (req: AuthRequest, res) => {
         u.id, 
         u.nickname, 
         u.language, 
+        u.theme, 
         u.discord_id, 
         u.elo_rating, 
         u.level, 
@@ -304,9 +306,11 @@ router.post('/profile/discord/validate', authMiddleware, async (req: AuthRequest
 // Update mutable user preferences owned by the authenticated profile.
 router.put('/profile/update', authMiddleware, async (req: AuthRequest, res) => {
   try {
-    const { country, avatar, language, timezone, availability_schedule } = req.body;
+    const { country, avatar, language, theme, timezone, availability_schedule } = req.body;
 
-    if (!country && !avatar && !language && !timezone && !availability_schedule) {
+    // `theme: null` is a meaningful update (return to the site default), so
+    // presence is checked with `!== undefined` rather than truthiness.
+    if (!country && !avatar && !language && theme === undefined && !timezone && !availability_schedule) {
       return res.status(400).json({ error: 'At least one field is required' });
     }
 
@@ -331,6 +335,15 @@ router.put('/profile/update', authMiddleware, async (req: AuthRequest, res) => {
       }
       updateFields.push(`language = ?`);
       params.push(language);
+    }
+
+    if (theme !== undefined) {
+      // NULL clears the explicit choice so the user follows default_theme.
+      if (theme !== null && !isSupportedTheme(theme)) {
+        return res.status(400).json({ error: 'Unsupported theme' });
+      }
+      updateFields.push(`theme = ?`);
+      params.push(theme);
     }
 
     // Validate and update timezone

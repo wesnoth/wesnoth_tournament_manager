@@ -10,6 +10,7 @@ import {
 } from '../services/tournamentResultService.js';
 import { optionalAuthMiddleware } from '../middleware/auth.js';
 import { getCombinedMatchFeed } from '../services/combinedMatchFeedService.js';
+import { FALLBACK_DEFAULT_THEME, getDefaultTheme } from '../services/themeSettingsService.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -605,6 +606,20 @@ router.get('/factions', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch factions' });
   }
 });
+/**
+ * Site-wide default visual theme. Public because anonymous visitors also
+ * follow it. On a database error the fallback default is returned instead
+ * of a 500, since a missing theme must not break page rendering.
+ */
+router.get('/site-theme', async (_req, res) => {
+  try {
+    res.json({ default_theme: await getDefaultTheme() });
+  } catch (error) {
+    console.error('Error fetching default theme:', error);
+    res.json({ default_theme: FALLBACK_DEFAULT_THEME });
+  }
+});
+
 // Debug endpoint to verify public routes are working
 router.get('/debug', (req, res) => {
   res.json({ message: 'Public routes working', timestamp: new Date().toISOString() });
