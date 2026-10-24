@@ -9,9 +9,30 @@
  * Mixing happens in OKLab, a perceptual color space, so the generated steps
  * look evenly spaced and intermediate shades do not turn muddy the way a
  * plain RGB average does.
+ *
+ * Advanced mode lets the user replace individual derived colors
+ * (`overrides`). Every color without an override keeps following the three
+ * picks, so changing a pick later still updates the rest of the palette.
  */
 
 import type { ThemeName } from '../store/themeStore';
+
+/**
+ * Colors the advanced editor exposes, grouped by the role they play in the
+ * components (measured from how the Tailwind classes are used). Shades that
+ * are barely used (gray-950, blue-300/400/950, secondary) stay automatic.
+ * Keep in sync with ADVANCED_TOKENS in
+ * backend/src/services/themeSettingsService.ts.
+ */
+export const ADVANCED_TOKEN_GROUPS = [
+  { key: 'surfaces', tokens: ['white', 'gray-50', 'gray-100', 'gray-200', 'gray-300'] },
+  { key: 'text', tokens: ['gray-400', 'gray-500', 'gray-600', 'gray-700', 'gray-800', 'gray-900', 'primary'] },
+  { key: 'accent', tokens: ['blue-50', 'blue-100', 'blue-200', 'blue-500', 'blue-600', 'blue-700', 'blue-800', 'blue-900'] },
+] as const;
+
+export type AdvancedToken = (typeof ADVANCED_TOKEN_GROUPS)[number]['tokens'][number];
+
+export const ADVANCED_TOKENS: readonly AdvancedToken[] = ADVANCED_TOKEN_GROUPS.flatMap((group) => group.tokens);
 
 export interface CustomThemeConfig {
   base: ThemeName;
@@ -21,6 +42,8 @@ export interface CustomThemeConfig {
   text: string;
   /** Accent for links, buttons and highlights, #rrggbb. */
   accent: string;
+  /** Advanced mode: derived colors the user replaced, #rrggbb by token. */
+  overrides?: Partial<Record<AdvancedToken, string>>;
 }
 
 type Rgb = [number, number, number];
@@ -44,9 +67,15 @@ export const isHexColor = (value: unknown): value is string =>
 /** Type guard for custom theme configs read from storage or the API. */
 export const isCustomThemeConfig = (value: unknown): value is CustomThemeConfig => {
   if (!value || typeof value !== 'object') return false;
-  const { base, background, text, accent } = value as Record<string, unknown>;
+  const { base, background, text, accent, overrides } = value as Record<string, unknown>;
+  const validOverrides = overrides === undefined || (
+    !!overrides && typeof overrides === 'object' && !Array.isArray(overrides)
+    && Object.entries(overrides).every(
+      ([token, color]) => (ADVANCED_TOKENS as readonly string[]).includes(token) && isHexColor(color)
+    )
+  );
   return (base === 'medieval' || base === 'ranked')
-    && isHexColor(background) && isHexColor(text) && isHexColor(accent);
+    && isHexColor(background) && isHexColor(text) && isHexColor(accent) && validOverrides;
 };
 
 const hexToRgb = (hex: string): Rgb => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as Rgb;
@@ -168,8 +197,12 @@ export interface CustomPalette {
  */
 export function buildCustomPalette(config: CustomThemeConfig): CustomPalette {
   const { background, text, accent } = config;
+  const overrides = config.overrides ?? {};
   const isLight = luminance(background) > luminance(text);
-  const card = isLight ? mixColors(background, '#ffffff', 0.7) : mixColors(background, text, 0.07);
+  // An overridden panel color is applied first, because the accent ramp and
+  // the readability adjustments below are computed against the panels.
+  const card = overrides.white
+    ?? (isLight ? mixColors(background, '#ffffff', 0.7) : mixColors(background, text, 0.07));
 
   const grayAmounts = [0.03, 0.07, 0.14, 0.24, 0.4, 0.52, 0.64, 0.75, 0.86, 0.93, 0.97];
   const gray = Object.fromEntries(
@@ -194,11 +227,18 @@ export function buildCustomPalette(config: CustomThemeConfig): CustomPalette {
   blue['600'] = ensureContrast(blue['600'], card, text, MIN_TEXT_CONTRAST);
   blue['700'] = ensureContrast(blue['700'], card, text, MIN_TEXT_CONTRAST);
 
+  // Overrides win over the automatic adjustments: in advanced mode the user
+  // decides, and checkContrast reports (and blocks) unreadable results.
+  for (const shade of SHADES) {
+    gray[shade] = overrides[`gray-${shade}` as AdvancedToken] ?? gray[shade];
+    blue[shade] = overrides[`blue-${shade}` as AdvancedToken] ?? blue[shade];
+  }
+
   const hex = {
     gray,
     blue,
     white: card,
-    primary: blue['900'],
+    primary: overrides.primary ?? blue['900'],
     secondary: blue['500'],
     background,
   };
@@ -219,9 +259,20 @@ export function buildCustomPalette(config: CustomThemeConfig): CustomPalette {
   return { hex, vars };
 }
 
+/**
+ * Effective color of an advanced token in a palette, used by the editor to
+ * show each token's current and automatic values.
+ */
+export function tokenColor(palette: CustomPalette, token: AdvancedToken): string {
+  if (token === 'white') return palette.hex.white;
+  if (token === 'primary') return palette.hex.primary;
+  const [scale, shade] = token.split('-') as ['gray' | 'blue', (typeof SHADES)[number]];
+  return palette.hex[scale][shade];
+}
+
 export interface ContrastCheck {
   /** i18n key suffix under theme.contrast_*. */
-  key: 'light_background' | 'text_background' | 'text_cards' | 'muted_cards' | 'links_cards';
+  key: 'light_background' | 'text_background' | 'text_cards' | 'muted_cards' | 'links_cards' | 'buttons';
   /** WCAG ratio, or null for checks that are not a color pair. */
   ratio: number | null;
   passes: boolean;
@@ -231,8 +282,12 @@ export interface ContrastCheck {
  * Readability report shown in the editor; every check must pass to save.
  * The background must be lighter than the text, because the fixed status
  * tints (`bg-yellow-50` and similar) assume dark text on light surfaces.
- * The user's own pair is checked next. The derived pairs are adjusted
- * automatically, so they only fail when the picks leave no room to fix them.
+ * The other checks use the effective palette, overrides included: the most
+ * used text shades on panels (body text is gray-700, secondary text
+ * gray-500), links (blue-600) and button labels, which are the panel color
+ * on the accent (blue-500), where WCAG allows 3:1 for their bold text.
+ * Without overrides the derived pairs are adjusted automatically, so they
+ * only fail when the picks leave no room to fix them.
  */
 export function checkContrast(config: CustomThemeConfig): ContrastCheck[] {
   const { hex } = buildCustomPalette(config);
@@ -241,14 +296,15 @@ export function checkContrast(config: CustomThemeConfig): ContrastCheck[] {
     ratio: null,
     passes: luminance(config.background) > luminance(config.text),
   };
-  const pairs: Array<[ContrastCheck['key'], string, string]> = [
-    ['text_background', config.text, config.background],
-    ['text_cards', hex.gray['900'], hex.white],
-    ['muted_cards', hex.gray['500'], hex.white],
-    ['links_cards', hex.blue['600'], hex.white],
+  const pairs: Array<[ContrastCheck['key'], string, string, number]> = [
+    ['text_background', config.text, config.background, MIN_TEXT_CONTRAST],
+    ['text_cards', hex.gray['700'], hex.white, MIN_TEXT_CONTRAST],
+    ['muted_cards', hex.gray['500'], hex.white, MIN_TEXT_CONTRAST],
+    ['links_cards', hex.blue['600'], hex.white, MIN_TEXT_CONTRAST],
+    ['buttons', hex.white, hex.blue['500'], 3],
   ];
-  return [lightBackground, ...pairs.map(([key, a, b]) => {
+  return [lightBackground, ...pairs.map(([key, a, b, minimum]) => {
     const ratio = contrastRatio(a, b);
-    return { key, ratio, passes: ratio >= MIN_TEXT_CONTRAST };
+    return { key, ratio, passes: ratio >= minimum };
   })];
 }

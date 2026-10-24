@@ -37,33 +37,60 @@ export const isUserTheme = (value: unknown): value is ThemeName | typeof CUSTOM_
  * theme are stored; the frontend derives every color scale from them, so the
  * stored shape stays small and independent of how scales are generated.
  */
+/**
+ * Derived colors a user may replace in the advanced editor. Keep in sync
+ * with ADVANCED_TOKEN_GROUPS in frontend/src/theme/customTheme.ts. The list
+ * also bounds the size of the stored JSON.
+ */
+export const ADVANCED_TOKENS = [
+  'white', 'gray-50', 'gray-100', 'gray-200', 'gray-300',
+  'gray-400', 'gray-500', 'gray-600', 'gray-700', 'gray-800', 'gray-900', 'primary',
+  'blue-50', 'blue-100', 'blue-200', 'blue-500', 'blue-600', 'blue-700', 'blue-800', 'blue-900',
+] as const;
+
 export interface CustomThemeConfig {
   base: ThemeName;
   background: string;
   text: string;
   accent: string;
+  /** Advanced overrides by token, omitted when the user replaced nothing. */
+  overrides?: Partial<Record<(typeof ADVANCED_TOKENS)[number], string>>;
 }
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
+const isHexColor = (value: unknown): value is string => typeof value === 'string' && HEX_COLOR.test(value);
+
 /**
  * Validates a custom theme received from a client and returns a normalized
- * copy containing only the known keys (lowercase colors), or null when the
- * value is malformed. Extra keys are dropped so the stored JSON cannot grow
- * with arbitrary client data.
+ * copy (lowercase colors), or null when the value is malformed. Unknown
+ * top-level keys are dropped so the stored JSON cannot grow with arbitrary
+ * client data. Overrides are stricter: an unknown token or a non-hex value
+ * rejects the whole theme, because silently dropping one would save colors
+ * different from what the user previewed.
  */
 export function parseCustomTheme(value: unknown): CustomThemeConfig | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const { base, background, text, accent } = value as Record<string, unknown>;
+  const { base, background, text, accent, overrides } = value as Record<string, unknown>;
   if (!isSupportedTheme(base)) return null;
-  const colors = [background, text, accent];
-  if (!colors.every((color) => typeof color === 'string' && HEX_COLOR.test(color))) return null;
-  return {
+  if (![background, text, accent].every(isHexColor)) return null;
+
+  const config: CustomThemeConfig = {
     base,
     background: (background as string).toLowerCase(),
     text: (text as string).toLowerCase(),
     accent: (accent as string).toLowerCase(),
   };
+  if (overrides !== undefined && overrides !== null) {
+    if (typeof overrides !== 'object' || Array.isArray(overrides)) return null;
+    const normalized: Record<string, string> = {};
+    for (const [token, color] of Object.entries(overrides)) {
+      if (!(ADVANCED_TOKENS as readonly string[]).includes(token) || !isHexColor(color)) return null;
+      normalized[token] = color.toLowerCase();
+    }
+    if (Object.keys(normalized).length > 0) config.overrides = normalized;
+  }
+  return config;
 }
 
 /**
