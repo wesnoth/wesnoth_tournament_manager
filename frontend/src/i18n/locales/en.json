@@ -1978,6 +1978,9 @@
     "sample_badge": "badge",
     "sample_button": "Button",
     "sample_button_light": "Accent button",
-    "sample_link": "Link"
+    "sample_link": "Link",
+    "token_blue_300": "Active status badge borders",
+    "token_blue_400": "Team card and availability grid borders, bracket arrows",
+    "sample_team_card": "Team card"
   }
 }

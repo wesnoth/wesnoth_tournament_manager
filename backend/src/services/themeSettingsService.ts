@@ -45,7 +45,7 @@ export const isUserTheme = (value: unknown): value is ThemeName | typeof CUSTOM_
 export const ADVANCED_TOKENS = [
   'white', 'gray-50', 'gray-100', 'gray-200', 'gray-300',
   'gray-400', 'gray-500', 'gray-600', 'gray-700', 'gray-800', 'gray-900', 'primary',
-  'blue-50', 'blue-100', 'blue-200', 'blue-500', 'blue-600', 'blue-700', 'blue-800', 'blue-900',
+  'blue-50', 'blue-100', 'blue-200', 'blue-300', 'blue-400', 'blue-500', 'blue-600', 'blue-700', 'blue-800', 'blue-900',
 ] as const;
 
 export interface CustomThemeConfig {

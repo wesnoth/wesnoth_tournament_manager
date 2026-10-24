@@ -1978,6 +1978,9 @@
     "sample_badge": "Abzeichen",
     "sample_button": "Schaltfläche",
     "sample_button_light": "Akzent-Schaltfläche",
-    "sample_link": "Link"
+    "sample_link": "Link",
+    "token_blue_300": "Rahmen aktiver Statusabzeichen",
+    "token_blue_400": "Rahmen von Teamkarten und Verfügbarkeitsraster, Pfeile im Turnierbaum",
+    "sample_team_card": "Teamkarte"
   }
 }

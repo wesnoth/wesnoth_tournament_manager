@@ -1978,6 +1978,9 @@
     "sample_badge": "insignia",
     "sample_button": "Botón",
     "sample_button_light": "Botón de acento",
-    "sample_link": "Enlace"
+    "sample_link": "Enlace",
+    "token_blue_300": "Bordes de insignias de estado activo",
+    "token_blue_400": "Bordes de tarjetas de equipo y rejilla de disponibilidad, flechas del cuadro",
+    "sample_team_card": "Tarjeta de equipo"
   }
 }

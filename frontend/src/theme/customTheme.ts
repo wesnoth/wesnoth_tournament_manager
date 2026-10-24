@@ -19,15 +19,19 @@ import type { ThemeName } from '../store/themeStore';
 
 /**
  * Colors the advanced editor exposes, grouped by the role they play in the
- * components (measured from how the Tailwind classes are used). Shades that
- * are barely used (gray-950, blue-300/400/950, secondary) stay automatic.
- * Keep in sync with ADVANCED_TOKENS in
+ * components (measured from how the Tailwind classes are used). Colors no
+ * component uses (gray-950, blue-950, dark, light, info) stay automatic, as
+ * does secondary, which equals blue-500 in a custom theme and is only used
+ * by the navbar. Keep in sync with ADVANCED_TOKENS in
  * backend/src/services/themeSettingsService.ts.
  */
 export const ADVANCED_TOKEN_GROUPS = [
   { key: 'surfaces', tokens: ['white', 'gray-50', 'gray-100', 'gray-200', 'gray-300'] },
   { key: 'text', tokens: ['gray-400', 'gray-500', 'gray-600', 'gray-700', 'gray-800', 'gray-900', 'primary'] },
-  { key: 'accent', tokens: ['blue-50', 'blue-100', 'blue-200', 'blue-500', 'blue-600', 'blue-700', 'blue-800', 'blue-900'] },
+  {
+    key: 'accent',
+    tokens: ['blue-50', 'blue-100', 'blue-200', 'blue-300', 'blue-400', 'blue-500', 'blue-600', 'blue-700', 'blue-800', 'blue-900'],
+  },
 ] as const;
 
 export type AdvancedToken = (typeof ADVANCED_TOKEN_GROUPS)[number]['tokens'][number];

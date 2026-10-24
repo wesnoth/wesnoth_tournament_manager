@@ -149,8 +149,11 @@ const ThemeSample: React.FC = () => {
           <tr className="bg-gray-50"><td className="px-3 py-1 text-gray-700">{t('theme.sample_table_row')}</td></tr>
         </tbody>
       </table>
+      <div className="mt-3 flex items-center gap-2 rounded-lg border-2 border-blue-400 bg-gray-50 p-2 text-sm text-gray-700">
+        {t('theme.sample_team_card')} <span className="text-lg font-bold text-blue-400">→</span>
+      </div>
       <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-        {t('theme.sample_highlight')} <span className="rounded bg-blue-100 px-1 text-blue-900">{t('theme.sample_badge')}</span>
+        {t('theme.sample_highlight')} <span className="rounded border border-blue-300 bg-blue-100 px-1 text-blue-900">{t('theme.sample_badge')}</span>
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <span className="cursor-default rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">

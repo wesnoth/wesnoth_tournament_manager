@@ -1978,6 +1978,9 @@
     "sample_badge": "徽章",
     "sample_button": "按钮",
     "sample_button_light": "强调按钮",
-    "sample_link": "链接"
+    "sample_link": "链接",
+    "token_blue_300": "活跃状态徽章边框",
+    "token_blue_400": "队伍卡片和空闲时间表格边框、对阵图箭头",
+    "sample_team_card": "队伍卡片"
   }
 }
