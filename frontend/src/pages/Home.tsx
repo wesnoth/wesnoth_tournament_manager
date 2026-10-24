@@ -317,23 +317,27 @@ const Home: React.FC = () => {
             </div>
             {recentMatches.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="w-full table-fixed text-sm">
+                {/* A fixed layout with only percentage columns never overflows, so on phones the
+                    columns shrank until dates, nicknames and headers overlapped. The minimum width
+                    lets the wrapper scroll horizontally instead, and the fixed rem widths keep the
+                    date and rating columns readable while the player columns share the rest. */}
+                <table className="w-full min-w-[52rem] table-fixed text-sm">
                   <colgroup>
-                    <col className="w-[10%]" />
-                    <col className="w-[25%]" />
-                    <col className="w-[10%]" />
-                    <col className="w-[25%]" />
-                    <col className="w-[10%]" />
-                    <col className="w-[20%]" />
+                    <col className="w-32" />
+                    <col />
+                    <col className="w-32" />
+                    <col />
+                    <col className="w-32" />
+                    <col className="w-48" />
                   </colgroup>
                   <thead className="bg-gray-100">
                     <tr>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">{t('label_date')}</th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">{t('label_winner')}</th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">{t('label_winner_rating')}</th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">{t('label_loser')}</th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">{t('label_loser_rating')}</th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">{t('label_actions')}</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">{t('label_date')}</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">{t('label_winner')}</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">{t('label_winner_rating')}</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">{t('label_loser')}</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">{t('label_loser_rating')}</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">{t('label_actions')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -354,14 +358,14 @@ const Home: React.FC = () => {
 
                         return (
                           <tr key={match.feed_id || match.id} className={`border-b ${borderColor} hover:${isDueReplay ? 'bg-red-100' : 'bg-yellow-50'} ${bgColor}`}>
-                            <td className="px-4 py-3 align-top text-sm text-gray-700">
+                            <td className="whitespace-nowrap px-3 py-3 align-top text-sm text-gray-700">
                               {new Date(match.created_at).toLocaleDateString(i18next.language)}
                             </td>
 
-                            <td className="px-4 py-3 align-top text-sm" colSpan={2}>
+                            <td className="px-3 py-3 align-top text-sm" colSpan={2}>
                               <div className="space-y-2">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <div className="min-w-0 flex-1 break-words">
+                                  <div className="min-w-[6rem] flex-1 break-words">
                                     <span className={`font-semibold ${textColor}`}>{player1Name}</span>
                                   </div>
                                   {match.winner_faction && (
@@ -374,10 +378,10 @@ const Home: React.FC = () => {
                               </div>
                             </td>
 
-                            <td className="px-4 py-3 align-top text-sm" colSpan={2}>
+                            <td className="px-3 py-3 align-top text-sm" colSpan={2}>
                               <div className="space-y-2">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <div className="min-w-0 flex-1 break-words">
+                                  <div className="min-w-[6rem] flex-1 break-words">
                                     <span className={`font-semibold ${textColor}`}>{player2Name}</span>
                                   </div>
                                   {match.loser_faction && (
@@ -390,7 +394,7 @@ const Home: React.FC = () => {
                               </div>
                             </td>
 
-                            <td className="px-4 py-3 align-top text-sm">
+                            <td className="px-3 py-3 align-top text-sm">
                               <div className="space-y-2">
                                 <div className={`break-words font-semibold ${isDueReplay ? 'text-red-900' : 'text-yellow-900'}`}>{map}</div>
                                 {(match.replay_filename || match.game_name) && (
@@ -426,11 +430,11 @@ const Home: React.FC = () => {
 
                       return (
                         <tr data-help-id="region-home-recent-match-row" key={match.feed_id || match.id} className={`border-b transition-colors ${isPendingTournamentReplay ? 'border-yellow-200 bg-yellow-50 hover:bg-yellow-100' : 'hover:bg-gray-50'}`}>
-                          <td className="px-4 py-3 align-top text-gray-700">
+                          <td className="whitespace-nowrap px-3 py-3 align-top text-gray-700">
                             {new Date(match.created_at).toLocaleDateString(i18next.language)}
                           </td>
                           
-                          <td className="px-4 py-3 align-top">
+                          <td className="px-3 py-3 align-top">
                             <div className="flex flex-col gap-1">
                               {isPendingTournamentReplay && <span className="text-[11px] font-semibold uppercase text-gray-500">{t('match_feed.side_1', 'Side 1')}</span>}
                               <span className="font-semibold text-green-600"><PlayerLink nickname={match.winner_nickname} userId={match.winner_id} /></span>
@@ -451,7 +455,7 @@ const Home: React.FC = () => {
                             </div>
                           </td>
                           
-                          <td className="px-4 py-3 align-top">
+                          <td className="px-3 py-3 align-top">
                             <div className="flex flex-col gap-1">
                               {match.has_elo_data === false ? (
                                 <div className="text-xs font-semibold text-gray-500">{match.match_type === 'tournament_ranked' ? t('match_feed.elo_unavailable', 'ELO unavailable') : t('match_feed.no_elo', 'No ELO')}</div>
@@ -464,7 +468,7 @@ const Home: React.FC = () => {
                             </div>
                           </td>
                           
-                          <td className="px-4 py-3 align-top">
+                          <td className="px-3 py-3 align-top">
                             <div className="flex flex-col gap-1">
                               {isPendingTournamentReplay && <span className="text-[11px] font-semibold uppercase text-gray-500">{t('match_feed.side_2', 'Side 2')}</span>}
                               <span className="font-semibold text-red-600"><PlayerLink nickname={match.loser_nickname} userId={match.loser_id} /></span>
@@ -485,7 +489,7 @@ const Home: React.FC = () => {
                             </div>
                           </td>
                           
-                          <td className="px-4 py-3 align-top">
+                          <td className="px-3 py-3 align-top">
                             <div className="flex flex-col gap-1">
                               {match.has_elo_data === false ? (
                                 <div className="text-xs font-semibold text-gray-500">{match.match_type === 'tournament_ranked' ? t('match_feed.elo_unavailable', 'ELO unavailable') : t('match_feed.no_elo', 'No ELO')}</div>
@@ -498,7 +502,7 @@ const Home: React.FC = () => {
                             </div>
                           </td>
                           
-                          <td className="px-4 py-3 align-top">
+                          <td className="px-3 py-3 align-top">
                             <MatchTypeBadge match={match} compact />
                             {isPendingTournamentReplay && match.tournament_id && (
                               <Link

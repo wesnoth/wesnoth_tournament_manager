@@ -186,21 +186,21 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
   if (matches.length === 0) {
     return (
       <div className="w-full overflow-x-auto">
-        <table className="w-full table-fixed border-collapse bg-white">
+        <table className="w-full min-w-[56rem] table-fixed border-collapse bg-white">
           <colgroup>
-            <col className="w-[7%]" />
-            <col className="w-[30%]" />
-            <col className="w-[30%]" />
-            <col className="w-[15%]" />
-            <col className="w-[18%]" />
+            <col className="w-32" />
+            <col />
+            <col />
+            <col className="w-44" />
+            <col className="w-56" />
           </colgroup>
           <thead className="bg-gray-100 border-b-2 border-gray-300">
             <tr>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('date')}>{t('label_date')}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('winner')}>{t('label_winner')}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('loser')}>{t('label_loser')}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('map')}>{t('label_map')}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('status')}>{t('label_status_actions')}</th>
+              <th className="px-3 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('date')}>{t('label_date')}</th>
+              <th className="px-3 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('winner')}>{t('label_winner')}</th>
+              <th className="px-3 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('loser')}>{t('label_loser')}</th>
+              <th className="px-3 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('map')}>{t('label_map')}</th>
+              <th className="px-3 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('status')}>{t('label_status_actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -213,31 +213,37 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
     );
   }
 
+  // Percentage-only columns in a fixed layout never overflow, so on phones they shrank until
+  // dates, nicknames and headers overlapped. The minimum width makes the wrapper scroll
+  // horizontally instead; fixed rem widths keep date, map and actions readable while the
+  // two player columns share the remaining space. The empty-state table mirrors this layout.
+  // Competitor names keep a 6rem minimum so the star and badges wrap below them on narrow
+  // columns instead of splitting short nicknames mid-word.
   return (
     <div className="w-full overflow-x-auto">
-      <table className="w-full table-fixed border-collapse bg-white">
+      <table className="w-full min-w-[56rem] table-fixed border-collapse bg-white">
         <colgroup>
-          <col className="w-[7%]" />
-          <col className="w-[30%]" />
-          <col className="w-[30%]" />
-          <col className="w-[15%]" />
-          <col className="w-[18%]" />
+          <col className="w-32" />
+          <col />
+          <col />
+          <col className="w-44" />
+          <col className="w-56" />
         </colgroup>
         <thead className="bg-gray-100 border-b-2 border-gray-300">
           <tr>
-            <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('date')}>
+            <th className="px-3 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('date')}>
               {t('label_date')}{sortColumn === 'date' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
             </th>
-            <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('winner')}>
+            <th className="px-3 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('winner')}>
               {t('label_winner')}{sortColumn === 'winner' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
             </th>
-            <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('loser')}>
+            <th className="px-3 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('loser')}>
               {t('label_loser')}{sortColumn === 'loser' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
             </th>
-            <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('map')}>
+            <th className="px-3 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('map')}>
               {t('label_map')}{sortColumn === 'map' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
             </th>
-            <th className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('status')}>
+            <th className="px-3 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200" onClick={() => handleSort('status')}>
               {t('label_status_actions')}{sortColumn === 'status' && (sortDirection === 'desc' ? ' ▼' : ' ▲')}
             </th>
           </tr>
@@ -271,12 +277,12 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
 
               return (
                 <tr key={match.feed_id || match.id} className={`border-b ${rowBorderColor} ${rowHoverColor} ${rowBgColor}`}>
-                  <td className="px-4 py-3 align-top text-sm text-gray-700">{date}</td>
+                  <td className="whitespace-nowrap px-3 py-3 align-top text-sm text-gray-700">{date}</td>
 
-                  <td className="px-4 py-3 align-top text-sm">
+                  <td className="px-3 py-3 align-top text-sm">
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
-                        <div className="min-w-0 flex-1 break-words">
+                        <div className="min-w-[6rem] flex-1 break-words">
                           <span className={`font-semibold ${isDueReplay ? 'text-red-800' : 'text-yellow-800'}`}>{player1Name}</span>
                         </div>
                         <span className={`inline-block px-2 py-1 ${isDueReplay ? 'bg-red-200 text-red-700' : 'bg-yellow-100 text-yellow-700'} text-xs rounded font-semibold`}>{faction1}</span>
@@ -285,10 +291,10 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                     </div>
                   </td>
 
-                  <td className="px-4 py-3 align-top text-sm">
+                  <td className="px-3 py-3 align-top text-sm">
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
-                        <div className="min-w-0 flex-1 break-words">
+                        <div className="min-w-[6rem] flex-1 break-words">
                           <span className={`font-semibold ${isDueReplay ? 'text-red-800' : 'text-yellow-800'}`}>{player2Name}</span>
                         </div>
                         <span className={`inline-block px-2 py-1 ${isDueReplay ? 'bg-red-200 text-red-700' : 'bg-yellow-100 text-yellow-700'} text-xs rounded font-semibold`}>{faction2}</span>
@@ -297,7 +303,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                     </div>
                   </td>
 
-                  <td className="px-4 py-3 align-top text-sm">
+                  <td className="px-3 py-3 align-top text-sm">
                     <div className={`break-words font-semibold ${isDueReplay ? 'text-red-900' : 'text-yellow-900'}`}>{map}</div>
                     {(match.replay_filename || match.game_name) && (
                       <div className={`text-xs ${isDueReplay ? 'text-red-700 bg-red-100' : 'text-yellow-700 bg-yellow-100'} mt-1 font-mono px-2 py-1 rounded truncate max-w-[200px]`} title={match.replay_filename || match.game_name}>
@@ -306,7 +312,7 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                     )}
                   </td>
 
-                  <td className="px-4 py-3 align-top text-sm">
+                  <td className="px-3 py-3 align-top text-sm">
                     <div className="space-y-2">
                       <div>
                         <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${isDueReplay ? 'bg-red-200 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
@@ -415,12 +421,12 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
 
             return (
               <tr data-help-id="region-match-row" key={match.feed_id || match.id} className={`border-b ${matchRowBorderColor} ${matchRowHoverColor} ${matchRowBgColor}`}>
-              <td className="px-4 py-3 align-top text-sm text-gray-700">{new Date(match.created_at).toLocaleDateString(i18next.language, { year: 'numeric', month: 'short', day: 'numeric' })}</td>
+              <td className="whitespace-nowrap px-3 py-3 align-top text-sm text-gray-700">{new Date(match.created_at).toLocaleDateString(i18next.language, { year: 'numeric', month: 'short', day: 'numeric' })}</td>
 
-              <td className="px-4 py-3 align-top text-sm">
+              <td className="px-3 py-3 align-top text-sm">
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="min-w-0 flex-1 break-words">
+                    <div className="min-w-[6rem] flex-1 break-words">
                       {renderCompetitor(match, true)}
                     </div>
                     <StarDisplay rating={match.loser_rating} size="sm" />
@@ -461,10 +467,10 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                 </div>
               </td>
 
-              <td className="px-4 py-3 align-top text-sm">
+              <td className="px-3 py-3 align-top text-sm">
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="min-w-0 flex-1 break-words">
+                    <div className="min-w-[6rem] flex-1 break-words">
                       {renderCompetitor(match, false)}
                     </div>
                     <StarDisplay rating={match.winner_rating} size="sm" />
@@ -505,12 +511,12 @@ const MatchesTable: React.FC<MatchesTableProps> = ({
                 </div>
               </td>
 
-              <td className="break-words px-4 py-3 align-top text-sm text-gray-700">
+              <td className="break-words px-3 py-3 align-top text-sm text-gray-700">
                 <div>{match.map}</div>
                 <MatchTypeBadge match={match} />
               </td>
 
-              <td className="px-4 py-3 align-top text-sm">
+              <td className="px-3 py-3 align-top text-sm">
                 <div className="space-y-2">
                   <div>
                     <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${

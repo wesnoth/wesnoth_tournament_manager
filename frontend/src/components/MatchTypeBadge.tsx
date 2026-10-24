@@ -42,7 +42,7 @@ const MatchTypeBadge: React.FC<Props> = ({ match, compact = false }) => {
         <Link
           data-help-id="action-open-match-tournament"
           to={tournamentUrl}
-          className="text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline"
+          className="min-w-0 text-xs font-semibold text-blue-700 [overflow-wrap:anywhere] hover:text-blue-900 hover:underline"
         >
           {match.tournament_name}
         </Link>
