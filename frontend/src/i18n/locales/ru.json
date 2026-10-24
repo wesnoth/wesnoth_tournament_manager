@@ -927,7 +927,16 @@
     "type_flexible_phases": "Гибкие этапы",
     "unranked": "Без рейтинга (1v1, без ELO)",
     "unranked_assets": "Ресурсы турнира без рейтинга",
-    "wesnoth_game_name": "Имя игры в Wesnoth"
+    "wesnoth_game_name": "Имя игры в Wesnoth",
+    "general_settings": "Общие настройки",
+    "max_participants_help_players": "Игроки, которые могут записаться. 0 = без ограничений, или от 2 до 256.",
+    "max_participants_help_teams": "Команды, которые могут записаться. 0 = без ограничений, или от 2 до 256.",
+    "round_duration_help": "Ожидаемая длительность каждого раунда в днях.",
+    "auto_advance_label": "Запускать раунды автоматически",
+    "auto_advance_help": "Когда фаза готова, её первый раунд начинается без участия организатора. Недоступно для лиг.",
+    "allowed_assets": "Разрешённые фракции и карты",
+    "allowed_ranked_assets": "Разрешённые рейтинговые фракции и карты",
+    "description_and_rules": "Описание и правила"
   },
   "tournament_create": "Создать турнир",
   "tournament_description": "Описание",

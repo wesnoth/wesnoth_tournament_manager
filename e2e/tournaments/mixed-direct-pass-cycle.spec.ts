@@ -74,7 +74,9 @@ test('mixed round-one and semifinal passes preserve drafts and produce playable 
   await page.locator('[data-help-id="field-tournament-name"]').fill(tournamentName);
   await page.locator('[data-help-id="field-tournament-description"]').fill('Playwright mixed-round direct-pass cycle.');
   await page.locator('[data-help-id="option-tournament-mode-unranked"]').check();
-  await page.locator('[data-help-id="action-toggle-tournament-phase-configuration"]').click();
+  // Form sections start open, so only click a summary whose section is closed.
+  const phaseConfigurationToggle = page.locator('[data-help-id="action-toggle-tournament-phase-configuration"]');
+  if (!(await phaseConfigurationToggle.evaluate((element) => element.parentElement?.hasAttribute('open') || false))) await phaseConfigurationToggle.click();
   page.on('dialog', dialog => dialog.accept());
   const builder = page.locator('[data-help-id="region-tournament-phase-builder"]');
   await builder.locator('[data-help-id="option-tournament-format-template"]').selectOption('swiss');
@@ -89,9 +91,10 @@ test('mixed round-one and semifinal passes preserve drafts and produce playable 
   await builder.locator('[data-help-id="field-group-direct-advancement-capacity"]').fill('2');
   await builder.locator('[data-help-id="action-generate-advancement-mappings"]').click();
   await expect(builder.locator('[data-help-id="field-advancement-target-seed"]')).toHaveCount(4);
-  await page.locator('[data-help-id="action-toggle-tournament-format-settings"]').click();
   await page.locator('[data-help-id="field-tournament-max-participants"]').fill('12');
-  await page.locator('[data-help-id="action-toggle-tournament-assets"]').click();
+  // Form sections start open, so only click a summary whose section is closed.
+  const assetsToggle = page.locator('[data-help-id="action-toggle-tournament-assets"]');
+  if (!(await assetsToggle.evaluate((element) => element.parentElement?.hasAttribute('open') || false))) await assetsToggle.click();
   for (const hook of ['option-tournament-faction', 'option-tournament-map']) {
     const boxes = page.locator(`[data-help-id="${hook}"]`);
     for (let index = 0; index < await boxes.count(); index += 1) {

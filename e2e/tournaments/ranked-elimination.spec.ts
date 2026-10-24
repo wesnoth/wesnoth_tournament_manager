@@ -352,7 +352,6 @@ test('flexible tournament accepts simulated joins and progresses through every c
       await expect(groupCounts.nth(1)).toHaveValue('2');
       await expect(groupCounts.nth(2)).toHaveValue('1');
     }
-    await openTournamentSection(page, 'action-toggle-tournament-format-settings');
     await page.locator('[data-help-id="field-tournament-max-participants"]').fill(String(participantCount));
     await page.waitForTimeout(1_000);
     await openTournamentSection(page, 'action-toggle-tournament-assets');
@@ -374,7 +373,6 @@ test('flexible tournament accepts simulated joins and progresses through every c
     expect(await mapOptions.evaluateAll((inputs) => inputs.every((input) => (input as HTMLInputElement).checked))).toBe(true);
     await page.waitForTimeout(1_000);
     if (autoAdvanceRounds) {
-      await openTournamentSection(page, 'action-toggle-tournament-round-configuration');
       const autoAdvance = page.locator('[data-help-id="option-tournament-auto-advance"]');
       if (!(await autoAdvance.isChecked())) await autoAdvance.check();
       await page.waitForTimeout(1_000);
@@ -550,13 +548,11 @@ test('a direct pass enters a played semifinal and leaves a third-place match', a
     await page.locator('[data-help-id="field-group-advance-count"]').fill('6');
     await page.locator('[data-help-id="action-generate-advancement-mappings"]').click();
     await expect(page.locator('[data-help-id="field-advancement-target-seed"]')).toHaveCount(6);
-    await openTournamentSection(page, 'action-toggle-tournament-format-settings');
     await page.locator('[data-help-id="field-tournament-max-participants"]').fill('7');
     await openTournamentSection(page, 'action-toggle-tournament-assets');
     for (const asset of await page.locator('[data-help-id="option-tournament-faction"], [data-help-id="option-tournament-map"]').all()) {
       if (!(await asset.isChecked())) await asset.check();
     }
-    await openTournamentSection(page, 'action-toggle-tournament-round-configuration');
     const autoAdvance = page.locator('[data-help-id="option-tournament-auto-advance"]');
     if (!(await autoAdvance.isChecked())) await autoAdvance.check();
     await page.locator('[data-help-id="action-create-tournament"]').click();

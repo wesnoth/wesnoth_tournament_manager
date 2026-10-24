@@ -5,7 +5,7 @@ import UnrankedMapSelect from './UnrankedMapSelect';
 import MarkdownPreview from './MarkdownPreview';
 import { tournamentService, userService } from '../services/api';
 import { useAuthStore } from '../store/authStore';
-import type { MatchFormat, TournamentFormData, TournamentMode, TournamentType } from '../types/tournament';
+import type { TournamentFormData, TournamentMode } from '../types/tournament';
 import type { TournamentFormatDefinition } from '../types/tournament';
 import TournamentPhaseBuilder, { type PhaseBuilderChangeOptions } from './TournamentPhaseBuilder';
 import TournamentMapPackSelector from './TournamentMapPackSelector';
@@ -62,34 +62,6 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [allUsers, setAllUsers] = useState<UserOption[]>([]);
   const [organizerCandidateId, setOrganizerCandidateId] = useState('');
-
-  const handleTournamentTypeChange = (newType: TournamentType) => {
-    const updatedData = { ...formData, tournament_type: newType };
-
-    // Reset round values based on new format to their creation defaults
-    if (newType === 'elimination') {
-      updatedData.general_rounds_format = 'bo3';
-      updatedData.final_rounds_format = 'bo5';
-      updatedData.general_rounds = 0;
-      updatedData.final_rounds = 0;
-    } else if (newType === 'league') {
-      updatedData.auto_advance_round = false;
-      updatedData.general_rounds = 1;
-      updatedData.final_rounds = 0;
-      updatedData.general_rounds_format = 'bo3';
-    } else if (newType === 'swiss') {
-      updatedData.general_rounds = 1;
-      updatedData.final_rounds = 0;
-      updatedData.general_rounds_format = 'bo3';
-    } else if (newType === 'swiss_elimination') {
-      updatedData.general_rounds = 1;
-      updatedData.final_rounds = 1;
-      updatedData.general_rounds_format = 'bo3';
-      updatedData.final_rounds_format = 'bo5';
-    }
-
-    onFormDataChange(updatedData);
-  };
 
   const handlePhaseFormatChange = (definition: TournamentFormatDefinition, options?: PhaseBuilderChangeOptions) => {
     onFormDataChange({
@@ -167,9 +139,45 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
     });
   };
 
+  /**
+   * Asset pickers per match type. The three variants differ in behavior, not
+   * only in title: ranked tournaments may only allow ranked factions and maps.
+   */
+  const assetSection = (assetsMode: TournamentMode, title: string, help: string, rankedOnly: boolean) => (
+    formData.tournament_mode === assetsMode && (
+      <details open data-help-id={`region-tournament-assets-${assetsMode}`} className="mb-6 rounded-lg border border-gray-200 bg-white">
+        <summary data-help-id="action-toggle-tournament-assets" className="cursor-pointer p-4 font-semibold text-gray-800">{title}</summary>
+        <div className="px-4 pb-4">
+          <p className="text-sm text-gray-600 italic mb-4">{help}</p>
+          <TournamentMapPackSelector selectedMapIds={unrankedMaps} onChange={onUnrankedMapsChange} rankedOnly={rankedOnly} disabled={isLoading} />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <UnrankedFactionSelect
+              selectedFactionIds={unrankedFactions}
+              onChange={onUnrankedFactionsChange}
+              disabled={isLoading}
+              isRankedOnly={rankedOnly}
+            />
+            <UnrankedMapSelect
+              selectedMapIds={unrankedMaps}
+              onChange={onUnrankedMapsChange}
+              disabled={isLoading}
+              isRankedOnly={rankedOnly}
+            />
+          </div>
+        </div>
+      </details>
+    )
+  );
+
+  const matchTypeOptions: Array<{ value: TournamentMode; label: string }> = [
+    { value: 'ranked', label: t('tournament.ranked', 'Ranked (1v1, ELO impact)') },
+    { value: 'unranked', label: t('tournament.unranked', 'Unranked (1v1, no ELO)') },
+    { value: 'team', label: t('tournament.team', 'Team (2v2, no ELO)') },
+  ];
+
   return (
     <form id="tournament-form" data-help-id="region-tournament-form" className="bg-white rounded-lg shadow-md p-8 space-y-6" onSubmit={onSubmit}>
-      {/* SECTION 1: BASIC INFORMATION */}
+      {/* SECTION 1: IDENTITY */}
       <details open data-help-id="region-tournament-basic-information" className="mb-6 border border-gray-200 rounded-lg bg-white">
         <summary data-help-id="action-toggle-tournament-basic-information" className="cursor-pointer p-4 font-semibold text-gray-800">{t('tournament.basic_info', 'Basic Information')}</summary>
         <div className="px-4 pb-4">
@@ -261,7 +269,158 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
           <small className="text-gray-600">{t('tournament.forum_thread_help')}</small>
           {extractedForumTopicId && <small className="text-green-700">{t('tournament.forum_topic_detected', { id: extractedForumTopicId })}</small>}
         </div>
+        </div>
+      </details>
 
+      {/*
+        SECTION 2: GENERAL SETTINGS. Everything that applies to the whole
+        tournament, kept together. Like every section it starts open, so the
+        required max participants field is never hidden by default.
+      */}
+      <details open data-help-id="region-tournament-general-settings" className="mb-6 rounded-lg border border-gray-200 bg-white">
+        <summary data-help-id="action-toggle-tournament-general-settings" className="cursor-pointer p-4 font-semibold text-gray-800">{t('tournament.general_settings', 'General settings')}</summary>
+        <div className="grid grid-cols-1 gap-6 px-4 pb-4 lg:grid-cols-[minmax(0,20rem)_1fr]">
+          {/* Tournament Mode Selector (Ranked/Unranked/Team) */}
+          <fieldset data-help-id="region-tournament-mode" className="flex flex-col gap-2">
+            <legend className="mb-2 font-medium text-gray-700">{t('tournament.match_type', 'Match Type')}</legend>
+            {matchTypeOptions.map((option) => (
+              <label
+                key={option.value}
+                className={`flex items-center gap-3 rounded-lg border px-3 py-2 ${
+                  formData.tournament_mode === option.value ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                } ${isLoading || mode === 'edit' ? 'cursor-default opacity-80' : 'cursor-pointer hover:border-blue-400'}`}
+              >
+                <input
+                  data-help-id={`option-tournament-mode-${option.value}`}
+                  type="radio"
+                  name="tournament_mode"
+                  value={option.value}
+                  checked={formData.tournament_mode === option.value}
+                  onChange={(e) => onFormDataChange({ ...formData, tournament_mode: e.target.value as TournamentMode })}
+                  disabled={isLoading || mode === 'edit'}
+                />
+                <span className="text-gray-800">{option.label}</span>
+              </label>
+            ))}
+          </fieldset>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-2">
+              <label htmlFor="tournament-max-participants" className="font-medium text-gray-700">{t('label_max_participants', 'Max Participants')}</label>
+              <input
+                id="tournament-max-participants"
+                data-help-id="field-tournament-max-participants"
+                type="number"
+                placeholder={t('label_max_participants', 'Max Participants')}
+                min="0"
+                max="256"
+                value={formData.max_participants ?? ''}
+                onChange={(e) => onFormDataChange({
+                  ...formData,
+                  max_participants: e.target.value ? parseInt(e.target.value) : null
+                })}
+                disabled={isLoading}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+              />
+              {/* The backend counts teams in team tournaments and players otherwise. */}
+              <small className="text-gray-600">
+                {formData.tournament_mode === 'team'
+                  ? t('tournament.max_participants_help_teams')
+                  : t('tournament.max_participants_help_players')}
+              </small>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label htmlFor="tournament-round-duration" className="font-medium text-gray-700">{t('label_round_duration', 'Round Duration (days)')}</label>
+              <EditableIntegerInput
+                id="tournament-round-duration"
+                data-help-id="field-tournament-round-duration"
+                min={1}
+                max={365}
+                value={formData.round_duration_days}
+                onValueChange={(days) => onFormDataChange({
+                  ...formData,
+                  round_duration_days: days,
+                })}
+                disabled={isLoading}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+              />
+              <small className="text-gray-600">{t('tournament.round_duration_help')}</small>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label htmlFor="tournament-scheduled-start" className="font-medium text-gray-700">{t('label_scheduled_start_date')}</label>
+              <input
+                id="tournament-scheduled-start"
+                data-help-id="field-tournament-scheduled-start"
+                type="datetime-local"
+                value={formData.scheduled_start_at
+                  ? toLocalDateTimeValue(formData.scheduled_start_at)
+                  : ''}
+                onChange={(e) => onFormDataChange({
+                  ...formData,
+                  scheduled_start_at: e.target.value ? new Date(e.target.value).toISOString() : null,
+                })}
+                disabled={isLoading}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+              />
+              <small className="text-gray-600">
+                {t('tournament.scheduled_start_help', 'Informational date; the actual start is recorded when the tournament is started.')}
+              </small>
+            </div>
+
+            {/*
+              The phase engine starts the rounds of a compiled phase when this
+              is set (tournaments.auto_progress). Leagues always open their
+              rounds manually, and the backend stores false for them, so the
+              option is hidden while the first phase is a round robin.
+            */}
+            {formData.tournament_type !== 'league' && (
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center gap-3 font-medium text-gray-700 sm:mt-8">
+                  <input
+                    data-help-id="option-tournament-auto-advance"
+                    type="checkbox"
+                    checked={formData.auto_advance_round}
+                    onChange={(e) => onFormDataChange({
+                      ...formData,
+                      auto_advance_round: e.target.checked
+                    })}
+                    className="w-5 h-5"
+                    disabled={isLoading}
+                  />
+                  {t('tournament.auto_advance_label', 'Start rounds automatically')}
+                </label>
+                <small className="text-gray-600">{t('tournament.auto_advance_help')}</small>
+              </div>
+            )}
+          </div>
+        </div>
+      </details>
+
+      {/* SECTION 3: PHASES */}
+      <details open data-help-id="region-tournament-phase-configuration" className="mb-6 rounded-lg border border-blue-200 bg-white">
+        <summary data-help-id="action-toggle-tournament-phase-configuration" className="cursor-pointer p-4 font-semibold text-gray-800">{t('tournament.phases')}</summary>
+        <div className="px-4 pb-4">
+          <TournamentPhaseBuilder
+            value={formData.format_definition}
+            onChange={handlePhaseFormatChange}
+            disabled={isLoading}
+            initialTemplate={formData.tournament_type === 'league' ? 'league' : formData.tournament_type === 'elimination' ? 'elimination' : 'swiss'}
+            entryOptions={entryOptions}
+          />
+        </div>
+      </details>
+
+      {/* SECTION 4: ALLOWED FACTIONS AND MAPS (per match type) */}
+      {assetSection('unranked', t('tournament.allowed_assets', 'Allowed factions and maps'), t('tournament.select_allowed_factions_maps', 'Select which factions and maps are allowed in this tournament'), false)}
+      {assetSection('team', t('tournament.allowed_assets', 'Allowed factions and maps'), t('tournament.select_allowed_factions_maps', 'Select which factions and maps are allowed in this tournament'), false)}
+      {assetSection('ranked', t('tournament.allowed_ranked_assets', 'Allowed ranked factions and maps'), t('tournament.select_allowed_ranked_factions_maps', 'Select which ranked factions and maps are allowed in this tournament'), true)}
+
+      {/* SECTION 5: DESCRIPTION AND RULES (long texts last) */}
+      <details open data-help-id="region-tournament-description-rules" className="mb-6 border border-gray-200 rounded-lg bg-white">
+        <summary data-help-id="action-toggle-tournament-description-rules" className="cursor-pointer p-4 font-semibold text-gray-800">{t('tournament.description_and_rules', 'Description and rules')}</summary>
+        <div className="px-4 pb-4">
         {/* Tournament Description - Wiki editor */}
         <div data-help-id="region-tournament-description" className="mb-4 flex flex-col gap-2">
           <label className="font-medium text-gray-700">{t('tournament_description', 'Description')}</label>
@@ -340,505 +499,6 @@ const TournamentForm: React.FC<TournamentFormProps> = ({
             {t('tournament.rules_markdown_help', 'Markdown syntax is supported, using the same renderer as Wiki Help.')}
           </small>
         </div>
-        
-        {/* Tournament Mode Selector (Ranked/Unranked/Team) */}
-        <div data-help-id="region-tournament-mode" className="flex flex-col gap-2">
-          <label className="font-medium text-gray-700">{t('tournament.match_type', 'Match Type')}:</label>
-          <div className="flex flex-col gap-2">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                data-help-id="option-tournament-mode-ranked"
-                type="radio"
-                value="ranked"
-                checked={formData.tournament_mode === 'ranked'}
-                onChange={(e) => onFormDataChange({ ...formData, tournament_mode: e.target.value as TournamentMode })}
-                disabled={isLoading || mode === 'edit'}
-              />
-              {t('tournament.ranked', 'Ranked (1v1, ELO impact)')}
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                data-help-id="option-tournament-mode-unranked"
-                type="radio"
-                value="unranked"
-                checked={formData.tournament_mode === 'unranked'}
-                onChange={(e) => onFormDataChange({ ...formData, tournament_mode: e.target.value as TournamentMode })}
-                disabled={isLoading || mode === 'edit'}
-              />
-              {t('tournament.unranked', 'Unranked (1v1, no ELO)')}
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                data-help-id="option-tournament-mode-team"
-                type="radio"
-                value="team"
-                checked={formData.tournament_mode === 'team'}
-                onChange={(e) => onFormDataChange({ ...formData, tournament_mode: e.target.value as TournamentMode })}
-                disabled={isLoading || mode === 'edit'}
-              />
-              {t('tournament.team', 'Team (2v2, no ELO)')}
-            </label>
-          </div>
-        </div>
-        </div>
-      </details>
-
-      {/* SECTION 2: TOURNAMENT TYPE AND PARTICIPANTS */}
-      <details data-help-id="region-tournament-format" className="mb-6 border border-gray-200 rounded-lg bg-white">
-        <summary data-help-id="action-toggle-tournament-format-settings" className="cursor-pointer p-4 font-semibold text-gray-800">{t('tournament.format_settings', 'Format Settings')}</summary>
-        <div className="px-4 pb-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {!formData.format_definition && <div className="flex flex-col gap-2">
-            <label className="font-medium text-gray-700">{t('tournament.tournament_format', 'Tournament Format')}</label>
-            <select
-              data-help-id="field-tournament-format"
-              value={formData.tournament_type}
-              onChange={(e) => handleTournamentTypeChange(e.target.value as TournamentType)}
-              required
-              disabled={isLoading}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-            >
-              <option value="elimination">{t('option_type_elimination', 'Elimination')}</option>
-              <option value="league">{t('option_type_league', 'League')}</option>
-              <option value="swiss">{t('option_type_swiss', 'Swiss')}</option>
-              <option value="swiss_elimination">{t('option_type_swiss_elimination', 'Swiss-Elimination Mix')}</option>
-            </select>
-          </div>}
-          <div className="flex flex-col gap-2">
-            <label className="font-medium text-gray-700">{t('label_max_participants', 'Max Participants')}</label>
-            <input
-              data-help-id="field-tournament-max-participants"
-              type="number"
-              placeholder={t('label_max_participants', 'Max Participants')}
-              min="0"
-              max="256"
-              value={formData.max_participants ?? ''}
-              onChange={(e) => onFormDataChange({ 
-                ...formData, 
-                max_participants: e.target.value ? parseInt(e.target.value) : null 
-              })}
-              disabled={isLoading}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-            />
-          </div>
-        </div>
-        </div>
-      </details>
-
-
-      <details data-help-id="region-tournament-phase-configuration" className="mb-6 rounded-lg border border-blue-200 bg-white">
-        <summary data-help-id="action-toggle-tournament-phase-configuration" className="cursor-pointer p-4 font-semibold text-gray-800">{t('tournament.phases')}</summary>
-        <div className="px-4 pb-4">
-          <TournamentPhaseBuilder
-            value={formData.format_definition}
-            onChange={handlePhaseFormatChange}
-            disabled={isLoading}
-            initialTemplate={formData.tournament_type === 'league' ? 'league' : formData.tournament_type === 'elimination' ? 'elimination' : 'swiss'}
-            entryOptions={entryOptions}
-          />
-        </div>
-      </details>
-
-      {/* SECTION 3: UNRANKED ASSETS (conditional) */}
-      {formData.tournament_mode === 'unranked' && (
-        <details data-help-id="region-tournament-assets-unranked" className="mb-6 rounded-lg border border-gray-200 bg-white">
-          <summary data-help-id="action-toggle-tournament-assets" className="cursor-pointer p-4 font-semibold text-gray-800">{t('tournament.unranked_assets', 'Unranked Tournament Assets')}</summary>
-          <div className="px-4 pb-4">
-          <p className="text-sm text-gray-600 italic mb-4">{t('tournament.select_allowed_factions_maps', 'Select which factions and maps are allowed in this tournament')}</p>
-          <TournamentMapPackSelector selectedMapIds={unrankedMaps} onChange={onUnrankedMapsChange} disabled={isLoading} />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <UnrankedFactionSelect 
-              selectedFactionIds={unrankedFactions}
-              onChange={onUnrankedFactionsChange}
-              disabled={isLoading}
-            />
-            <UnrankedMapSelect 
-              selectedMapIds={unrankedMaps}
-              onChange={onUnrankedMapsChange}
-              disabled={isLoading}
-            />
-          </div>
-          </div>
-        </details>
-      )}
-
-      {/* SECTION 3B: TEAM ASSETS (same as unranked) */}
-      {formData.tournament_mode === 'team' && (
-        <details data-help-id="region-tournament-assets-team" className="mb-6 rounded-lg border border-gray-200 bg-white">
-          <summary data-help-id="action-toggle-tournament-assets" className="cursor-pointer p-4 font-semibold text-gray-800">{t('tournament.team_assets', 'Team Tournament Assets')}</summary>
-          <div className="px-4 pb-4">
-          <p className="text-sm text-gray-600 italic mb-4">{t('tournament.select_allowed_factions_maps', 'Select which factions and maps are allowed in this tournament')}</p>
-          <TournamentMapPackSelector selectedMapIds={unrankedMaps} onChange={onUnrankedMapsChange} disabled={isLoading} />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <UnrankedFactionSelect 
-              selectedFactionIds={unrankedFactions}
-              onChange={onUnrankedFactionsChange}
-              disabled={isLoading}
-            />
-            <UnrankedMapSelect 
-              selectedMapIds={unrankedMaps}
-              onChange={onUnrankedMapsChange}
-              disabled={isLoading}
-            />
-          </div>
-          </div>
-        </details>
-      )}
-
-      {/* SECTION 3C: RANKED ASSETS (only ranked factions/maps) */}
-      {formData.tournament_mode === 'ranked' && (
-        <details data-help-id="region-tournament-assets-ranked" className="mb-6 rounded-lg border border-gray-200 bg-white">
-          <summary data-help-id="action-toggle-tournament-assets" className="cursor-pointer p-4 font-semibold text-gray-800">{t('tournament.ranked_assets', 'Ranked Tournament Assets')}</summary>
-          <div className="px-4 pb-4">
-          <p className="text-sm text-gray-600 italic mb-4">{t('tournament.select_allowed_ranked_factions_maps', 'Select which ranked factions and maps are allowed in this tournament')}</p>
-          <TournamentMapPackSelector selectedMapIds={unrankedMaps} onChange={onUnrankedMapsChange} rankedOnly disabled={isLoading} />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <UnrankedFactionSelect 
-              selectedFactionIds={unrankedFactions}
-              onChange={onUnrankedFactionsChange}
-              disabled={isLoading}
-              isRankedOnly={true}
-            />
-            <UnrankedMapSelect 
-              selectedMapIds={unrankedMaps}
-              onChange={onUnrankedMapsChange}
-              disabled={isLoading}
-              isRankedOnly={true}
-            />
-          </div>
-          </div>
-        </details>
-      )}
-
-      <details data-help-id="region-tournament-round-configuration" className="mb-6 border border-gray-200 rounded-lg bg-white">
-        <summary data-help-id="action-toggle-tournament-round-configuration" className="cursor-pointer p-4 font-semibold text-gray-800">{t('tournament.round_configuration', 'Round Configuration')}</summary>
-        <div className="px-4 pb-4">
-        <div className="mb-4">
-          {!formData.max_participants && (
-            <span className="text-sm text-gray-600 italic">{t('tournaments.round_config_optional', 'Optional - set when preparing the tournament')}</span>
-          )}
-        </div>
-
-        <div className="flex flex-col md:flex-row items-start md:items-end gap-4 mb-4">
-          <div className="flex-1">
-            <label className="block font-medium text-gray-700 mb-2">{t('label_round_duration', 'Round Duration (days)')}</label>
-            <EditableIntegerInput
-              data-help-id="field-tournament-round-duration"
-              min={1}
-              max={365}
-              value={formData.round_duration_days}
-              onValueChange={(days) => onFormDataChange({
-                ...formData, 
-                round_duration_days: days,
-              })}
-              disabled={isLoading}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-            />
-          </div>
-
-          {formData.tournament_type !== 'league' && (
-            <div className="flex items-center gap-3">
-              <label className="font-medium text-gray-700">{t('label_auto_advance_rounds', 'Auto-advance Rounds')}</label>
-              <input
-                data-help-id="option-tournament-auto-advance"
-                type="checkbox"
-                checked={formData.auto_advance_round}
-                onChange={(e) => onFormDataChange({
-                  ...formData,
-                  auto_advance_round: e.target.checked
-                })}
-                className="w-5 h-5"
-                disabled={isLoading}
-              />
-            </div>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-2 mb-4">
-          <label className="font-medium text-gray-700">
-            {t('label_scheduled_start_date')}
-          </label>
-          <input
-            data-help-id="field-tournament-scheduled-start"
-            type="datetime-local"
-            value={formData.scheduled_start_at
-              ? toLocalDateTimeValue(formData.scheduled_start_at)
-              : ''}
-            onChange={(e) => onFormDataChange({
-              ...formData,
-              scheduled_start_at: e.target.value ? new Date(e.target.value).toISOString() : null,
-            })}
-            disabled={isLoading}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-          />
-          <small className="text-gray-600">
-            {t('tournament.scheduled_start_help', 'Informational date; the actual start is recorded when the tournament is started.')}
-          </small>
-        </div>
-
-        {/* ELIMINATION TOURNAMENT - Auto-calculated rounds */}
-        {!formData.format_definition && formData.tournament_type === 'elimination' && (
-          <div data-help-id="region-tournament-format-elimination" className="border-t border-gray-200 pt-6">
-            <h4 className="font-semibold text-gray-800 mb-2">{t('tournament.round_configuration', 'Round Configuration')}</h4>
-            <p className="text-sm text-gray-600 mb-4">{t('tournament.configure_match_formats_elimination', 'Configure match formats for your elimination tournament')}</p>
-            
-            <div className="border border-blue-200 bg-blue-50 p-4 rounded mb-4">
-              <p className="text-sm text-blue-900">ℹ️ {t('tournament.elimination_auto_calculated', 'Tournament rounds are automatically calculated based on the number of participants.')}</p>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex flex-col gap-2">
-                <label className="font-medium text-gray-700">{t('tournament.preliminary_rounds_format', 'Preliminary Rounds Match Format')}</label>
-                <select
-                  data-help-id="field-tournament-elimination-preliminary-format"
-                  value={formData.general_rounds_format}
-                  onChange={(e) => onFormDataChange({
-                    ...formData,
-                    general_rounds_format: e.target.value as MatchFormat
-                  })}
-                  disabled={isLoading}
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                >
-                  <option value="bo1">{t('match_format.bo1', 'Best of 1 (Single match)')}</option>
-                  <option value="bo3">{t('match_format.bo3', 'Best of 3 (First to 2 wins)')}</option>
-                  <option value="bo5">{t('match_format.bo5', 'Best of 5 (First to 3 wins)')}</option>
-                </select>
-                <small className="text-gray-600">{t('tournament.preliminary_format_help', 'Best of format for all preliminary elimination rounds')}</small>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <label className="font-medium text-gray-700">{t('tournament.final_match_format', 'Final Match Format')}</label>
-                <select
-                  data-help-id="field-tournament-elimination-final-format"
-                  value={formData.final_rounds_format}
-                  onChange={(e) => onFormDataChange({
-                    ...formData,
-                    final_rounds_format: e.target.value as MatchFormat
-                  })}
-                  disabled={isLoading}
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                >
-                  <option value="bo1">{t('match_format.bo1', 'Best of 1 (Single match)')}</option>
-                  <option value="bo3">{t('match_format.bo3', 'Best of 3 (First to 2 wins)')}</option>
-                  <option value="bo5">{t('match_format.bo5', 'Best of 5 (First to 3 wins)')}</option>
-                </select>
-                <small className="text-gray-600">{t('tournament.final_format_help', 'Best of format for the final match')}</small>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* NON-ELIMINATION TOURNAMENT - Manual round configuration */}
-        {!formData.format_definition && formData.tournament_type !== 'elimination' && (
-          <div className="border-t border-gray-200 pt-6 space-y-6">
-            {/* LEAGUE TOURNAMENT */}
-            {formData.tournament_type === 'league' && (
-              <div data-help-id="region-tournament-format-league">
-                <h4 className="font-semibold text-gray-800 mb-2">{t('tournament.league_configuration', 'League Format Configuration')}</h4>
-                <p className="text-sm text-gray-600 mb-4">{t('tournament.league_description', 'Configure the League tournament format')}</p>
-                <div className="space-y-4">
-                  <div className="flex flex-col gap-2">
-                    <label className="font-medium text-gray-700">{t('tournament.league_format', 'League Format')}</label>
-                    <select
-                      data-help-id="field-tournament-league-waves"
-                      value={formData.general_rounds}
-                      onChange={(e) => onFormDataChange({
-                        ...formData,
-                        general_rounds: parseInt(e.target.value),
-                      })}
-                      disabled={isLoading}
-                      className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                    >
-                      <option value="1">{t('tournament.single_round', 'Single Wave')}</option>
-                      <option value="2">{t('tournament.double_round', 'Double Wave')}</option>
-                    </select>
-                    <small className="text-gray-600">{t('tournament.league_format_help', 'Select whether teams play once or twice against each other')}</small>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <label className="font-medium text-gray-700">{t('tournament.match_format', 'Match Format')}</label>
-                    <select
-                      data-help-id="field-tournament-league-match-format"
-                      value={formData.general_rounds_format}
-                      onChange={(e) => onFormDataChange({
-                        ...formData,
-                        general_rounds_format: e.target.value as 'bo1' | 'bo3' | 'bo5'
-                      })}
-                      disabled={isLoading}
-                      className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                    >
-                      <option value="bo1">{t('match_format.bo1', 'Best of 1 (Single match)')}</option>
-                      <option value="bo3">{t('match_format.bo3', 'Best of 3 (First to 2 wins)')}</option>
-                      <option value="bo5">{t('match_format.bo5', 'Best of 5 (First to 3 wins)')}</option>
-                    </select>
-                    <small className="text-gray-600">{t('tournament.match_format_help', 'Number of games in each match')}</small>
-                  </div>
-                  <div data-help-id="region-tournament-league-summary" className="bg-gray-50 p-3 rounded border border-gray-200">
-                    <p className="text-sm"><strong>{t('tournament.format', 'Format')}:</strong> {formData.general_rounds === 2 ? t('tournament.double_round', 'Double Wave') : t('tournament.single_round', 'Single Wave')} ({formData.general_rounds_format?.toUpperCase()})</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* SWISS TOURNAMENT */}
-            {formData.tournament_type === 'swiss' && (
-              <div data-help-id="region-tournament-format-swiss">
-                <h4 className="font-semibold text-gray-800 mb-2">{t('tournament.swiss_configuration', 'Swiss Rounds Configuration')}</h4>
-                <p className="text-sm text-gray-600 mb-4">{t('tournament.swiss_description', 'Configure the Swiss round tournament')}</p>
-                <div className="space-y-4">
-                  <div className="flex flex-col gap-2">
-                    <label className="font-medium text-gray-700">{t('tournament.number_swiss_rounds', 'Number of Swiss Rounds')}</label>
-                    <select
-                      data-help-id="field-tournament-swiss-rounds"
-                      value={formData.general_rounds}
-                      onChange={(e) => onFormDataChange({
-                        ...formData,
-                        general_rounds: parseInt(e.target.value),
-                      })}
-                      disabled={isLoading}
-                      className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                    >
-                      {Array.from({ length: 10 }, (_, index) => index + 1).map((rounds) => (
-                        <option key={rounds} value={rounds}>{rounds}</option>
-                      ))}
-                    </select>
-                    <small className="text-gray-600">{t('tournament.swiss_rounds_help', 'Number of Swiss system rounds to run (typically 3-7 rounds for Swiss tournaments)')}</small>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <label className="font-medium text-gray-700">{t('tournament.match_format', 'Match Format')}</label>
-                    <select
-                      data-help-id="field-tournament-swiss-match-format"
-                      value={formData.general_rounds_format}
-                      onChange={(e) => onFormDataChange({
-                        ...formData,
-                        general_rounds_format: e.target.value as MatchFormat
-                      })}
-                      disabled={isLoading}
-                      className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                    >
-                      <option value="bo1">{t('match_format.bo1', 'Best of 1 (Single match)')}</option>
-                      <option value="bo3">{t('match_format.bo3', 'Best of 3 (First to 2 wins)')}</option>
-                      <option value="bo5">{t('match_format.bo5', 'Best of 5 (First to 3 wins)')}</option>
-                    </select>
-                    <small className="text-gray-600">{t('tournament.match_format_help', 'Number of games in each match')}</small>
-                  </div>
-                  <div data-help-id="region-tournament-swiss-summary" className="bg-gray-50 p-3 rounded border border-gray-200">
-                    <p className="text-sm"><strong>{t('tournament.total_rounds', 'Total Rounds')}:</strong> {formData.general_rounds} {t('tournament.swiss_rounds', 'Swiss rounds')} ({formData.general_rounds_format?.toUpperCase()})</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* SWISS-ELIMINATION HYBRID TOURNAMENT */}
-            {formData.tournament_type === 'swiss_elimination' && (
-              <div data-help-id="region-tournament-format-swiss-elimination">
-                <h4 className="font-semibold text-gray-800 mb-2">{t('tournament.swiss_elimination_configuration', 'Swiss-Elimination Mix Configuration')}</h4>
-                <p className="text-sm text-gray-600 mb-4">{t('tournament.swiss_elimination_description', 'Configure Swiss qualifying rounds and elimination bracket with different match formats')}</p>
-                <div className="border border-blue-200 bg-blue-50 p-4 rounded mb-4">
-                  <p className="text-sm text-blue-900">ℹ️ {t('tournament.swiss_elimination_info', 'This tournament combines a Swiss phase for qualification with an elimination phase for final ranking. You can set different match formats for qualification and the grand final.')}</p>
-                </div>
-                
-                {/* Rounds Configuration */}
-                <div data-help-id="region-tournament-swiss-elimination-rounds" className="border border-gray-200 p-4 rounded-lg mb-4">
-                  <h5 className="font-medium text-gray-800 mb-4">{t('tournament.rounds_configuration', 'Rounds Configuration')}</h5>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="flex flex-col gap-2">
-                      <label className="font-medium text-gray-700">{t('tournament.number_swiss_rounds', 'Number of Swiss Rounds')}</label>
-                      <select
-                        data-help-id="field-tournament-swiss-elimination-swiss-rounds"
-                        value={formData.general_rounds}
-                        onChange={(e) => onFormDataChange({
-                          ...formData,
-                          general_rounds: parseInt(e.target.value),
-                        })}
-                        disabled={isLoading}
-                        className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                      >
-                        {Array.from({ length: 10 }, (_, index) => index + 1).map((rounds) => (
-                          <option key={rounds} value={rounds}>{rounds}</option>
-                        ))}
-                      </select>
-                      <small className="text-gray-600">{t('tournament.qualifying_rounds_help', 'Qualifying rounds using Swiss system')}</small>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <label className="font-medium text-gray-700">{t('tournament.number_elimination_rounds', 'Number of Elimination Rounds')}</label>
-                      <select
-                        data-help-id="field-tournament-swiss-elimination-final-rounds"
-                        value={formData.final_rounds}
-                        onChange={(e) => onFormDataChange({
-                          ...formData,
-                          final_rounds: parseInt(e.target.value),
-                        })}
-                        disabled={isLoading}
-                        className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                      >
-                        {[1, 2, 3].map((rounds) => (
-                          <option key={rounds} value={rounds}>{rounds}</option>
-                        ))}
-                      </select>
-                      <small className="text-gray-600">{t('tournament.elimination_rounds_help', 'Total elimination rounds (includes grand final)')}</small>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Match Formats */}
-                <div data-help-id="region-tournament-swiss-elimination-match-formats" className="border border-gray-200 p-4 rounded-lg mb-4">
-                  <h5 className="font-medium text-gray-800 mb-4">{t('tournament.match_formats', 'Match Formats')}</h5>
-                  <div className="space-y-4">
-                    <div className="flex flex-col gap-2">
-                      <label className="font-medium text-gray-700">{t('tournament.general_format', 'General Format (Swiss Rounds + Elimination except Final)')}</label>
-                      <select
-                        data-help-id="field-tournament-swiss-elimination-general-format"
-                        value={formData.general_rounds_format}
-                        onChange={(e) => onFormDataChange({
-                          ...formData,
-                          general_rounds_format: e.target.value as MatchFormat
-                        })}
-                        disabled={isLoading}
-                        className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                      >
-                        <option value="bo1">{t('match_format.bo1', 'Best of 1 (Single match)')}</option>
-                        <option value="bo3">{t('match_format.bo3', 'Best of 3 (First to 2 wins)')}</option>
-                        <option value="bo5">{t('match_format.bo5', 'Best of 5 (First to 3 wins)')}</option>
-                      </select>
-                      <small className="text-gray-600">{t('tournament.general_format_help', 'Used for Swiss rounds and all elimination rounds except the grand final')}</small>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <label className="font-medium text-gray-700">{t('tournament.final_format', 'Final Format (Grand Final)')}</label>
-                      <select
-                        data-help-id="field-tournament-swiss-elimination-final-format"
-                        value={formData.final_rounds_format}
-                        onChange={(e) => onFormDataChange({
-                          ...formData,
-                          final_rounds_format: e.target.value as MatchFormat
-                        })}
-                        disabled={isLoading}
-                        className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                      >
-                        <option value="bo1">{t('match_format.bo1', 'Best of 1 (Single match)')}</option>
-                        <option value="bo3">{t('match_format.bo3', 'Best of 3 (First to 2 wins)')}</option>
-                        <option value="bo5">{t('match_format.bo5', 'Best of 5 (First to 3 wins)')}</option>
-                      </select>
-                      <small className="text-gray-600">{t('tournament.final_format_help', 'Used only for the grand final match')}</small>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Summary */}
-                <div data-help-id="region-tournament-swiss-elimination-summary" className="bg-gray-50 p-4 rounded border border-gray-200">
-                  <p className="font-medium text-gray-800 mb-2">{t('tournament.tournament_structure', 'Tournament Structure')}:</p>
-                  <div className="space-y-1 text-sm text-gray-700">
-                    <p>• {t('tournament.swiss_phase', 'Swiss Phase')}: {formData.general_rounds} {t('tournament.rounds', 'rounds')} ({formData.general_rounds_format?.toUpperCase()})</p>
-                    {formData.final_rounds > 1 && (
-                      <p>• {t('tournament.qualification_phase', 'Qualification Phase')}:  {formData.final_rounds - 1} {t('tournament.rounds', 'rounds')} ({formData.general_rounds_format?.toUpperCase()}) [{t('tournament.quarters_semis', 'Quarters, Semis, etc')}]</p>
-                    )}
-                    <p>• {t('tournament.grand_final', 'Grand Final')}:  1 {t('tournament.round', 'round')} ({formData.final_rounds_format?.toUpperCase()})</p>
-                    <p><strong>{t('tournament.total_rounds', 'Total Rounds')}:</strong> {formData.general_rounds + formData.final_rounds}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
         </div>
       </details>
 

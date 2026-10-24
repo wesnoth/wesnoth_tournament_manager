@@ -935,7 +935,16 @@
     "type_flexible_phases": "Fases flexibles",
     "unranked": "Sin ranking (1v1, sin ELO)",
     "unranked_assets": "Recursos del torneo sin ranking",
-    "wesnoth_game_name": "Nombre de partida en Wesnoth"
+    "wesnoth_game_name": "Nombre de partida en Wesnoth",
+    "general_settings": "Configuración general",
+    "max_participants_help_players": "Jugadores que pueden inscribirse. 0 = sin límite, o de 2 a 256.",
+    "max_participants_help_teams": "Equipos que pueden inscribirse. 0 = sin límite, o de 2 a 256.",
+    "round_duration_help": "Días que se espera que dure cada ronda.",
+    "auto_advance_label": "Iniciar rondas automáticamente",
+    "auto_advance_help": "Cuando una fase está lista, su primera ronda empieza sin esperar a un organizador. No disponible en ligas.",
+    "allowed_assets": "Facciones y mapas permitidos",
+    "allowed_ranked_assets": "Facciones y mapas ranked permitidos",
+    "description_and_rules": "Descripción y reglas"
   },
   "tournament_create": "Crear Torneo",
   "tournament_description": "Descripción",

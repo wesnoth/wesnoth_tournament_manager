@@ -57,7 +57,6 @@ export async function createStartedSwissTournament(page: Page, options: {
   for (const bestOf of await page.locator('[data-help-id="option-tournament-phase-best-of"]').all()) {
     await bestOf.selectOption(String(options.bestOf || 1));
   }
-  await openSection(page, 'action-toggle-tournament-format-settings');
   await page.locator('[data-help-id="field-tournament-max-participants"]').fill(String(options.players.length));
   await openSection(page, 'action-toggle-tournament-assets');
   for (const asset of await page.locator('[data-help-id="option-tournament-faction"], [data-help-id="option-tournament-map"]').all()) {
@@ -217,7 +216,6 @@ export async function createStartedTeamTournament(page: Page, options: {
   for (const bestOf of await page.locator('[data-help-id="option-tournament-phase-best-of"]').all()) {
     await bestOf.selectOption('1');
   }
-  await openSection(page, 'action-toggle-tournament-format-settings');
   await page.locator('[data-help-id="field-tournament-max-participants"]').fill(String(options.teams.length * 2));
   await openSection(page, 'action-toggle-tournament-assets');
   for (const asset of await page.locator('[data-help-id="option-tournament-faction"], [data-help-id="option-tournament-map"]').all()) {
