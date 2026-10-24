@@ -1911,6 +1911,27 @@
     "name_medieval": "Medieval",
     "name_ranked": "Ranked",
     "default_label": "Default theme:",
-    "default_updated": "Default theme updated"
+    "default_updated": "Default theme updated",
+    "name_custom": "Custom",
+    "custom_create": "Create custom colors",
+    "custom_edit": "Edit custom colors",
+    "custom_editor_title": "Custom theme",
+    "custom_editor_help": "Pick a base theme and three colors. Changes preview live on the whole page and are only kept when you save.",
+    "custom_base": "Base theme",
+    "color_background": "Background",
+    "color_text": "Text",
+    "color_accent": "Accent",
+    "color_value_label": "{{color}} value (#rrggbb or r, g, b)",
+    "color_invalid": "Use #rrggbb or three values from 0 to 255.",
+    "contrast_title": "Readability",
+    "contrast_text_background": "Text on background",
+    "contrast_text_cards": "Text on panels",
+    "contrast_muted_cards": "Secondary text on panels",
+    "contrast_links_cards": "Links and buttons",
+    "contrast_blocked": "Some checks fail: the background must be lighter than the text and combinations need at least 4.5:1. Adjust the colors to save.",
+    "custom_save": "Save and use",
+    "custom_reset": "Reset colors",
+    "saving": "Saving...",
+    "contrast_light_background": "Background lighter than text"
   }
 }

@@ -1911,6 +1911,27 @@
     "name_medieval": "中世纪",
     "name_ranked": "Ranked",
     "default_label": "默认主题：",
-    "default_updated": "默认主题已更新"
+    "default_updated": "默认主题已更新",
+    "name_custom": "自定义",
+    "custom_create": "创建自定义颜色",
+    "custom_edit": "编辑自定义颜色",
+    "custom_editor_title": "自定义主题",
+    "custom_editor_help": "选择一个基础主题和三种颜色。更改会在整个页面实时预览，只有保存后才会保留。",
+    "custom_base": "基础主题",
+    "color_background": "背景",
+    "color_text": "文字",
+    "color_accent": "强调色",
+    "color_value_label": "{{color}}的值（#rrggbb 或 r, g, b）",
+    "color_invalid": "请使用 #rrggbb 或三个 0 到 255 的数值。",
+    "contrast_title": "可读性",
+    "contrast_text_background": "背景上的文字",
+    "contrast_text_cards": "面板上的文字",
+    "contrast_muted_cards": "面板上的次要文字",
+    "contrast_links_cards": "链接和按钮",
+    "contrast_blocked": "部分检查未通过：背景必须比文字更亮，且颜色组合至少需要 4.5:1。请调整颜色后再保存。",
+    "custom_save": "保存并使用",
+    "custom_reset": "重置颜色",
+    "saving": "正在保存...",
+    "contrast_light_background": "背景比文字更亮"
   }
 }

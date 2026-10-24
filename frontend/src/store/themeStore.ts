@@ -1,13 +1,21 @@
 import { create } from 'zustand';
+import { buildCustomPalette, isCustomThemeConfig, type CustomThemeConfig } from '../theme/customTheme';
 
 /**
- * Visual themes. Keep in sync with SUPPORTED_THEMES in
+ * Built-in visual themes. Keep in sync with SUPPORTED_THEMES in
  * backend/src/services/themeSettingsService.ts, with the `data-theme` blocks
  * in src/styles/themes.css and with the bootstrap script in index.html.
+ * Only built-in themes can be the site default.
  */
 export const THEMES = ['medieval', 'ranked'] as const;
 
 export type ThemeName = (typeof THEMES)[number];
+
+/** A user's own colors on top of a built-in base theme (see theme/customTheme.ts). */
+export const CUSTOM_THEME = 'custom';
+
+/** What a visitor can pick explicitly: a built-in theme or their custom one. */
+export type ThemeChoice = ThemeName | typeof CUSTOM_THEME;
 
 /**
  * Used until the server default is known (first visit, or the request
@@ -20,77 +28,158 @@ export const FALLBACK_THEME: ThemeName = 'medieval';
 const EXPLICIT_THEME_KEY = 'theme';
 /** Last site default received from the server, cached to avoid a flash on reload. */
 const SITE_DEFAULT_THEME_KEY = 'themeDefault';
+/**
+ * Saved custom theme: `{ config, vars }`. `vars` caches the derived CSS
+ * variables so the index.html bootstrap script can apply them before the
+ * first paint without shipping the palette generator inline.
+ */
+const CUSTOM_THEME_KEY = 'themeCustom';
 
 export const isTheme = (value: unknown): value is ThemeName =>
   typeof value === 'string' && (THEMES as readonly string[]).includes(value);
+
+export const isThemeChoice = (value: unknown): value is ThemeChoice =>
+  isTheme(value) || value === CUSTOM_THEME;
 
 /**
  * localStorage can throw (private windows, blocked site data). The theme is
  * cosmetic, so storage failures degrade to the in-memory value silently.
  */
-const readStoredTheme = (key: string): ThemeName | null => {
+const readStorage = (key: string): string | null => {
   try {
-    const value = localStorage.getItem(key);
-    return isTheme(value) ? value : null;
+    return localStorage.getItem(key);
   } catch {
     return null;
   }
 };
 
-const writeStoredTheme = (key: string, value: ThemeName | null) => {
+const writeStorage = (key: string, value: string | null) => {
   try {
-    if (value) localStorage.setItem(key, value);
-    else localStorage.removeItem(key);
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
   } catch {
-    // Ignored: see readStoredTheme.
+    // Ignored: see readStorage.
   }
 };
 
-/** Applies a theme by switching the `data-theme` attribute read by themes.css. */
-const applyTheme = (theme: ThemeName) => {
-  document.documentElement.dataset.theme = theme;
+const readStoredCustomTheme = (): CustomThemeConfig | null => {
+  try {
+    const parsed = JSON.parse(readStorage(CUSTOM_THEME_KEY) || 'null');
+    return isCustomThemeConfig(parsed?.config) ? parsed.config : null;
+  } catch {
+    return null;
+  }
+};
+
+/** Names of the variables a custom theme sets inline, so they can be removed again. */
+let appliedCustomVars: string[] = [];
+
+/**
+ * Renders a theme. Built-in themes only switch the `data-theme` attribute
+ * read by themes.css. A custom theme keeps its base theme's attribute (fonts,
+ * artwork, bar styling), marks the root with `data-custom-theme` and sets
+ * its derived color variables inline, which override the stylesheet values.
+ */
+const renderTheme = (theme: ThemeName, custom: CustomThemeConfig | null) => {
+  const root = document.documentElement;
+  for (const name of appliedCustomVars) root.style.removeProperty(name);
+  appliedCustomVars = [];
+  if (custom) {
+    const { vars } = buildCustomPalette(custom);
+    for (const [name, value] of Object.entries(vars)) root.style.setProperty(name, value);
+    appliedCustomVars = Object.keys(vars);
+    root.dataset.theme = custom.base;
+    root.dataset.customTheme = '';
+  } else {
+    root.dataset.theme = theme;
+    delete root.dataset.customTheme;
+  }
 };
 
 interface ThemeState {
   /** Explicit choice of this visitor, or null to follow `siteDefault`. */
-  explicitTheme: ThemeName | null;
+  explicitTheme: ThemeChoice | null;
+  /** Saved custom colors, kept even while another theme is active. */
+  customTheme: CustomThemeConfig | null;
   /** Site-wide default from the `default_theme` system setting. */
   siteDefault: ThemeName;
-  /** Theme currently rendered: the explicit choice wins over the default. */
-  activeTheme: ThemeName;
+  /**
+   * Theme currently rendered. The explicit choice wins over the default,
+   * except a 'custom' choice without saved colors, which has nothing to
+   * render and falls back to the default.
+   */
+  activeTheme: ThemeChoice;
   /**
    * Stores this visitor's explicit choice (null returns to the default).
    * Persisting it to the profile is the caller's job, because only the
    * caller knows whether the visitor is authenticated.
    */
-  setExplicitTheme: (theme: ThemeName | null) => void;
+  setExplicitTheme: (theme: ThemeChoice | null) => void;
+  /** Stores the custom colors locally (null forgets them) and re-renders. */
+  setCustomTheme: (config: CustomThemeConfig | null) => void;
   /** Records the site default and applies it when no explicit choice exists. */
   setSiteDefault: (theme: ThemeName) => void;
+  /**
+   * Renders unsaved custom colors for a live preview in the editor, or with
+   * null renders the saved state again. Nothing is stored.
+   */
+  previewCustomTheme: (config: CustomThemeConfig | null) => void;
 }
 
-const initialExplicit = readStoredTheme(EXPLICIT_THEME_KEY);
-const initialDefault = readStoredTheme(SITE_DEFAULT_THEME_KEY) ?? FALLBACK_THEME;
+const resolveActive = (
+  explicit: ThemeChoice | null,
+  custom: CustomThemeConfig | null,
+  siteDefault: ThemeName
+): ThemeChoice => {
+  if (explicit === CUSTOM_THEME) return custom ? CUSTOM_THEME : siteDefault;
+  return explicit ?? siteDefault;
+};
+
+/** Renders the stored state and returns the resolved active theme. */
+const applyState = (explicit: ThemeChoice | null, custom: CustomThemeConfig | null, siteDefault: ThemeName) => {
+  const activeTheme = resolveActive(explicit, custom, siteDefault);
+  renderTheme(activeTheme === CUSTOM_THEME ? siteDefault : activeTheme, activeTheme === CUSTOM_THEME ? custom : null);
+  return activeTheme;
+};
+
+const storedExplicit = readStorage(EXPLICIT_THEME_KEY);
+const initialExplicit = isThemeChoice(storedExplicit) ? storedExplicit : null;
+const storedDefault = readStorage(SITE_DEFAULT_THEME_KEY);
+const initialDefault = isTheme(storedDefault) ? storedDefault : FALLBACK_THEME;
+const initialCustom = readStoredCustomTheme();
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
   explicitTheme: initialExplicit,
+  customTheme: initialCustom,
   siteDefault: initialDefault,
-  activeTheme: initialExplicit ?? initialDefault,
+  // The index.html bootstrap script normally applied this already; rendering
+  // it again keeps the page correct if that script was removed or failed.
+  activeTheme: applyState(initialExplicit, initialCustom, initialDefault),
 
   setExplicitTheme: (theme) => {
-    writeStoredTheme(EXPLICIT_THEME_KEY, theme);
-    const activeTheme = theme ?? get().siteDefault;
-    applyTheme(activeTheme);
-    set({ explicitTheme: theme, activeTheme });
+    writeStorage(EXPLICIT_THEME_KEY, theme);
+    const { customTheme, siteDefault } = get();
+    set({ explicitTheme: theme, activeTheme: applyState(theme, customTheme, siteDefault) });
+  },
+
+  setCustomTheme: (config) => {
+    writeStorage(
+      CUSTOM_THEME_KEY,
+      config ? JSON.stringify({ config, vars: buildCustomPalette(config).vars }) : null
+    );
+    const { explicitTheme, siteDefault } = get();
+    set({ customTheme: config, activeTheme: applyState(explicitTheme, config, siteDefault) });
   },
 
   setSiteDefault: (theme) => {
-    writeStoredTheme(SITE_DEFAULT_THEME_KEY, theme);
-    const activeTheme = get().explicitTheme ?? theme;
-    applyTheme(activeTheme);
-    set({ siteDefault: theme, activeTheme });
+    writeStorage(SITE_DEFAULT_THEME_KEY, theme);
+    const { explicitTheme, customTheme } = get();
+    set({ siteDefault: theme, activeTheme: applyState(explicitTheme, customTheme, theme) });
+  },
+
+  previewCustomTheme: (config) => {
+    const { explicitTheme, customTheme, siteDefault } = get();
+    if (config) renderTheme(config.base, config);
+    else applyState(explicitTheme, customTheme, siteDefault);
   },
 }));
-
-// The index.html bootstrap script normally applied this already; repeating
-// it keeps the attribute correct if that script was removed or failed.
-applyTheme(useThemeStore.getState().activeTheme);

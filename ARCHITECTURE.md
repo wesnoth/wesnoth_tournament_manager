@@ -101,6 +101,8 @@ The frontend ships two visual themes: **Medieval**, modelled on the wesnoth.org 
 
 The active theme is the visitor's explicit choice if there is one, otherwise the site default. The site default is the `default_theme` system setting, changed from the admin page; switching it back to Ranked is the global rollback if the Medieval theme shows a regression, and it leaves explicit user choices untouched. An explicit choice is kept in the browser and, for signed-in users, in their profile, so it follows them across devices.
 
+Users can also build a **custom** theme in their profile: a base theme plus three colors (background, text, accent), from which the frontend derives every color scale. Only those picks are stored. The editor previews changes live and refuses combinations that fail a readability check, including dark backgrounds, because the fixed status colors assume dark text on light surfaces. The navigation bars and footer keep the base theme's colors. A custom theme belongs to one user and can never be the site default.
+
 ## Configuration
 
 Settings come from environment files that are never committed. `backend/.env.example` and `frontend/.env.example` document every supported setting: tournament and forum database connections, the forum moderator group, JWT secret and expiry, port, trusted proxy, replay paths and Wesnoth version filter, Discord, rate limits, and `TEST_MODE` (TEST only: lets staff log in as real forum users with a shared, bcrypt-hashed password). The frontend reads `VITE_API_BASE_URL` at build time.

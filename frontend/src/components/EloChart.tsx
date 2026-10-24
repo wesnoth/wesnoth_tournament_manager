@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import i18next from 'i18next';
-import { useThemeStore, type ThemeName } from '../store/themeStore';
+import { CUSTOM_THEME, useThemeStore, type ThemeName } from '../store/themeStore';
+import { buildCustomPalette } from '../theme/customTheme';
 
 interface EloChartProps {
   matches: any[];
@@ -114,8 +115,24 @@ const CHART_COLORS: Record<ThemeName, { grid: string; axis: string; tooltipBackg
   medieval: { grid: '#e7d9c0', axis: '#5e4f3b', tooltipBackground: '#fdfbf7', tooltipBorder: '#cbac76', line: '#8a6a35' },
 };
 
+/** Chart colors of the custom theme, taken from its derived palette. */
+const customChartColors = (palette: ReturnType<typeof buildCustomPalette>) => ({
+  grid: palette.hex.gray['200'],
+  axis: palette.hex.gray['600'],
+  tooltipBackground: palette.hex.white,
+  tooltipBorder: palette.hex.gray['300'],
+  line: palette.hex.blue['600'],
+});
+
 const EloChart: React.FC<EloChartProps> = ({ matches, currentPlayerId }) => {
-  const chartColors = CHART_COLORS[useThemeStore((state) => state.activeTheme)];
+  const activeTheme = useThemeStore((state) => state.activeTheme);
+  const customTheme = useThemeStore((state) => state.customTheme);
+  const chartColors = useMemo(
+    () => (activeTheme === CUSTOM_THEME && customTheme
+      ? customChartColors(buildCustomPalette(customTheme))
+      : CHART_COLORS[activeTheme === CUSTOM_THEME ? 'ranked' : activeTheme]),
+    [activeTheme, customTheme]
+  );
   const { t } = useTranslation();
   const [window, setWindow] = useState<TimeWindow>('all');
 

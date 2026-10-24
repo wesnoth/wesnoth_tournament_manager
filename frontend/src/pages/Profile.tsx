@@ -3,8 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { userService } from '../services/api';
 import { useAuthStore } from '../store/authStore';
-import { THEMES, isTheme, useThemeStore } from '../store/themeStore';
-import { chooseTheme, syncThemeWithProfile } from '../theme/themePreference';
+import { CUSTOM_THEME, THEMES, isThemeChoice, isTheme, useThemeStore } from '../store/themeStore';
+import { chooseTheme, saveCustomTheme, syncThemeWithProfile } from '../theme/themePreference';
+import { DEFAULT_CUSTOM_COLORS } from '../theme/customTheme';
+import CustomThemeEditor from '../components/CustomThemeEditor';
 import MainLayout from '../components/MainLayout';
 import ProfileStats from '../components/ProfileStats';
 import { CountrySelector } from '../components/CountrySelector';
@@ -31,6 +33,11 @@ const Profile: React.FC = () => {
   const [languageDropdownOpen, setLanguageDropdownOpen] = useState(false);
   const explicitTheme = useThemeStore((state) => state.explicitTheme);
   const siteDefaultTheme = useThemeStore((state) => state.siteDefault);
+  const customTheme = useThemeStore((state) => state.customTheme);
+  const activeTheme = useThemeStore((state) => state.activeTheme);
+  // A first custom theme starts from the look the user is seeing now.
+  const customBase = isTheme(activeTheme) ? activeTheme : siteDefaultTheme;
+  const [editingCustomTheme, setEditingCustomTheme] = useState(false);
   const [preferencesCollapsed, setPreferencesCollapsed] = useState(false);
   const [avatarSectionCollapsed, setAvatarSectionCollapsed] = useState(true);
   const [enableRanked, setEnableRanked] = useState(false);
@@ -80,7 +87,7 @@ const Profile: React.FC = () => {
         if (langFromDB !== i18n.language) {
           i18n.changeLanguage(langFromDB);
         }
-        void syncThemeWithProfile(profileRes.data.theme);
+        void syncThemeWithProfile(profileRes.data.theme, profileRes.data.theme_custom);
       } catch (err) {
         console.error('Error fetching data:', err);
       } finally {
@@ -114,11 +121,24 @@ const Profile: React.FC = () => {
   const handleThemeChange = useCallback(async (value: string) => {
     setProfileError('');
     try {
-      await chooseTheme(isTheme(value) ? value : null, true);
+      await chooseTheme(isThemeChoice(value) ? value : null, true);
       setProfileMessage(t('theme.updated'));
       setTimeout(() => setProfileMessage(''), 3000);
     } catch (err: any) {
       setProfileError(err?.response?.data?.error || t('theme.error_update'));
+    }
+  }, [t]);
+
+  /** Saves the editor's colors and selects the custom theme in the profile. */
+  const handleCustomThemeSave = useCallback(async (config: Parameters<typeof saveCustomTheme>[0]) => {
+    setProfileError('');
+    try {
+      await saveCustomTheme(config, true);
+      setProfileMessage(t('theme.updated'));
+      setTimeout(() => setProfileMessage(''), 3000);
+    } catch (err: any) {
+      setProfileError(err?.response?.data?.error || t('theme.error_update'));
+      throw err;
     }
   }, [t]);
 
@@ -348,8 +368,27 @@ const Profile: React.FC = () => {
                   {THEMES.map((theme) => (
                     <option key={theme} value={theme}>{t(`theme.name_${theme}`)}</option>
                   ))}
+                  {/* Selectable once colors exist, created through the editor below. */}
+                  {customTheme && <option value={CUSTOM_THEME}>{t('theme.name_custom')}</option>}
                 </select>
                 <p className="text-sm text-gray-600 mt-2">{t('theme.help')}</p>
+                {!editingCustomTheme && (
+                  <button
+                    type="button"
+                    data-help-id="action-open-custom-theme-editor"
+                    onClick={() => setEditingCustomTheme(true)}
+                    className="mt-4 px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-800 font-semibold hover:border-blue-500 hover:bg-gray-50"
+                  >
+                    🎨 {customTheme ? t('theme.custom_edit') : t('theme.custom_create')}
+                  </button>
+                )}
+                {editingCustomTheme && (
+                  <CustomThemeEditor
+                    initial={customTheme ?? { base: customBase, ...DEFAULT_CUSTOM_COLORS[customBase] }}
+                    onSave={handleCustomThemeSave}
+                    onClose={() => setEditingCustomTheme(false)}
+                  />
+                )}
               </section>
 
               <section data-help-id="region-profile-preferences" className="bg-white rounded-lg shadow-md mb-8">

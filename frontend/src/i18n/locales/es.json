@@ -1911,6 +1911,27 @@
     "name_medieval": "Medieval",
     "name_ranked": "Ranked",
     "default_label": "Tema predeterminado:",
-    "default_updated": "Tema predeterminado actualizado"
+    "default_updated": "Tema predeterminado actualizado",
+    "name_custom": "Personalizado",
+    "custom_create": "Crear colores personalizados",
+    "custom_edit": "Editar colores personalizados",
+    "custom_editor_title": "Tema personalizado",
+    "custom_editor_help": "Elige un tema base y tres colores. Los cambios se previsualizan en toda la página y solo se conservan al guardar.",
+    "custom_base": "Tema base",
+    "color_background": "Fondo",
+    "color_text": "Texto",
+    "color_accent": "Acento",
+    "color_value_label": "Valor de {{color}} (#rrggbb o r, g, b)",
+    "color_invalid": "Usa #rrggbb o tres valores de 0 a 255.",
+    "contrast_title": "Legibilidad",
+    "contrast_text_background": "Texto sobre el fondo",
+    "contrast_text_cards": "Texto sobre los paneles",
+    "contrast_muted_cards": "Texto secundario sobre los paneles",
+    "contrast_links_cards": "Enlaces y botones",
+    "contrast_blocked": "Algunas comprobaciones fallan: el fondo debe ser más claro que el texto y las combinaciones necesitan al menos 4.5:1. Ajusta los colores para guardar.",
+    "custom_save": "Guardar y usar",
+    "custom_reset": "Restablecer colores",
+    "saving": "Guardando...",
+    "contrast_light_background": "Fondo más claro que el texto"
   }
 }

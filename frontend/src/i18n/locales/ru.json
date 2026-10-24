@@ -1911,6 +1911,27 @@
     "name_medieval": "Средневековая",
     "name_ranked": "Ranked",
     "default_label": "Тема по умолчанию:",
-    "default_updated": "Тема по умолчанию обновлена"
+    "default_updated": "Тема по умолчанию обновлена",
+    "name_custom": "Пользовательская",
+    "custom_create": "Создать свои цвета",
+    "custom_edit": "Изменить свои цвета",
+    "custom_editor_title": "Пользовательская тема",
+    "custom_editor_help": "Выберите базовую тему и три цвета. Изменения сразу видны на всей странице и сохраняются только после нажатия «Сохранить».",
+    "custom_base": "Базовая тема",
+    "color_background": "Фон",
+    "color_text": "Текст",
+    "color_accent": "Акцент",
+    "color_value_label": "Значение «{{color}}» (#rrggbb или r, g, b)",
+    "color_invalid": "Используйте #rrggbb или три значения от 0 до 255.",
+    "contrast_title": "Читаемость",
+    "contrast_text_background": "Текст на фоне",
+    "contrast_text_cards": "Текст на панелях",
+    "contrast_muted_cards": "Второстепенный текст на панелях",
+    "contrast_links_cards": "Ссылки и кнопки",
+    "contrast_blocked": "Некоторые проверки не пройдены: фон должен быть светлее текста, а контраст сочетаний — не менее 4.5:1. Измените цвета, чтобы сохранить.",
+    "custom_save": "Сохранить и использовать",
+    "custom_reset": "Сбросить цвета",
+    "saving": "Сохранение...",
+    "contrast_light_background": "Фон светлее текста"
   }
 }

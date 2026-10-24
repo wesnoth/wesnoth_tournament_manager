@@ -13,16 +13,33 @@
       // choice wins, then the cached site default, then the fallback. Kept
       // inline because an external script would load too late to avoid the
       // flash. Storage access can throw, so every failure keeps the fallback.
+      // A custom theme applies the CSS variables cached by the store; only
+      // variable names and channel or hex values are accepted, so a tampered
+      // cache cannot inject other styles.
       (function () {
         var themes = ['medieval', 'ranked'];
+        var root = document.documentElement;
         var theme = 'medieval';
         try {
           var explicit = localStorage.getItem('theme');
           var siteDefault = localStorage.getItem('themeDefault');
+          if (themes.indexOf(siteDefault) !== -1) theme = siteDefault;
           if (themes.indexOf(explicit) !== -1) theme = explicit;
-          else if (themes.indexOf(siteDefault) !== -1) theme = siteDefault;
+          if (explicit === 'custom') {
+            var custom = JSON.parse(localStorage.getItem('themeCustom') || 'null');
+            if (custom && custom.config && themes.indexOf(custom.config.base) !== -1 && custom.vars) {
+              theme = custom.config.base;
+              root.setAttribute('data-custom-theme', '');
+              for (var name in custom.vars) {
+                var value = String(custom.vars[name]);
+                if (/^--[a-z0-9-]+$/.test(name) && /^(\d{1,3} \d{1,3} \d{1,3}|#[0-9a-f]{6})$/i.test(value)) {
+                  root.style.setProperty(name, value);
+                }
+              }
+            }
+          }
         } catch (e) {}
-        document.documentElement.setAttribute('data-theme', theme);
+        root.setAttribute('data-theme', theme);
       })();
     </script>
   </head>

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../store/authStore';
-import { THEMES, useThemeStore } from '../store/themeStore';
+import { CUSTOM_THEME, THEMES, useThemeStore, type ThemeChoice } from '../store/themeStore';
 import { chooseTheme } from '../theme/themePreference';
 
 /** Public repository; AGPL-3.0 entitles network users to the source code. */
@@ -21,12 +21,15 @@ const Footer: React.FC = () => {
   const { t } = useTranslation();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const activeTheme = useThemeStore((state) => state.activeTheme);
+  const hasCustomTheme = useThemeStore((state) => state.customTheme !== null);
+  // The custom theme is offered only once its colors exist (Profile editor).
+  const themeOptions: ThemeChoice[] = hasCustomTheme ? [...THEMES, CUSTOM_THEME] : [...THEMES];
   const currentYear = new Date().getFullYear();
 
   // The theme switcher lives in the footer rather than the navbar, whose
   // link row has no spare width at common desktop sizes. The Profile page
   // offers the full choice, including returning to the site default.
-  const selectTheme = (theme: (typeof THEMES)[number]) => {
+  const selectTheme = (theme: ThemeChoice) => {
     chooseTheme(theme, isAuthenticated).catch((err) => {
       console.error('Error saving theme preference:', err);
     });
@@ -36,7 +39,7 @@ const Footer: React.FC = () => {
       <div className="text-center text-sm text-gray-400 space-y-1">
         <p className="m-0 text-xs" data-help-id="region-footer-theme">
           {t('theme.label')}:{' '}
-          {THEMES.map((theme, index) => (
+          {themeOptions.map((theme, index) => (
             <React.Fragment key={theme}>
               {index > 0 && ' · '}
               <button

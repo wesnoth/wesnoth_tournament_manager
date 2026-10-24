@@ -62,7 +62,7 @@ const Login: React.FC = () => {
         setIsStreamer(profileRes.data.is_streamer || false);
         setEnableRanked(!!profileRes.data.enable_ranked);
         
-        void syncThemeWithProfile(profileRes.data.theme);
+        void syncThemeWithProfile(profileRes.data.theme, profileRes.data.theme_custom);
 
         const userLanguage = profileRes.data.language || 'en';
         if (userLanguage !== i18n.language) {

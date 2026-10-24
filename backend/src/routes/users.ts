@@ -7,7 +7,7 @@ import { avatarManifestService } from '../services/avatarManifestService.js';
 import { validateTimezone, validateAvailabilitySchedule } from '../utils/timezoneUtils.js';
 import { isValidDiscordSnowflake, validateDiscordId } from '../services/discord.js';
 import { getCombinedMatchFeed } from '../services/combinedMatchFeedService.js';
-import { isSupportedTheme } from '../services/themeSettingsService.js';
+import { CUSTOM_THEME, isUserTheme, parseCustomTheme } from '../services/themeSettingsService.js';
 import {
   TOURNAMENT_LAURELS_COLUMNS,
   TOURNAMENT_LAURELS_SORT_COLUMNS,
@@ -25,6 +25,7 @@ router.get('/profile', authMiddleware, async (req: AuthRequest, res) => {
         u.nickname, 
         u.language, 
         u.theme, 
+        u.theme_custom, 
         u.discord_id, 
         u.elo_rating, 
         u.level, 
@@ -76,6 +77,9 @@ router.get('/profile', authMiddleware, async (req: AuthRequest, res) => {
     // Parse JSON fields
     if (user.availability_schedule && typeof user.availability_schedule === 'string') {
       user.availability_schedule = JSON.parse(user.availability_schedule);
+    }
+    if (user.theme_custom && typeof user.theme_custom === 'string') {
+      user.theme_custom = JSON.parse(user.theme_custom);
     }
 
     const result = {
@@ -306,11 +310,14 @@ router.post('/profile/discord/validate', authMiddleware, async (req: AuthRequest
 // Update mutable user preferences owned by the authenticated profile.
 router.put('/profile/update', authMiddleware, async (req: AuthRequest, res) => {
   try {
-    const { country, avatar, language, theme, timezone, availability_schedule } = req.body;
+    const { country, avatar, language, theme, theme_custom, timezone, availability_schedule } = req.body;
 
     // `theme: null` is a meaningful update (return to the site default), so
     // presence is checked with `!== undefined` rather than truthiness.
-    if (!country && !avatar && !language && theme === undefined && !timezone && !availability_schedule) {
+    if (
+      !country && !avatar && !language && theme === undefined && theme_custom === undefined
+      && !timezone && !availability_schedule
+    ) {
       return res.status(400).json({ error: 'At least one field is required' });
     }
 
@@ -337,10 +344,38 @@ router.put('/profile/update', authMiddleware, async (req: AuthRequest, res) => {
       params.push(language);
     }
 
+    // theme_custom is validated before theme because selecting the custom
+    // theme requires colors, either sent now or saved earlier.
+    let customThemeProvided = false;
+    if (theme_custom !== undefined) {
+      if (theme_custom === null) {
+        if (theme === CUSTOM_THEME) {
+          return res.status(400).json({ error: 'Custom theme colors are required' });
+        }
+        updateFields.push(`theme_custom = NULL`);
+      } else {
+        const customTheme = parseCustomTheme(theme_custom);
+        if (!customTheme) {
+          return res.status(400).json({ error: 'Invalid custom theme' });
+        }
+        updateFields.push(`theme_custom = ?`);
+        params.push(JSON.stringify(customTheme));
+        customThemeProvided = true;
+      }
+    }
+
     if (theme !== undefined) {
       // NULL clears the explicit choice so the user follows default_theme.
-      if (theme !== null && !isSupportedTheme(theme)) {
+      if (theme !== null && !isUserTheme(theme)) {
         return res.status(400).json({ error: 'Unsupported theme' });
+      }
+      if (theme === CUSTOM_THEME && !customThemeProvided) {
+        // A stored 'custom' without colors would leave the frontend nothing
+        // to render, so the choice needs colors from an earlier save.
+        const stored = await query('SELECT theme_custom FROM users_extension WHERE id = ?', [req.userId]);
+        if (!stored.rows[0]?.theme_custom) {
+          return res.status(400).json({ error: 'Custom theme colors are required' });
+        }
       }
       updateFields.push(`theme = ?`);
       params.push(theme);

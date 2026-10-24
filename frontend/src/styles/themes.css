@@ -21,10 +21,17 @@
  * - Medieval-only decoration (fonts, background art, bar styling) lives in
  *   selectors scoped to `[data-theme="medieval"]`, so the ranked theme never
  *   downloads those assets.
+ * - A custom theme (theme/customTheme.ts) keeps its base theme's
+ *   `data-theme`, adds `data-custom-theme` and sets the `--c-*` variables
+ *   inline on the root. The bars (`.theme-bar`) re-declare the base
+ *   theme's variables, so they keep the base look: their white text and
+ *   dark backgrounds were designed together and would lose contrast with
+ *   arbitrary user colors.
  */
 
 :root,
-:root[data-theme='ranked'] {
+:root[data-theme='ranked'],
+:root[data-theme='ranked'][data-custom-theme] .theme-bar {
   --c-gray-50: 249 250 251;
   --c-gray-100: 243 244 246;
   --c-gray-200: 229 231 235;
@@ -69,7 +76,8 @@
  * (50 lightest, 950 darkest) so existing light-background and dark-text
  * pairings keep their contrast direction.
  */
-:root[data-theme='medieval'] {
+:root[data-theme='medieval'],
+:root[data-theme='medieval'][data-custom-theme] .theme-bar {
   --c-gray-50: 247 240 225;
   --c-gray-100: 239 228 205;
   --c-gray-200: 231 217 192;
@@ -321,4 +329,13 @@
   margin-bottom: 0.75rem;
   border-bottom: 1px solid #cbac76;
   border-image: linear-gradient(to right, rgba(180, 134, 72, 0.6), rgba(180, 134, 72, 0.1)) 1;
+}
+
+/*
+ * Custom themes set the text color explicitly: the ranked base leaves body
+ * text at the browser default (black), which a dark custom background would
+ * make unreadable.
+ */
+:root[data-custom-theme] body {
+  color: rgb(var(--c-gray-900));
 }

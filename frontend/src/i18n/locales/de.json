@@ -1911,6 +1911,27 @@
     "name_medieval": "Mittelalter",
     "name_ranked": "Ranked",
     "default_label": "Standarddesign:",
-    "default_updated": "Standarddesign aktualisiert"
+    "default_updated": "Standarddesign aktualisiert",
+    "name_custom": "Benutzerdefiniert",
+    "custom_create": "Eigene Farben erstellen",
+    "custom_edit": "Eigene Farben bearbeiten",
+    "custom_editor_title": "Benutzerdefiniertes Design",
+    "custom_editor_help": "Wähle ein Basisdesign und drei Farben. Änderungen werden auf der ganzen Seite live angezeigt und erst beim Speichern übernommen.",
+    "custom_base": "Basisdesign",
+    "color_background": "Hintergrund",
+    "color_text": "Text",
+    "color_accent": "Akzent",
+    "color_value_label": "Wert für {{color}} (#rrggbb oder r, g, b)",
+    "color_invalid": "Verwende #rrggbb oder drei Werte von 0 bis 255.",
+    "contrast_title": "Lesbarkeit",
+    "contrast_text_background": "Text auf dem Hintergrund",
+    "contrast_text_cards": "Text auf Bereichen",
+    "contrast_muted_cards": "Sekundärtext auf Bereichen",
+    "contrast_links_cards": "Links und Schaltflächen",
+    "contrast_blocked": "Einige Prüfungen schlagen fehl: Der Hintergrund muss heller als der Text sein und Kombinationen brauchen mindestens 4,5:1. Passe die Farben an, um zu speichern.",
+    "custom_save": "Speichern und verwenden",
+    "custom_reset": "Farben zurücksetzen",
+    "saving": "Wird gespeichert...",
+    "contrast_light_background": "Hintergrund heller als der Text"
   }
 }
