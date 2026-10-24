@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { userService } from '../services/api';
 import { useAuthStore } from '../store/authStore';
+import { THEMES, isTheme, useThemeStore } from '../store/themeStore';
+import { chooseTheme, syncThemeWithProfile } from '../theme/themePreference';
 import MainLayout from '../components/MainLayout';
 import ProfileStats from '../components/ProfileStats';
 import { CountrySelector } from '../components/CountrySelector';
@@ -27,6 +29,8 @@ const Profile: React.FC = () => {
   const [validatingDiscord, setValidatingDiscord] = useState(false);
   const [discordValidationMessage, setDiscordValidationMessage] = useState('');
   const [languageDropdownOpen, setLanguageDropdownOpen] = useState(false);
+  const explicitTheme = useThemeStore((state) => state.explicitTheme);
+  const siteDefaultTheme = useThemeStore((state) => state.siteDefault);
   const [preferencesCollapsed, setPreferencesCollapsed] = useState(false);
   const [avatarSectionCollapsed, setAvatarSectionCollapsed] = useState(true);
   const [enableRanked, setEnableRanked] = useState(false);
@@ -76,6 +80,7 @@ const Profile: React.FC = () => {
         if (langFromDB !== i18n.language) {
           i18n.changeLanguage(langFromDB);
         }
+        void syncThemeWithProfile(profileRes.data.theme);
       } catch (err) {
         console.error('Error fetching data:', err);
       } finally {
@@ -100,6 +105,22 @@ const Profile: React.FC = () => {
       setProfileError(err?.response?.data?.error || t('profile.error_language_update', 'Error updating language'));
     }
   }, [t, i18n]);
+
+  /**
+   * Saves the theme choice. The empty option means "follow the site
+   * default" and is stored as NULL, so a later change of the site default
+   * still reaches this user.
+   */
+  const handleThemeChange = useCallback(async (value: string) => {
+    setProfileError('');
+    try {
+      await chooseTheme(isTheme(value) ? value : null, true);
+      setProfileMessage(t('theme.updated'));
+      setTimeout(() => setProfileMessage(''), 3000);
+    } catch (err: any) {
+      setProfileError(err?.response?.data?.error || t('theme.error_update'));
+    }
+  }, [t]);
 
   const handleCountryChange = useCallback(async (countryCode: string) => {
     setProfileError('');
@@ -309,6 +330,26 @@ const Profile: React.FC = () => {
                     </div>
                   )}
                 </div>
+              </section>
+
+              <section data-help-id="region-profile-theme" className="bg-white rounded-lg shadow-md p-8 mb-8">
+                <h2 className="text-2xl font-semibold text-gray-800 mb-6 pb-4 border-b-2 border-gray-200">{t('theme.settings_title')}</h2>
+                <label className="block text-sm font-semibold text-gray-700 mb-2" htmlFor="profile-theme">
+                  {t('theme.label')}
+                </label>
+                <select
+                  id="profile-theme"
+                  data-help-id="field-theme"
+                  value={explicitTheme ?? ''}
+                  onChange={(e) => handleThemeChange(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-800 focus:outline-none focus:border-blue-500"
+                >
+                  <option value="">{t('theme.follow_default', { theme: t(`theme.name_${siteDefaultTheme}`) })}</option>
+                  {THEMES.map((theme) => (
+                    <option key={theme} value={theme}>{t(`theme.name_${theme}`)}</option>
+                  ))}
+                </select>
+                <p className="text-sm text-gray-600 mt-2">{t('theme.help')}</p>
               </section>
 
               <section data-help-id="region-profile-preferences" className="bg-white rounded-lg shadow-md mb-8">

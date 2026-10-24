@@ -288,9 +288,17 @@ const Home: React.FC = () => {
   }
 
   return (
-    <div className="w-full max-w-full mx-auto px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200 min-h-screen flex flex-col">
+    <>
+    {/* Hero artwork for themes that define it (see .theme-hero in
+        themes.css). It renders nothing visible in themes without hero art,
+        so the markup can stay unconditional. */}
+    <div data-help-id="region-home-hero" className="theme-hero px-4 pt-8 pb-10 text-center">
+      <div className="theme-hero-logo" role="img" aria-label="The Battle for Wesnoth" />
+      <p className="font-heading text-3xl text-[#f0e6d8] mt-2 [text-shadow:0_2px_4px_#000]">{t('app_name')}</p>
+    </div>
+    <div className="theme-home theme-page w-full max-w-full mx-auto px-4 py-8 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200 min-h-screen flex flex-col">
       <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-gray-800 mb-4">{t('app_name')}</h1>
+        <h1 className="theme-plain-title text-4xl font-bold text-gray-800 mb-4">{t('app_name')}</h1>
         {error && <p className="bg-gradient-to-r from-red-100 to-red-50 text-red-900 p-4 rounded-lg border-l-4 border-red-500 shadow-md">{error}</p>}
       </div>
 
@@ -303,7 +311,7 @@ const Home: React.FC = () => {
           }} />
           {/* Recent Matches */}
           <section className="bg-white rounded-xl shadow-lg p-8">
-            <div className="flex justify-between items-center mb-6 pb-4 border-b-2 border-gray-200">
+            <div className="theme-section-title flex justify-between items-center mb-6 pb-4 border-b-2 border-gray-200">
               <h2 className="text-2xl font-bold text-gray-800">{t('recent_games')}</h2>
               <a href="/matches" data-help-id="action-view-all-matches" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 font-semibold text-sm px-4 py-2 rounded transition-all">{t('view_all')}</a>
             </div>
@@ -669,6 +677,7 @@ const Home: React.FC = () => {
       </div>
       <ChallengeFromPlayerModal isOpen={!!waitingChallenge} onClose={() => setWaitingChallenge(null)} onSuccess={() => setWaitingChallenge(null)} opponentId={waitingChallenge?.user_id || ''} opponentNickname={waitingChallenge?.nickname || ''} />
     </div>
+    </>
   );
 };
 

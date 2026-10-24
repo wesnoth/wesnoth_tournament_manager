@@ -95,6 +95,12 @@ Long administrative operations (global recalculation, balance history rebuild) r
 
 The interface is available in English, Spanish, German, Russian, and Chinese. English is the reference locale and is bundled with the application as the fallback; the other locales are separate chunks loaded on demand; `npm run verify` blocks a push when another locale is missing a key or an interpolation variable, or when the frontend uses a literal translation key that `en.json` does not define. Stored values (levels, statuses) are identifiers, never translated text. In-app notifications are the exception: each one is stored as text written in the recipient's profile language and timezone when it is created, while Discord messages stay in English because the channels are shared. The user documentation is the in-app wiki; controls carry stable `data-help-id` hooks so its articles and screenshots can be generated and kept in sync.
 
+## Visual themes
+
+The frontend ships two visual themes: **Medieval**, modelled on the wesnoth.org home page, and **Ranked**, the original look. Components keep ordinary Tailwind classes; the neutral and accent color scales resolve to CSS variables that each theme defines, so a theme recolors the whole site without per-component branches, and status colors (error, success, warning) stay fixed in every theme. Ranked reproduces the default Tailwind palette exactly. Medieval-only decoration (fonts, background artwork, bar styling) is scoped to that theme, and its self-hosted assets live under `frontend/public/themes/medieval/`.
+
+The active theme is the visitor's explicit choice if there is one, otherwise the site default. The site default is the `default_theme` system setting, changed from the admin page; switching it back to Ranked is the global rollback if the Medieval theme shows a regression, and it leaves explicit user choices untouched. An explicit choice is kept in the browser and, for signed-in users, in their profile, so it follows them across devices.
+
 ## Configuration
 
 Settings come from environment files that are never committed. `backend/.env.example` and `frontend/.env.example` document every supported setting: tournament and forum database connections, the forum moderator group, JWT secret and expiry, port, trusted proxy, replay paths and Wesnoth version filter, Discord, rate limits, and `TEST_MODE` (TEST only: lets staff log in as real forum users with a shared, bcrypt-hashed password). The frontend reads `VITE_API_BASE_URL` at build time.

@@ -17,7 +17,7 @@ const UserProfileNav: React.FC = () => {
   };
 
   return (
-    <nav data-help-id="region-user-navigation" className="w-full bg-gradient-dark-blue border-b-2 border-blue-900 py-3 px-4 sticky top-0 z-100 shadow-md max-md:overflow-x-auto max-md:-webkit-overflow-scrolling-touch">
+    <nav data-help-id="region-user-navigation" className="theme-bar w-full bg-gradient-dark-blue border-b-2 border-blue-900 py-3 px-4 sticky top-0 z-100 shadow-md max-md:overflow-x-auto max-md:-webkit-overflow-scrolling-touch">
       <div className="max-w-7xl mx-auto w-full">
         <div className="flex flex-wrap max-md:flex-nowrap items-center gap-2 justify-start w-full max-md:overflow-x-auto max-md:-webkit-overflow-scrolling-touch">
           {/* Settings */}

@@ -168,14 +168,14 @@ const Navbar: React.FC = () => {
   };
 
   return (
-    <nav className="w-full bg-primary text-white shadow-sm p-3 min-h-[60px] flex items-center relative z-[999] overflow-hidden max-nav:flex-col max-nav:min-h-auto max-nav:gap-2">
+    <nav className="theme-bar w-full bg-primary text-white shadow-sm p-3 min-h-[60px] flex items-center relative z-[999] overflow-hidden max-nav:flex-col max-nav:min-h-auto max-nav:gap-2">
       <div className="w-full max-w-full mx-auto px-2 flex justify-between items-center gap-2 relative z-[999] max-nav:w-full max-nav:flex-col max-nav:gap-2 overflow-x-auto -webkit-overflow-scrolling-touch">
         
         {/* Brand + Language Selector Row */}
         <div className="flex justify-between items-center gap-4 max-nav:w-full max-nav:gap-2">
           {/* Brand */}
           <div className="flex-shrink-0 min-w-fit">
-            <Link to="/" className="text-2xl font-bold text-white hover:opacity-90 transition-opacity max-sm:text-xl">
+            <Link to="/" className="font-heading text-2xl font-bold text-white hover:opacity-90 transition-opacity max-sm:text-xl">
               {t('app_name')}
             </Link>
           </div>
@@ -202,7 +202,7 @@ const Navbar: React.FC = () => {
         {/* Links and Controls Container */}
         <div className="flex flex-1 justify-between items-center gap-2 max-nav:w-full max-nav:flex-col-reverse">
           {/* Links */}
-          <div className="flex flex-1 justify-center items-center gap-2 max-nav:overflow-x-auto max-nav:-webkit-overflow-scrolling-touch max-nav:scrollbar-none max-nav:w-full max-nav:flex-nowrap min-w-0">
+          <div className="theme-bar-links flex flex-1 justify-center items-center gap-2 max-nav:overflow-x-auto max-nav:-webkit-overflow-scrolling-touch max-nav:scrollbar-none max-nav:w-full max-nav:flex-nowrap min-w-0">
           <Link to="/" className="text-white hover:bg-white/10 px-3 py-2 rounded transition-colors min-h-[40px] flex items-center flex-shrink-0 max-sm:px-2 max-sm:py-1.5 max-sm:text-xs max-nav:px-2.5 max-nav:py-1.5 max-nav:text-sm">
             {t('navbar_home')}
           </Link>

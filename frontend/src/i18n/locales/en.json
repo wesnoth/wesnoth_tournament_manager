@@ -1899,5 +1899,18 @@
     "bronze": "Third-place finishes",
     "winner": "Winner",
     "runner_up": "Runner-up"
+  },
+  "theme": {
+    "settings_title": "Visual Theme",
+    "label": "Theme",
+    "follow_default": "Site default ({{theme}})",
+    "help": "The site default is chosen by the administrators. Picking a theme here keeps it even if the default changes.",
+    "updated": "Theme updated",
+    "error_update": "Error updating theme",
+    "switch_to": "Switch to the {{theme}} theme",
+    "name_medieval": "Medieval",
+    "name_ranked": "Ranked",
+    "default_label": "Default theme:",
+    "default_updated": "Default theme updated"
   }
 }

@@ -1899,5 +1899,18 @@
     "bronze": "季军次数",
     "winner": "冠军",
     "runner_up": "亚军"
+  },
+  "theme": {
+    "settings_title": "视觉主题",
+    "label": "主题",
+    "follow_default": "站点默认（{{theme}}）",
+    "help": "默认主题由管理员设置。在此选择的主题即使默认主题更改也会保留。",
+    "updated": "主题已更新",
+    "error_update": "更新主题时出错",
+    "switch_to": "切换到{{theme}}主题",
+    "name_medieval": "中世纪",
+    "name_ranked": "Ranked",
+    "default_label": "默认主题：",
+    "default_updated": "默认主题已更新"
   }
 }

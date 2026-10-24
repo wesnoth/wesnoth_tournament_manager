@@ -1899,5 +1899,18 @@
     "bronze": "Terceros puestos",
     "winner": "Ganador",
     "runner_up": "Subcampeón"
+  },
+  "theme": {
+    "settings_title": "Tema visual",
+    "label": "Tema",
+    "follow_default": "Predeterminado del sitio ({{theme}})",
+    "help": "Los administradores eligen el tema predeterminado. Si eliges un tema aquí, lo conservas aunque cambie el predeterminado.",
+    "updated": "Tema actualizado",
+    "error_update": "Error al actualizar el tema",
+    "switch_to": "Cambiar al tema {{theme}}",
+    "name_medieval": "Medieval",
+    "name_ranked": "Ranked",
+    "default_label": "Tema predeterminado:",
+    "default_updated": "Tema predeterminado actualizado"
   }
 }

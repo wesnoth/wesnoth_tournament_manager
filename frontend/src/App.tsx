@@ -8,6 +8,7 @@ import Footer from './components/Footer';
 import MaintenanceBanner from './components/MaintenanceBanner';
 import RouteLoader from './components/RouteLoader';
 import { adminService } from './services/api';
+import { loadSiteDefaultTheme } from './theme/themePreference';
 import './App.css';
 
 // Eagerly loaded (critical paths)
@@ -59,6 +60,12 @@ const App: React.FC = () => {
     
     checkAuth();
   }, [token, validateToken]);
+
+  useEffect(() => {
+    // The site default can change while a tab stays open only through an
+    // admin action, so one load per page visit is enough.
+    void loadSiteDefaultTheme();
+  }, []);
 
   useEffect(() => {
     // Fetch maintenance status on app load

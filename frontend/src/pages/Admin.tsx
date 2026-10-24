@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { adminService } from '../services/api';
+import { THEMES, isTheme, useThemeStore } from '../store/themeStore';
 import MainLayout from '../components/MainLayout';
 import PlayerLink from '../components/PlayerLink';
 import GlobalStatsRecalculationProgress from '../components/GlobalStatsRecalculationProgress';
@@ -111,6 +112,31 @@ const AdminUsers: React.FC = () => {
 
     setFilteredUsers(filtered);
     setCurrentPage(1);
+  };
+
+  const siteDefaultTheme = useThemeStore((state) => state.siteDefault);
+  const [savingDefaultTheme, setSavingDefaultTheme] = useState(false);
+
+  /**
+   * Changes the `default_theme` system setting. It affects anonymous visitors
+   * and users without an explicit choice, so switching it back to "ranked"
+   * is the global rollback if the medieval theme shows a regression. Users
+   * who picked a theme explicitly keep it.
+   */
+  const handleDefaultThemeChange = async (value: string) => {
+    if (!isTheme(value)) return;
+    try {
+      setSavingDefaultTheme(true);
+      setError('');
+      await adminService.updateSystemSetting('default_theme', value);
+      useThemeStore.getState().setSiteDefault(value);
+      setMessage(t('theme.default_updated'));
+      setTimeout(() => setMessage(''), 3000);
+    } catch (err: any) {
+      setError(err.response?.data?.error || t('theme.error_update'));
+    } finally {
+      setSavingDefaultTheme(false);
+    }
   };
 
   const fetchMaintenanceStatus = async () => {
@@ -332,6 +358,20 @@ const AdminUsers: React.FC = () => {
         >
           {maintenanceMode ? '⚠️ Maintenance ON' : '✓ Maintenance OFF'}
         </button>
+        <label className="inline-flex items-center gap-2 ml-3 text-sm font-semibold text-gray-700">
+          {t('theme.default_label')}
+          <select
+            data-help-id="field-admin-default-theme"
+            value={siteDefaultTheme}
+            onChange={(e) => handleDefaultThemeChange(e.target.value)}
+            disabled={savingDefaultTheme}
+            className="px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-800 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+          >
+            {THEMES.map((theme) => (
+              <option key={theme} value={theme}>{t(`theme.name_${theme}`)}</option>
+            ))}
+          </select>
+        </label>
           </>
         )}
       </section>

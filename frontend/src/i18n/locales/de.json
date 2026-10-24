@@ -1899,5 +1899,18 @@
     "bronze": "Dritte Plätze",
     "winner": "Sieger",
     "runner_up": "Zweiter"
+  },
+  "theme": {
+    "settings_title": "Design",
+    "label": "Design",
+    "follow_default": "Standard der Seite ({{theme}})",
+    "help": "Das Standarddesign wird von den Administratoren festgelegt. Ein hier gewähltes Design bleibt erhalten, auch wenn sich der Standard ändert.",
+    "updated": "Design aktualisiert",
+    "error_update": "Fehler beim Aktualisieren des Designs",
+    "switch_to": "Zum Design {{theme}} wechseln",
+    "name_medieval": "Mittelalter",
+    "name_ranked": "Ranked",
+    "default_label": "Standarddesign:",
+    "default_updated": "Standarddesign aktualisiert"
   }
 }

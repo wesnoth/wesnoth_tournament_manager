@@ -1,0 +1,324 @@
+/*
+ * Visual themes.
+ *
+ * Components keep using ordinary Tailwind classes (`text-gray-700`,
+ * `bg-white`, `bg-blue-500`...). tailwind.config.js points the neutral and
+ * accent scales (gray, blue, white, primary, secondary, dark, light) at the
+ * `--c-*` variables below, so a theme recolors the whole site by redefining
+ * them instead of every component choosing colors per theme.
+ *
+ * Invariants:
+ * - Variables hold space-separated RGB channels, not full colors, because
+ *   Tailwind composes them as `rgb(var(--c-x) / <alpha-value>)`. That keeps
+ *   opacity modifiers such as `bg-white/10` and `bg-opacity-50` working.
+ * - The ranked theme is exactly Tailwind's default palette plus the former
+ *   custom colors, so it renders pixel-identical to the pre-theme site. It is
+ *   also the `:root` fallback for a document without a `data-theme`.
+ * - Every shade a scale defines here must exist in every theme. A scale used
+ *   by components but missing from a theme would render as an invalid color.
+ * - Status scales (red, green, amber, yellow...) are deliberately not
+ *   themed: they carry meaning (error, success, warning) and must keep it.
+ * - Medieval-only decoration (fonts, background art, bar styling) lives in
+ *   selectors scoped to `[data-theme="medieval"]`, so the ranked theme never
+ *   downloads those assets.
+ */
+
+:root,
+:root[data-theme='ranked'] {
+  --c-gray-50: 249 250 251;
+  --c-gray-100: 243 244 246;
+  --c-gray-200: 229 231 235;
+  --c-gray-300: 209 213 219;
+  --c-gray-400: 156 163 175;
+  --c-gray-500: 107 114 128;
+  --c-gray-600: 75 85 99;
+  --c-gray-700: 55 65 81;
+  --c-gray-800: 31 41 55;
+  --c-gray-900: 17 24 39;
+  --c-gray-950: 3 7 18;
+
+  --c-blue-50: 239 246 255;
+  --c-blue-100: 219 234 254;
+  --c-blue-200: 191 219 254;
+  --c-blue-300: 147 197 253;
+  --c-blue-400: 96 165 250;
+  --c-blue-500: 59 130 246;
+  --c-blue-600: 37 99 235;
+  --c-blue-700: 29 78 216;
+  --c-blue-800: 30 64 175;
+  --c-blue-900: 30 58 138;
+  --c-blue-950: 23 37 84;
+
+  --c-white: 255 255 255;
+  --c-primary: 44 62 80;
+  --c-secondary: 52 152 219;
+  --c-dark: 44 62 80;
+  --c-light: 245 245 245;
+
+  --page-background: #f5f5f5;
+  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  --font-heading: var(--font-body);
+}
+
+/*
+ * Medieval: the parchment-and-gold look of the wesnoth.org home page
+ * (wesmere.css). The gray scale becomes a warm parchment-to-ink ramp and the
+ * blue accent scale becomes a gold-to-leather ramp. Both stay monotonic
+ * (50 lightest, 950 darkest) so existing light-background and dark-text
+ * pairings keep their contrast direction.
+ */
+:root[data-theme='medieval'] {
+  --c-gray-50: 247 240 225;
+  --c-gray-100: 239 228 205;
+  --c-gray-200: 231 217 192;
+  --c-gray-300: 203 172 118;
+  --c-gray-400: 168 145 107;
+  --c-gray-500: 125 106 79;
+  --c-gray-600: 94 79 59;
+  --c-gray-700: 70 58 43;
+  --c-gray-800: 47 39 29;
+  --c-gray-900: 28 23 18;
+  --c-gray-950: 15 12 9;
+
+  --c-blue-50: 250 243 227;
+  --c-blue-100: 243 230 200;
+  --c-blue-200: 232 211 165;
+  --c-blue-300: 217 187 126;
+  --c-blue-400: 196 157 92;
+  --c-blue-500: 162 127 68;
+  --c-blue-600: 138 106 53;
+  --c-blue-700: 114 79 46;
+  --c-blue-800: 90 61 36;
+  --c-blue-900: 62 42 25;
+  --c-blue-950: 42 28 16;
+
+  /* Cards stay a shade lighter than the parchment page, as on wesnoth.org. */
+  --c-white: 253 251 247;
+  --c-primary: 15 20 33;
+  --c-secondary: 162 127 68;
+  --c-dark: 15 20 33;
+  --c-light: 243 234 216;
+
+  /* Darker parchment at the side edges, fading to the base color at 5%. */
+  --page-background: linear-gradient(to left, #e7d9c0, rgba(231, 217, 192, 0) 5%),
+    linear-gradient(to right, #e7d9c0, #f3ead8 5%);
+  --font-body: 'Open Sans', Verdana, 'DejaVu Sans', Arial, sans-serif;
+  --font-heading: Montaga, Junicode, 'Times New Roman', serif;
+
+  /* Night-blue bars with a gold rule, shared by the navigation and footer. */
+  --bar-background: linear-gradient(to right, #0f1421, #161e31, #0f1421);
+  --bar-accent: #b48648;
+  --bar-link: #b48648;
+  --bar-link-hover: #f0e6d8;
+}
+
+/*
+ * Self-hosted copies of the wesnoth.org fonts (SIL Open Font License).
+ * Only the subsets needed by the shipped locales are included: Latin covers
+ * en/es/de, Cyrillic covers ru. Chinese falls back to system fonts. Browsers
+ * fetch a face only when rendered text uses it, so the ranked theme never
+ * downloads these files.
+ */
+@font-face {
+  font-family: 'Montaga';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/themes/medieval/fonts/montaga-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212,
+    U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Open Sans';
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url('/themes/medieval/fonts/opensans-normal-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212,
+    U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Open Sans';
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url('/themes/medieval/fonts/opensans-normal-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Open Sans';
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url('/themes/medieval/fonts/opensans-normal-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+
+@font-face {
+  font-family: 'Open Sans';
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url('/themes/medieval/fonts/opensans-normal-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C88, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+
+@font-face {
+  font-family: 'Open Sans';
+  font-style: italic;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url('/themes/medieval/fonts/opensans-italic-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212,
+    U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Open Sans';
+  font-style: italic;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url('/themes/medieval/fonts/opensans-italic-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Open Sans';
+  font-style: italic;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url('/themes/medieval/fonts/opensans-italic-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+
+@font-face {
+  font-family: 'Open Sans';
+  font-style: italic;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url('/themes/medieval/fonts/opensans-italic-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C88, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+
+:root[data-theme='medieval'] body {
+  color: rgb(var(--c-gray-800));
+}
+
+:root[data-theme='medieval'] h1,
+:root[data-theme='medieval'] h2,
+:root[data-theme='medieval'] h3 {
+  font-family: var(--font-heading);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+/*
+ * Bars. `.theme-bar` marks the site navigation, the user navigation and the
+ * footer. `.theme-bar-links` marks a container whose links (and direct
+ * child buttons, such as the navbar Help entry) take the bar link color. The ranked theme keeps each bar's own Tailwind classes, so these
+ * rules only exist for themes that restyle the bars. `!important` is needed
+ * to win over the bar's background utilities without editing them per theme.
+ */
+:root[data-theme='medieval'] .theme-bar {
+  background: var(--bar-background) !important;
+  border-color: var(--bar-accent) !important;
+  box-shadow: 0 1px 4px 0 #000 !important;
+}
+
+:root[data-theme='medieval'] .theme-bar-links a,
+:root[data-theme='medieval'] .theme-bar-links > button {
+  color: var(--bar-link);
+  font-weight: 700;
+  text-shadow: 0 0 1px #000;
+}
+
+:root[data-theme='medieval'] .theme-bar-links a:hover,
+:root[data-theme='medieval'] .theme-bar-links a:focus-visible,
+:root[data-theme='medieval'] .theme-bar-links > button:hover,
+:root[data-theme='medieval'] .theme-bar-links > button:focus-visible {
+  color: var(--bar-link-hover);
+  text-shadow: 0 0 8px #ccc;
+}
+
+/*
+ * Home hero: the wesnoth.org front artwork and large logo. Hidden in themes
+ * without hero art so the markup can stay unconditional. The background
+ * fades to the bar color at the bottom so the hero blends into the page edge
+ * like the wesnoth.org intro block.
+ */
+.theme-hero {
+  display: none;
+}
+
+:root[data-theme='medieval'] .theme-hero {
+  display: block;
+  background-color: #0f1421;
+  background-image: linear-gradient(to top, #0f1421, rgba(15, 20, 33, 0.8) 1em, rgba(15, 20, 33, 0) 3em),
+    url('/themes/medieval/img/front-background.jpg');
+  background-position: bottom, 50% 40%;
+  background-size: auto, cover;
+  background-repeat: no-repeat;
+  border-bottom: 1px solid var(--bar-accent);
+}
+
+:root[data-theme='medieval'] .theme-hero-logo {
+  max-width: 600px;
+  aspect-ratio: 3 / 1;
+  margin: 0 auto;
+  background-image: image-set(
+    url('/themes/medieval/img/logo-large.png') 1x,
+    url('/themes/medieval/img/logo-large@2x.png') 2x
+  );
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Section headings get the gold rule that fades out to the right. */
+:root[data-theme='medieval'] .theme-section-title {
+  border-bottom: 1px solid #cbac76;
+  border-image: linear-gradient(to right, rgba(180, 134, 72, 0.6), rgba(180, 134, 72, 0.1)) 1;
+}
+
+/* Themes with their own page title art hide the plain text title. */
+:root[data-theme='medieval'] .theme-plain-title {
+  display: none;
+}
+
+/*
+ * Pages whose own gradient would fight the parchment page background drop
+ * it, so the themed body background shows through.
+ */
+:root[data-theme='medieval'] .theme-page {
+  background-image: none !important;
+}
+
+/*
+ * Home sidebar and news headings are bare <h2>/<h3> elements that inherit the
+ * body size under Tailwind's preflight. Medieval gives them the wesnoth.org
+ * heading size and gold rule. `:not([class])` leaves headings that already
+ * style themselves through utilities untouched.
+ */
+:root[data-theme='medieval'] .theme-home h2:not([class]) {
+  font-size: 1.6rem;
+  color: #111;
+}
+
+:root[data-theme='medieval'] .theme-home h3:not([class]) {
+  font-size: 1.3rem;
+  color: #111;
+  padding-bottom: 0.25rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid #cbac76;
+  border-image: linear-gradient(to right, rgba(180, 134, 72, 0.6), rgba(180, 134, 72, 0.1)) 1;
+}

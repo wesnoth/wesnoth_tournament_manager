@@ -6,10 +6,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=10.0, user-scalable=yes" />
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <!-- Optimize LCP: preload system fonts for faster text rendering -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <title>Wesnoth Tournament Manager</title>
+    <script>
+      // Apply the visual theme before the first paint so the page does not
+      // flash the wrong palette. Mirrors src/store/themeStore.ts: an explicit
+      // choice wins, then the cached site default, then the fallback. Kept
+      // inline because an external script would load too late to avoid the
+      // flash. Storage access can throw, so every failure keeps the fallback.
+      (function () {
+        var themes = ['medieval', 'ranked'];
+        var theme = 'medieval';
+        try {
+          var explicit = localStorage.getItem('theme');
+          var siteDefault = localStorage.getItem('themeDefault');
+          if (themes.indexOf(explicit) !== -1) theme = explicit;
+          else if (themes.indexOf(siteDefault) !== -1) theme = siteDefault;
+        } catch (e) {}
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,4 +1,8 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
+import { useAuthStore } from '../store/authStore';
+import { THEMES, useThemeStore } from '../store/themeStore';
+import { chooseTheme } from '../theme/themePreference';
 
 /** Public repository; AGPL-3.0 entitles network users to the source code. */
 const SOURCE_URL = 'https://github.com/wesnoth/wesnoth_tournament_manager';
@@ -14,10 +18,39 @@ const SOURCE_URL = 'https://github.com/wesnoth/wesnoth_tournament_manager';
  * service.
  */
 const Footer: React.FC = () => {
+  const { t } = useTranslation();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const activeTheme = useThemeStore((state) => state.activeTheme);
   const currentYear = new Date().getFullYear();
+
+  // The theme switcher lives in the footer rather than the navbar, whose
+  // link row has no spare width at common desktop sizes. The Profile page
+  // offers the full choice, including returning to the site default.
+  const selectTheme = (theme: (typeof THEMES)[number]) => {
+    chooseTheme(theme, isAuthenticated).catch((err) => {
+      console.error('Error saving theme preference:', err);
+    });
+  };
   return (
-    <footer className="bg-gradient-to-r from-gray-900 to-gray-800 text-gray-100 py-4 px-4 border-t-4 border-blue-500 flex-shrink-0">
+    <footer className="theme-bar theme-bar-links bg-gradient-to-r from-gray-900 to-gray-800 text-gray-100 py-4 px-4 border-t-4 border-blue-500 flex-shrink-0">
       <div className="text-center text-sm text-gray-400 space-y-1">
+        <p className="m-0 text-xs" data-help-id="region-footer-theme">
+          {t('theme.label')}:{' '}
+          {THEMES.map((theme, index) => (
+            <React.Fragment key={theme}>
+              {index > 0 && ' · '}
+              <button
+                type="button"
+                data-help-id={`option-theme-${theme}`}
+                onClick={() => selectTheme(theme)}
+                aria-pressed={theme === activeTheme}
+                className={theme === activeTheme ? 'font-semibold text-gray-100' : 'underline hover:text-gray-300'}
+              >
+                {t(`theme.name_${theme}`)}
+              </button>
+            </React.Fragment>
+          ))}
+        </p>
         <p className="m-0">Wesnoth Tournament Manager by The Battle for Wesnoth Project</p>
         <p className="m-0">Site design Copyright © 2024–{currentYear} by clmates</p>
         <p className="m-0 text-xs text-gray-500">

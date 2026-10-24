@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import i18next from 'i18next';
+import { useThemeStore, type ThemeName } from '../store/themeStore';
 
 interface EloChartProps {
   matches: any[];
@@ -103,7 +104,18 @@ const formatTickLabel = (start: Date, granularity: Granularity): string => {
   return `${start.getFullYear()}`;
 };
 
+/**
+ * Chart colors per theme. Recharts writes colors as SVG presentation
+ * attributes, which cannot resolve CSS variables, so each theme lists
+ * concrete values. The ranked values are the chart's original colors.
+ */
+const CHART_COLORS: Record<ThemeName, { grid: string; axis: string; tooltipBackground: string; tooltipBorder: string; line: string }> = {
+  ranked: { grid: '#ddd', axis: '#666', tooltipBackground: '#fff', tooltipBorder: '#ccc', line: '#2196F3' },
+  medieval: { grid: '#e7d9c0', axis: '#5e4f3b', tooltipBackground: '#fdfbf7', tooltipBorder: '#cbac76', line: '#8a6a35' },
+};
+
 const EloChart: React.FC<EloChartProps> = ({ matches, currentPlayerId }) => {
+  const chartColors = CHART_COLORS[useThemeStore((state) => state.activeTheme)];
   const { t } = useTranslation();
   const [window, setWindow] = useState<TimeWindow>('all');
 
@@ -241,18 +253,18 @@ const EloChart: React.FC<EloChartProps> = ({ matches, currentPlayerId }) => {
       <div className="w-full overflow-x-auto">
         <ResponsiveContainer width="100%" height={320}>
           <LineChart data={chartData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#ddd" />
-            <XAxis dataKey="label" stroke="#666" tick={{ fontSize: 12 }} />
+            <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+            <XAxis dataKey="label" stroke={chartColors.axis} tick={{ fontSize: 12 }} />
             <YAxis
-              stroke="#666"
+              stroke={chartColors.axis}
               domain={[Math.max(minElo, 800), maxElo]}
               tick={{ fontSize: 12 }}
               label={{ value: t('label_elo_rating'), angle: -90, position: 'insideLeft' }}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#fff',
-                border: '1px solid #ccc',
+                backgroundColor: chartColors.tooltipBackground,
+                border: `1px solid ${chartColors.tooltipBorder}`,
                 borderRadius: '4px',
                 padding: '8px',
               }}
@@ -262,7 +274,7 @@ const EloChart: React.FC<EloChartProps> = ({ matches, currentPlayerId }) => {
             <Line
               type="monotone"
               dataKey="elo"
-              stroke="#2196F3"
+              stroke={chartColors.line}
               dot={chartData.length <= 80}
               activeDot={{ r: 5 }}
               strokeWidth={2}

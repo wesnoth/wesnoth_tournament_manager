@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { authService, userService, SESSION_END_REASON_KEY } from '../services/api';
 import { useAuthStore } from '../store/authStore';
+import { syncThemeWithProfile } from '../theme/themePreference';
 import i18next from 'i18next';
 
 const Login: React.FC = () => {
@@ -61,6 +62,8 @@ const Login: React.FC = () => {
         setIsStreamer(profileRes.data.is_streamer || false);
         setEnableRanked(!!profileRes.data.enable_ranked);
         
+        void syncThemeWithProfile(profileRes.data.theme);
+
         const userLanguage = profileRes.data.language || 'en';
         if (userLanguage !== i18n.language) {
           i18n.changeLanguage(userLanguage);

@@ -1,3 +1,18 @@
+/**
+ * Builds a Tailwind color scale whose shades read the theme variables from
+ * src/styles/themes.css. The variables hold RGB channels so Tailwind can
+ * inject the opacity of modifiers like `bg-white/10` through <alpha-value>.
+ */
+const themedScale = (name) =>
+  Object.fromEntries(
+    ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900', '950'].map((shade) => [
+      shade,
+      `rgb(var(--c-${name}-${shade}) / <alpha-value>)`,
+    ])
+  );
+
+const themedColor = (name) => `rgb(var(--c-${name}) / <alpha-value>)`;
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -9,15 +24,23 @@ export default {
       screens: {
         'nav': '1310px',
       },
+      // Neutral and accent scales follow the active theme (see themes.css).
+      // Status colors stay fixed because they carry meaning in every theme.
       colors: {
-        primary: '#2c3e50',
-        secondary: '#3498db',
+        gray: themedScale('gray'),
+        blue: themedScale('blue'),
+        white: themedColor('white'),
+        primary: themedColor('primary'),
+        secondary: themedColor('secondary'),
         success: '#27ae60',
         danger: '#e74c3c',
         warning: '#e67e22',
-        info: '#3498db',
-        dark: '#2c3e50',
-        light: '#f5f5f5',
+        info: themedColor('secondary'),
+        dark: themedColor('dark'),
+        light: themedColor('light'),
+      },
+      fontFamily: {
+        heading: 'var(--font-heading)',
       },
       backgroundImage: {
         'gradient-purple': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
