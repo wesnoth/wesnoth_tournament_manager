@@ -1,6 +1,7 @@
 import rateLimit from 'express-rate-limit';
 import type { Request } from 'express';
 import { getUserAgent, getUserIP, logAuditEvent } from './audit.js';
+import { rateLimitKeyForAddress } from '../utils/rateLimitKey.js';
 
 // Local development makes many parallel requests while loading tournament pages.
 // Keep production limits unchanged, but make the development defaults forgiving;
@@ -23,6 +24,17 @@ const searchWindowMs = getWindowMs('RATE_LIMIT_SEARCH_WINDOW_MS', 60 * 1000);
 const loginMax = getLimit('RATE_LIMIT_LOGIN_MAX', 10, 50);
 const generalMax = getLimit('RATE_LIMIT_GENERAL_MAX', 100, 1000);
 const searchMax = getLimit('RATE_LIMIT_SEARCH_MAX', 10, 60);
+
+/**
+ * Bucket key shared by every limiter. `req.ip` already resolves the client
+ * behind the trusted proxy (finding 1); IPv6 clients are then grouped by /64
+ * so rotating the interface identifier cannot multiply a client's allowance.
+ *
+ * @param req Incoming request.
+ * @returns Key from {@link rateLimitKeyForAddress}.
+ */
+const clientRateLimitKey = (req: Request): string =>
+  rateLimitKeyForAddress(req.ip || req.socket.remoteAddress);
 
 /**
  * Persist only rejected requests in the security audit trail. Allowed traffic
@@ -64,7 +76,7 @@ const auditRateLimitRejection = (
 /**
  * Rate limiter for login endpoint
  * Prevents brute force password attacks
- * Production limit: 10 attempts per 15 minutes per IP.
+ * Production limit: 10 attempts per 15 minutes per IP (per /64 for IPv6).
  */
 export const loginLimiter = rateLimit({
   windowMs: loginWindowMs,
@@ -72,9 +84,7 @@ export const loginLimiter = rateLimit({
   message: 'Too many login attempts from this IP, please try again after 15 minutes',
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req, res) => {
-    return req.ip || req.socket.remoteAddress || 'unknown';
-  },
+  keyGenerator: clientRateLimitKey,
   skip: (req) => {
     return process.env.NODE_ENV === 'test';
   },
@@ -94,16 +104,14 @@ export const loginLimiter = rateLimit({
 /**
  * General rate limiter for API endpoints
  * Prevents resource exhaustion and API abuse
- * Production limit: 100 requests per minute per IP; local development defaults to 1000.
+ * Production limit: 100 requests per minute per IP (per /64 for IPv6); local development defaults to 1000.
  */
 export const generalLimiter = rateLimit({
   windowMs: generalWindowMs,
   max: generalMax,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req, res) => {
-    return req.ip || req.socket.remoteAddress || 'unknown';
-  },
+  keyGenerator: clientRateLimitKey,
   skip: (req) => {
     return process.env.NODE_ENV === 'test';
   },
@@ -121,16 +129,14 @@ export const generalLimiter = rateLimit({
 /**
  * Strict rate limiter for search endpoints
  * Prevents user enumeration and information gathering
- * Production limit: 10 requests per minute per IP; local development defaults to 60.
+ * Production limit: 10 requests per minute per IP (per /64 for IPv6); local development defaults to 60.
  */
 export const searchLimiter = rateLimit({
   windowMs: searchWindowMs,
   max: searchMax,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req, res) => {
-    return req.ip || req.socket.remoteAddress || 'unknown';
-  },
+  keyGenerator: clientRateLimitKey,
   skip: (req) => {
     return process.env.NODE_ENV === 'test';
   },
