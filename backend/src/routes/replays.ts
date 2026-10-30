@@ -17,7 +17,7 @@ import {
   ReplayResultDataError,
 } from '../services/replayResultService.js';
 import { validateAndCorrectFactions } from '../services/replayConfirmationService.js';
-import { phaseGameDisplayMetadata } from '../tournament-engine/competitionProgression.js';
+import { orientPhaseGameMetadata, phaseGameDisplayMetadata } from '../tournament-engine/competitionProgression.js';
 import { globalRecalculationInProgressResponse, globalRecalculationMiddleware } from '../services/systemPauseService.js';
 import { RatingHistoryLockedError } from '../services/ratingHistoryLock.js';
 import { getActiveGlobalStatsRecalculationJobId } from '../services/globalStatsRecalculationJobService.js';
@@ -287,7 +287,15 @@ router.post('/:replayId/confirm-winner', authMiddleware, globalRecalculationMidd
         tournamentId: summary.linkedTournamentId,
         gameId: summary.linkedTournamentGameId,
         winnerEntryId,
-        metadata: phaseGameDisplayMetadata(summary),
+        // The replay summary describes its own victory claim, but the
+        // player's answer decides the winner. When they disagree (for
+        // example "I lost" from the replay's claimed winner) the factions
+        // and winner side must swap, as in the organizer resolution.
+        metadata: orientPhaseGameMetadata(
+          phaseGameDisplayMetadata(summary),
+          summary.linkedWinnerEntryId,
+          winnerEntryId
+        ),
         confirmation: {
           entryId: iWon ? winnerEntryId : opponentEntryId(gameEntries, winnerEntryId)!,
           comments: comments || null,

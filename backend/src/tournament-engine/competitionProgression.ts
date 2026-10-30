@@ -61,8 +61,9 @@ export function phaseGameDisplayMetadata(parseSummary: any): PhaseGameResultMeta
 }
 
 /**
- * Orient replay display metadata to a winner chosen outside the replay, such
- * as an organizer resolving a confidence-one replay.
+ * Orient replay display metadata to a winner chosen outside the replay: an
+ * organizer resolving a confidence-one replay, or a participant confirming
+ * it with "I won" / "I lost".
  *
  * `phaseGameDisplayMetadata` describes the replay's own victory claim. When
  * the chosen winner is the replay's loser, the factions swap and the winner
