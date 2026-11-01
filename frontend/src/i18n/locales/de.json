@@ -1156,7 +1156,9 @@
     "confirm_award": "Diese Serie per administrativer Entscheidung an {{name}} vergeben? Nicht gespielte Spiele zählen nicht für Tiebreaker nach Spielanteil.",
     "error_admin_decision": "Administrative Entscheidung konnte nicht eingetragen werden",
     "award_to": "An {{name}} vergeben",
-    "no_filter_results": "Keine Spiele entsprechen den gewählten Filtern."
+    "no_filter_results": "Keine Spiele entsprechen den gewählten Filtern.",
+    "col_phase": "Phase",
+    "sort_by": "Nach {{column}} sortieren"
   },
   "composition": {
     "title": "Vorschau der Teilnehmer und K.-o.-Bäume",

@@ -1156,7 +1156,9 @@
     "confirm_award": "要通过管理裁定将本系列赛判给 {{name}} 吗？未进行的对局不计入局胜率决胜指标。",
     "error_admin_decision": "无法记录管理裁定",
     "award_to": "判给 {{name}}",
-    "no_filter_results": "没有符合所选筛选条件的比赛。"
+    "no_filter_results": "没有符合所选筛选条件的比赛。",
+    "col_phase": "阶段",
+    "sort_by": "按{{column}}排序"
   },
   "composition": {
     "title": "参赛者与对阵表预览",

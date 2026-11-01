@@ -1156,7 +1156,9 @@
     "confirm_award": "Award this series to {{name}} by administrative decision? Unplayed games will not count towards game-percentage tiebreakers.",
     "error_admin_decision": "Failed to record administrative decision",
     "award_to": "Award to {{name}}",
-    "no_filter_results": "No matches match the selected filters."
+    "no_filter_results": "No matches match the selected filters.",
+    "col_phase": "Phase",
+    "sort_by": "Sort by {{column}}"
   },
   "composition": {
     "title": "Participant and bracket preview",

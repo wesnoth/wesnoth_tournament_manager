@@ -1156,7 +1156,9 @@
     "confirm_award": "¿Otorgar esta serie a {{name}} por decisión administrativa? Las partidas no jugadas no contarán en los desempates por porcentaje de partidas.",
     "error_admin_decision": "No se pudo registrar la decisión administrativa",
     "award_to": "Otorgar a {{name}}",
-    "no_filter_results": "Ninguna partida coincide con los filtros seleccionados."
+    "no_filter_results": "Ninguna partida coincide con los filtros seleccionados.",
+    "col_phase": "Fase",
+    "sort_by": "Ordenar por {{column}}"
   },
   "composition": {
     "title": "Vista previa de participantes y cuadros",

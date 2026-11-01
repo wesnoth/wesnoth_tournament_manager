@@ -9,6 +9,10 @@ import TournamentEntryName from './TournamentEntryName';
 import StarDisplay from './StarDisplay';
 import { tournamentSchedulingService } from '../services/tournamentSchedulingService';
 import { groupSlotsIntoRanges } from '../utils/slotGrouping';
+import {
+  compareCompetitionGames, DEFAULT_COMPETITION_GAME_SORT, initialSortDirection,
+  type CompetitionGameSort, type CompetitionGameSortColumn,
+} from '../utils/competitionGameSort';
 
 interface Props {
   tournamentId: string;
@@ -210,6 +214,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
   const [editingStreamId, setEditingStreamId] = useState<string | null>(null);
   const [editingStreamUrl, setEditingStreamUrl] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [gameSort, setGameSort] = useState<CompetitionGameSort>(DEFAULT_COMPETITION_GAME_SORT);
   const [inputFilters, setInputFilters] = useState({ player: '', map: '', faction: '' });
   const [appliedFilters, setAppliedFilters] = useState({ player: '', map: '', faction: '' });
   const { user, isAdmin, isTournamentModerator, isStreamer } = useAuthStore();
@@ -357,6 +362,21 @@ const TournamentCompetitionView: React.FC<Props> = ({
     setCurrentPage(1);
   };
 
+  // Game rows carry their phase id only; the phase list gives each one its
+  // position in the tournament graph for the phase ordering.
+  const phaseOrder = useMemo(
+    () => new Map(phases.map(phase => [phase.phase_id, Number(phase.phase_order)])),
+    [phases],
+  );
+
+  /** Select a sort column, or flip the direction when it is already selected. */
+  const changeGameSort = (column: CompetitionGameSortColumn) => {
+    setGameSort(current => current.column === column
+      ? { column, direction: current.direction === 'desc' ? 'asc' : 'desc' }
+      : { column, direction: initialSortDirection(column) });
+    setCurrentPage(1);
+  };
+
   const filteredGames = useMemo(() => {
     const playerFilter = appliedFilters.player.trim().toLowerCase();
     const mapFilter = appliedFilters.map.trim().toLowerCase();
@@ -409,12 +429,26 @@ const TournamentCompetitionView: React.FC<Props> = ({
       );
       const firstPending = Number(Boolean(first.pending_replay_id));
       const secondPending = Number(Boolean(second.pending_replay_id));
+      // The organizer-chosen column orders games inside each category, after
+      // the rows that need attention (highlighted, replay to confirm).
       return categoryDifference
         || secondHighlighted - firstHighlighted
         || secondPending - firstPending
-        || String(first.game_id).localeCompare(String(second.game_id));
+        || compareCompetitionGames(first, second, gameSort, phaseOrder, isCompetitionGameCompleted);
     });
-  }, [appliedFilters, currentUserId, games, highlightedGameId, highlightedSeriesId, matchFilter, participantTeamIds, showOnlyMine]);
+  }, [appliedFilters, currentUserId, gameSort, games, highlightedGameId, highlightedSeriesId, matchFilter, participantTeamIds, phaseOrder, showOnlyMine]);
+
+  const ariaSort = (column: CompetitionGameSortColumn): 'ascending' | 'descending' | 'none' =>
+    gameSort.column !== column ? 'none' : gameSort.direction === 'asc' ? 'ascending' : 'descending';
+
+  /** Clickable column title; the arrow marks the active column and its direction. */
+  const sortButton = (column: CompetitionGameSortColumn, label: string, helpId: string) => (
+    <button type="button" data-help-id={helpId} onClick={() => changeGameSort(column)}
+      title={t('competition.sort_by', { column: label })}
+      className={`inline-flex items-center gap-1 font-semibold hover:text-blue-700 ${gameSort.column === column ? 'text-blue-800' : ''}`}>
+      {label}{gameSort.column === column && <span aria-hidden="true">{gameSort.direction === 'desc' ? '▼' : '▲'}</span>}
+    </button>
+  );
 
   const totalPages = Math.max(1, Math.ceil(filteredGames.length / pageSize));
   const paginatedGames = filteredGames.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -783,10 +817,13 @@ const TournamentCompetitionView: React.FC<Props> = ({
               <col className={completed ? 'w-[16%]' : 'w-[18%]'} />
             </colgroup>
             <thead className="bg-gray-200"><tr>
-              {completed && <th className="px-4 py-3 text-left font-semibold text-gray-700">{t('label_date')}</th>}
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">{completed ? t('label_winner') : t('label_player1')}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">{completed ? t('label_loser') : t('label_player2')}</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">{t('label_map')}</th>
+              {completed && <th aria-sort={ariaSort('date')} className="px-4 py-3 text-left font-semibold text-gray-700">{sortButton('date', t('label_date'), 'action-sort-competition-games-by-date')}</th>}
+              <th aria-sort={ariaSort('first')} className="px-4 py-3 text-left font-semibold text-gray-700">{sortButton('first', completed ? t('label_winner') : t('label_player1'), 'action-sort-competition-games-by-first-entry')}</th>
+              <th aria-sort={ariaSort('second')} className="px-4 py-3 text-left font-semibold text-gray-700">{sortButton('second', completed ? t('label_loser') : t('label_player2'), 'action-sort-competition-games-by-second-entry')}</th>
+              {/* The map cell also names the phase and round, so this header sorts by either. */}
+              <th aria-sort={gameSort.column === 'map' || gameSort.column === 'phase' ? ariaSort(gameSort.column) : 'none'} className="px-4 py-3 text-left font-semibold text-gray-700">
+                {sortButton('map', t('label_map'), 'action-sort-competition-games-by-map')}<span className="px-1 text-gray-400">·</span>{sortButton('phase', t('competition.col_phase'), 'action-sort-competition-games-by-phase')}
+              </th>
               <th className="px-4 py-3 text-left font-semibold text-gray-700">{t('label_status_actions')}</th>
             </tr></thead>
             <tbody>{sectionGames.map(game => {
