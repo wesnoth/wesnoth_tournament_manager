@@ -1160,7 +1160,16 @@
     "award_to": "判给 {{name}}",
     "no_filter_results": "没有符合所选筛选条件的比赛。",
     "col_phase": "阶段",
-    "sort_by": "按{{column}}排序"
+    "sort_by": "按{{column}}排序",
+    "link_replay": "关联回放",
+    "link_replay_url_placeholder": "https://replays.wesnoth.org/…/game_(123).bz2",
+    "link_replay_submit": "关联",
+    "link_replay_cancel": "取消",
+    "link_replay_linking": "正在关联…",
+    "link_replay_hint": "当对局使用了错误的名称或未开启锦标赛设置时使用。粘贴 replays.wesnoth.org 上的回放链接。",
+    "link_replay_queued": "回放“{{game}}”已加入队列，将在几分钟内处理；如果结果不明确，玩家需要确认。",
+    "link_replay_associated": "该排位对局已关联到此锦标赛对局。",
+    "error_link_replay": "无法关联回放"
   },
   "composition": {
     "title": "参赛者与对阵表预览",

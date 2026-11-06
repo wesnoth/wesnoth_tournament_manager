@@ -1160,7 +1160,16 @@
     "award_to": "Award to {{name}}",
     "no_filter_results": "No matches match the selected filters.",
     "col_phase": "Phase",
-    "sort_by": "Sort by {{column}}"
+    "sort_by": "Sort by {{column}}",
+    "link_replay": "Link replay",
+    "link_replay_url_placeholder": "https://replays.wesnoth.org/…/game_(123).bz2",
+    "link_replay_submit": "Link",
+    "link_replay_cancel": "Cancel",
+    "link_replay_linking": "Linking…",
+    "link_replay_hint": "Use this when the game was hosted with a wrong name or without the tournament setting. Paste the replay URL from replays.wesnoth.org.",
+    "link_replay_queued": "Replay \"{{game}}\" queued. It will be processed in a few minutes; if the result is not clear, the players must confirm it.",
+    "link_replay_associated": "The ranked match was attached to this tournament game.",
+    "error_link_replay": "The replay could not be linked"
   },
   "composition": {
     "title": "Participant and bracket preview",

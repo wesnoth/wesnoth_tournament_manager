@@ -85,10 +85,21 @@ interface UnparsedReplay {
   reprocess_overrides: string | null;
 }
 
+/**
+ * One-shot overrides stored in `replays.reprocess_overrides`.
+ *
+ * The admin Reprocess action sets the mode flags and a tournament name. The
+ * manual replay link (manualReplayLinkService) also sets an explicit
+ * tournament and tournament game: the replay is then linked to exactly that
+ * game, the name lookup is skipped, and unranked/team tournaments do not
+ * require the Ranked add-on.
+ */
 interface ReplayAdminOverrides {
   rankedMode: boolean;
   tournament: boolean;
   tournamentName: string | null;
+  tournamentId: string | null;
+  tournamentGameId: string | null;
 }
 
 interface ParseSummary {
@@ -136,7 +147,7 @@ interface ParseSummary {
   matchType: 'ranked' | 'tournament_ranked' | 'tournament_unranked' | 'rejected';
   linkedTournamentId: string | null;
   linkedTournamentGameId: string | null;
-  tournamentLinkMethod: 'tournament_game' | 'participants' | null;
+  tournamentLinkMethod: 'tournament_game' | 'participants' | 'manual_url' | null;
   linkedWinnerEntryId: string | null;
   // Cached tournament record found during match type detection (avoid double DB lookup)
   detectedTournament: { id: string; name: string; tournament_mode: string; tournament_type: string; competition_model_version?: number } | null;
@@ -265,6 +276,8 @@ export class ParseNewReplaysRefactorized {
           // For tournament matches, link to the specific tournament_game.
           if (parseSummary.matchType === 'tournament_ranked' || parseSummary.matchType === 'tournament_unranked') {
             const linked = await this.linkToTournament(parseSummary);
+            // Record that a person, not the server metadata, chose this game.
+            if (linked && adminOverrides?.tournamentGameId) parseSummary.tournamentLinkMethod = 'manual_url';
             if (!linked) {
               console.log(`❌ [PARSE] Tournament link failed → REJECTED`);
               await query(
@@ -430,6 +443,11 @@ export class ParseNewReplaysRefactorized {
         rankedMode: overrides.rankedMode,
         tournament: overrides.tournament,
         tournamentName: typeof overrides.tournamentName === 'string' ? overrides.tournamentName.trim() || null : null,
+        // Both ids or neither: a tournament without its game cannot be linked explicitly.
+        tournamentId: typeof overrides.tournamentId === 'string' && typeof overrides.tournamentGameId === 'string'
+          ? overrides.tournamentId : null,
+        tournamentGameId: typeof overrides.tournamentId === 'string' && typeof overrides.tournamentGameId === 'string'
+          ? overrides.tournamentGameId : null,
       };
     } catch {
       return null;
@@ -572,6 +590,13 @@ export class ParseNewReplaysRefactorized {
     } else if (addonResult.length > 0) {
       parseSummary.forumAddon = addonResult[0];
       console.log(`   ✅ Found Ranked addon in forum`);
+    } else if (adminOverrides?.tournamentId
+      && await findTournamentById(adminOverrides.tournamentId, ['unranked', 'team'])) {
+      // A manual link to an unranked or team tournament accepts games hosted
+      // without the add-on: those modes never touch ELO and the players were
+      // already checked against the tournament game. Ranked tournaments keep
+      // the add-on requirement.
+      console.log(`   ⚠️  No Ranked addon; accepted for a manual unranked/team tournament link`);
     } else {
       console.log(`   ⚠️  No Ranked addon or competitive_game_id found`);
       parseSummary.matchType = 'rejected';
@@ -801,6 +826,26 @@ export class ParseNewReplaysRefactorized {
       parseSummary.replayTournament = adminOverrides.tournamentName;
     }
 
+    // Manual link: the tournament and game are explicit, so the tournament
+    // mode decides the match type and the game-name lookup is skipped below.
+    let manualTournamentLink = false;
+    if (adminOverrides?.tournamentId && adminOverrides.tournamentGameId) {
+      const manualTournament = await findTournamentById(adminOverrides.tournamentId, ['ranked', 'unranked', 'team']);
+      if (!manualTournament) {
+        console.log(`   ❌ Manual link tournament is no longer in progress → REJECTED`);
+        parseSummary.matchType = 'rejected';
+        return parseSummary;
+      }
+      manualTournamentLink = true;
+      parseSummary.detectedTournament = manualTournament;
+      parseSummary.forumTournamentId = manualTournament.id;
+      parseSummary.forumTournamentGameId = adminOverrides.tournamentGameId;
+      parseSummary.replayRankedMode = manualTournament.tournament_mode === 'ranked';
+      parseSummary.replayTournamentFlag = true;
+      parseSummary.matchType = manualTournament.tournament_mode === 'ranked' ? 'tournament_ranked' : 'tournament_unranked';
+      console.log(`   ✅ Manual link to "${manualTournament.name}" game ${adminOverrides.tournamentGameId} → ${parseSummary.matchType}`);
+    }
+
     // ======== CONFIDENCE LEVEL (from replayVictory) ========
     console.log(`🎯 [PARSE] Determining confidence level...`);
     // A completed competitive_game result is authoritative and never uses
@@ -824,7 +869,7 @@ export class ParseNewReplaysRefactorized {
     // New games use competitive_game metadata. Legacy games use the Ranked
     // add-on plus its WML flags and resolve tournament names locally.
     console.log(`📊 [PARSE] Determining match type...`);
-    if (!competitive && !parseSummary.forumAddon) {
+    if (!competitive && !parseSummary.forumAddon && !(manualTournamentLink && parseSummary.matchType === 'tournament_unranked')) {
       parseSummary.matchType = 'rejected';
       console.log(`   ❌ No valid competitive marker in forum → REJECTED`);
       return parseSummary;
@@ -858,7 +903,7 @@ export class ParseNewReplaysRefactorized {
       }
     }
 
-    if (competitive && parseSummary.detectedTournament) {
+    if (parseSummary.detectedTournament && (competitive || manualTournamentLink)) {
       // The new model already resolved the tournament from tournament_id.
       // Never fall back to the replay game name when an exact server link is
       // available; tournament_game_id is resolved later by linkToTournament.

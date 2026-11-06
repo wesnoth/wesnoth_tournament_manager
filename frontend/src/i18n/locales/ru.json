@@ -1160,7 +1160,16 @@
     "award_to": "Присудить {{name}}",
     "no_filter_results": "Нет матчей, соответствующих выбранным фильтрам.",
     "col_phase": "Фаза",
-    "sort_by": "Сортировать по: {{column}}"
+    "sort_by": "Сортировать по: {{column}}",
+    "link_replay": "Привязать реплей",
+    "link_replay_url_placeholder": "https://replays.wesnoth.org/…/game_(123).bz2",
+    "link_replay_submit": "Привязать",
+    "link_replay_cancel": "Отмена",
+    "link_replay_linking": "Привязка…",
+    "link_replay_hint": "Используйте, если игра была создана с неверным названием или без настройки турнира. Вставьте URL реплея с replays.wesnoth.org.",
+    "link_replay_queued": "Реплей \"{{game}}\" поставлен в очередь. Он будет обработан через несколько минут; если результат неясен, игроки должны его подтвердить.",
+    "link_replay_associated": "Рейтинговая игра привязана к этой игре турнира.",
+    "error_link_replay": "Не удалось привязать реплей"
   },
   "composition": {
     "title": "Предпросмотр участников и сеток",

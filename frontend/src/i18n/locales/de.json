@@ -1160,7 +1160,16 @@
     "award_to": "An {{name}} vergeben",
     "no_filter_results": "Keine Spiele entsprechen den gewählten Filtern.",
     "col_phase": "Phase",
-    "sort_by": "Nach {{column}} sortieren"
+    "sort_by": "Nach {{column}} sortieren",
+    "link_replay": "Replay verknüpfen",
+    "link_replay_url_placeholder": "https://replays.wesnoth.org/…/spiel_(123).bz2",
+    "link_replay_submit": "Verknüpfen",
+    "link_replay_cancel": "Abbrechen",
+    "link_replay_linking": "Wird verknüpft…",
+    "link_replay_hint": "Verwende dies, wenn das Spiel mit falschem Namen oder ohne Turnier-Einstellung erstellt wurde. Füge die Replay-URL von replays.wesnoth.org ein.",
+    "link_replay_queued": "Replay \"{{game}}\" eingereiht. Es wird in wenigen Minuten verarbeitet; ist das Ergebnis unklar, müssen die Spieler es bestätigen.",
+    "link_replay_associated": "Das Ranked-Spiel wurde diesem Turnierspiel zugeordnet.",
+    "error_link_replay": "Das Replay konnte nicht verknüpft werden"
   },
   "composition": {
     "title": "Vorschau der Teilnehmer und K.-o.-Bäume",
