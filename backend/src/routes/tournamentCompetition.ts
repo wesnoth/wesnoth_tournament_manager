@@ -27,7 +27,14 @@ import {
 } from '../tournament-engine/competitionCompiler.js';
 import { forumTopicUrl, tournamentGameName } from '../tournament-engine/forumTopic.js';
 import { getUserAgent, getUserIP, logAuditEvent } from '../middleware/audit.js';
-import { clientErrorMessage, isClientSafeError } from '../utils/clientError.js';
+import { clientErrorMessage, DomainError, isClientSafeError } from '../utils/clientError.js';
+import { globalRecalculationMiddleware } from '../services/systemPauseService.js';
+import {
+  linkReplayByUrl,
+  ManualReplayLinkConflictError,
+  ManualReplayLinkForbiddenError,
+  ManualReplayLinkNotFoundError,
+} from '../services/manualReplayLinkService.js';
 
 const router = Router();
 
@@ -592,6 +599,55 @@ router.post('/:id/games/:gameId/result', authMiddleware, async (req: AuthRequest
     if (isClientSafeError(error) && (error.message?.includes('already') || error.message?.includes('not part'))) return res.status(409).json({ error: error.message });
     console.error('Record phase game result error:', error);
     return res.status(500).json({ error: 'Failed to record phase game result' });
+  }
+});
+
+/**
+ * Link a misconfigured game to a pending tournament game by its
+ * replays.wesnoth.org URL (issue #5). Allowed for the tournament organizers
+ * and the players of the game; all validation lives in manualReplayLinkService.
+ * Blocked during a global recalculation because associating an existing
+ * ranked match records a result immediately.
+ */
+router.post('/:id/games/:gameId/link-replay', authMiddleware, globalRecalculationMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const result = await linkReplayByUrl({
+      tournamentId: req.params.id,
+      tournamentGameId: req.params.gameId,
+      replayUrl: req.body?.replay_url,
+      userId: req.userId!,
+    });
+    await logAuditEvent({
+      event_type: 'TOURNAMENT_REPLAY_LINK_REQUESTED',
+      user_id: req.userId,
+      username: req.username,
+      ip_address: getUserIP(req),
+      user_agent: getUserAgent(req),
+      details: {
+        tournament_id: req.params.id,
+        tournament_game_id: req.params.gameId,
+        replay_id: result.replayId,
+        replay_url: String(req.body?.replay_url || '').slice(0, 1000),
+        outcome: result.status,
+        match_id: result.matchId ?? null,
+      },
+    });
+    return res.json({
+      success: true,
+      status: result.status,
+      replay_id: result.replayId,
+      game_name: result.gameName,
+      match_id: result.matchId ?? null,
+    });
+  } catch (error: any) {
+    if (error instanceof ManualReplayLinkForbiddenError) return res.status(403).json({ error: error.message });
+    if (error instanceof ManualReplayLinkNotFoundError) return res.status(404).json({ error: error.message });
+    if (error instanceof ManualReplayLinkConflictError) return res.status(409).json({ error: error.message });
+    if (error instanceof DomainError) return res.status(400).json({ error: error.message });
+    // Errors thrown by the shared result recorder (already recorded, ...).
+    if (isClientSafeError(error)) return res.status(409).json({ error: error.message });
+    console.error('Link tournament replay error:', error);
+    return res.status(500).json({ error: 'Failed to link the replay' });
   }
 });
 

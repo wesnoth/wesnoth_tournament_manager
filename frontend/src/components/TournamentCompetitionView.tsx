@@ -217,6 +217,11 @@ const TournamentCompetitionView: React.FC<Props> = ({
   const [savingStreamGameId, setSavingStreamGameId] = useState<string | null>(null);
   const [editingStreamId, setEditingStreamId] = useState<string | null>(null);
   const [editingStreamUrl, setEditingStreamUrl] = useState('');
+  // Manual replay link (issue #5): one open form at a time, keyed by game id.
+  const [linkReplayGameId, setLinkReplayGameId] = useState<string | null>(null);
+  const [linkReplayUrl, setLinkReplayUrl] = useState('');
+  const [linkingReplay, setLinkingReplay] = useState(false);
+  const [linkReplayFeedback, setLinkReplayFeedback] = useState<{ gameId: string; text: string; failed: boolean } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [gameSort, setGameSort] = useState<CompetitionGameSort>(DEFAULT_COMPETITION_GAME_SORT);
   const [inputFilters, setInputFilters] = useState({ player: '', map: '', faction: '' });
@@ -298,6 +303,35 @@ const TournamentCompetitionView: React.FC<Props> = ({
       setReloadKey(value => value + 1);
     } catch (decisionError: any) {
       setError(decisionError.response?.data?.error || t('competition.error_decide_replay'));
+    }
+  };
+
+  /**
+   * Submit a replays.wesnoth.org URL for a pending game. The server validates
+   * everything; a queued replay appears once the parse job has processed it,
+   * while an associated ranked match completes the game immediately.
+   */
+  const linkReplay = async (game: any) => {
+    const replayUrl = linkReplayUrl.trim();
+    if (!replayUrl) return;
+    setLinkingReplay(true);
+    try {
+      const response = await api.post(`/tournaments/${tournamentId}/games/${game.game_id}/link-replay`, { replay_url: replayUrl });
+      const associated = response.data?.status === 'associated';
+      setLinkReplayFeedback({
+        gameId: game.game_id,
+        failed: false,
+        text: associated
+          ? t('competition.link_replay_associated')
+          : t('competition.link_replay_queued', { game: response.data?.game_name || replayUrl }),
+      });
+      setLinkReplayGameId(null);
+      setLinkReplayUrl('');
+      if (associated) setReloadKey(value => value + 1);
+    } catch (linkError: any) {
+      setLinkReplayFeedback({ gameId: game.game_id, failed: true, text: linkError.response?.data?.error || t('competition.error_link_replay') });
+    } finally {
+      setLinkingReplay(false);
     }
   };
 
@@ -765,6 +799,15 @@ const TournamentCompetitionView: React.FC<Props> = ({
       </div>
     </section>}
     {games.length > 0 && <section data-help-id="region-tournament-phase-games" className="space-y-7 rounded-lg border bg-white p-4">
+      {/* Shown above the tables, not in the game row: an associated ranked
+          match completes the game, which then moves to the completed section. */}
+      {linkReplayFeedback && <div
+        role="status"
+        className={`flex items-start justify-between gap-2 rounded border px-3 py-2 text-sm ${linkReplayFeedback.failed ? 'border-red-300 bg-red-50 text-red-800' : 'border-green-300 bg-green-50 text-green-800'}`}
+      >
+        <span>{linkReplayFeedback.text}</span>
+        <button type="button" data-help-id="action-dismiss-link-replay-feedback" onClick={() => setLinkReplayFeedback(null)} className="text-xs font-semibold hover:underline">✕</button>
+      </div>}
       <div data-help-id="region-tournament-competition-filters" className="rounded-lg bg-gray-100 p-4">
         <div className="flex flex-wrap items-end gap-4">
           <label className="min-w-[200px] flex-1 text-sm font-semibold text-gray-700">
@@ -1097,6 +1140,42 @@ const TournamentCompetitionView: React.FC<Props> = ({
                     >
                       {scheduleStatus === 'none' ? `🗓️ ${t('competition.schedule')}` : t('events_open_schedule')}
                     </button>}
+                    {(canManage || isScheduleParticipant) && linkReplayGameId !== game.game_id && <button
+                      type="button"
+                      data-help-id="action-open-link-tournament-replay"
+                      onClick={() => { setLinkReplayGameId(game.game_id); setLinkReplayUrl(''); setLinkReplayFeedback(null); }}
+                      className="rounded bg-teal-600 px-2 py-1 text-xs font-semibold text-white hover:bg-teal-700"
+                    >🔗 {t('competition.link_replay')}</button>}
+                    {(canManage || isScheduleParticipant) && linkReplayGameId === game.game_id && <form
+                      className="flex w-full flex-col gap-1"
+                      onSubmit={(event) => { event.preventDefault(); void linkReplay(game); }}
+                    >
+                      <span className="text-xs text-gray-600">{t('competition.link_replay_hint')}</span>
+                      <div className="flex w-full flex-wrap items-center gap-1">
+                        <input
+                          data-help-id="field-tournament-replay-url"
+                          type="url"
+                          value={linkReplayUrl}
+                          onChange={(event) => setLinkReplayUrl(event.target.value)}
+                          placeholder={t('competition.link_replay_url_placeholder')}
+                          className="min-w-0 flex-1 basis-48 rounded border border-gray-300 px-2 py-1 text-xs"
+                          maxLength={1000}
+                          autoFocus
+                        />
+                        <button
+                          data-help-id="action-link-tournament-replay"
+                          type="submit"
+                          disabled={linkingReplay || !linkReplayUrl.trim()}
+                          className="rounded bg-teal-600 px-2 py-1 text-xs font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
+                        >{linkingReplay ? t('competition.link_replay_linking') : t('competition.link_replay_submit')}</button>
+                        <button
+                          data-help-id="action-cancel-link-tournament-replay"
+                          type="button"
+                          onClick={() => setLinkReplayGameId(null)}
+                          className="rounded bg-gray-500 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-600"
+                        >{t('competition.link_replay_cancel')}</button>
+                      </div>
+                    </form>}
                     {canManage && [{ id: game.entry1_id, name: game.entry1_name }, { id: game.entry2_id, name: game.entry2_name }].map(entry => <button key={entry.id} data-help-id="action-record-tournament-game-winner" type="button" onClick={async () => {
                       if (!window.confirm(t('competition.confirm_record_winner', { name: entry.name }))) return;
                       try { await api.post(`/tournaments/${tournamentId}/games/${game.game_id}/result`, { winner_entry_id: entry.id }); setReloadKey(value => value + 1); } catch (resultError: any) { setError(resultError.response?.data?.error || t('competition.error_record_result')); }

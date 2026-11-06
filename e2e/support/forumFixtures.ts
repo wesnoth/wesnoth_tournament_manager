@@ -100,6 +100,12 @@ export function injectLegacyGame(options: {
    * Ranked era and Ranked map picker of the Ranked Classic Maps replays.
    */
   content?: { era: ContentRow; scenario: ContentRow; rankedAddonVersion?: string };
+  /**
+   * Omit the `Ranked` modification row, as for a game hosted without the
+   * add-on. The forum sync then skips the game, which only a manual replay
+   * link can recover. Defaults to true.
+   */
+  rankedAddon?: boolean;
 }): InjectedGame {
   const instanceUuid = randomUUID();
   const gameId = 1;
@@ -139,13 +145,27 @@ export function injectLegacyGame(options: {
        (${sqlLiteral(instanceUuid)}, ${gameId}, 'era', ${sqlLiteral(content.era.id)}, ${sqlLiteral(content.era.addonId)},
         ${sqlLiteral(content.era.addonVersion)}, ${sqlLiteral(content.era.name)}),
        (${sqlLiteral(instanceUuid)}, ${gameId}, 'scenario', ${sqlLiteral(content.scenario.id)}, ${sqlLiteral(content.scenario.addonId)},
-        ${sqlLiteral(content.scenario.addonVersion)}, ${sqlLiteral(content.scenario.name)}),
-       (${sqlLiteral(instanceUuid)}, ${gameId}, 'modification', 'ranked', 'Ranked', ${sqlLiteral(content.rankedAddonVersion || '1.0.10')}, 'Ranked');`,
+        ${sqlLiteral(content.scenario.addonVersion)}, ${sqlLiteral(content.scenario.name)})${options.rankedAddon === false ? ';' : `,
+       (${sqlLiteral(instanceUuid)}, ${gameId}, 'modification', 'ranked', 'Ranked', ${sqlLiteral(content.rankedAddonVersion || '1.0.10')}, 'Ranked');`}`,
     'COMMIT;',
   ].join('\n');
   runSql(sql);
 
   return { instanceUuid, gameId, replayName, sides };
+}
+
+/**
+ * Public replay-server URL of an injected game, as a player would copy it
+ * from replays.wesnoth.org: base version, UTC end date (the game ended now),
+ * and the replay file name, which ends with the game number.
+ */
+export function replayServerUrl(game: InjectedGame): string {
+  const baseVersion = localStack.wesnothVersion.match(/^\d+\.\d+/)?.[0];
+  const rows = runSql(
+    `SELECT DATE_FORMAT(END_TIME, '%Y/%m/%d') AS day FROM ${localStack.forumDb}.wesnothd_game_info
+     WHERE INSTANCE_UUID = ${sqlLiteral(game.instanceUuid)} AND GAME_ID = ${game.gameId};`,
+  );
+  return `https://replays.wesnoth.org/${baseVersion}/${rows[0].day}/${encodeURIComponent(game.replayName)}`;
 }
 
 /**
