@@ -284,6 +284,33 @@ export function validateTournamentFormat(definition: TournamentFormatDefinition)
             'A later-phase group needs at least two entries from advancement rules or direct passes');
         }
       }
+      if (phase.format === 'single_elimination' && nextPhase) {
+        // A bracket feeding a later phase is cut where only its qualifiers
+        // survive (eliminationRoundsToPlay). Every round halves the field, so
+        // only a power of two can be the survivor count, and the qualifiers
+        // must be fewer than the bracket holds or no round would be played.
+        // The deepest mapped rank counts too: a rule taking rank 3 needs three
+        // survivors even when advance_count was left empty.
+        const deepestRank = Math.max(0, ...(definition.advancement_rules || [])
+          .filter(rule => rule.source_group_id === group.id).map(rule => Number(rule.source_rank)));
+        const qualifiers = Math.max(Number(group.advance_count || 0), deepestRank);
+        if (qualifiers > 1 && (qualifiers & (qualifiers - 1)) !== 0) {
+          issue(issues, `${groupPath}.advance_count`, 'elimination_qualifiers_power_of_two',
+            'An elimination bracket that feeds a later phase must advance 1, 2, 4, 8… entries');
+        } else if (qualifiers > 1) {
+          // The size is known when configured, or for a later phase from the
+          // entries mapped into it; a first phase's size depends on the
+          // registrations and is only known when it is compiled.
+          const incoming = (definition.advancement_rules || []).filter(rule => rule.target_group_id === group.id).length
+            + directSlots;
+          const knownSize = phase.elimination?.bracket_size
+            || (phaseIndex > 0 ? 2 ** Math.ceil(Math.log2(Math.max(MIN_GROUP_ENTRIES, incoming))) : null);
+          if (knownSize && qualifiers >= knownSize) {
+            issue(issues, `${groupPath}.advance_count`, 'elimination_qualifiers_fill_bracket',
+              'An elimination bracket must advance fewer entries than it holds, or no round is played');
+          }
+        }
+      }
       if (phase.format === 'single_elimination' && phase.elimination?.bracket_size) {
         const targetRules = (definition.advancement_rules || []).filter(rule => rule.target_group_id === group.id);
         const mapped = targetRules.length;

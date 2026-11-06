@@ -16,7 +16,7 @@ export interface AdvancementGenerationResult {
   }>;
 }
 
-interface Qualifier {
+export interface Qualifier {
   source_group_id: string;
   source_group_order: number;
   source_rank: number;
@@ -29,9 +29,75 @@ function compareQualifier(left: Qualifier, right: Qualifier): number {
 }
 
 /**
+ * Place one bracket's qualifiers on its seeds.
+ *
+ * Which seeds are used does not depend on who qualified: the first-round
+ * series are filled in bracket order, both slots while two qualifiers remain,
+ * so the empty seeds (later filled by direct passes or left as structural
+ * byes) sit where they always did. Who takes each used seed follows standard
+ * group-stage seeding: every group winner ranks above every runner-up, and so
+ * on by source rank, so the best used seeds go to the best ranks and the
+ * first round pairs a high rank against a low one (winners meet runners-up,
+ * never each other). Only within one rank tier may entries swap seeds: each
+ * qualifier takes the free seed of its tier that keeps it furthest from the
+ * entries of its own source group already placed, measured by the round in
+ * which their bracket paths would join, so group mates meet as late as
+ * possible. Ties keep the lower seed, which keeps the result deterministic
+ * and in source-group order.
+ *
+ * Returns the placements and the first-round series whose two entrants still
+ * share a source group, which happens only when the distribution leaves no
+ * alternative (for example a single source group).
+ */
+export function seedEliminationQualifiers(
+  rows: readonly Qualifier[],
+  seedOrder: readonly number[],
+): { placements: Array<{ qualifier: Qualifier; seed: number }>; sameSourcePairs: Array<[number, number]> } {
+  const usedSeeds: number[] = [];
+  for (let index = 0; index < seedOrder.length && usedSeeds.length < rows.length; index += 2) {
+    usedSeeds.push(seedOrder[index]);
+    if (usedSeeds.length < rows.length) usedSeeds.push(seedOrder[index + 1]);
+  }
+  usedSeeds.sort((left, right) => left - right);
+  const bracketIndex = new Map(seedOrder.map((seed, index) => [seed, index]));
+  const roundCount = Math.log2(seedOrder.length);
+  // Two bracket positions first meet in the round where their paths join:
+  // the highest differing bit of their zero-based indexes.
+  const meetingRound = (left: number, right: number) => Math.floor(Math.log2(left ^ right)) + 1;
+  const ordered = rows.slice().sort(compareQualifier);
+  const placements: Array<{ qualifier: Qualifier; seed: number }> = [];
+  let tierStart = 0;
+  while (tierStart < ordered.length) {
+    const rank = ordered[tierStart].source_rank;
+    let tierEnd = tierStart;
+    while (tierEnd < ordered.length && ordered[tierEnd].source_rank === rank) tierEnd += 1;
+    const freeSeeds = usedSeeds.slice(tierStart, tierEnd);
+    for (const qualifier of ordered.slice(tierStart, tierEnd)) {
+      const mates = placements.filter(row => row.qualifier.source_group_id === qualifier.source_group_id);
+      // An earlier meeting weighs more than any number of later ones.
+      const cost = (seed: number) => mates.reduce((total, mate) => total
+        + 4 ** (roundCount - meetingRound(bracketIndex.get(seed)!, bracketIndex.get(mate.seed)!)), 0);
+      const seed = freeSeeds.reduce((best, candidate) => cost(candidate) < cost(best) ? candidate : best);
+      freeSeeds.splice(freeSeeds.indexOf(seed), 1);
+      placements.push({ qualifier, seed });
+    }
+    tierStart = tierEnd;
+  }
+  const groupBySeed = new Map(placements.map(row => [row.seed, row.qualifier.source_group_id]));
+  const sameSourcePairs: Array<[number, number]> = [];
+  for (let index = 0; index < seedOrder.length; index += 2) {
+    const [seedOne, seedTwo] = [seedOrder[index], seedOrder[index + 1]];
+    if (groupBySeed.has(seedOne) && groupBySeed.get(seedOne) === groupBySeed.get(seedTwo)) {
+      sameSourcePairs.push([seedOne, seedTwo]);
+    }
+  }
+  return { placements, sameSourcePairs };
+}
+
+/**
  * Generate concrete rules from per-group qualification counts. Assignment is
- * deterministic: it balances target groups, then pairs different source groups
- * into first-round elimination matches whenever the remaining distribution allows.
+ * deterministic: it balances target groups, then seeds each elimination
+ * bracket by source rank, keeping group mates apart (seedEliminationQualifiers).
  */
 export function generateAdvancementRules(
   source: PhaseDefinition,
@@ -102,45 +168,17 @@ export function generateAdvancementRules(
     }
 
     const seedOrder = buildEliminationSeedOrder(bracketSize);
-    const pairSeedSlots: Array<[number, number]> = [];
-    for (let index = 0; index < seedOrder.length; index += 2) {
-      pairSeedSlots.push([seedOrder[index], seedOrder[index + 1]]);
-    }
-    const remainingByGroup = new Map<string, Qualifier[]>();
-    for (const row of rows) {
-      const groupRows = remainingByGroup.get(row.source_group_id) || [];
-      groupRows.push(row);
-      remainingByGroup.set(row.source_group_id, groupRows);
-    }
-    const takeLargestGroup = (): Qualifier | undefined => {
-      const group = [...remainingByGroup.values()]
-        .filter(groupRows => groupRows.length)
-        .sort((left, right) => right.length - left.length || compareQualifier(left[0], right[0]))[0];
-      return group?.shift();
-    };
-    for (const [seedOne, seedTwo] of pairSeedSlots) {
-      const first = takeLargestGroup();
-      if (!first) break;
-      // Taking the two largest remaining source groups leaves the fewest
-      // unavoidable same-source pairs for later matches.
-      const second = takeLargestGroup();
+    const { placements, sameSourcePairs } = seedEliminationQualifiers(rows, seedOrder);
+    for (const { qualifier, seed } of placements) {
       rules.push({
-        source_group_id: first.source_group_id,
-        source_rank: first.source_rank,
+        source_group_id: qualifier.source_group_id,
+        source_rank: qualifier.source_rank,
         target_group_id: bucket.group.id,
-        target_seed: seedOne,
+        target_seed: seed,
       });
-      if (second) {
-        rules.push({
-          source_group_id: second.source_group_id,
-          source_rank: second.source_rank,
-          target_group_id: bucket.group.id,
-          target_seed: seedTwo,
-        });
-        if (second.source_group_id === first.source_group_id) {
-          conflicts.push({ target_group_id: bucket.group.id, seed_one: seedOne, seed_two: seedTwo });
-        }
-      }
+    }
+    for (const [seedOne, seedTwo] of sameSourcePairs) {
+      conflicts.push({ target_group_id: bucket.group.id, seed_one: seedOne, seed_two: seedTwo });
     }
   }
 

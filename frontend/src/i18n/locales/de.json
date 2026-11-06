@@ -1073,6 +1073,8 @@
   "format_issue_invalid_best_of": "Best-of muss 1, 3 oder 5 sein",
   "format_issue_invalid_assignment": "Nicht unterstützte Zuteilungsmethode",
   "format_issue_groups_required": "Jede Phase braucht mindestens eine Gruppe oder einen Turnierbaum",
+  "format_issue_elimination_qualifiers_power_of_two": "Ein K.-o.-Bracket, das eine spätere Phase speist, muss 1, 2, 4, 8 … Teilnehmer weiterschicken, weil jede Runde das Feld halbiert",
+  "format_issue_elimination_qualifiers_fill_bracket": "Ein K.-o.-Bracket muss weniger Teilnehmer weiterschicken, als es fasst, sonst wird keine Runde gespielt",
   "format_issue_duplicate_group": "Gruppenkennungen müssen eindeutig sein",
   "format_issue_duplicate_group_order": "Die Gruppenreihenfolge muss eine eindeutige positive Zahl sein",
   "format_issue_invalid_advance_count": "Eine Gruppe, die eine spätere Phase speist, muss mindestens einen Teilnehmer weiterschicken",
@@ -1302,7 +1304,18 @@
     "default_group": "Gruppe {{number}}",
     "default_phase": "Phase {{number}}",
     "confirm_release_direct_passes": "Diese Änderung entfernt Gruppen, denen bereits direkte Einzüge zugewiesen sind. Beim Speichern werden sie freigegeben ({{count}}): {{names}}. Diese Teilnahmen beginnen in der ersten Phase. Fortfahren?",
-    "reserved_assigned_floor": "Bereits zugewiesen: {{count}}. Um darunter zu gehen, entferne Einzüge im Tab Teilnehmer."
+    "reserved_assigned_floor": "Bereits zugewiesen: {{count}}. Um darunter zu gehen, entferne Einzüge im Tab Teilnehmer.",
+    "round_best_of_title": "Best-of pro Runde",
+    "round_best_of_help": "Runden auf dem Standard verwenden das Best-of der Phase, z. B. Halbfinale Bo1 und Finale Bo3.",
+    "round_best_of_cut_help": "Dieses Bracket schickt {{qualifiers}} Teilnehmer in die nächste Phase. Es endet, sobald nur noch sie übrig sind, und spielt kein Finale. Runden auf dem Standard verwenden das Best-of der Phase.",
+    "round_best_of_unknown_size": "Die Bracket-Größe hängt von den Anmeldungen ab; Einstellungen für Runden, die es nicht gibt, werden ignoriert.",
+    "round_best_of_default": "Standard der Phase (Bo{{bestOf}})",
+    "stage_final": "Finale",
+    "stage_semifinals": "Halbfinale",
+    "stage_quarterfinals": "Viertelfinale",
+    "stage_round_of": "Runde der letzten {{entrants}}",
+    "stage_last": "Letzte Runde",
+    "stage_from_end": "{{n}}. Runde vor Schluss"
   },
   "schedule_grid": {
     "proposed": "Vorgeschlagen",

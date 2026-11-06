@@ -4,7 +4,9 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { buildSwissFirstRoundPairs, opponentMatchPercentage, selectSwissByeEntry } from './pairingAlgorithms.js';
+import {
+  buildSwissFirstRoundPairs, eliminationRoundsToPlay, opponentMatchPercentage, orderEliminationStandings, selectSwissByeEntry,
+} from './pairingAlgorithms.js';
 
 describe('buildSwissFirstRoundPairs', () => {
   it('pairs the top half against the bottom half', () => {
@@ -62,5 +64,67 @@ describe('opponentMatchPercentage', () => {
   it('returns zero without played series', () => {
     assert.equal(opponentMatchPercentage(1, 1, 0), 0);
     assert.equal(opponentMatchPercentage(0, 0, 0), 0);
+  });
+});
+
+describe('eliminationRoundsToPlay', () => {
+  it('plays the whole bracket when it decides a champion', () => {
+    assert.equal(eliminationRoundsToPlay(8, null), 3);
+    assert.equal(eliminationRoundsToPlay(8, 1), 3);
+  });
+
+  it('stops once only the qualifiers survive', () => {
+    assert.equal(eliminationRoundsToPlay(8, 4), 1);
+    assert.equal(eliminationRoundsToPlay(8, 2), 2);
+    assert.equal(eliminationRoundsToPlay(4, 2), 1);
+  });
+
+  it('rounds an unvalidated qualifier count up to the next survivor tier', () => {
+    assert.equal(eliminationRoundsToPlay(8, 3), 1);
+  });
+
+  it('keeps the full bracket when the qualifiers would fill it', () => {
+    assert.equal(eliminationRoundsToPlay(4, 4), 2);
+  });
+});
+
+describe('orderEliminationStandings', () => {
+  // Rows arrive in points-and-tiebreaker order, as rankGroup reads them.
+  const entries = [{ entry_id: 'e1' }, { entry_id: 'e2' }, { entry_id: 'e3' }, { entry_id: 'e4' }];
+
+  it('ranks the survivors of a cut bracket first, keeping the tiebreaker order', () => {
+    // Semifinals only: e4 beat e1, e2 beat e3.
+    const ranked = orderEliminationStandings(entries, [
+      { round_number: 1, series_role: 'main', loser_entry_id: 'e1' },
+      { round_number: 1, series_role: 'main', loser_entry_id: 'e3' },
+    ]).map(row => row.entry_id);
+    assert.deepEqual(ranked, ['e2', 'e4', 'e1', 'e3']);
+  });
+
+  it('ranks later eliminations above earlier ones', () => {
+    const ranked = orderEliminationStandings(entries, [
+      { round_number: 1, series_role: 'main', loser_entry_id: 'e1' },
+      { round_number: 1, series_role: 'main', loser_entry_id: 'e3' },
+      { round_number: 2, series_role: 'main', loser_entry_id: 'e2' },
+    ]).map(row => row.entry_id);
+    assert.deepEqual(ranked, ['e4', 'e2', 'e1', 'e3']);
+  });
+
+  it('ranks a bye survivor above an entry eliminated later with more points', () => {
+    // e1 had a structural bye and won nothing yet; e3 won a round, then lost.
+    const ranked = orderEliminationStandings(
+      [{ entry_id: 'e3' }, { entry_id: 'e1' }],
+      [{ round_number: 2, series_role: 'main', loser_entry_id: 'e3' }],
+    ).map(row => row.entry_id);
+    assert.deepEqual(ranked, ['e1', 'e3']);
+  });
+
+  it('ignores the third-place series', () => {
+    const ranked = orderEliminationStandings(entries, [
+      { round_number: 1, series_role: 'main', loser_entry_id: 'e3' },
+      { round_number: 1, series_role: 'main', loser_entry_id: 'e4' },
+      { round_number: 2, series_role: 'third_place', loser_entry_id: 'e3' },
+    ]).map(row => row.entry_id);
+    assert.deepEqual(ranked, ['e1', 'e2', 'e3', 'e4']);
   });
 });

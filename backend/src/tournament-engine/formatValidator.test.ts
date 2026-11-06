@@ -122,3 +122,57 @@ describe('malformed definitions (finding 32)', () => {
     assert.deepEqual(codes('swiss'), ['required']);
   });
 });
+
+describe('elimination brackets that feed a later phase', () => {
+  function eliminationPhase(order: number, groupIds: string[], bracketSize: number | null = null): PhaseDefinition {
+    return {
+      id: `phase-${order}`, name: `Phase ${order}`, order, format: 'single_elimination',
+      assignment_method: 'seeded_snake', default_best_of: 1,
+      groups: groupIds.map((groupId, index) => ({ id: groupId, name: groupId, order: index + 1 })),
+      elimination: { bracket_size: bracketSize },
+    };
+  }
+
+  it('accepts a power-of-two qualifier count smaller than the bracket', () => {
+    const definition = {
+      phases: [swissPhase(1, ['a']), eliminationPhase(2, ['top']), eliminationPhase(3, ['final'])],
+      advancement_rules: [
+        rule('a', 1, 'top', 1), rule('a', 2, 'top', 2), rule('a', 3, 'top', 3), rule('a', 4, 'top', 4),
+        rule('top', 1, 'final', 1), rule('top', 2, 'final', 2),
+      ],
+    };
+    assert.deepEqual(validateTournamentFormat(definition), { valid: true, issues: [] });
+  });
+
+  it('rejects a qualifier count that no round can produce', () => {
+    const top = eliminationPhase(2, ['top']);
+    top.groups[0].advance_count = 3;
+    const definition = {
+      phases: [swissPhase(1, ['a']), top, swissPhase(3, ['final'])],
+      advancement_rules: [
+        ...Array.from({ length: 8 }, (_, index) => rule('a', index + 1, 'top', index + 1)),
+        rule('top', 1, 'final', 1), rule('top', 2, 'final', 2), rule('top', 3, 'final', 3),
+      ],
+    };
+    assert.deepEqual(codes(definition), ['elimination_qualifiers_power_of_two']);
+  });
+
+  it('rejects qualifiers that fill the whole bracket', () => {
+    const definition = {
+      phases: [swissPhase(1, ['a']), eliminationPhase(2, ['top']), eliminationPhase(3, ['final'])],
+      advancement_rules: [
+        rule('a', 1, 'top', 1), rule('a', 2, 'top', 2),
+        rule('top', 1, 'final', 1), rule('top', 2, 'final', 2),
+      ],
+    };
+    assert.deepEqual(codes(definition), ['elimination_qualifiers_fill_bracket']);
+  });
+
+  it('leaves a first-phase bracket without a configured size to the compiler', () => {
+    const definition = {
+      phases: [eliminationPhase(1, ['top']), eliminationPhase(2, ['final'])],
+      advancement_rules: [rule('top', 1, 'final', 1), rule('top', 2, 'final', 2)],
+    };
+    assert.deepEqual(validateTournamentFormat(definition), { valid: true, issues: [] });
+  });
+});

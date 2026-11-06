@@ -10,6 +10,7 @@ import { tournamentService } from '../services/api';
 import EditableIntegerInput from './EditableIntegerInput';
 import { MAX_SWISS_ROUNDS } from '../utils/formatIssues';
 import { buildFormatTemplate as template, buildPhaseDefinition as phase, newDefinitionId, type DefaultNames } from '../utils/tournamentFormatTemplates';
+import { eliminationRoundsToPlay, entrantsAtRoundFromEnd, phaseQualifierCount } from '../utils/eliminationRounds';
 
 /** Extra facts about a builder change that the definition alone cannot carry. */
 export interface PhaseBuilderChangeOptions {
@@ -176,6 +177,50 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
     }
   };
 
+  /**
+   * Stage name of an elimination round counted from the last played round.
+   * A bracket that hands qualifiers to a later phase stops before its final,
+   * so the same position can be a final, semifinals or quarterfinals. When the
+   * brackets of a phase stop at different depths there is no single name, and
+   * the position itself is shown.
+   */
+  const eliminationStageLabel = (roundFromEnd: number, qualifierCount: number | null | 'mixed') => {
+    if (qualifierCount === 'mixed') {
+      return roundFromEnd === 1 ? t('phase_builder.stage_last') : t('phase_builder.stage_from_end', { n: roundFromEnd });
+    }
+    const entrants = entrantsAtRoundFromEnd(roundFromEnd, qualifierCount);
+    if (entrants === 2) return t('phase_builder.stage_final');
+    if (entrants === 4) return t('phase_builder.stage_semifinals');
+    if (entrants === 8) return t('phase_builder.stage_quarterfinals');
+    return t('phase_builder.stage_round_of', { entrants });
+  };
+
+  /**
+   * Rounds an elimination phase will play, counted from the end, or null when
+   * its size is only known after registration closes. A configured bracket
+   * size wins; a later phase otherwise takes the largest bracket its mapped
+   * qualifiers and direct passes project.
+   */
+  const eliminationRoundsFor = (item: TournamentPhaseDefinition, qualifierCount: number | null | 'mixed'): number | null => {
+    const projectedSize = directPassSummaries.find(summary => summary.target.id === item.id)?.groups
+      .reduce((largest, group) => Math.max(largest, group.bracketSize), 0) || 0;
+    const bracketSize = item.elimination?.bracket_size || projectedSize;
+    if (!bracketSize) return null;
+    const cutCounts = qualifierCount === 'mixed'
+      ? item.groups.map(group => Number(group.advance_count || 0))
+      : [qualifierCount];
+    return Math.max(...cutCounts.map(count => eliminationRoundsToPlay(bracketSize, count)));
+  };
+
+  /** Store the best-of of one round counted from the end; null restores the phase default. */
+  const setRoundBestOf = (index: number, item: TournamentPhaseDefinition, roundFromEnd: number, bestOf: BestOf | null) => {
+    const kept = (item.round_overrides || []).filter(override => Number(override.round_from_end) !== roundFromEnd);
+    replacePhase(index, {
+      ...item,
+      round_overrides: bestOf == null ? kept : [...kept, { id: id(), round_from_start: null, round_from_end: roundFromEnd, best_of: bestOf }],
+    });
+  };
+
   return (
     <section data-help-id="region-tournament-phase-builder" className="p-4 border border-blue-200 rounded-lg bg-blue-50 space-y-4">
       <div className="flex flex-wrap items-end gap-3">
@@ -213,6 +258,10 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
                 const format = event.target.value as PhaseFormat;
                 replacePhase(index, {
                   ...item, format,
+                  // Per-round best-of is only offered for brackets, where it is
+                  // counted from the last round; kept on a league or Swiss phase
+                  // it would silently change one of its rounds.
+                  round_overrides: [],
                   swiss: format === 'swiss' ? { round_count: 3, avoid_rematches: true } : undefined,
                   round_robin: format === 'round_robin' ? { cycle_count: 1, open_rounds_together: true } : undefined,
                   elimination: format === 'single_elimination' ? { bracket_size: null, seeding_policy: 'seeded', reseed_each_round: false } : undefined,
@@ -286,6 +335,32 @@ const TournamentPhaseBuilder: React.FC<Props> = ({ value, onChange, disabled, in
                 }} className="border rounded p-1"><option value="">{t('phase_builder.unassigned')}</option>{item.groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>;
               })}
             </div>}
+            {item.format === 'single_elimination' && (() => {
+              const qualifierCount = phaseQualifierCount(item, definition.advancement_rules, index === definition.phases.length - 1);
+              const knownRounds = eliminationRoundsFor(item, qualifierCount);
+              // Without a known size (a first phase sized by registrations)
+              // offer the usual stages; overrides for rounds the bracket will
+              // not have are ignored by the compiler.
+              const roundsFromEnd = Array.from({ length: Math.min(knownRounds ?? 4, 6) }, (_, roundIndex) => roundIndex + 1).reverse();
+              return <div className="md:col-span-5 border-t pt-2 space-y-2">
+                <h5 className="text-sm font-medium">{t('phase_builder.round_best_of_title')}</h5>
+                <p className="text-xs text-gray-600">{qualifierCount && qualifierCount !== 'mixed' && qualifierCount > 1
+                  ? t('phase_builder.round_best_of_cut_help', { qualifiers: qualifierCount })
+                  : t('phase_builder.round_best_of_help')}</p>
+                {knownRounds == null && <p className="text-xs text-gray-600">{t('phase_builder.round_best_of_unknown_size')}</p>}
+                <div className="grid gap-2 grid-cols-2 md:grid-cols-4">
+                  {roundsFromEnd.map(roundFromEnd => {
+                    const override = (item.round_overrides || []).find(value => Number(value.round_from_end) === roundFromEnd);
+                    return <label key={roundFromEnd} className="text-xs">{eliminationStageLabel(roundFromEnd, qualifierCount)}
+                      <select data-help-id="option-elimination-round-best-of" disabled={disabled} value={override?.best_of ?? ''} onChange={(event) => setRoundBestOf(index, item, roundFromEnd, event.target.value ? Number(event.target.value) as BestOf : null)} className="mt-1 block w-full px-2 py-1 border rounded">
+                        <option value="">{t('phase_builder.round_best_of_default', { bestOf: item.default_best_of })}</option>
+                        <option value={1}>Bo1</option><option value={3}>Bo3</option><option value={5}>Bo5</option>
+                      </select>
+                    </label>;
+                  })}
+                </div>
+              </div>;
+            })()}
           </div>
         ))}
       </div>

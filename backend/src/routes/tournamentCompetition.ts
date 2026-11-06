@@ -7,6 +7,7 @@ import { checkUserIsForumModerator } from '../services/phpbbAuth.js';
 import { validateTournamentFormat } from '../tournament-engine/formatValidator.js';
 import { generateAdvancementRules } from '../tournament-engine/advancementGenerator.js';
 import { findDirectPassPlacement, rebalanceRoundOneDirectPasses } from '../tournament-engine/directPassPlacement.js';
+import { eliminationRoundsToPlay } from '../tournament-engine/pairingAlgorithms.js';
 import { FormatConflictError, getTournamentFormat, saveTournamentFormat } from '../tournament-engine/formatService.js';
 import type { TournamentFormatDefinition } from '../tournament-engine/types.js';
 import { pool, query } from '../config/database.js';
@@ -139,7 +140,8 @@ router.put('/:id/direct-pass/:entityType/:entityId', authMiddleware, async (req:
       }
       const [bracketRows] = await connection.execute<any[]>(
         `SELECT settings.bracket_size,
-                (SELECT COUNT(*) FROM tournament_advancement_rules rules WHERE rules.target_group_id = groups.id) AS mapped_count
+                (SELECT COUNT(*) FROM tournament_advancement_rules rules WHERE rules.target_group_id = groups.id) AS mapped_count,
+                (SELECT MAX(rules.source_rank) FROM tournament_advancement_rules rules WHERE rules.source_group_id = groups.id) AS qualifier_count
          FROM tournament_phase_groups groups
          LEFT JOIN tournament_elimination_settings settings ON settings.phase_id = groups.phase_id
          WHERE groups.id = ?`, [groupId]
@@ -147,7 +149,9 @@ router.put('/:id/direct-pass/:entityType/:entityId', authMiddleware, async (req:
       const configuredSize = Number(bracketRows[0]?.bracket_size || 0);
       const minimumSize = Math.max(2, configuredSize || Number(bracketRows[0]?.mapped_count || 0) + capacity);
       const bracketSize = 2 ** Math.ceil(Math.log2(minimumSize));
-      const roundCount = Math.log2(bracketSize);
+      // A bracket feeding a later phase is cut before its final, so a pass
+      // cannot target a round the compiler will not create.
+      const roundCount = eliminationRoundsToPlay(bracketSize, bracketRows[0]?.qualifier_count);
       if (Number(roundNumber) > roundCount) {
         return res.status(400).json({ error: 'The selected round is outside the configured elimination bracket' });
       }
@@ -883,6 +887,7 @@ router.get('/:id/competition', async (req, res) => {
               g.direct_advancement_slots,
               COUNT(DISTINCT pe.entry_id) AS entry_count,
               (SELECT COUNT(*) FROM tournament_advancement_rules ar WHERE ar.target_group_id = g.id) AS planned_entry_count,
+              (SELECT MAX(ar.source_rank) FROM tournament_advancement_rules ar WHERE ar.source_group_id = g.id) AS qualifier_count,
               COUNT(DISTINCT r.id) AS round_count,
               COUNT(DISTINCT s.id) AS series_count,
               COALESCE(
@@ -938,6 +943,21 @@ router.get('/:id/competition', async (req, res) => {
        WHERE phases.tournament_id = ? ORDER BY rules.target_group_id, rules.target_seed`,
       [req.params.id]
     );
+    // The planned (not yet compiled) bracket preview needs the same per-round
+    // best-of the compiler will apply, so it receives the phase overrides.
+    const overrideRows = await query(
+      `SELECT overrides.phase_id, overrides.round_from_start, overrides.round_from_end, overrides.best_of
+       FROM tournament_phase_round_overrides overrides
+       JOIN tournament_phases phases ON phases.id = overrides.phase_id
+       WHERE phases.tournament_id = ?`,
+      [req.params.id]
+    );
+    const overridesByPhase = new Map<string, any[]>();
+    for (const row of overrideRows.rows as any[]) {
+      const list = overridesByPhase.get(row.phase_id) || [];
+      list.push({ round_from_start: row.round_from_start, round_from_end: row.round_from_end, best_of: Number(row.best_of) });
+      overridesByPhase.set(row.phase_id, list);
+    }
     const mappedSeedsByGroup = new Map<string, number[]>();
     for (const rule of mappedSeeds.rows as any[]) {
       const seeds = mappedSeedsByGroup.get(rule.target_group_id) || [];
@@ -952,6 +972,8 @@ router.get('/:id/competition', async (req, res) => {
           ...(directPassesByGroup.get(row.group_id) || []).map(pass =>
             Number(pass.series_position || 0) * (2 ** Number(pass.round_number || 0))))))
         : row.bracket_size,
+      qualifier_count: row.qualifier_count == null ? null : Number(row.qualifier_count),
+      round_overrides: overridesByPhase.get(row.phase_id) || [],
       direct_passes: directPassesByGroup.get(row.group_id) || [],
       mapped_seeds: mappedSeedsByGroup.get(row.group_id) || [],
     })) });

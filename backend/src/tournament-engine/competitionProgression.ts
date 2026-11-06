@@ -7,7 +7,7 @@ import {
   notifyTournamentFinished,
 } from '../services/tournamentPhaseDiscordService.js';
 import { compileNextPhaseCompetition } from './competitionCompiler.js';
-import { opponentMatchPercentage, orderThirdPlaceStandings, selectSwissByeEntry } from './pairingAlgorithms.js';
+import { opponentMatchPercentage, orderEliminationStandings, orderThirdPlaceStandings, selectSwissByeEntry } from './pairingAlgorithms.js';
 
 export interface PhaseGameResultMetadata {
   map: string | null;
@@ -178,6 +178,24 @@ async function rankGroup(connection: any, groupId: string, finalize: boolean): P
     [groupId]
   );
   let rankedRows = rows;
+  const [formatRows] = await connection.execute(
+    `SELECT phases.format FROM tournament_phase_groups groups
+     JOIN tournament_phases phases ON phases.id = groups.phase_id WHERE groups.id = ?`,
+    [groupId]
+  );
+  if (formatRows[0]?.format === 'single_elimination') {
+    // Bracket progress, not points, orders an elimination group: the ranks
+    // feed the next phase's advancement rules, so the survivors of a cut
+    // bracket must hold the top ranks (see orderEliminationStandings).
+    const [outcomes] = await connection.execute(
+      `SELECT rounds.round_number, series.series_role, series.loser_entry_id
+       FROM tournament_series series
+       JOIN tournament_phase_rounds rounds ON rounds.id = series.round_id
+       WHERE rounds.group_id = ? AND series.status = 'completed'`,
+      [groupId]
+    );
+    rankedRows = orderEliminationStandings(rows, outcomes);
+  }
   const [decidingSeries] = await connection.execute(
     `SELECT series.series_role, series.winner_entry_id, series.loser_entry_id
        FROM tournament_series series
@@ -193,7 +211,7 @@ async function rankGroup(connection: any, groupId: string, finalize: boolean): P
   if (final?.winner_entry_id && final?.loser_entry_id && bronze?.winner_entry_id && bronze?.loser_entry_id) {
     // Match outcomes outrank accumulated points: the semifinal losers have
     // equal progress until their deciding bronze series is completed.
-    rankedRows = orderThirdPlaceStandings(rows, final.winner_entry_id, final.loser_entry_id,
+    rankedRows = orderThirdPlaceStandings(rankedRows, final.winner_entry_id, final.loser_entry_id,
       bronze.winner_entry_id, bronze.loser_entry_id);
   }
   for (const [index, row] of rankedRows.entries()) {

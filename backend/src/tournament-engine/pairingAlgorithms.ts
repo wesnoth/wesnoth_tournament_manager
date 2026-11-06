@@ -77,3 +77,67 @@ export function orderThirdPlaceStandings<T extends { entry_id: string }>(
   }
   return [...podiumIds.map(id => byId.get(id)!), ...rows.filter(row => !podiumIds.includes(row.entry_id))];
 }
+
+/**
+ * Number of rounds an elimination bracket plays before its group finishes.
+ *
+ * A bracket that feeds a later phase only has to reduce its field to the
+ * entries that phase takes: with eight entrants and four qualifiers only the
+ * quarterfinals are played, with two qualifiers the quarterfinals and the
+ * semifinals. Playing on would stage a final whose two finalists meet again in
+ * the next phase. `qualifierCount` is the highest source rank the advancement
+ * rules take from the group; one (or none: the final phase) keeps the whole
+ * bracket, so a champion is decided.
+ *
+ * Each played round halves the surviving field, so the cut needs a power of
+ * two. The format validator rejects other counts; one that predates that check
+ * is rounded up, cutting where enough entries survive to fill every mapped
+ * rank. A count that leaves no round to play (qualifiers fill the bracket) also
+ * predates validation and keeps the full bracket, the previous behaviour.
+ */
+export function eliminationRoundsToPlay(bracketSize: number, qualifierCount: number | null | undefined): number {
+  const fullRounds = Math.log2(bracketSize);
+  if (!Number.isInteger(fullRounds) || fullRounds < 1) throw new Error('Bracket size must be a power of two');
+  const qualifiers = Number(qualifierCount || 0);
+  if (qualifiers <= 1) return fullRounds;
+  const survivors = Math.ceil(Math.log2(qualifiers));
+  return survivors >= fullRounds ? fullRounds : fullRounds - survivors;
+}
+
+/** Outcome of one elimination series, as needed to rank its group. */
+export interface EliminationSeriesOutcome {
+  round_number: number;
+  series_role: string | null;
+  loser_entry_id: string | null;
+}
+
+/**
+ * Rank an elimination group by how far each entry went, not by points.
+ *
+ * Points cannot order a bracket: a structural bye advances an entry without a
+ * series win, so a bracket survivor can hold fewer points than an entry it
+ * never met but which was eliminated later. Entries that have not lost a main
+ * series rank first (in a cut bracket they are the qualifiers; in a finished
+ * full bracket only the champion remains), then entries by the round in which
+ * they were eliminated, latest first. Within one tier the incoming order is
+ * kept: `rows` arrive sorted by points and the group tiebreakers (OMP, GWP,
+ * OGP, initial seed), so entries with equal bracket progress are still
+ * separated by the strength of what they faced, as before this ordering
+ * existed. The third-place series is ignored here: both of its players fell
+ * in the semifinals, and the caller orders them from that series' result
+ * (orderThirdPlaceStandings).
+ */
+export function orderEliminationStandings<T extends { entry_id: string }>(
+  rows: T[], series: readonly EliminationSeriesOutcome[]
+): T[] {
+  const eliminatedIn = new Map<string, number>();
+  for (const row of series) {
+    if (row.series_role === 'third_place' || !row.loser_entry_id) continue;
+    eliminatedIn.set(row.loser_entry_id, Math.max(eliminatedIn.get(row.loser_entry_id) || 0, Number(row.round_number)));
+  }
+  const reach = (entryId: string) => eliminatedIn.get(entryId) ?? Number.MAX_SAFE_INTEGER;
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((left, right) => reach(right.row.entry_id) - reach(left.row.entry_id) || left.index - right.index)
+    .map(({ row }) => row);
+}

@@ -54,6 +54,9 @@ async function scenario(order, otherGroupActive) {
       // Final and third-place series only exist in elimination groups; this
       // round-robin group has none, so ranking keeps the standings order.
       if (sql.startsWith('SELECT series.series_role')) return [[]];
+      // Ranking reads the phase format: only elimination groups are ordered
+      // by bracket progress, so this league keeps its points order.
+      if (sql.startsWith('SELECT phases.format')) return [[{ format: 'round_robin' }]];
       if (sql.startsWith('SELECT id, best_of FROM tournament_phase_rounds')) {
         const next = rounds.find(round => Number(round.id) === args[1]);
         return [[...(next && (!sql.includes("status = 'pending'") || next.status === 'pending') ? [next] : [])]];

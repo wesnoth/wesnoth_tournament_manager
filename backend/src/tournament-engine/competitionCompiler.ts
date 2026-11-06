@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import type { PoolConnection } from 'mysql2/promise';
 import { pool } from '../config/database.js';
 import { notifyPhaseStarted } from '../services/tournamentPhaseDiscordService.js';
-import { buildEliminationSeedOrder, buildSwissFirstRoundPairs } from './pairingAlgorithms.js';
+import { buildEliminationSeedOrder, buildSwissFirstRoundPairs, eliminationRoundsToPlay } from './pairingAlgorithms.js';
 
 interface EntryRow {
   id: string;
@@ -187,7 +187,8 @@ async function compileElimination(
   overrides: any[],
   configuredSize: number | null,
   thirdPlace: boolean,
-  directPlacements: DirectPassRow[] = []
+  directPlacements: DirectPassRow[] = [],
+  qualifierCount: number | null = null
 ): Promise<void> {
   if (configuredSize && entryIds.length + directPlacements.length > configuredSize) {
     throw new Error(`Group ${group.id} has more entries than its configured bracket size`);
@@ -201,7 +202,11 @@ async function compileElimination(
   }
   const minimumSize = Math.max(2, configuredSize || (entryIds.length + directPlacements.length), directBracketDemand);
   const bracketSize = 2 ** Math.ceil(Math.log2(minimumSize));
-  const roundCount = Math.log2(bracketSize);
+  // A bracket feeding a later phase stops once only its qualifiers survive
+  // (see eliminationRoundsToPlay). Every round-indexed rule below, including
+  // the best-of overrides counted from the end, refers to the played rounds,
+  // so "last round" is the round that decides the qualifiers.
+  const roundCount = eliminationRoundsToPlay(bracketSize, qualifierCount);
   const seedOrder = buildEliminationSeedOrder(bracketSize);
   const [seedEntryRows] = await connection.execute<any[]>(
     `SELECT group_seed, entry_id FROM tournament_phase_entries WHERE group_id = ? AND group_seed IS NOT NULL`,
@@ -342,8 +347,20 @@ async function compileGroup(
       [phase.tournament_id, phase.phase_order]
     );
     const [groupCount] = await connection.execute<any[]>(`SELECT COUNT(*) AS count FROM tournament_phase_groups WHERE phase_id = ?`, [phase.id]);
-    const thirdPlace = Number(laterPhases[0].count) === 0 && Number(groupCount[0].count) === 1;
-    await compileElimination(connection, phase, group, entryIds, overrides, settings[0]?.bracket_size ?? null, thirdPlace, directPlacements);
+    const hasLaterPhase = Number(laterPhases[0].count) > 0;
+    const thirdPlace = !hasLaterPhase && Number(groupCount[0].count) === 1;
+    // The deepest rank a later phase takes from this bracket decides where it
+    // is cut. Rules are already stored for every phase when a tournament is
+    // prepared, so the count is known even for the first phase.
+    const [qualifierRows] = hasLaterPhase
+      ? await connection.execute<any[]>(
+        `SELECT MAX(source_rank) AS qualifier_count FROM tournament_advancement_rules WHERE source_group_id = ?`,
+        [group.id]
+      )
+      : [[]];
+    const qualifierCount = qualifierRows[0]?.qualifier_count == null ? null : Number(qualifierRows[0].qualifier_count);
+    await compileElimination(connection, phase, group, entryIds, overrides, settings[0]?.bracket_size ?? null, thirdPlace,
+      directPlacements, qualifierCount);
   }
 }
 

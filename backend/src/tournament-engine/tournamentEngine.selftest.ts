@@ -45,6 +45,27 @@ const generated = generateAdvancementRules({
 assert.equal(generated.rules.length, 8);
 assert.equal(new Set(generated.rules.map(rule => rule.target_seed)).size, 8);
 assert.deepEqual(generated.sameSourceFirstRoundPairs, []);
+// Group winners meet runners-up in the first round, never each other: with
+// four groups of two, each first-round series pairs a rank 1 and a rank 2
+// from different groups (the "Testing Grounds" mapping paired winners).
+const generatedSeedOrder = buildEliminationSeedOrder(8);
+const generatedBySeed = new Map(generated.rules.map(rule => [rule.target_seed, rule]));
+for (let index = 0; index < 8; index += 2) {
+  const [top, bottom] = [generatedBySeed.get(generatedSeedOrder[index])!, generatedBySeed.get(generatedSeedOrder[index + 1])!];
+  assert.deepEqual([top.source_rank, bottom.source_rank], [1, 2]);
+  assert.notEqual(top.source_group_id, bottom.source_group_id);
+}
+const twoGroupsOfTwo = generateAdvancementRules({
+  id: 'league', name: 'League', order: 1, format: 'round_robin', assignment_method: 'seeded_snake', default_best_of: 1,
+  groups: [1, 2].map(order => ({ id: `league-${order}`, name: `Group ${order}`, order, advance_count: 2 })),
+}, {
+  id: 'top-cut', name: 'Top Cut', order: 2, format: 'single_elimination', assignment_method: 'seeded_snake', default_best_of: 1,
+  groups: [{ id: 'top-cut-bracket', name: 'Top Cut', order: 1 }],
+});
+assert.deepEqual(twoGroupsOfTwo.rules.map(rule => [rule.source_group_id, rule.source_rank, rule.target_seed]), [
+  ['league-1', 1, 1], ['league-2', 1, 2], ['league-1', 2, 3], ['league-2', 2, 4],
+]);
+assert.deepEqual(twoGroupsOfTwo.sameSourceFirstRoundPairs, []);
 const directPassAwareGeneration = generateAdvancementRules({
   id: 'source', name: 'Swiss groups', order: 1, format: 'swiss', assignment_method: 'seeded_snake', default_best_of: 1,
   groups: Array.from({ length: 4 }, (_, index) => ({ id: `direct-source-${index + 1}`, name: `Group ${index + 1}`, order: index + 1, advance_count: 2 })),

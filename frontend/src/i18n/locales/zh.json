@@ -1073,6 +1073,8 @@
   "format_issue_invalid_best_of": "局数（BO）必须为 1、3 或 5",
   "format_issue_invalid_assignment": "不支持的分配方式",
   "format_issue_groups_required": "每个阶段至少需要一个小组或对阵表",
+  "format_issue_elimination_qualifiers_power_of_two": "向后续阶段输送选手的淘汰赛对阵表必须晋级 1、2、4、8… 名参赛者，因为每轮都会使人数减半",
+  "format_issue_elimination_qualifiers_fill_bracket": "淘汰赛对阵表晋级的人数必须少于其容量，否则不会进行任何一轮",
   "format_issue_duplicate_group": "小组标识必须唯一",
   "format_issue_duplicate_group_order": "小组顺序必须是唯一的正整数",
   "format_issue_invalid_advance_count": "向后续阶段输送的小组至少要晋级一名参赛者",
@@ -1302,7 +1304,18 @@
     "default_group": "第 {{number}} 组",
     "default_phase": "阶段 {{number}}",
     "confirm_release_direct_passes": "此更改将删除已分配直接晋级的分组。保存后将释放这些名额（{{count}}）：{{names}}。这些参赛者将从第一阶段开始。继续吗？",
-    "reserved_assigned_floor": "已分配：{{count}}。如需更低，请在“参与者”标签页中移除直接晋级。"
+    "reserved_assigned_floor": "已分配：{{count}}。如需更低，请在“参与者”标签页中移除直接晋级。",
+    "round_best_of_title": "每轮赛制",
+    "round_best_of_help": "保持默认的轮次使用本阶段的赛制，例如半决赛 Bo1、决赛 Bo3。",
+    "round_best_of_cut_help": "此对阵表向下一阶段输送 {{qualifiers}} 名参赛者，因此只剩他们时即停止，不进行决赛。保持默认的轮次使用本阶段的赛制。",
+    "round_best_of_unknown_size": "对阵表规模取决于报名人数；对不存在的轮次所做的设置将被忽略。",
+    "round_best_of_default": "阶段默认（Bo{{bestOf}}）",
+    "stage_final": "决赛",
+    "stage_semifinals": "半决赛",
+    "stage_quarterfinals": "四分之一决赛",
+    "stage_round_of": "{{entrants}} 强赛",
+    "stage_last": "最后一轮",
+    "stage_from_end": "倒数第 {{n}} 轮"
   },
   "schedule_grid": {
     "proposed": "已提议",

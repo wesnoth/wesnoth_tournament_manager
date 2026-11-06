@@ -1073,6 +1073,8 @@
   "format_issue_invalid_best_of": "Best-of must be 1, 3 or 5",
   "format_issue_invalid_assignment": "Unsupported assignment method",
   "format_issue_groups_required": "Every phase needs at least one group or bracket",
+  "format_issue_elimination_qualifiers_power_of_two": "An elimination bracket that feeds a later phase must advance 1, 2, 4, 8… entries, because each round halves the field",
+  "format_issue_elimination_qualifiers_fill_bracket": "An elimination bracket must advance fewer entries than it holds, otherwise no round is played",
   "format_issue_duplicate_group": "Group identifiers must be unique",
   "format_issue_duplicate_group_order": "Group order must be a unique positive number",
   "format_issue_invalid_advance_count": "A group that feeds a later phase must advance at least one entry",
@@ -1302,7 +1304,18 @@
     "default_group": "Group {{number}}",
     "default_phase": "Phase {{number}}",
     "confirm_release_direct_passes": "This change removes groups that already have assigned direct passes. Saving will release them ({{count}}): {{names}}. Those entries will start from the first phase. Continue?",
-    "reserved_assigned_floor": "Already assigned: {{count}}. To go lower, remove passes in the Participants tab."
+    "reserved_assigned_floor": "Already assigned: {{count}}. To go lower, remove passes in the Participants tab.",
+    "round_best_of_title": "Best-of per round",
+    "round_best_of_help": "Rounds left on the default use the phase best-of, e.g. Bo1 semifinals and a Bo3 final.",
+    "round_best_of_cut_help": "This bracket feeds the next phase with {{qualifiers}} entries, so it stops when only they remain and plays no final. Rounds left on the default use the phase best-of.",
+    "round_best_of_unknown_size": "The bracket size depends on registrations; choices for rounds it will not have are ignored.",
+    "round_best_of_default": "Phase default (Bo{{bestOf}})",
+    "stage_final": "Final",
+    "stage_semifinals": "Semifinals",
+    "stage_quarterfinals": "Quarterfinals",
+    "stage_round_of": "Round of {{entrants}}",
+    "stage_last": "Last round",
+    "stage_from_end": "Round {{n}} from the end"
   },
   "schedule_grid": {
     "proposed": "Proposed",

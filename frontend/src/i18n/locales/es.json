@@ -1073,6 +1073,8 @@
   "format_issue_invalid_best_of": "El formato al mejor de debe ser 1, 3 o 5",
   "format_issue_invalid_assignment": "Método de asignación no admitido",
   "format_issue_groups_required": "Cada fase necesita al menos un grupo o cuadro",
+  "format_issue_elimination_qualifiers_power_of_two": "Un cuadro de eliminación que alimenta otra fase debe clasificar 1, 2, 4, 8… participantes, porque cada ronda reduce el cuadro a la mitad",
+  "format_issue_elimination_qualifiers_fill_bracket": "Un cuadro de eliminación debe clasificar menos participantes de los que caben en él; si no, no se juega ninguna ronda",
   "format_issue_duplicate_group": "Los identificadores de grupo deben ser únicos",
   "format_issue_duplicate_group_order": "El orden del grupo debe ser un número positivo único",
   "format_issue_invalid_advance_count": "Un grupo que alimenta una fase posterior debe clasificar al menos a uno",
@@ -1302,7 +1304,18 @@
     "default_group": "Grupo {{number}}",
     "default_phase": "Fase {{number}}",
     "confirm_release_direct_passes": "Este cambio elimina grupos que ya tienen pases directos asignados. Al guardar se liberarán ({{count}}): {{names}}. Esas inscripciones empezarán desde la primera fase. ¿Continuar?",
-    "reserved_assigned_floor": "Ya asignados: {{count}}. Para bajar de ahí, quita pases en la pestaña Participantes."
+    "reserved_assigned_floor": "Ya asignados: {{count}}. Para bajar de ahí, quita pases en la pestaña Participantes.",
+    "round_best_of_title": "Partidas por ronda",
+    "round_best_of_help": "Las rondas que dejes por defecto usan el formato de la fase; por ejemplo, semifinales a Bo1 y final a Bo3.",
+    "round_best_of_cut_help": "Este cuadro clasifica a {{qualifiers}} para la fase siguiente, así que se detiene cuando solo quedan ellos y no juega final. Las rondas que dejes por defecto usan el formato de la fase.",
+    "round_best_of_unknown_size": "El tamaño del cuadro depende de las inscripciones; se ignoran las rondas que no llegue a tener.",
+    "round_best_of_default": "Por defecto de la fase (Bo{{bestOf}})",
+    "stage_final": "Final",
+    "stage_semifinals": "Semifinales",
+    "stage_quarterfinals": "Cuartos de final",
+    "stage_round_of": "Ronda de {{entrants}}",
+    "stage_last": "Última ronda",
+    "stage_from_end": "Ronda {{n}} desde el final"
   },
   "schedule_grid": {
     "proposed": "Propuesta",

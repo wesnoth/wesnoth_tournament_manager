@@ -13,6 +13,7 @@ import {
   compareCompetitionGames, DEFAULT_COMPETITION_GAME_SORT, initialSortDirection,
   type CompetitionGameSort, type CompetitionGameSortColumn,
 } from '../utils/competitionGameSort';
+import { eliminationRoundsToPlay, roundBestOf } from '../utils/eliminationRounds';
 
 interface Props {
   tournamentId: string;
@@ -69,12 +70,15 @@ function buildPlannedBracketSeries(phase: any, isFinalPhase: boolean, t: TFuncti
       name: phase.group_name || phase.phase_name,
       bracket_size: phase.bracket_size,
       planned_entry_count: phase.planned_entry_count,
+      qualifier_count: phase.qualifier_count,
     }];
 
   return groups.flatMap((group: any) => {
     const bracketSize = Number(group.bracket_size ?? phase.bracket_size ?? 0);
     if (bracketSize < 2 || (bracketSize & (bracketSize - 1)) !== 0) return [];
-    const roundCount = Math.log2(bracketSize);
+    // Preview exactly the rounds the compiler will create: a bracket feeding
+    // a later phase stops once only its qualifiers survive.
+    const roundCount = eliminationRoundsToPlay(bracketSize, isFinalPhase ? null : group.qualifier_count);
     const groupName = group.name || group.group_name || phase.phase_name;
     const groupKey = group.id || group.group_id || groupName;
     const planned: any[] = [];
@@ -104,7 +108,7 @@ function buildPlannedBracketSeries(phase: any, isFinalPhase: boolean, t: TFuncti
           round_number: round,
           series_position: position,
           status: 'pending',
-          best_of: phase.default_best_of || 1,
+          best_of: roundBestOf(phase.default_best_of || 1, round, roundCount, phase.round_overrides),
           entry1_wins: 0,
           entry2_wins: 0,
           winner_entry_id: null,
@@ -152,7 +156,7 @@ function buildPlannedBracketSeries(phase: any, isFinalPhase: boolean, t: TFuncti
         series_position: 2,
         series_role: 'third_place',
         status: 'pending',
-        best_of: phase.default_best_of || 1,
+        best_of: roundBestOf(phase.default_best_of || 1, roundCount, roundCount, phase.round_overrides),
         entry1_wins: 0,
         entry2_wins: 0,
         winner_entry_id: null,
@@ -309,6 +313,7 @@ const TournamentCompetitionView: React.FC<Props> = ({
             name: groupRow.group_name,
             bracket_size: groupRow.bracket_size,
             planned_entry_count: groupRow.planned_entry_count,
+            qualifier_count: groupRow.qualifier_count,
             direct_passes: groupRow.direct_passes || [],
             mapped_seeds: groupRow.mapped_seeds || [],
           })),
