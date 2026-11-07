@@ -1169,7 +1169,19 @@
     "link_replay_hint": "当对局使用了错误的名称或未开启锦标赛设置时使用。粘贴 replays.wesnoth.org 上的回放链接。",
     "link_replay_queued": "回放“{{game}}”已加入队列，将在几分钟内处理；如果结果不明确，玩家需要确认。",
     "link_replay_associated": "该排位对局已关联到此锦标赛对局。",
-    "error_link_replay": "无法关联回放"
+    "error_link_replay": "无法关联回放",
+    "link_replay_picker_hint": "本对局玩家最近 {{days}} 天的对局。请选择属于这场锦标赛对局的那一局。",
+    "link_replay_candidates_loading": "正在查找最近的对局…",
+    "link_replay_no_candidates": "这些玩家最近 {{days}} 天没有对局。请改为粘贴回放链接。",
+    "link_replay_view": "回放",
+    "link_replay_show_url": "没有列出？粘贴回放链接",
+    "link_replay_status_ranked_match": "已计为排位对局：关联后将归入本锦标赛。",
+    "link_replay_status_processing": "正在处理中，请几分钟后重试。",
+    "link_replay_status_counted_as_ranked": "已计为排位对局，不能成为非排位锦标赛的对局。",
+    "link_replay_status_oos": "因不同步 (OOS) 错误结束。",
+    "link_replay_status_turn_one": "在第 1 回合结束。",
+    "link_replay_status_no_ranked_addon": "未使用 Ranked 插件，排位锦标赛必须使用。",
+    "error_replay_candidates": "无法加载最近的对局"
   },
   "composition": {
     "title": "参赛者与对阵表预览",

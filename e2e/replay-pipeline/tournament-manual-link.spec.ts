@@ -4,6 +4,7 @@ import {
   getPlayerRating,
   injectLegacyGame,
   replayServerUrl,
+  type InjectedGame,
   waitForReplayOutcome,
 } from '../support/forumFixtures';
 import { runSql, sqlLiteral, localStack } from '../support/localStack';
@@ -11,13 +12,15 @@ import { loginAs } from '../support/login';
 import { createStartedSwissTournament, getPendingTournamentGames, getTournamentGame } from '../support/tournamentSetup';
 
 /**
- * Manual replay link (issue #5): a game that automatic detection could not
- * attach to its tournament is linked from its replays.wesnoth.org URL.
+ * Manual replay link (issues #5 and #6): a game that automatic detection could
+ * not attach to its tournament is linked by choosing it among the recent
+ * server games of its players, or from its replays.wesnoth.org URL.
  *
  * - Unranked tournament, game hosted without the Ranked add-on and with a
- *   wrong name: the forum sync skips it, a player links it from the
- *   competition view, and the parse job integrates the surrender
- *   (confidence 2). Linking the same replay again to the next game fails.
+ *   wrong name: the forum sync skips it, a player picks it in the competition
+ *   view, and the parse job integrates the surrender (confidence 2). The used
+ *   game disappears from the picker of the next game, and linking it again by
+ *   URL fails.
  * - Ranked tournament, game hosted with the tournament flag off: it is first
  *   counted as a plain ranked match; the organizer then links it and the
  *   existing match is attached to the tournament game without a second ELO
@@ -27,17 +30,39 @@ const organizer = process.env.E2E_TOURNAMENT_ORGANIZER || 'Blair';
 
 test.afterAll(cleanupInjectedReplays);
 
-/** Open the link form of the first pending game, submit a URL, and return the status text. */
-async function linkFromCompetitionView(page: Page, tournamentId: string, url: string): Promise<string> {
+/** Open the link form of the first pending game and return its picker region. */
+async function openLinkForm(page: Page, tournamentId: string) {
   await page.goto(`/tournament/${tournamentId}`);
   const open = page.locator('[data-help-id="action-open-link-tournament-replay"]').first();
   await expect(open).toBeVisible({ timeout: 30_000 });
   await open.click();
-  await page.locator('[data-help-id="field-tournament-replay-url"]').fill(url);
-  await page.locator('[data-help-id="action-link-tournament-replay"]').click();
+  const picker = page.locator('[data-help-id="region-tournament-replay-picker"]');
+  await expect(picker).toBeVisible();
+  return picker;
+}
+
+/** Text of the link outcome banner above the game tables. */
+async function linkStatusText(page: Page): Promise<string> {
   const status = page.locator('[data-help-id="region-tournament-phase-games"] [role="status"]');
   await expect(status).toBeVisible({ timeout: 30_000 });
   return (await status.locator('span').textContent()) || '';
+}
+
+/**
+ * Picker row of an injected game, identified by its replay link: earlier runs
+ * may leave other recent games of the same players in the list.
+ */
+function candidateRow(picker: ReturnType<Page['locator']>, game: InjectedGame) {
+  return picker.locator('li').filter({ has: picker.page().locator(`a[href*="${game.replayName.slice(0, 13)}"]`) });
+}
+
+/** Open the link form of the first pending game, submit a URL from the fallback, and return the status text. */
+async function linkFromCompetitionView(page: Page, tournamentId: string, url: string): Promise<string> {
+  await openLinkForm(page, tournamentId);
+  await page.locator('[data-help-id="action-show-tournament-replay-url"]').click();
+  await page.locator('[data-help-id="field-tournament-replay-url"]').fill(url);
+  await page.locator('[data-help-id="action-link-tournament-replay"]').click();
+  return linkStatusText(page);
 }
 
 function linkMethod(replayId: string): string | null {
@@ -63,7 +88,12 @@ test('a player links an unranked tournament game hosted without the Ranked add-o
   });
 
   await loginAs(page, 'Caritas');
-  const message = await linkFromCompetitionView(page, tournamentId, replayServerUrl(game));
+  const picker = await openLinkForm(page, tournamentId);
+  const row = candidateRow(picker, game);
+  await expect(row).toHaveCount(1, { timeout: 30_000 });
+  await expect(row).toContainText('clmates');
+  await row.locator('[data-help-id="action-link-tournament-replay-candidate"]').click();
+  const message = await linkStatusText(page);
   expect(message).not.toMatch(/could not|error/i);
 
   const replay = await waitForReplayOutcome(game, (state) => state.parse_status !== 'new');
@@ -74,11 +104,15 @@ test('a player links an unranked tournament game hosted without the Ranked add-o
     tournament_game_id: first.gameId,
     match_id: null,
   });
+  // The picker reuses the URL link path, so the link method is the same.
   expect(linkMethod(replay.id)).toBe('manual_url');
   expect(getTournamentGame(first.gameId)).toMatchObject({ status: 'completed', winnerNickname: 'clmates' });
 
   // The same replay cannot be used for the next game of the series.
   await expect.poll(() => getPendingTournamentGames(tournamentId).length, { timeout: 30_000 }).toBe(1);
+  const nextPicker = await openLinkForm(page, tournamentId);
+  await expect(nextPicker).toHaveAttribute('aria-busy', 'false', { timeout: 30_000 });
+  await expect(candidateRow(nextPicker, game)).toHaveCount(0);
   const again = await linkFromCompetitionView(page, tournamentId, replayServerUrl(game));
   expect(again).toMatch(/already linked/i);
 });

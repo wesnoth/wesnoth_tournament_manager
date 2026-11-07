@@ -30,7 +30,10 @@ import { getUserAgent, getUserIP, logAuditEvent } from '../middleware/audit.js';
 import { clientErrorMessage, DomainError, isClientSafeError } from '../utils/clientError.js';
 import { globalRecalculationMiddleware } from '../services/systemPauseService.js';
 import {
+  linkReplayByServerGame,
   linkReplayByUrl,
+  listReplayCandidates,
+  REPLAY_CANDIDATE_DAYS,
   ManualReplayLinkConflictError,
   ManualReplayLinkForbiddenError,
   ManualReplayLinkNotFoundError,
@@ -603,20 +606,43 @@ router.post('/:id/games/:gameId/result', authMiddleware, async (req: AuthRequest
 });
 
 /**
- * Link a misconfigured game to a pending tournament game by its
- * replays.wesnoth.org URL (issue #5). Allowed for the tournament organizers
- * and the players of the game; all validation lives in manualReplayLinkService.
+ * Recent server games of the players of a pending tournament game that could
+ * be linked to it (issue #6). Read-only and informational: the link endpoint
+ * re-validates the chosen game. Same audience as the link endpoint.
+ */
+router.get('/:id/games/:gameId/replay-candidates', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const candidates = await listReplayCandidates({
+      tournamentId: req.params.id,
+      tournamentGameId: req.params.gameId,
+      userId: req.userId!,
+    });
+    return res.json({ days: REPLAY_CANDIDATE_DAYS, candidates });
+  } catch (error: any) {
+    if (error instanceof ManualReplayLinkForbiddenError) return res.status(403).json({ error: error.message });
+    if (error instanceof ManualReplayLinkNotFoundError) return res.status(404).json({ error: error.message });
+    if (error instanceof ManualReplayLinkConflictError) return res.status(409).json({ error: error.message });
+    console.error('List tournament replay candidates error:', error);
+    return res.status(500).json({ error: 'Failed to list the replay candidates' });
+  }
+});
+
+/**
+ * Link a server game to a pending tournament game, either by its
+ * replays.wesnoth.org URL (`replay_url`, issue #5) or by the identifiers of a
+ * candidate chosen in the picker (`instance_uuid` + `game_id`, issue #6).
+ * Allowed for the tournament organizers and the players of the game; all
+ * validation lives in manualReplayLinkService and is identical for both.
  * Blocked during a global recalculation because associating an existing
  * ranked match records a result immediately.
  */
 router.post('/:id/games/:gameId/link-replay', authMiddleware, globalRecalculationMiddleware, async (req: AuthRequest, res) => {
   try {
-    const result = await linkReplayByUrl({
-      tournamentId: req.params.id,
-      tournamentGameId: req.params.gameId,
-      replayUrl: req.body?.replay_url,
-      userId: req.userId!,
-    });
+    const bySelection = req.body?.instance_uuid !== undefined;
+    const base = { tournamentId: req.params.id, tournamentGameId: req.params.gameId, userId: req.userId! };
+    const result = bySelection
+      ? await linkReplayByServerGame({ ...base, instanceUuid: req.body.instance_uuid, gameId: req.body.game_id })
+      : await linkReplayByUrl({ ...base, replayUrl: req.body?.replay_url });
     await logAuditEvent({
       event_type: 'TOURNAMENT_REPLAY_LINK_REQUESTED',
       user_id: req.userId,
@@ -627,7 +653,9 @@ router.post('/:id/games/:gameId/link-replay', authMiddleware, globalRecalculatio
         tournament_id: req.params.id,
         tournament_game_id: req.params.gameId,
         replay_id: result.replayId,
-        replay_url: String(req.body?.replay_url || '').slice(0, 1000),
+        link_source: bySelection ? 'picker' : 'url',
+        replay_url: bySelection ? null : String(req.body?.replay_url || '').slice(0, 1000),
+        server_game: bySelection ? `${String(req.body.instance_uuid).slice(0, 36)}:${String(req.body.game_id).slice(0, 12)}` : null,
         outcome: result.status,
         match_id: result.matchId ?? null,
       },

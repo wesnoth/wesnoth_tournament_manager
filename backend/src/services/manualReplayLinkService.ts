@@ -5,7 +5,8 @@
  * Automatic tournament detection fails when a game was hosted with a wrong
  * game name, with the tournament flag off, or (unranked/team tournaments)
  * without the Ranked add-on. This service lets the tournament organizer or a
- * player of the game point at the replay instead.
+ * player of the game point at the replay instead, either by pasting its URL
+ * or by choosing it from the recent server games of the players (issue #6).
  *
  * Trust model:
  * - The user's URL is never downloaded. Only identifiers are parsed from it
@@ -36,6 +37,8 @@ import { getGamePlayers, getCompetitiveGameData, hasGameTournamentAddon, queryFo
 import { getBaseVersion } from '../utils/versionParser.js';
 import { DomainError } from '../utils/clientError.js';
 import { parseReplayServerUrl, REPLAY_HOST, type ReplayServerUrlParts } from '../utils/replayServerUrl.js';
+import { matchesTournamentGamePlayers, type ExpectedReplayPlayer } from '../utils/replayCandidateMatch.js';
+import { queryPhpbb } from '../config/phpbbDatabase.js';
 import { isTournamentOrganizer } from './tournamentAuthorizationService.js';
 import {
   recordPhaseGameResultInTransaction,
@@ -229,13 +232,72 @@ export interface ManualReplayLinkResult {
  * attaches an already counted ranked match. See the module comment.
  */
 export async function linkReplayByUrl(input: ManualReplayLinkInput): Promise<ManualReplayLinkResult> {
+  const game = await loadAuthorizedPendingGame(input);
+  const parts = parseReplayServerUrl(input.replayUrl);
+  const forumGame = await findForumGame(parts);
+  return linkForumGame(input, game, forumGame);
+}
+
+/** Pending tournament game the user may link a replay to, or a 403/404/409 error. */
+async function loadAuthorizedPendingGame(input: { tournamentId: string; tournamentGameId: string; userId: string }): Promise<any> {
   const game = await loadPendingGame(input.tournamentId, input.tournamentGameId);
   if (!(await canLinkGame(input.tournamentId, game, input.userId))) {
     throw new ManualReplayLinkForbiddenError('Only the tournament organizers and the players of this game can link its replay');
   }
+  return game;
+}
 
-  const parts = parseReplayServerUrl(input.replayUrl);
-  const forumGame = await findForumGame(parts);
+/** Columns of `wesnothd_game_info` read for a link, aliased as the link path expects. */
+const FORUM_GAME_COLUMNS = `g.INSTANCE_UUID, g.GAME_ID, g.INSTANCE_VERSION AS wesnoth_version, g.GAME_NAME AS game_name,
+            g.START_TIME AS start_time, g.END_TIME AS end_time, g.REPLAY_NAME AS replay_filename,
+            g.OOS AS oos, g.RELOAD AS is_reload`;
+
+export interface ServerGameLinkInput {
+  tournamentId: string;
+  tournamentGameId: string;
+  instanceUuid: unknown;
+  gameId: unknown;
+  userId: string;
+}
+
+/**
+ * Link a server game chosen in the replay picker (issue #6) to a pending
+ * tournament game.
+ *
+ * The client only sends the server identifiers of the chosen candidate. The
+ * candidate list is never trusted: the game is read again from the forum and
+ * goes through exactly the same validations and outcomes as a pasted URL.
+ */
+export async function linkReplayByServerGame(input: ServerGameLinkInput): Promise<ManualReplayLinkResult> {
+  const instanceUuid = typeof input.instanceUuid === 'string' ? input.instanceUuid.trim() : '';
+  const gameId = Number(input.gameId);
+  if (!/^[0-9a-fA-F-]{36}$/.test(instanceUuid) || !Number.isInteger(gameId) || gameId < 0) {
+    throw new DomainError('instance_uuid and game_id identify the server game');
+  }
+  const game = await loadAuthorizedPendingGame(input);
+  const rows = await queryForum(
+    `SELECT ${FORUM_GAME_COLUMNS} FROM wesnothd_game_info g
+     WHERE g.INSTANCE_UUID = ? AND g.GAME_ID = ? LIMIT 1`,
+    [instanceUuid, gameId]
+  );
+  const forumGame = rows[0];
+  if (!forumGame) throw new ManualReplayLinkNotFoundError('The server game was not found');
+  // A game without an end time or replay file is still running or was never saved.
+  if (!forumGame.end_time || !forumGame.replay_filename) {
+    throw new ManualReplayLinkConflictError('The server game has not finished or has no replay');
+  }
+  return linkForumGame(input, game, forumGame);
+}
+
+/**
+ * Validate a located forum game against the pending tournament game and link
+ * it. Shared by the URL and the picker paths, so both enforce the same rules.
+ */
+async function linkForumGame(
+  input: { tournamentId: string; tournamentGameId: string },
+  game: any,
+  forumGame: any
+): Promise<ManualReplayLinkResult> {
   if (bitValue(forumGame.oos)) throw new ManualReplayLinkConflictError('The server game ended with an out-of-sync error');
   if (String(forumGame.replay_filename).includes('Turn_1_')) {
     throw new ManualReplayLinkConflictError('The game ended on turn 1 and cannot count as a result');
@@ -249,9 +311,7 @@ export async function linkReplayByUrl(input: ManualReplayLinkInput): Promise<Man
   // requirement (or the server-side competitive model). Unranked and team
   // tournaments accept games hosted without it.
   if (game.tournament_mode === 'ranked') {
-    const competitive = await getCompetitiveGameData(forumGame.INSTANCE_UUID, forumGame.GAME_ID);
-    const hasAddon = competitive ? true : await hasGameTournamentAddon(forumGame.INSTANCE_UUID, forumGame.GAME_ID, 'Ranked');
-    if (!hasAddon) {
+    if (!(await hasRankedMarker(forumGame.INSTANCE_UUID, forumGame.GAME_ID))) {
       throw new ManualReplayLinkConflictError('Ranked tournament games must be played with the Ranked add-on');
     }
   }
@@ -333,6 +393,210 @@ export async function linkReplayByUrl(input: ManualReplayLinkInput): Promise<Man
     throw new ManualReplayLinkConflictError('This replay changed while linking; try again');
   }
   return { status: 'queued', replayId: replay.id, gameName: forumGame.game_name ?? null };
+}
+
+/**
+ * Whether a server game qualifies as ranked: the server-side competitive model
+ * (when deployed) or the legacy Ranked add-on content marker.
+ */
+async function hasRankedMarker(instanceUuid: string, gameId: number): Promise<boolean> {
+  const competitive = await getCompetitiveGameData(instanceUuid, gameId);
+  return competitive ? true : hasGameTournamentAddon(instanceUuid, gameId, 'Ranked');
+}
+
+/** How far back the replay picker looks, in days. Older games are linked by URL. */
+export const REPLAY_CANDIDATE_DAYS = 15;
+/** Upper bound of server games read per picker request, newest first. */
+const REPLAY_CANDIDATE_SCAN_LIMIT = 200;
+
+/**
+ * Why a candidate can or cannot be linked. The order of the checks below
+ * mirrors `linkForumGame`, so the reason shown is the error the link would give.
+ * - `linkable`: not processed yet, or processed without a match (re-queued).
+ * - `ranked_match`: already counted as a ranked match; linking attaches it (ranked tournaments only).
+ * - `processing`: the parse job owns the replay right now.
+ * - `counted_as_ranked`: already a ranked match, cannot become an unranked tournament game.
+ * - `oos`, `turn_one`, `no_ranked_addon`: refused by the link validations.
+ */
+export type ReplayCandidateStatus =
+  | 'linkable' | 'ranked_match' | 'processing' | 'counted_as_ranked' | 'oos' | 'turn_one' | 'no_ranked_addon';
+
+export interface ReplayCandidate {
+  instance_uuid: string;
+  game_id: number;
+  game_name: string | null;
+  scenario: string | null;
+  end_time: string;
+  replay_url: string;
+  players: { nickname: string; side: number; faction: string | null }[];
+  status: ReplayCandidateStatus;
+  linkable: boolean;
+}
+
+/** OR-chain of `(INSTANCE_UUID, GAME_ID)` pairs, which uses the primary key of the forum tables. */
+function gamePairsCondition(games: any[]): { sql: string; params: any[] } {
+  return {
+    sql: games.map(() => '(INSTANCE_UUID = ? AND GAME_ID = ?)').join(' OR '),
+    params: games.flatMap(row => [row.INSTANCE_UUID, row.GAME_ID]),
+  };
+}
+
+/**
+ * Participants of the tournament game, keyed by lower-case nickname: the two
+ * entry users in 1v1, the accepted active members of both teams otherwise.
+ */
+async function loadExpectedPlayers(tournamentId: string, game: any, isTeamGame: boolean): Promise<Map<string, ExpectedReplayPlayer>> {
+  const result = isTeamGame
+    ? await query(
+      `SELECT participants.user_id, participants.team_id, users.nickname
+       FROM tournament_participants participants
+       JOIN users_extension users ON users.id = participants.user_id
+       WHERE participants.tournament_id = ? AND participants.team_id IN (?, ?)
+         AND participants.status = 'active' AND participants.participation_status = 'accepted'`,
+      [tournamentId, game.team1_id, game.team2_id]
+    )
+    : await query(
+      `SELECT id AS user_id, NULL AS team_id, nickname FROM users_extension WHERE id IN (?, ?)`,
+      [game.user1_id, game.user2_id]
+    );
+  return new Map((result.rows || [])
+    .filter((row: any) => row.nickname)
+    .map((row: any) => [String(row.nickname).toLowerCase(), { userId: row.user_id, teamId: row.team_id ?? null }]));
+}
+
+/**
+ * Server games of the last {@link REPLAY_CANDIDATE_DAYS} days that could be
+ * linked to a pending tournament game (issue #6), newest first.
+ *
+ * Source of truth is the forum (`wesnothd_game_*`), not the local `replays`
+ * table: games hosted without the Ranked add-on are never synced locally, and
+ * those are exactly the misconfigured games this feature recovers.
+ *
+ * Steps:
+ * 1. Resolve the forum user ids of the expected players through phpBB
+ *    (`username_clean` is the lower-case form phpBB stores). One resolved
+ *    player is enough to find the games; unresolved nicknames only narrow the
+ *    search, and the URL fallback remains for those cases.
+ * 2. Read their finished games with a replay since the cut-off, driven by the
+ *    `USER_ID` index of `wesnothd_game_player_info`.
+ * 3. Keep the games whose identified players are exactly the players or teams
+ *    of the tournament game.
+ * 4. Drop games already linked to a tournament or deleted locally, and give
+ *    the rest a status that predicts the link outcome.
+ *
+ * The list is informational only: linking re-validates everything.
+ */
+export async function listReplayCandidates(input: {
+  tournamentId: string;
+  tournamentGameId: string;
+  userId: string;
+}): Promise<ReplayCandidate[]> {
+  const game = await loadAuthorizedPendingGame(input);
+  const isTeamGame = Boolean(game.team1_id || game.team2_id) || game.tournament_mode === 'team';
+  const expected = await loadExpectedPlayers(input.tournamentId, game, isTeamGame);
+  if (expected.size < 2) return [];
+
+  const cleanNames = Array.from(expected.keys());
+  const forumUsers = await queryPhpbb(
+    `SELECT user_id FROM phpbb3_users WHERE username_clean IN (${cleanNames.map(() => '?').join(', ')})`,
+    cleanNames
+  ) as any[];
+  const forumUserIds = (forumUsers || []).map((row: any) => Number(row.user_id)).filter(Number.isInteger);
+  if (forumUserIds.length === 0) return [];
+
+  const cutoff = new Date(Date.now() - REPLAY_CANDIDATE_DAYS * 24 * 60 * 60 * 1000)
+    .toISOString().slice(0, 19).replace('T', ' ');
+  const games = await queryForum(
+    `SELECT DISTINCT ${FORUM_GAME_COLUMNS}
+     FROM wesnothd_game_player_info p
+     JOIN wesnothd_game_info g ON g.INSTANCE_UUID = p.INSTANCE_UUID AND g.GAME_ID = p.GAME_ID
+     WHERE p.USER_ID IN (${forumUserIds.map(() => '?').join(', ')})
+       AND g.START_TIME >= ? AND g.END_TIME IS NOT NULL AND g.REPLAY_NAME IS NOT NULL
+     ORDER BY g.END_TIME DESC
+     LIMIT ${REPLAY_CANDIDATE_SCAN_LIMIT}`,
+    [...forumUserIds, cutoff]
+  );
+  if (games.length === 0) return [];
+
+  const pairs = gamePairsCondition(games);
+  const playerRows = await queryForum(
+    `SELECT INSTANCE_UUID, GAME_ID, USER_ID AS user_id, SIDE_NUMBER AS side_number, FACTION AS faction, USER_NAME AS username
+     FROM wesnothd_game_player_info WHERE ${pairs.sql} ORDER BY SIDE_NUMBER`,
+    pairs.params
+  );
+  const keyOf = (row: any) => `${row.INSTANCE_UUID}:${row.GAME_ID}`;
+  const playersByGame = new Map<string, any[]>();
+  for (const row of playerRows) {
+    const list = playersByGame.get(keyOf(row)) ?? [];
+    list.push(row);
+    playersByGame.set(keyOf(row), list);
+  }
+
+  const shape = {
+    isTeamGame,
+    user1Id: game.user1_id ?? null,
+    user2Id: game.user2_id ?? null,
+    team1Id: game.team1_id ?? null,
+    team2Id: game.team2_id ?? null,
+  };
+  const matching = games.filter(row => matchesTournamentGamePlayers(playersByGame.get(keyOf(row)) ?? [], expected, shape));
+  if (matching.length === 0) return [];
+
+  const matchingPairs = gamePairsCondition(matching);
+  const [contentRows, localRows] = await Promise.all([
+    queryForum(
+      `SELECT INSTANCE_UUID, GAME_ID, TYPE, ADDON_ID, NAME FROM wesnothd_game_content_info
+       WHERE (${matchingPairs.sql}) AND (TYPE = 'scenario' OR ADDON_ID = 'Ranked')`,
+      matchingPairs.params
+    ),
+    query(
+      `SELECT instance_uuid, game_id, parse_status, match_id, tournament_id, tournament_game_id, deleted_at
+       FROM replays WHERE ${matching.map(() => '(instance_uuid = ? AND game_id = ?)').join(' OR ')}`,
+      matchingPairs.params
+    ),
+  ]);
+  const scenarioByGame = new Map<string, string>();
+  const rankedAddonGames = new Set<string>();
+  for (const row of contentRows) {
+    if (row.TYPE === 'scenario' && row.NAME) scenarioByGame.set(keyOf(row), row.NAME);
+    if (row.ADDON_ID === 'Ranked') rankedAddonGames.add(keyOf(row));
+  }
+  const localByGame = new Map<string, any>(
+    (localRows.rows || []).map((row: any) => [`${row.instance_uuid}:${row.game_id}`, row])
+  );
+
+  const candidates: ReplayCandidate[] = [];
+  for (const row of matching) {
+    const key = keyOf(row);
+    const local = localByGame.get(key);
+    // Already used or deleted: the link would always refuse it, so hide it.
+    if (local && (local.deleted_at || local.tournament_id || local.tournament_game_id)) continue;
+
+    let status: ReplayCandidateStatus;
+    if (bitValue(row.oos)) status = 'oos';
+    else if (String(row.replay_filename).includes('Turn_1_')) status = 'turn_one';
+    else if (game.tournament_mode === 'ranked' && !rankedAddonGames.has(key)
+      && !(await hasRankedMarker(row.INSTANCE_UUID, row.GAME_ID))) status = 'no_ranked_addon';
+    else if (local?.match_id) status = game.tournament_mode === 'ranked' ? 'ranked_match' : 'counted_as_ranked';
+    else if (local && !REQUEUEABLE_STATUSES.includes(local.parse_status)) status = 'processing';
+    else status = 'linkable';
+
+    const endTime = new Date(row.end_time);
+    candidates.push({
+      instance_uuid: row.INSTANCE_UUID,
+      game_id: Number(row.GAME_ID),
+      game_name: row.game_name ?? null,
+      scenario: scenarioByGame.get(key) ?? null,
+      end_time: endTime.toISOString(),
+      replay_url: `https://${REPLAY_HOST}/${getBaseVersion(row.wesnoth_version)}/${utcPathDate(endTime)}/${encodeURIComponent(row.replay_filename)}`,
+      players: (playersByGame.get(key) ?? [])
+        .filter((player: any) => player.user_id !== -1 && player.user_id !== null)
+        .map((player: any) => ({ nickname: player.username, side: Number(player.side_number), faction: player.faction || null })),
+      status,
+      linkable: status === 'linkable' || status === 'ranked_match',
+    });
+  }
+  return candidates;
 }
 
 /**

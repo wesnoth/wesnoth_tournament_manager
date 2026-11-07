@@ -1169,7 +1169,19 @@
     "link_replay_hint": "Use this when the game was hosted with a wrong name or without the tournament setting. Paste the replay URL from replays.wesnoth.org.",
     "link_replay_queued": "Replay \"{{game}}\" queued. It will be processed in a few minutes; if the result is not clear, the players must confirm it.",
     "link_replay_associated": "The ranked match was attached to this tournament game.",
-    "error_link_replay": "The replay could not be linked"
+    "error_link_replay": "The replay could not be linked",
+    "link_replay_picker_hint": "Games of the last {{days}} days played by the players of this game. Choose the one that belongs to this tournament game.",
+    "link_replay_candidates_loading": "Looking for recent games…",
+    "link_replay_no_candidates": "No game of these players in the last {{days}} days. Paste the replay URL instead.",
+    "link_replay_view": "replay",
+    "link_replay_show_url": "Not listed? Paste the replay URL",
+    "link_replay_status_ranked_match": "Already counted as a ranked match: linking attaches it to this tournament.",
+    "link_replay_status_processing": "Being processed right now, try again in a few minutes.",
+    "link_replay_status_counted_as_ranked": "Already counted as a ranked match, it cannot become an unranked tournament game.",
+    "link_replay_status_oos": "Ended with an out-of-sync error.",
+    "link_replay_status_turn_one": "Ended on turn 1.",
+    "link_replay_status_no_ranked_addon": "Played without the Ranked add-on, required in ranked tournaments.",
+    "error_replay_candidates": "The recent games could not be loaded"
   },
   "composition": {
     "title": "Participant and bracket preview",
