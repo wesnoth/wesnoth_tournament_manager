@@ -1169,7 +1169,19 @@
     "link_replay_hint": "Verwende dies, wenn das Spiel mit falschem Namen oder ohne Turnier-Einstellung erstellt wurde. Füge die Replay-URL von replays.wesnoth.org ein.",
     "link_replay_queued": "Replay \"{{game}}\" eingereiht. Es wird in wenigen Minuten verarbeitet; ist das Ergebnis unklar, müssen die Spieler es bestätigen.",
     "link_replay_associated": "Das Ranked-Spiel wurde diesem Turnierspiel zugeordnet.",
-    "error_link_replay": "Das Replay konnte nicht verknüpft werden"
+    "error_link_replay": "Das Replay konnte nicht verknüpft werden",
+    "link_replay_picker_hint": "Spiele der letzten {{days}} Tage mit den Spielern dieser Partie. Wähle das Spiel, das zu dieser Turnierpartie gehört.",
+    "link_replay_candidates_loading": "Suche nach aktuellen Spielen…",
+    "link_replay_no_candidates": "Keine Spiele dieser Spieler in den letzten {{days}} Tagen. Füge stattdessen die Replay-URL ein.",
+    "link_replay_view": "Replay",
+    "link_replay_show_url": "Nicht dabei? Replay-URL einfügen",
+    "link_replay_status_ranked_match": "Bereits als Ranked-Partie gewertet: Verknüpfen ordnet sie diesem Turnier zu.",
+    "link_replay_status_processing": "Wird gerade verarbeitet, versuche es in einigen Minuten erneut.",
+    "link_replay_status_counted_as_ranked": "Bereits als Ranked-Partie gewertet, kann keine Partie eines Nicht-Ranked-Turniers werden.",
+    "link_replay_status_oos": "Mit einem Out-of-Sync-Fehler beendet.",
+    "link_replay_status_turn_one": "In Runde 1 beendet.",
+    "link_replay_status_no_ranked_addon": "Ohne das Ranked-Add-on gespielt, das in Ranked-Turnieren Pflicht ist.",
+    "error_replay_candidates": "Die aktuellen Spiele konnten nicht geladen werden"
   },
   "composition": {
     "title": "Vorschau der Teilnehmer und K.-o.-Bäume",

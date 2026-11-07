@@ -1169,7 +1169,19 @@
     "link_replay_hint": "Úsalo cuando la partida se creó con un nombre incorrecto o sin la opción de torneo. Pega la URL del replay de replays.wesnoth.org.",
     "link_replay_queued": "Replay \"{{game}}\" en cola. Se procesará en unos minutos; si el resultado no es claro, los jugadores deberán confirmarlo.",
     "link_replay_associated": "La partida ranked se ha asociado a esta partida del torneo.",
-    "error_link_replay": "No se pudo vincular el replay"
+    "error_link_replay": "No se pudo vincular el replay",
+    "link_replay_picker_hint": "Partidas de los últimos {{days}} días jugadas por los jugadores de esta partida. Elige la que corresponde a esta partida del torneo.",
+    "link_replay_candidates_loading": "Buscando partidas recientes…",
+    "link_replay_no_candidates": "No hay partidas de estos jugadores en los últimos {{days}} días. Pega la URL del replay.",
+    "link_replay_view": "replay",
+    "link_replay_show_url": "¿No aparece? Pega la URL del replay",
+    "link_replay_status_ranked_match": "Ya contada como partida ranked: al vincularla se asocia a este torneo.",
+    "link_replay_status_processing": "Se está procesando ahora, inténtalo en unos minutos.",
+    "link_replay_status_counted_as_ranked": "Ya contada como partida ranked, no puede ser una partida de un torneo no ranked.",
+    "link_replay_status_oos": "Terminó con un error de desincronización (OOS).",
+    "link_replay_status_turn_one": "Terminó en el turno 1.",
+    "link_replay_status_no_ranked_addon": "Jugada sin el add-on Ranked, obligatorio en torneos ranked.",
+    "error_replay_candidates": "No se pudieron cargar las partidas recientes"
   },
   "composition": {
     "title": "Vista previa de participantes y cuadros",
