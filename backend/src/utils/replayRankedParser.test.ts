@@ -160,6 +160,17 @@ describe('Wesnoth 1.18 team tournament (2v2)', () => {
     assert.equal(parsed.victory.winner_sides, undefined);
   });
 
+  it('a player typing a surrender message in chat does not count as a surrender', async () => {
+    // Only wesnothd can emit id="server": it overwrites the id of player chat
+    // with the sender's nickname, so this is what a forged message looks like.
+    const restore = silence();
+    const parsed = await parseSample('1.18', replay, (wml) =>
+      replaceOnce(wml, /id="server"\s+message="KhorneflakesBA has surrendered\."/, 'id="Danniel_BR"\nmessage="KhorneflakesBA has surrendered."')
+    ).finally(restore);
+    assert.equal(parsed.victory.confidence_level, 1);
+    assert.equal(parsed.victory.winner_sides, undefined);
+  });
+
   it('one surrender in each team, then the game ends: undecided (confidence 1)', async () => {
     // The maintainer's case: neither alliance surrendered as a whole.
     const restore = silence();

@@ -949,8 +949,12 @@ function extractSurrenders(
 
       // PATTERN 2: New surrender pattern with server speak message
       // Message: "PlayerName has surrendered."
+      // Only messages from wesnothd count: player chat uses the same [speak]
+      // node, and anyone could type this text to claim the opponent gave up.
+      // wesnothd overwrites the id of player chat with the sender's nickname,
+      // so a player cannot produce id="server".
       const speak = command.speak as WmlNode | undefined;
-      if (speak && typeof speak === 'object') {
+      if (speak && typeof speak === 'object' && speak.id === 'server') {
         const message = speak.message as string | undefined;
         if (message && message.includes('has surrendered.')) {
           const surrenderMatch = message.match(/^(.+)\s+has\s+surrendered\.$/);
