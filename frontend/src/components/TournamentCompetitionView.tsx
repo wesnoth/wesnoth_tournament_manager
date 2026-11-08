@@ -928,12 +928,22 @@ const TournamentCompetitionView: React.FC<Props> = ({
               const winnerSide = Number(game.winner_side);
               const loserSide = winnerSide === 1 ? 2 : winnerSide === 2 ? 1 : null;
               const pendingWinnerSide = Number(pendingSummary?.replayVictory?.winner_side);
-              const pendingSide1Faction = pendingSummary?.forumFactions?.side1
-                || (pendingWinnerSide === 1 ? pendingSummary?.replayVictory?.winner_faction : pendingSummary?.replayVictory?.loser_faction)
+              const pendingFactionForSide = (side: number) => pendingSummary?.forumFactions?.[`side${side}`]
+                || (pendingWinnerSide === side ? pendingSummary?.replayVictory?.winner_faction : pendingSummary?.replayVictory?.loser_faction)
                 || null;
-              const pendingSide2Faction = pendingSummary?.forumFactions?.side2
-                || (pendingWinnerSide === 2 ? pendingSummary?.replayVictory?.winner_faction : pendingSummary?.replayVictory?.loser_faction)
-                || null;
+              // Bracket entry order is unrelated to the side chosen in the game
+              // lobby, so the side comes from the replay's player list. Site and
+              // server nicknames can differ in case. Position is only a fallback
+              // for a replay whose players do not match the entry names.
+              const pendingEntrySide = (entryName: string | null | undefined, fallbackSide: number) => {
+                const normalizedName = String(entryName || '').toLowerCase();
+                const player = (pendingSummary?.forumPlayers || []).find((candidate: any) =>
+                  String(candidate?.user_name || '').toLowerCase() === normalizedName
+                );
+                return Number(player?.side_number) || fallbackSide;
+              };
+              const entry1PendingSide = pendingEntrySide(game.entry1_name, 1);
+              const entry2PendingSide = pendingEntrySide(game.entry2_name, 2);
               const detectedTeams = pendingSummary?.detectedTeams || {};
               // tournament_entries.id identifies the bracket entry; detectedTeams
               // is indexed by the entry's team_id.
@@ -944,10 +954,10 @@ const TournamentCompetitionView: React.FC<Props> = ({
               const renderCompetitorBadges = (first: boolean) => {
                 const team = first ? entry1Team : entry2Team;
                 const factions = pendingReplay
-                  ? team?.factions || [first ? pendingSide1Faction : pendingSide2Faction]
+                  ? team?.factions || [pendingFactionForSide(first ? entry1PendingSide : entry2PendingSide)]
                   : (first ? game.winner_faction : game.loser_faction)?.split(', ') || [];
                 const sides = pendingReplay
-                  ? team?.sides || [first ? 1 : 2]
+                  ? team?.sides || [first ? entry1PendingSide : entry2PendingSide]
                   : [first ? winnerSide : loserSide];
                 return <>
                   {factions.filter(Boolean).map((faction: string, index: number) => <span key={`faction-${index}`} className={`rounded px-2 py-1 text-xs font-semibold ${first ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}`}>{faction}</span>)}

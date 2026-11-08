@@ -1405,6 +1405,10 @@ router.get('/:id/phases/:phaseId/bracket', async (req, res) => {
  * precedence until a result exists, then the played date takes precedence.
  */
 router.get('/:id/phases/:phaseId/games', async (req, res) => {
+  // A resumed game produces one replay per file, so an earlier confidence-one
+  // replay stays open after a later one records the result. The pending-replay
+  // join excludes closed games so they show the recorded result, as the
+  // combined match feed does.
   const result = await query(
     `SELECT games.id AS game_id, games.game_number, games.status, games.confirmation_status, games.played_at,
             CASE WHEN games.status NOT IN ('completed', 'cancelled') AND pending_replay.id IS NOT NULL
@@ -1489,7 +1493,8 @@ router.get('/:id/phases/:phaseId/games', async (req, res) => {
      LEFT JOIN tournament_teams team1 ON team1.id = entry1.team_id
      LEFT JOIN tournament_teams team2 ON team2.id = entry2.team_id
      LEFT JOIN replays pending_replay
-       ON pending_replay.id = (
+       ON games.status NOT IN ('completed', 'cancelled')
+      AND pending_replay.id = (
          SELECT replay.id FROM replays replay
          WHERE replay.tournament_game_id = games.id
            AND replay.parse_status IN ('parsed', 'due')
